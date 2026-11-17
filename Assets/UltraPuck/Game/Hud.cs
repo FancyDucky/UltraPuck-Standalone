@@ -18,12 +18,17 @@ namespace UltraPuck.Game
         private Simulation _sim;
         private string _error;
 
+        /// <summary>A name floating over a player (filled in by GameRunner each frame).</summary>
+        public struct Tag { public Vector3 World; public string Name; public int Team; }
+        public readonly System.Collections.Generic.List<Tag> Tags = new System.Collections.Generic.List<Tag>();
+        public Camera Cam;
+
         /// <param name="covered">A menu or the card screen is up: keep the score and messages out of the way.</param>
         public void Show(bool lobby, bool free, LocalPlayers local, GameState state, Simulation sim, string error, bool covered)
         {
             _lobby = lobby; _free = free; _local = local; _state = state; _sim = sim; _error = error; _covered = covered;
             var kb = Keyboard.current;
-            if (kb != null && (kb.leftBracketKey.wasPressedThisFrame || kb.rightBracketKey.wasPressedThisFrame))
+            if (kb != null && !Menus.Typing && !LocalPlayers.Blocked && (kb.leftBracketKey.wasPressedThisFrame || kb.rightBracketKey.wasPressedThisFrame))
                 Settings.UiScale += kb.rightBracketKey.wasPressedThisFrame ? 0.1f : -0.1f;
         }
 
@@ -35,6 +40,7 @@ namespace UltraPuck.Game
             if (!string.IsNullOrEmpty(_error)) { Ui.Label(new Rect(0, h / 2 - 40, w, 80), _error, Ui.Font(24, true, TextAnchor.MiddleCenter), Color.white); return; }
             if (_lobby) { if (!_covered) Lobby(w, h); return; }
             if (_state == null || _covered) return;
+            NameTags();
 
             // score: team name, symbol and colour, so it reads without relying on colour
             var score = Palette.TeamName(0) + "    " + _state.Score[0] + "   :   " + _state.Score[1] + "    " + Palette.TeamName(1);
@@ -52,9 +58,9 @@ namespace UltraPuck.Game
             if (_free)
             {
                 Ui.Label(new Rect(0, 64, w, 26), "FREE PLAY", Ui.Font(15, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.55f));
-                Ui.Label(new Rect(0, h - 36, w, 28),
-                    "View / R: puck back      Start / Esc: menu (bots, pick a card, settings)      A / Space on a new controller: join",
-                    Ui.Font(15, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f));
+                Glyphs.Hint(new Rect(0, h - 36, w, 28),
+                    "{reset} Puck back      {menu} Menu (bots, pick a card, settings)      " + (InputMode.Pad ? "{join} on another controller: join" : "{join} Join on the keyboard"),
+                    15, new Color(1f, 1f, 1f, 0.6f));
             }
 
             var big = Ui.Font(46, true, TextAnchor.MiddleCenter);
@@ -69,7 +75,7 @@ namespace UltraPuck.Game
                 case Phase.GameOver:
                     Ui.Box(new Rect(w / 2 - 330, h * 0.28f, 660, 150), Ui.Panel, 20f);
                     Ui.Label(new Rect(0, h * 0.28f + 14, w, 70), Palette.TeamName(_state.LastScorer) + " wins!", big, Palette.Team(_state.LastScorer));
-                    Ui.Label(new Rect(0, h * 0.28f + 90, w, 40), "Start / Enter: play again      B / Esc: main menu", Ui.Font(18, false, TextAnchor.MiddleCenter), Ui.TextDim);
+                    Glyphs.Hint(new Rect(0, h * 0.28f + 90, w, 40), "{start} Play again      {back} Main menu", 18, Ui.TextDim);
                     break;
             }
         }
@@ -79,10 +85,12 @@ namespace UltraPuck.Game
             Ui.Box(new Rect(w / 2 - 370, 30, 740, 214), Ui.Panel, 22f);
             Ui.Label(new Rect(0, 44, w, 60), "ULTRA PUCK", Ui.Font(50, true, TextAnchor.MiddleCenter), Color.white);
             var small = Ui.Font(18, false, TextAnchor.MiddleCenter);
-            Ui.Label(new Rect(0, 106, w, 28), "Join: A on a controller, or Space on the keyboard   (up to " + LocalPlayers.MaxPlayers + ")", small, Ui.Text);
-            Ui.Label(new Rect(0, 134, w, 28), "Left / right: pick a side      B / Esc: leave", small, Ui.TextDim);
-            Ui.Label(new Rect(0, 162, w, 28), _local.Slots.Count > 0 ? "Start / Enter: play a match  (first to " + (_sim != null && _sim.T.GoalsToWin > 0 ? _sim.T.GoalsToWin : 5) + ", cards after every goal)" : "Waiting for players...", small, Ui.Text);
-            Ui.Label(new Rect(0, 190, w, 28), "Y / F: free play      View / Tab: settings", small, Ui.Text);
+            Glyphs.Hint(new Rect(0, 106, w, 28), "{join} Join   (up to " + LocalPlayers.MaxPlayers + " players)", 18, Ui.Text);
+            Glyphs.Hint(new Rect(0, 134, w, 28), "{side} Pick a side      Hold {leave} Leave", 18, Ui.TextDim);
+            if (_local.Slots.Count > 0) Glyphs.Hint(new Rect(0, 162, w, 28), "{start} Play a match  (first to " + (_sim != null && _sim.T.GoalsToWin > 0 ? _sim.T.GoalsToWin : 5) + ", cards after every goal)", 18, Ui.Text);
+            else Ui.Label(new Rect(0, 162, w, 28), "Waiting for players...", small, Ui.Text);
+            Glyphs.Hint(new Rect(0, 190, w, 28), "{freeplay} Free play      {settings} Settings", 18, Ui.Text);
+            LeavingBar(new Rect(w / 2 - 150, 252, 300, 26), _local.NobodyLeaving, "Back to the main menu");
 
             var y = h - 104 - _local.Slots.Count * 36;
             if (_local.Slots.Count > 0) Ui.Box(new Rect(w / 2 - 270, y - 12, 540, _local.Slots.Count * 36 + 22), new Color(0f, 0f, 0f, 0.55f), 14f);
@@ -90,16 +98,54 @@ namespace UltraPuck.Game
             {
                 var s = _local.Slots[i];
                 Ui.Swatch(new Rect(w / 2 - 252, y + i * 36 + 5, 24, 24), s.Team);
-                Ui.Label(new Rect(w / 2 - 216, y + i * 36, 460, 34), "P" + (i + 1) + "   " + s.Label + "   ·   " + Palette.TeamName(s.Team) + " (" + Palette.SymbolName(s.Team) + ")", Ui.Font(18), Color.white);
+                var leaving = s.BackHeld / LocalPlayers.HoldToLeave;
+                if (leaving > 0.02f)
+                {
+                    Ui.Box(new Rect(w / 2 - 260, y + i * 36 + 1, 520 * Mathf.Clamp01(leaving), 32), new Color(0.9f, 0.3f, 0.3f, 0.35f), 8f);
+                    Ui.Label(new Rect(w / 2 - 216, y + i * 36, 460, 34), "Leaving...", Ui.Font(18, true, TextAnchor.MiddleRight), Color.white);
+                }
+                Ui.Label(new Rect(w / 2 - 216, y + i * 36, 460, 34), "P" + (i + 1) + "   " + NameOf(i, s) + "   ·   " + Palette.TeamName(s.Team) + " (" + Palette.SymbolName(s.Team) + ")", Ui.Font(18), Color.white);
             }
 
-            var hint = Ui.Font(15, false, TextAnchor.MiddleCenter);
-            Ui.Label(new Rect(0, h - 58, w, 24),
-                "Controller: left stick move, right stick aim.  A / Cross / RB: shoot or check.  B / Circle / LB: charge shot or brake.  Y / Triangle: utility",
-                hint, new Color(1f, 1f, 1f, 0.6f));
-            Ui.Label(new Rect(0, h - 34, w, 24),
-                "Keyboard: WASD move, arrows aim.  Space: shoot or check.  Shift: charge shot or brake.  E: utility.     [ ] UI size",
-                hint, new Color(1f, 1f, 1f, 0.6f));
+            Glyphs.Hint(new Rect(0, h - 40, w, 28),
+                "{move} Move    {aim} Aim    {shoot} Shoot / check    {charge} Charge / brake    {utility} Utility" + (InputMode.Pad ? "" : "      [ ] UI size"),
+                16, new Color(1f, 1f, 1f, 0.7f));
+        }
+
+        /// <summary>The name shown for a local lobby seat: yours for the first person, then P2, P3...</summary>
+        private string NameOf(int i, LocalPlayers.Slot s)
+        {
+            if (s.Demo) return "Bot";
+            for (var k = 0; k < i; k++) if (!_local.Slots[k].Demo) return s.Label;
+            return Settings.PlayerName + "  (" + s.Label + ")";
+        }
+
+        /// <summary>A bar that fills while B / Escape is held to leave.</summary>
+        public static void LeavingBar(Rect r, float t, string what)
+        {
+            if (t <= 0.02f) return;
+            Ui.Box(r, new Color(0f, 0f, 0f, 0.6f), r.height / 2f);
+            Ui.Box(new Rect(r.x, r.y, r.width * Mathf.Clamp01(t), r.height), new Color(0.9f, 0.3f, 0.3f, 0.8f), r.height / 2f);
+            Ui.Label(r, what + "...", Ui.Font(14, true, TextAnchor.MiddleCenter), Color.white);
+        }
+
+        /// <summary>Names over the players, so it's easy to tell who is who.</summary>
+        private void NameTags()
+        {
+            if (!Settings.NameTags || Cam == null || Event.current.type != EventType.Repaint) return;
+            var k = Screen.height / 720f * Settings.UiScale;
+            var style = Ui.Font(14, true, TextAnchor.MiddleCenter);
+            foreach (var t in Tags)
+            {
+                if (string.IsNullOrEmpty(t.Name)) continue;
+                var sp = Cam.WorldToScreenPoint(t.World);
+                var p = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
+                var tw = style.CalcSize(new GUIContent(t.Name)).x + 16f;
+                var r = new Rect(p.x - tw / 2f, p.y - 22f, tw, 20f);
+                Ui.Box(r, new Color(0f, 0f, 0f, 0.5f), 10f);
+                Ui.Box(new Rect(r.x + 6f, r.yMax - 3f, r.width - 12f, 2f), Palette.Team(t.Team), 1f);
+                Ui.Label(r, t.Name, style, Color.white);
+            }
         }
     }
 }

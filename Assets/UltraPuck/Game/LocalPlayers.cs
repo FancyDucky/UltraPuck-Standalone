@@ -33,6 +33,8 @@ namespace UltraPuck.Game
             public bool PrevLeft, PrevRight, PrevUp, PrevDown;
             /// <summary>A computer player (free play bots, or the ULTRAPUCK_DEMO players).</summary>
             public bool Demo;
+            /// <summary>How long B / Escape has been held (holding it long enough leaves).</summary>
+            public float BackHeld;
             public string Label { get { return Demo ? "Bot" : Device is Keyboard ? "Keyboard" : Device != null ? Device.displayName : "Disconnected"; } }
         }
 
@@ -49,22 +51,39 @@ namespace UltraPuck.Game
 
         // ------------------------------------------------------------------ lobby
 
-        /// <summary>Lobby: join with A / Space, leave with B / Escape, pick a side with left / right.</summary>
+        /// <summary>The Steam overlay is open: the game ignores controllers and the keyboard until it closes.</summary>
+        public static bool Blocked;
+
+        /// <summary>Seconds B / Escape must be held to leave (a tap does nothing, so nobody leaves by accident).</summary>
+        public const float HoldToLeave = 0.8f;
+
+        /// <summary>How far an unjoined controller or keyboard has got with holding B / Escape (0..1): leaving the lobby itself.</summary>
+        public float NobodyLeaving { get; private set; }
+
+        /// <summary>Lobby: join with A / Space, pick a side with left / right, hold B / Escape to leave.</summary>
         public void LobbyUpdate()
         {
+            var dt = Time.unscaledDeltaTime;
+            var nobody = 0f;
+            if (Blocked) { NobodyLeaving = 0f; return; }
             foreach (var g in Gamepad.all)
             {
                 var s = Find(g);
                 if (s == null && g.buttonSouth.wasPressedThisFrame) Join(g);
-                else if (s != null && g.buttonEast.wasPressedThisFrame) Slots.Remove(s);
+                else if (s != null) Hold(s, g.buttonEast.isPressed, dt);
+                else if (g.buttonEast.isPressed) nobody = Mathf.Max(nobody, Held(g, dt));
+                else _nobodyHeld.Remove(g);
             }
             var kb = Keyboard.current;
             if (kb != null)
             {
                 var s = Find(kb);
                 if (s == null && kb.spaceKey.wasPressedThisFrame) Join(kb);
-                else if (s != null && kb.escapeKey.wasPressedThisFrame) Slots.Remove(s);
+                else if (s != null) Hold(s, kb.escapeKey.isPressed, dt);
+                else if (kb.escapeKey.isPressed) nobody = Mathf.Max(nobody, Held(kb, dt));
+                else _nobodyHeld.Remove(kb);
             }
+            NobodyLeaving = Mathf.Clamp01(nobody / HoldToLeave);
             foreach (var s in Slots)
             {
                 if (s.Demo) continue;
@@ -73,6 +92,27 @@ namespace UltraPuck.Game
                 if (nav.x > 0) s.Team = 1;
             }
         }
+
+        private readonly Dictionary<InputDevice, float> _nobodyHeld = new Dictionary<InputDevice, float>();
+
+        private float Held(InputDevice d, float dt)
+        {
+            float t;
+            _nobodyHeld.TryGetValue(d, out t);
+            t += dt;
+            _nobodyHeld[d] = t;
+            return t;
+        }
+
+        /// <summary>Holding B long enough leaves your seat; letting go early cancels.</summary>
+        private void Hold(Slot s, bool down, float dt)
+        {
+            s.BackHeld = down ? s.BackHeld + dt : 0f;
+            if (s.BackHeld >= HoldToLeave) { Slots.Remove(s); _nobodyHeld[s.Device] = -10f; } // keep holding: don't leave the lobby too
+        }
+
+        /// <summary>Someone who hasn't joined held B / Escape long enough: leave the lobby.</summary>
+        public bool LeaveLobbyHeld() { return NobodyLeaving >= 1f; }
 
         private bool Join(InputDevice d)
         {
@@ -92,6 +132,7 @@ namespace UltraPuck.Game
         /// <summary>Start / Enter from anyone who has joined.</summary>
         public bool StartPressed()
         {
+            if (Blocked) return false;
             foreach (var s in Slots)
             {
                 var g = s.Device as Gamepad;
@@ -105,6 +146,7 @@ namespace UltraPuck.Game
         /// <summary>B / Escape from anyone who has joined.</summary>
         public bool BackPressed()
         {
+            if (Blocked) return false;
             foreach (var s in Slots)
             {
                 var g = s.Device as Gamepad;
@@ -118,6 +160,7 @@ namespace UltraPuck.Game
         /// <summary>Lobby: Y / F starts free play. Whoever presses it joins first if they haven't yet.</summary>
         public bool FreePlayPressed()
         {
+            if (Blocked) return false;
             foreach (var g in Gamepad.all)
                 if (g.buttonNorth.wasPressedThisFrame) { if (Find(g) == null) Join(g); return Find(g) != null; }
             var kb = Keyboard.current;
@@ -131,6 +174,7 @@ namespace UltraPuck.Game
         public int JoinMidGame()
         {
             var joined = 0;
+            if (Blocked) return 0;
             foreach (var g in Gamepad.all)
                 if (Find(g) == null && g.buttonSouth.wasPressedThisFrame && Join(g)) joined++;
             var kb = Keyboard.current;
@@ -141,6 +185,7 @@ namespace UltraPuck.Game
         /// <summary>Start / Options / Escape from anyone playing (opens the menu).</summary>
         public bool MenuPressed()
         {
+            if (Blocked) return false;
             foreach (var s in Slots)
             {
                 var g = s.Device as Gamepad;
@@ -154,6 +199,7 @@ namespace UltraPuck.Game
         /// <summary>Lobby: View (Select) / Tab on any controller or the keyboard opens the settings.</summary>
         public bool SettingsPressed()
         {
+            if (Blocked) return false;
             foreach (var g in Gamepad.all) if (g.selectButton.wasPressedThisFrame) return true;
             var kb = Keyboard.current;
             return kb != null && kb.tabKey.wasPressedThisFrame;
@@ -162,6 +208,7 @@ namespace UltraPuck.Game
         /// <summary>A player's aim stick right now (right stick, or arrow keys), for the card screen's tilt.</summary>
         public Vector2 AimOf(int slot)
         {
+            if (Blocked) return Vector2.zero;
             return slot >= 0 && slot < Slots.Count && Slots[slot].Device != null ? Aim(Slots[slot].Device) : Vector2.zero;
         }
 
@@ -245,6 +292,7 @@ namespace UltraPuck.Game
         private MenuInput MenuFrom(InputDevice d)
         {
             var m = new MenuInput();
+            if (Blocked) return m;
             var v = Stick(d);
             var g = d as Gamepad;
             var kb = d as Keyboard;
@@ -297,6 +345,7 @@ namespace UltraPuck.Game
         /// <summary>Every frame: remember presses until the next tick reads them.</summary>
         public void LatchPresses()
         {
+            if (Blocked) return;
             foreach (var s in Slots) s.Latched |= Buttons(s.Device, true);
         }
 
@@ -308,7 +357,7 @@ namespace UltraPuck.Game
             {
                 var s = Slots[i];
                 if (s.Demo) { inputs[i] = Bot.Think(sim, state, i); continue; }
-                if (s.Device == null || !s.Device.added) continue; // unplugged: stands still
+                if (s.Device == null || !s.Device.added || Blocked) continue; // unplugged, or the Steam overlay is open: stands still
                 var m = Stick(s.Device);
                 var a = Aim(s.Device);
                 inputs[i] = new PlayerInput

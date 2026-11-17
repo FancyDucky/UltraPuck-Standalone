@@ -17,7 +17,7 @@ namespace UltraPuck.Core.Net
     /// </summary>
     public sealed class NetSession : IDisposable
     {
-        public const int Version = 1;
+        public const int Version = 2; // 2: knock-loose checks, bigger puck, Puck Gun on brake
         public const int MaxPlayers = 4;
         /// <summary>Your own controls take effect this many ticks later (25 ms at 120 a second), which hides a little lag for free.</summary>
         public const int InputDelay = 3;

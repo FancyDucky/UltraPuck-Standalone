@@ -112,7 +112,7 @@
       "tier": "S",
       "max": 1,
       "color": "#CC3340",
-      "text": "Utility (Y): fire a shot. The first player it hits gets a [good]1 s Stun[/] and drops the puck. [note]2 s cooldown.[/]",
+      "text": "Brake to fire a shot. The first player it hits gets a [good]1 s Stun[/] and drops the puck; it knocks the puck too. [note]2 s cooldown.[/]",
       "stats": { "PuckGun": "+1" }
     },
     {

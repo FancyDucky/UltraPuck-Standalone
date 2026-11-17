@@ -24,6 +24,11 @@ namespace UltraPuck.Game
         private static bool _tried;
         private static Callback<GameLobbyJoinRequested_t> _joinRequested;
         private static Callback<LobbyEnter_t> _lobbyEntered;
+        private static Callback<GameOverlayActivated_t> _overlay;
+        private static Callback<GamepadTextInputDismissed_t> _textDismissed;
+
+        /// <summary>The Steam overlay is open right now (the game stops reading controls while it is).</summary>
+        public static bool OverlayOpen { get; private set; }
         private static CallResult<LobbyCreated_t> _created;
         private static CallResult<LobbyMatchList_t> _listed;
 
@@ -67,6 +72,12 @@ namespace UltraPuck.Game
                 _joinRequested = Callback<GameLobbyJoinRequested_t>.Create(r => Join(r.m_steamIDLobby));
                 _lobbyEntered = Callback<LobbyEnter_t>.Create(Entered);
                 _created = CallResult<LobbyCreated_t>.Create(Created);
+                _overlay = Callback<GameOverlayActivated_t>.Create(r =>
+                {
+                    OverlayOpen = r.m_bActive != 0;
+                    Debug.Log("Ultra Puck: Steam overlay " + (OverlayOpen ? "opened" : "closed"));
+                });
+                _textDismissed = Callback<GamepadTextInputDismissed_t>.Create(TextDismissed);
                 _listed = CallResult<LobbyMatchList_t>.Create(Listed);
                 Debug.Log("Ultra Puck: Steam ready as " + SteamFriends.GetPersonaName() + " (overlay " + (SteamUtils.IsOverlayEnabled() ? "on" : "off") + ")");
             }
@@ -100,6 +111,36 @@ namespace UltraPuck.Game
         }
 
         public static string Name { get { return Ready ? SteamFriends.GetPersonaName() : "Player"; } }
+
+        // ------------------------------------------------------------------ on-screen keyboard
+
+        private static Action<string> _textDone;
+
+        /// <summary>
+        /// Steam's on-screen keyboard, for typing with a controller. Only works in Big Picture mode or on a Steam
+        /// Deck; returns false otherwise (then type on the keyboard instead).
+        /// </summary>
+        public static bool AskText(string title, string current, int max, Action<string> done)
+        {
+            if (!Ready) return false;
+            try
+            {
+                if (!SteamUtils.ShowGamepadTextInput(EGamepadTextInputMode.k_EGamepadTextInputModeNormal, EGamepadTextInputLineMode.k_EGamepadTextInputLineModeSingleLine, title, (uint)max, current ?? "")) return false;
+                _textDone = done;
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
+        private static void TextDismissed(GamepadTextInputDismissed_t r)
+        {
+            var done = _textDone;
+            _textDone = null;
+            if (done == null || !r.m_bSubmitted) return;
+            string text;
+            var len = SteamUtils.GetEnteredGamepadTextLength();
+            if (SteamUtils.GetEnteredGamepadTextInput(out text, len + 1)) done(text);
+        }
 
         // ------------------------------------------------------------------ lobbies
 

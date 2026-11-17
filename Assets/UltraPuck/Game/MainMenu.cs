@@ -178,6 +178,7 @@ namespace UltraPuck.Game
 
             var x = 80f;
             Ui.Label(new Rect(x, 70f, 600f, 90f), "ULTRA PUCK", Ui.Font(76, true), Color.white);
+            if (Current == Page.Main) Ui.Label(new Rect(x + 4f, 46f, 300f, 26f), "v" + Updater.Current, Ui.Font(16, true), new Color(1f, 1f, 1f, 0.5f));
             Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim);
 
             var top = 220f;
@@ -226,8 +227,8 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(x + 6f, Ui.H - 198f, 510f, 66f), Message, WrapStyle(), Color.white);
             }
 
-            if (Current == Page.OnlineLobby) Players();
-            Ui.Label(new Rect(x, Ui.H - 36f, 900f, 24f), Hint(), Ui.Font(14), new Color(1f, 1f, 1f, 0.45f));
+            if (Current == Page.OnlineLobby) { Players(); Hud.LeavingBar(new Rect(x, Ui.H - 160f, 300f, 26f), Local.NobodyLeaving, "Leaving the game"); Hud.LeavingBar(new Rect(x, Ui.H - 160f, 300f, 26f), SeatLeaving(), "Leaving your seat"); }
+            Glyphs.Hint(new Rect(x, Ui.H - 38f, 900f, 28f), Hint(), 15, new Color(1f, 1f, 1f, 0.55f), TextAnchor.MiddleLeft);
             Ui.Label(new Rect(Ui.W - 220f, Ui.H - 36f, 200f, 24f), "v" + Updater.Current, Ui.Font(14, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.35f));
         }
 
@@ -294,10 +295,18 @@ namespace UltraPuck.Game
         {
             switch (Current)
             {
-                case Page.OnlineLobby: return "A / Space: join on this PC      Left / right: pick a side      B / Esc: leave your seat";
-                case Page.JoinIp: return _typing ? "Type the address, then Enter      Esc: back" : "A / Enter: choose      B / Esc: back";
-                default: return "A / Enter: choose      B / Esc: back";
+                case Page.OnlineLobby: return "{join} Join on this PC      {side} Pick a side      Hold {leave} Leave";
+                case Page.JoinIp: return _typing ? "Type the address, then Enter      Esc: back" : "{confirm} Choose      {back} Back";
+                case Page.Main: return "{confirm} Choose";
+                default: return "{confirm} Choose      {back} Back";
             }
+        }
+
+        private float SeatLeaving()
+        {
+            var t = 0f;
+            foreach (var sl in Local.Slots) t = Mathf.Max(t, sl.BackHeld / LocalPlayers.HoldToLeave);
+            return t;
         }
 
         /// <summary>The online lobby's player list, on the right.</summary>
@@ -309,7 +318,7 @@ namespace UltraPuck.Game
             var y = 120f;
             Ui.Box(new Rect(x - 20f, y - 20f, 470f, 70f + Mathf.Max(1, s.Seats.Count) * 50f), new Color(0f, 0f, 0f, 0.6f), 16f);
             Ui.Label(new Rect(x, y - 12f, 430f, 40f), "Players  " + s.Seats.Count + " / " + NetSession.MaxPlayers, Ui.Font(22, true), Color.white);
-            if (s.Seats.Count == 0) Ui.Label(new Rect(x, y + 34f, 430f, 40f), s.Current == NetSession.Stage.Connecting ? "Connecting..." : "Press A / Space to join", Ui.Font(18), Ui.TextDim);
+            if (s.Seats.Count == 0) Ui.Label(new Rect(x, y + 34f, 430f, 40f), s.Current == NetSession.Stage.Connecting ? "Connecting..." : InputMode.Pad ? "Press A / Cross to join" : "Press Space to join", Ui.Font(18), Ui.TextDim);
             for (var k = 0; k < s.Seats.Count; k++)
             {
                 var seat = s.Seats[k];

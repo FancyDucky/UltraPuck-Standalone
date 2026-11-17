@@ -242,6 +242,8 @@ namespace UltraPuck.Game
         {
             if (_sim == null) return;
             SteamNet.Update();
+            LocalPlayers.Blocked = SteamNet.OverlayOpen;
+            InputMode.Update();
             if (Updater.Busy) { AttractUpdate(); UpdateCamera(false); return; } // updating: the bots play on behind, nothing else
             var playing = _mode == Mode.Match || (_mode == Mode.Online && OnlinePlaying);
             if (_mode == Mode.Online) OnlineUpdate();
@@ -407,14 +409,15 @@ namespace UltraPuck.Game
                 if (_menus.IsOpen) _menus.Close();
                 _mainMenu.Show(MainMenu.Page.OnlineLobby);
                 _mainMenu.Message = s.Problem;
-                if (_local.Slots.Count == 0 && _local.BackFromNobody()) { LeaveOnline(null); return; }
+                _mainMenu.Tick(); // before joining: pressing A to join mustn't also press the highlighted button
+                if (_mode != Mode.Online || _session == null) return;
                 _local.LobbyUpdate();
+                if (_local.LeaveLobbyHeld()) { LeaveOnline(null); return; }
                 var mine = new List<KeyValuePair<string, int>>();
                 for (var k = 0; k < _local.Slots.Count; k++)
-                    mine.Add(new KeyValuePair<string, int>(SteamNet.Name + (k > 0 ? " (" + (k + 1) + ")" : ""), _local.Slots[k].Team));
+                    mine.Add(new KeyValuePair<string, int>(Settings.PlayerName + (k > 0 ? " (" + (k + 1) + ")" : ""), _local.Slots[k].Team));
                 s.SetLocalPlayers(mine);
                 if (s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2) StartOnlineMatch();
-                _mainMenu.Tick();
                 AttractUpdate();
                 return;
             }
@@ -491,8 +494,8 @@ namespace UltraPuck.Game
         private void LobbyUpdate()
         {
             if (_local.SettingsPressed()) { _menus.OpenSettings(true); return; }
-            if (_local.Slots.Count == 0 && _local.BackFromNobody()) { GoMainMenu(); return; }
             _local.LobbyUpdate();
+            if (_local.LeaveLobbyHeld()) { GoMainMenu(); return; }
             // show everyone who has joined standing at their spawn
             _state = _matchSim.NewGame(_local.Teams());
             Show(_state, _state, 0f);
@@ -608,7 +611,7 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Card effects for one player: invisibility, slowed / boosted, cooldown bars, shockwave and Team Play bursts.</summary>
-        private void CardEffects(int i, PlayerState p, Vector2 pos)
+        private bool CardEffects(int i, PlayerState p, Vector2 pos)
         {
             bool orange, blue;
             LocalTeams(out orange, out blue);
@@ -633,10 +636,24 @@ namespace UltraPuck.Game
                 _effects.Ring(pos, 0.6f, new Color(0.35f, 0.95f, 0.55f), 1.3f, 0.5f);
             _seenShocks[i] = p.Shocks;
             _seenRefreshes[i] = p.Refreshes;
+            return hidden;
+        }
+
+        /// <summary>The name over player <paramref name="i"/>: their online name, yours (then P2, P3...) on this PC, or Bot.</summary>
+        private string NameOf(int i)
+        {
+            if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count ? _session.Seats[i].Name : "";
+            if (i >= _local.Slots.Count) return "";
+            var s = _local.Slots[i];
+            if (s.Demo) return "Bot";
+            for (var k = 0; k < i; k++) if (!_local.Slots[k].Demo) return "P" + (i + 1);
+            return Settings.PlayerName;
         }
 
         private void Show(GameState a, GameState b, float t)
         {
+            _hud.Tags.Clear();
+            _hud.Cam = _cam;
             while (_players.Count > b.Players.Length) { Destroy(_players[_players.Count - 1].Root); _players.RemoveAt(_players.Count - 1); }
             for (var i = 0; i < b.Players.Length; i++)
             {
@@ -657,7 +674,8 @@ namespace UltraPuck.Game
                 var full = Simulation.MaxDashes(pb).ToFloat();
                 Vector2 hitAt;
                 var hit = _players[i].Show(pos, facing, pb.DashCharge.ToFloat(), Mathf.RoundToInt(full), pb.Charge.ToFloat(), pb.Hits, pb.HitPower.ToFloat(), V.Of(pb.HitDir), out hitAt);
-                CardEffects(i, pb, pos);
+                if (!CardEffects(i, pb, pos))
+                    _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.25f, 0f), Name = NameOf(i), Team = pb.Team });
                 if (hit > 0f)
                 {
                     // both players in a hit report it; one ring per contact is enough

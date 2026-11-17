@@ -346,13 +346,14 @@ namespace UltraPuck.Core
             // utility (Y / Triangle): every utility card you have that's ready
             if ((pressed & PlayerInput.Utility) != 0)
             {
-                if (p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero) FireGun(s, i);
                 if (p.Stats.Invisibility > 0 && p.InvisCooldown <= Fix.Zero) { p.InvisibleTime = T.InvisTime; p.InvisCooldown = T.InvisCooldown; }
             }
 
             if (!carrying)
             {
                 p.Charge = Fix.Zero;
+                // Puck Gun: brake fires it (when you don't have the puck)
+                if ((pressed & PlayerInput.ChargeBrake) != 0 && p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero) FireGun(s, i);
                 // check: a dash that knocks people back. Not while carrying the puck, and not while dazed.
                 if ((pressed & PlayerInput.ShootCheck) != 0 && p.DashCharge >= Fix.One && p.Stun <= Fix.Zero)
                 {
@@ -434,15 +435,17 @@ namespace UltraPuck.Core
                 var c = s.Players[s.Carrier];
                 s.PuckPos = CarrySpot(c);
                 s.PuckVel = c.Vel;
-                // an opponent checking straight into the carried puck takes it
+                // an opponent checking straight into the carried puck knocks it loose
                 for (var j = 0; j < s.Players.Length; j++)
                 {
                     var q = s.Players[j];
-                    if (j == s.Carrier || q.Team == c.Team || q.DashTime <= Fix.Zero || q.NoPickup > Fix.Zero || s.Phase != Phase.Play) continue;
+                    if (j == s.Carrier || q.Team == c.Team || q.DashTime <= Fix.Zero || s.Phase != Phase.Play) continue;
                     var reach = RadiusOf(q) + T.PuckRadius;
                     if ((s.PuckPos - q.Pos).SqrLength >= reach * reach) continue;
                     Hit(c, (q.Pos - c.Pos).Normalized, Fix.Half);
-                    TakePuck(s, j);
+                    var dir = q.Vel.SqrLength.Raw > 0 ? q.Vel.Normalized : q.Facing;
+                    KnockLoose(s, s.Carrier, dir, j);
+                    q.DashTime = Fix.Zero; // that was the check
                     return;
                 }
                 return;
@@ -507,9 +510,10 @@ namespace UltraPuck.Core
                 var n = dist.Raw > 0 ? d / dist : p.Facing;
                 var pushedFrom = s.PuckPos;
                 s.PuckPos = p.Pos + n * r;
+                // only a soft nudge: a player who can't pick it up yet (just shot it, or just lost it) shouldn't send it flying
                 var rel = s.PuckVel - p.Vel;
                 var vn = FixVec2.Dot(rel, n);
-                if (vn < Fix.Zero) s.PuckVel -= n * (vn * (Fix.One + T.PuckWallBounce));
+                if (vn < Fix.Zero) s.PuckVel -= n * (vn * Fix.Ratio(11, 10));
                 // a player against the boards mustn't push the puck through them
                 CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
                 KeepPuckIn(s, pushedFrom);
@@ -611,17 +615,25 @@ namespace UltraPuck.Core
             Hit(a, n, Fix.Ratio(3, 5));
             if (s.Carrier == to)
             {
-                // checking the carrier: an opponent takes the puck; a teammate (or someone who can't pick up yet)
-                // just pops it loose, gently, rather than sending it flying with the knockback
-                if (a.Team != b.Team && a.NoPickup <= Fix.Zero && s.Phase == Phase.Play) TakePuck(s, from);
-                else
-                {
-                    s.Carrier = -1;
-                    s.PuckVel = a.Vel * Fix.Half;
-                    b.NoPickup = T.StolenPickupDelay;
-                    b.Charge = Fix.Zero;
-                }
+                // checking the carrier knocks the puck loose: it pops out the way the check was going, and nobody
+                // owns it until someone picks it up (the checker has to wait a moment, so it doesn't just change hands)
+                KnockLoose(s, to, n, from);
             }
+        }
+
+        /// <summary>
+        /// The carrier <paramref name="carrier"/> loses the puck: it pops loose in direction <paramref name="dir"/>.
+        /// <paramref name="by"/> (the checker, or -1) can't grab it for a moment.
+        /// </summary>
+        private void KnockLoose(GameState s, int carrier, FixVec2 dir, int by)
+        {
+            var c = s.Players[carrier];
+            s.Carrier = -1;
+            s.PassFrom = -1;
+            s.PuckVel = c.Vel * Fix.Half + dir * T.KnockLooseSpeed;
+            c.NoPickup = T.StolenPickupDelay;
+            c.Charge = Fix.Zero;
+            if (by >= 0) s.Players[by].NoPickup = Fix.Max(s.Players[by].NoPickup, T.CheckerPickupDelay);
         }
 
         /// <summary><paramref name="to"/> takes the puck off whoever has it.</summary>
@@ -673,6 +685,16 @@ namespace UltraPuck.Core
                 {
                     var r = T.PylonRadius + T.ShotRadius;
                     if (!gone && (sh.Pos - py.Pos).SqrLength < r * r) gone = true;
+                }
+                // the puck: a loose one gets knocked along; a carried one is knocked loose
+                var pr = T.PuckRadius + T.ShotRadius;
+                if (!gone && (s.Carrier < 0 || s.Carrier != sh.Owner) && (sh.Pos - s.PuckPos).SqrLength < pr * pr)
+                {
+                    var dir = sh.Vel.Normalized;
+                    if (s.Carrier >= 0) KnockLoose(s, s.Carrier, dir, -1);
+                    s.PuckVel += dir * T.GunPuckPush;
+                    s.PassFrom = -1;
+                    gone = true;
                 }
                 if (!gone)
                     for (var j = 0; j < s.Players.Length; j++)
@@ -807,13 +829,19 @@ namespace UltraPuck.Core
                 }
         }
 
+        /// <summary>
+        /// The point on a wall nearest <paramref name="p"/>. Measured from the wall's middle, not an end, so a wall that
+        /// is its own mirror image (one straight wall across both halves of the rink) gives exactly mirrored answers
+        /// for mirrored points: the rules must never favour a side.
+        /// </summary>
         private static FixVec2 Closest(WallSegment s, FixVec2 p)
         {
-            var ab = s.B - s.A;
-            var len2 = ab.SqrLength;
-            if (len2.Raw == 0) return s.A;
-            var t = Fix.Clamp01(FixVec2.Dot(p - s.A, ab) / len2);
-            return s.A + ab * t;
+            var half = (s.B - s.A) * Fix.Half;
+            var mid = s.A + half;
+            var len2 = half.SqrLength;
+            if (len2.Raw == 0) return mid;
+            var t = Fix.Clamp(FixVec2.Dot(p - mid, half) / len2, -Fix.One, Fix.One);
+            return mid + half * t;
         }
 
         /// <summary>How far along from <paramref name="p"/> to <paramref name="q"/> the first wall is (0..1), or 1 if none.</summary>

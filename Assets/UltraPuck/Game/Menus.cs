@@ -43,7 +43,16 @@ namespace UltraPuck.Game
             public Func<bool> Toggle;             // switches: on or off
             public Func<bool> Enabled = () => true;
             public string Hint;
+            public bool Text;                     // a text box (your name): press to type
         }
+
+        // typing your name
+        private bool _typing;
+        private string _buffer = "";
+        private Action<string> _typed;
+
+        /// <summary>A text box in the settings has the keyboard (other keyboard shortcuts should leave it alone).</summary>
+        public static bool Typing { get; private set; }
 
         private readonly List<Row> _rows = new List<Row>();
 
@@ -107,6 +116,14 @@ namespace UltraPuck.Game
                     _rows.Add(Switch("Card effects", () => Settings.CardEffects, v => Settings.CardEffects = v, "Holo foil, glare and sparkle on cards."));
                     break;
                 case 1:
+                    _rows.Add(new Row
+                    {
+                        Label = "Your name", Text = true,
+                        Value = () => _typing ? _buffer : Settings.PlayerName,
+                        Press = () => StartTyping(Settings.PlayerName, v => Settings.PlayerName = v),
+                        Hint = "Shown over your player and in online games. Leave it empty to use your Steam name.",
+                    });
+                    _rows.Add(Switch("Name tags", () => Settings.NameTags, v => Settings.NameTags = v, "Names floating over the players."));
                     _rows.Add(Slider("Screen shake", () => Settings.ShakeAmount, v => Settings.ShakeAmount = v, v => v < 0.01f ? "Off" : Mathf.RoundToInt(v * 100f) + "%"));
                     _rows.Add(Switch("Hit effects", () => Settings.HitEffects, v => Settings.HitEffects = v, "Squash, flash and impact rings when players collide."));
                     _rows.Add(Choice("Check bar", new[] { "While recharging", "Always" }, () => Settings.DashBarAlways ? 1 : 0, v => Settings.DashBarAlways = v == 1));
@@ -122,6 +139,66 @@ namespace UltraPuck.Game
                     break;
             }
             _rows.Add(Button("Back", Back));
+        }
+
+        private int _settingsRows;
+
+        /// <summary>The most rows any settings tab has.</summary>
+        private int SettingsRows()
+        {
+            if (_settingsRows > 0) return Mathf.Max(_settingsRows, _rows.Count);
+            var keep = _tab;
+            for (_tab = 0; _tab < Tabs.Length; _tab++) { BuildRows(); _settingsRows = Mathf.Max(_settingsRows, _rows.Count); }
+            _tab = keep;
+            BuildRows();
+            return _settingsRows;
+        }
+
+        // ------------------------------------------------------------------ typing
+
+        private void StartTyping(string current, Action<string> done)
+        {
+            // a controller: Steam's on-screen keyboard if it's available (Big Picture, Steam Deck); otherwise the keyboard
+            if (InputMode.Pad && SteamNet.AskText("Your name", current, Settings.MaxNameLength, done)) return;
+            _typing = Typing = true;
+            _buffer = current ?? "";
+            _typed = done;
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null) kb.onTextInput += OnText;
+        }
+
+        private void OnText(char c)
+        {
+            if (!_typing || char.IsControl(c) || c == '<' || c == '>') return;
+            if (_buffer.Length < Settings.MaxNameLength) _buffer += c;
+        }
+
+        private void TypingTick()
+        {
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            var pad = UnityEngine.InputSystem.Gamepad.current;
+            if (LocalPlayers.Blocked) return;
+            if (kb != null && kb.backspaceKey.wasPressedThisFrame && _buffer.Length > 0) _buffer = _buffer.Substring(0, _buffer.Length - 1);
+            var done = kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame);
+            var cancel = kb != null && kb.escapeKey.wasPressedThisFrame;
+            foreach (var g in UnityEngine.InputSystem.Gamepad.all)
+            {
+                done |= g.buttonSouth.wasPressedThisFrame;
+                cancel |= g.buttonEast.wasPressedThisFrame;
+            }
+            if (done) StopTyping(true);
+            else if (cancel) StopTyping(false);
+        }
+
+        private void StopTyping(bool keep)
+        {
+            if (!_typing) return;
+            _typing = Typing = false;
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null) kb.onTextInput -= OnText;
+            if (keep && _typed != null) _typed(_buffer);
+            _typed = null;
+            PlayerPrefs.Save();
         }
 
         private static string ZoomText(float v) { return v < 0.15f ? "Close" : v > 0.85f ? "Wide" : Mathf.RoundToInt(v * 100f) + "%"; }
@@ -151,6 +228,7 @@ namespace UltraPuck.Game
 
         public void Close()
         {
+            StopTyping(false);
             Current = Page.None;
             PlayerPrefs.Save();
             if (OnResume != null) OnResume();
@@ -158,6 +236,7 @@ namespace UltraPuck.Game
 
         private void Back()
         {
+            StopTyping(false);
             PlayerPrefs.Save();
             if (Current == Page.Settings && !_settingsFromLobby) { Current = Page.Pause; _focus = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }
             else Close();
@@ -168,7 +247,8 @@ namespace UltraPuck.Game
         /// <summary>Controller / keyboard input for this frame (from <see cref="LocalPlayers.Menu"/>).</summary>
         public void Tick(LocalPlayers.MenuInput m)
         {
-            if (!IsOpen) return;
+            if (!IsOpen) { StopTyping(false); return; }
+            if (_typing) { TypingTick(); return; }
             BuildRows();
             if (_rows.Count == 0) return;
             if (m.Back) { Back(); return; }
@@ -205,7 +285,8 @@ namespace UltraPuck.Game
             var rowH = pause ? 54f : 50f;
             var panelW = pause ? 440f : 780f;
             var top = pause ? 110f : 150f;
-            var panelH = top + _rows.Count * (rowH + 8f) + (pause ? 30f : 92f);
+            // the settings panel is as tall as its longest tab, so it doesn't jump about between tabs
+            var panelH = top + (pause ? _rows.Count : SettingsRows()) * (rowH + 8f) + (pause ? 30f : 92f);
             var x = Ui.W / 2f - panelW / 2f;
             var y = Ui.H / 2f - panelH / 2f + (1f - appear) * 40f;
 
@@ -250,8 +331,10 @@ namespace UltraPuck.Game
             {
                 var hint = _focus < _rows.Count && _rows[_focus].Hint != null ? _rows[_focus].Hint : "";
                 Ui.Label(new Rect(x, y + panelH - 70f, panelW, 24f), hint, Ui.Font(16, false, TextAnchor.MiddleCenter), Ui.TextDim);
-                Ui.Label(new Rect(x, y + panelH - 40f, panelW, 24f), "LB / RB or Q / E: tabs      B / Esc: back      changes save straight away",
-                    Ui.Font(14, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f));
+                Glyphs.Hint(new Rect(x, y + panelH - 40f, panelW, 24f),
+                    _typing ? (InputMode.Pad ? "Type on the keyboard    {confirm} Done    {back} Cancel" : "Type your name    {confirm} Done    {back} Cancel")
+                            : "{tabs} Tabs      {back} Back      Changes save straight away",
+                    14, new Color(1f, 1f, 1f, 0.45f));
             }
             GUI.matrix = oldMatrix;
         }
@@ -317,6 +400,15 @@ namespace UltraPuck.Game
                 var grab = new Rect(track.x - 12f, r.y, track.width + 24f, r.height);
                 if (enabled && Ui.MouseHeld && grab.Contains(mouse) && Event.current.type == EventType.Repaint)
                     row.Set01(Mathf.Clamp01((mouse.x - track.x) / track.width));
+            }
+            else if (row.Text)
+            {
+                var box = new Rect(right.x, r.y + 8f, right.width, r.height - 16f);
+                var editing = _typing && focused;
+                Ui.Box(box, new Color(1f, 1f, 1f, editing ? 0.16f : 0.06f), 10f);
+                var caret = editing && (Time.unscaledTime * 2f) % 2f < 1.2f ? "|" : "";
+                Ui.Label(new Rect(box.x + 14f, box.y, box.width - 28f, box.height), row.Value() + caret, Ui.Font(18, focused), textCol);
+                if (clicked) row.Press();
             }
             else if (row.Value != null)
             {

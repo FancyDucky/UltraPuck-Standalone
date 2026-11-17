@@ -89,6 +89,38 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("dash_bar_always", value ? 1 : 0); }
         }
 
+        /// <summary>Your name, shown over your player and in online lobbies. Empty: your Steam name.</summary>
+        public static string PlayerName
+        {
+            get
+            {
+                var n = Clean(PlayerPrefs.GetString("player_name", ""));
+                if (n.Length > 0) return n;
+                n = Clean(SteamNet.Name);
+                return n.Length > 0 ? n : "Player";
+            }
+            set { PlayerPrefs.SetString("player_name", Clean(value)); }
+        }
+
+        public const int MaxNameLength = 16;
+
+        /// <summary>A name with no line breaks, rich-text tags or spaces at the ends, at most <see cref="MaxNameLength"/> long.</summary>
+        public static string Clean(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            var sb = new System.Text.StringBuilder();
+            foreach (var c in s) if (!char.IsControl(c) && c != '<' && c != '>') sb.Append(c);
+            var t = sb.ToString().Trim();
+            return t.Length > MaxNameLength ? t.Substring(0, MaxNameLength).Trim() : t;
+        }
+
+        /// <summary>Names floating over the players.</summary>
+        public static bool NameTags
+        {
+            get { return PlayerPrefs.GetInt("name_tags", 1) != 0; }
+            set { PlayerPrefs.SetInt("name_tags", value ? 1 : 0); }
+        }
+
         // ------------------------------------------------------------------ camera
 
         /// <summary>The camera follows the action and zooms (on), or always shows the whole rink (off).</summary>

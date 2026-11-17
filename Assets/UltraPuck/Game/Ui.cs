@@ -48,17 +48,18 @@ namespace UltraPuck.Game
 
         public static bool MouseMoved
         {
-            get { var m = UnityEngine.InputSystem.Mouse.current; return m != null && m.delta.ReadValue().sqrMagnitude > 0.5f; }
+            // a real move only: a resting mouse (or a bumped desk) mustn't pull the focus away from a controller
+            get { InputMode.Update(); return InputMode.MouseUsed && !LocalPlayers.Blocked; }
         }
 
         public static bool Clicked
         {
-            get { var m = UnityEngine.InputSystem.Mouse.current; return m != null && m.leftButton.wasPressedThisFrame; }
+            get { var m = UnityEngine.InputSystem.Mouse.current; return m != null && m.leftButton.wasPressedThisFrame && !LocalPlayers.Blocked; }
         }
 
         public static bool MouseHeld
         {
-            get { var m = UnityEngine.InputSystem.Mouse.current; return m != null && m.leftButton.isPressed; }
+            get { var m = UnityEngine.InputSystem.Mouse.current; return m != null && m.leftButton.isPressed && !LocalPlayers.Blocked; }
         }
 
         // ------------------------------------------------------------------ shapes

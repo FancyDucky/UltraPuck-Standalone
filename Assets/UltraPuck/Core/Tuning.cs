@@ -15,7 +15,7 @@ namespace UltraPuck.Core
         public int Substeps = 2;
 
         public Fix PlayerRadius = Fix.Ratio(1, 2);
-        public Fix PuckRadius = Fix.Ratio(1, 4);
+        public Fix PuckRadius = Fix.Ratio(27, 80); // 0.3375: 35% bigger than the first 0.25
 
         // moving: the stick pushes with MoveForce; Drag slows you, so top speed = MoveForce / Drag
         public Fix MoveForce = Fix.FromInt(24);
@@ -45,7 +45,7 @@ namespace UltraPuck.Core
         // the puck
         public Fix PuckDrag = Fix.Ratio(7, 10);
         public Fix PuckWallBounce = Fix.Ratio(4, 5);
-        public Fix PuckMaxSpeed = Fix.FromInt(40);
+        public Fix PuckMaxSpeed = Fix.FromInt(60);
         /// <summary>A quick shot (shoot/check with the puck).</summary>
         public Fix ShotSpeed = Fix.FromInt(15);
         /// <summary>
@@ -53,10 +53,14 @@ namespace UltraPuck.Core
         /// <see cref="ChargedShotMin"/> for a tap to <see cref="ChargedShotMax"/> at <see cref="ChargeTime"/> seconds.
         /// Held half the time = half way. Holding longer than ChargeTime keeps it at full.
         /// </summary>
-        public Fix ChargedShotMin = Fix.FromInt(2);
-        public Fix ChargedShotMax = Fix.FromInt(30);
+        public Fix ChargedShotMin = Fix.FromInt(5);
+        public Fix ChargedShotMax = Fix.FromInt(45);
         public Fix ChargeTime = Fix.Ratio(9, 10);
-        public Fix ShotPickupDelay = Fix.Ratio(3, 10);
+        public Fix ShotPickupDelay = Fix.Ratio(1, 5);
+        /// <summary>Checking the carrier knocks the puck loose: how fast it pops out, and how long the checker must wait to grab it.</summary>
+        public Fix KnockLooseSpeed = Fix.FromInt(4), CheckerPickupDelay = Fix.Ratio(1, 4);
+        /// <summary>How hard a Puck Gun shot knocks the puck.</summary>
+        public Fix GunPuckPush = Fix.FromInt(14);
         public Fix StolenPickupDelay = Fix.Ratio(1, 2);
 
         // match flow

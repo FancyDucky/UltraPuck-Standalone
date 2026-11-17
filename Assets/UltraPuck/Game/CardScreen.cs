@@ -403,10 +403,9 @@ namespace UltraPuck.Game
             Ui.Box(bar, new Color(1f, 1f, 1f, 0.12f * a), 3f);
             Ui.Box(new Rect(bar.x, bar.y, bar.width * left, bar.height), new Color(1f, 1f, 1f, (left < 0.2f ? 0.9f : 0.6f) * a), 3f);
 
-            var hint = Slot >= 0 && Slot < Local.Slots.Count && Local.Slots[Slot].Device is UnityEngine.InputSystem.Keyboard
-                ? "A / D or arrows: look      Space / Enter or click: take it"
-                : "Left / right: look      Right stick: tilt      A / Cross: take it";
-            Ui.Label(new Rect(0f, Ui.H - 46f, Ui.W, 30f), hint, Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a));
+            var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
+            var hint = device is UnityEngine.InputSystem.Keyboard ? "{look} Look      {join} Take it  (or click)" : "{side} Look      {aim} Tilt      {confirm} Take it";
+            Glyphs.Hint(new Rect(0f, Ui.H - 46f, Ui.W, 30f), hint, 17, new Color(1f, 1f, 1f, 0.6f * a), TextAnchor.MiddleCenter, device);
         }
 
         // ------------------------------------------------------------------ building a card

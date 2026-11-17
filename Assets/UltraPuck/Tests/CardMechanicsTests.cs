@@ -98,7 +98,7 @@ namespace UltraPuck.Tests
             s.Players[0].Pos = At(-4, 0); s.Players[0].Facing = FixVec2.Right;
             s.Players[1].Pos = At(3, 0); s.Players[1].Facing = new FixVec2(Fix.Zero, Fix.One);
             s.Carrier = 1;
-            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
             Assert.AreEqual(1, s.Shots.Length, "fired");
             Run(s, 60, default(PlayerInput), default(PlayerInput));
             Assert.Greater(s.Players[1].Stun.ToDouble(), 0.0, "stunned");
@@ -106,11 +106,25 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0, s.Shots.Length);
             // a second shot has to wait for the cooldown
             _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
-            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
             Assert.AreEqual(0, s.Shots.Length, "still cooling down");
             Run(s, 2 * _sim.T.TicksPerSecond, default(PlayerInput), default(PlayerInput));
-            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
             Assert.AreEqual(1, s.Shots.Length, "ready again");
+        }
+
+        [Test]
+        public void PuckGunKnocksTheLoosePuck()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.puckgun");
+            Play(s);
+            s.Players[0].Pos = At(-4, -6); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(10, 8);
+            s.PuckPos = At(0, -6);
+            _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
+            for (var t = 0; t < 60 && s.Shots.Length > 0; t++) _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.Greater(s.PuckVel.X.ToDouble(), 8.0, "the shot knocked the puck along");
         }
 
         [Test]
