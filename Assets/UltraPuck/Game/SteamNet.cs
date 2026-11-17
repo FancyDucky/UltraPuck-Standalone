@@ -26,6 +26,8 @@ namespace UltraPuck.Game
         private static Callback<LobbyEnter_t> _lobbyEntered;
         private static Callback<GameOverlayActivated_t> _overlay;
         private static Callback<GamepadTextInputDismissed_t> _textDismissed;
+        private static Callback<GameRichPresenceJoinRequested_t> _presenceJoin;
+        private static Callback<LobbyDataUpdate_t> _lobbyData;
 
         /// <summary>The Steam overlay is open right now (the game stops reading controls while it is).</summary>
         public static bool OverlayOpen { get; private set; }
@@ -42,12 +44,22 @@ namespace UltraPuck.Game
         public static Action OnHosted;
         public static Action<string> OnFailed;
 
-        public sealed class Listing { public CSteamID Id; public string Name; public int Players; }
+        public sealed class Listing
+        {
+            public CSteamID Id; public string Name; public int Players;
+            /// <summary>The lobby's online version, or null while Steam is still fetching it (a friend's lobby).</summary>
+            public string Version;
+            public bool Friend;
+            public bool SameVersion { get { return string.IsNullOrEmpty(Version) || Version == NetSession.Version.ToString(); } }
+        }
         public static readonly List<Listing> Found = new List<Listing>();
         public static bool Searching { get; private set; }
 
-        /// <summary>Lobby key that marks Ultra Puck lobbies (the test app is shared with many other games).</summary>
-        private const string Key = "ultrapuck";
+        /// <summary>
+        /// Lobby keys: "game" marks Ultra Puck lobbies (the test app is shared with many other games), "ultrapuck"
+        /// holds the online version (so a game on another version shows up as such instead of not at all).
+        /// </summary>
+        private const string Key = "ultrapuck", GameKey = "game", GameValue = "ultrapuck";
 
         public static void Init()
         {
@@ -79,6 +91,15 @@ namespace UltraPuck.Game
                 });
                 _textDismissed = Callback<GamepadTextInputDismissed_t>.Create(TextDismissed);
                 _listed = CallResult<LobbyMatchList_t>.Create(Listed);
+                // "Join game" from the Steam friends list while the game is running
+                _presenceJoin = Callback<GameRichPresenceJoinRequested_t>.Create(r =>
+                {
+                    ulong id;
+                    var parts = (r.m_rgchConnect ?? "").Split(' ');
+                    for (var k = 0; k + 1 < parts.Length; k++)
+                        if (parts[k] == "+connect_lobby" && ulong.TryParse(parts[k + 1], out id)) Join(new CSteamID(id));
+                });
+                _lobbyData = Callback<LobbyDataUpdate_t>.Create(LobbyData);
                 Debug.Log("Ultra Puck: Steam ready as " + SteamFriends.GetPersonaName() + " (overlay " + (SteamUtils.IsOverlayEnabled() ? "on" : "off") + ")");
             }
             catch (Exception ex)
@@ -155,6 +176,8 @@ namespace UltraPuck.Game
         {
             if (failed || r.m_eResult != EResult.k_EResultOK) { if (OnFailed != null) OnFailed("Steam couldn't make a lobby (" + r.m_eResult + ")."); return; }
             Lobby = new CSteamID(r.m_ulSteamIDLobby);
+            Present();
+            SteamMatchmaking.SetLobbyData(Lobby, GameKey, GameValue);
             SteamMatchmaking.SetLobbyData(Lobby, Key, NetSession.Version.ToString());
             SteamMatchmaking.SetLobbyData(Lobby, "name", Name + "'s game");
             SteamMatchmaking.SetLobbyData(Lobby, "players", "1");
@@ -225,6 +248,7 @@ namespace UltraPuck.Game
                 return;
             }
             Lobby = lobby;
+            Present();
             var owner = SteamMatchmaking.GetLobbyOwner(lobby);
             if (owner == SteamUser.GetSteamID()) return; // our own, just made
             if (OnJoined != null) OnJoined(owner);
@@ -234,15 +258,29 @@ namespace UltraPuck.Game
         {
             if (Ready && Lobby.IsValid() && Lobby != CSteamID.Nil) SteamMatchmaking.LeaveLobby(Lobby);
             Lobby = CSteamID.Nil;
+            Present();
+        }
+
+        /// <summary>
+        /// Rich presence: while we're in a lobby, Steam friends get "Join game" on us in their friends list (it
+        /// sends them our lobby: see <see cref="CheckLaunchInvite"/> and the presence join callback).
+        /// </summary>
+        private static void Present()
+        {
+            if (!Ready) return;
+            if (InLobby) SteamFriends.SetRichPresence("connect", "+connect_lobby " + Lobby.m_SteamID);
+            else SteamFriends.ClearRichPresence();
         }
 
         public static void Search()
         {
             if (!Ready) return;
             Searching = true;
-            SteamMatchmaking.AddRequestLobbyListStringFilter(Key, NetSession.Version.ToString(), ELobbyComparison.k_ELobbyComparisonEqual);
+            // Steam only lists lobbies near you by default: friends in another region wouldn't show up
+            SteamMatchmaking.AddRequestLobbyListDistanceFilter(ELobbyDistanceFilter.k_ELobbyDistanceFilterWorldwide);
+            SteamMatchmaking.AddRequestLobbyListStringFilter(GameKey, GameValue, ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListStringFilter("playing", "0", ELobbyComparison.k_ELobbyComparisonEqual);
-            SteamMatchmaking.AddRequestLobbyListResultCountFilter(30);
+            SteamMatchmaking.AddRequestLobbyListResultCountFilter(50);
             _listed.Set(SteamMatchmaking.RequestLobbyList());
         }
 
@@ -250,15 +288,55 @@ namespace UltraPuck.Game
         {
             Searching = false;
             Found.Clear();
+            FriendsLobbies();
             if (failed) return;
             for (var k = 0; k < r.m_nLobbiesMatching; k++)
             {
                 var id = SteamMatchmaking.GetLobbyByIndex(k);
-                int players;
-                int.TryParse(SteamMatchmaking.GetLobbyData(id, "players"), out players);
-                var name = SteamMatchmaking.GetLobbyData(id, "name");
-                Found.Add(new Listing { Id = id, Name = string.IsNullOrEmpty(name) ? "Ultra Puck game" : name, Players = Math.Max(1, players) });
+                if (id == Lobby || Found.Exists(l => l.Id == id)) continue;
+                var listing = new Listing { Id = id, Name = "Ultra Puck game" };
+                Fill(listing);
+                Found.Add(listing);
             }
+        }
+
+        /// <summary>Lobbies our friends are in, found through the friends list (whatever the lobby search turns up).</summary>
+        private static void FriendsLobbies()
+        {
+            var app = SteamUtils.GetAppID();
+            var n = SteamFriends.GetFriendCount(EFriendFlags.k_EFriendFlagImmediate);
+            for (var k = 0; k < n; k++)
+            {
+                var friend = SteamFriends.GetFriendByIndex(k, EFriendFlags.k_EFriendFlagImmediate);
+                FriendGameInfo_t game;
+                if (!SteamFriends.GetFriendGamePlayed(friend, out game) || game.m_gameID.AppID() != app) continue;
+                var lobby = game.m_steamIDLobby;
+                if (!lobby.IsValid() || lobby == CSteamID.Nil || lobby == Lobby || Found.Exists(l => l.Id == lobby)) continue;
+                Found.Add(new Listing { Id = lobby, Friend = true, Name = SteamFriends.GetFriendPersonaName(friend) + "'s game", Players = 1 });
+                SteamMatchmaking.RequestLobbyData(lobby); // its details arrive in LobbyData
+            }
+        }
+
+        private static void Fill(Listing l)
+        {
+            int players;
+            int.TryParse(SteamMatchmaking.GetLobbyData(l.Id, "players"), out players);
+            var name = SteamMatchmaking.GetLobbyData(l.Id, "name");
+            if (!string.IsNullOrEmpty(name)) l.Name = name;
+            l.Players = Math.Max(1, players);
+            l.Version = SteamMatchmaking.GetLobbyData(l.Id, Key);
+        }
+
+        private static void LobbyData(LobbyDataUpdate_t r)
+        {
+            if (r.m_ulSteamIDLobby != r.m_ulSteamIDMember) return; // a member's data, not the lobby's
+            var id = new CSteamID(r.m_ulSteamIDLobby);
+            var l = Found.Find(x => x.Id == id);
+            if (l == null) return;
+            if (r.m_bSuccess == 0) { Found.Remove(l); return; } // gone
+            // a friend in the test app's lobby for some other game
+            if (SteamMatchmaking.GetLobbyData(id, GameKey) != GameValue && SteamMatchmaking.GetLobbyData(id, Key) == "") { Found.Remove(l); return; }
+            Fill(l);
         }
     }
 

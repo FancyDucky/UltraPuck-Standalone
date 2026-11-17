@@ -82,7 +82,14 @@ namespace UltraPuck.Game
                     foreach (var l in SteamNet.Found)
                     {
                         var id = l.Id;
-                        _rows.Add(new Row { Label = l.Name, Detail = l.Players + " / " + NetSession.MaxPlayers + " players", Press = () => Runner.JoinSteam(id) });
+                        var listing = l;
+                        _rows.Add(new Row
+                        {
+                            Label = l.Name,
+                            Detail = l.SameVersion ? l.Players + " / " + NetSession.MaxPlayers + " players" + (l.Friend ? " (friend)" : "") : "Different version: you both need the latest update",
+                            Press = () => Runner.JoinSteam(id),
+                            Enabled = () => listing.SameVersion,
+                        });
                     }
                     _rows.Add(new Row { Label = SteamNet.Searching ? "Searching..." : "Refresh", Press = SteamNet.Search, Enabled = () => !SteamNet.Searching });
                     _rows.Add(new Row { Label = "Back", Press = () => Show(Page.Online) });
@@ -317,7 +324,9 @@ namespace UltraPuck.Game
                 case Page.Browse:
                     return SteamNet.Found.Count == 0 && !SteamNet.Searching ? "No open games found. Friends can also invite you from Steam." : "";
                 case Page.Friends:
-                    return _friends.Count == 0 ? "None of your Steam friends are online." : "The invite arrives in their Steam chat. If they have Ultra Puck open, accepting joins your game; they can also use Online > Find games on Steam.";
+                    var help = _friends.Count == 0 ? "None of your Steam friends are online." : "The invite arrives in their Steam chat. If they have Ultra Puck open, accepting joins your game; they can also use Online > Find games on Steam, or Join game on you in their Steam friends list.";
+                    if (!SteamNet.OverlayWorks) help += " (The Steam overlay only works when Steam starts the game: add UltraPuck.exe with Games > Add a Non-Steam Game and start it from your Steam library.)";
+                    return help;
                 case Page.OnlineLobby:
                     if (Session == null) return "";
                     var s = Session.Describe();
