@@ -474,9 +474,10 @@ namespace UltraPuck.Tests
         {
             var sim = new Simulation(LoadMap("hockey-rink.json"));
             int[] goals = new int[2];
-            for (var k = 0; k < 8; k++)
+            // the rink is 35% longer than the Test Rink, so goals come slower: longer matches
+            for (var k = 0; k < 10; k++)
             {
-                var score = BotMatch(sim, new[] { 0, 1, 0, 1 }, 0x51ED27u + (uint)k * 7919u, 150);
+                var score = BotMatch(sim, new[] { 0, 1, 0, 1 }, 0x51ED27u + (uint)k * 7919u, 240);
                 goals[0] += score[0]; goals[1] += score[1];
             }
             Assert.Greater(goals[0] + goals[1], 10, "goals: orange " + goals[0] + " blue " + goals[1]);
@@ -491,13 +492,16 @@ namespace UltraPuck.Tests
             var s = sim.NewGame(new[] { 0 });
             PlayNow(s);
             s.Players[0].Pos = new FixVec2(Fix.Zero, Fix.FromInt(10));
-            s.PuckPos = new FixVec2(Fix.FromInt(-22), Fix.Zero);
+            // the left net (team 0's): its back wall is just behind the goal area
+            var goal = sim.Map.Goals[0].Team == 0 ? sim.Map.Goals[0] : sim.Map.Goals[1];
+            var back = goal.Min.X.ToDouble() - 0.34; // the back wall's middle line
+            s.PuckPos = new FixVec2(goal.Min.X - Fix.FromInt(3), Fix.Zero);
             s.PuckVel = new FixVec2(Fix.FromInt(40), Fix.Zero);
             for (var t = 0; t < 60; t++) sim.Step(s, null);
             Assert.AreEqual(0, s.Score[0] + s.Score[1], "no goal from behind");
-            Assert.Less(s.PuckPos.X.ToDouble(), -18.5, "it stayed behind the net");
+            Assert.Less(s.PuckPos.X.ToDouble(), back, "it stayed behind the net");
             // and from the front it goes in
-            s.PuckPos = new FixVec2(Fix.FromInt(-10), Fix.Zero);
+            s.PuckPos = new FixVec2(goal.Max.X + Fix.FromInt(6), Fix.Zero);
             s.PuckVel = new FixVec2(Fix.FromInt(-30), Fix.Zero);
             for (var t = 0; t < 60 && s.Phase == Phase.Play; t++) sim.Step(s, null);
             Assert.AreEqual(1, s.Score[1], "a shot into the mouth scores for the team attacking that net");

@@ -36,6 +36,14 @@ namespace UltraPuck.Core
                 aim = toGoal.Normalized;
                 var aimed = FixVec2.Dot(me.Facing, aim) > Fix.Ratio(97, 100);
                 var range = Fix.FromInt(12) + wobble * Fix.Two;
+                // a net out on the ice: from beside or behind it, skate round to the front first (and don't shoot into its side)
+                var round = dir > Fix.Zero ? pos.X > attack.X - Fix.FromInt(2) : pos.X < attack.X + Fix.FromInt(2);
+                if (round)
+                {
+                    target = new FixVec2(attack.X - dir * Fix.FromInt(5), pos.Y >= Fix.Zero ? Fix.FromInt(5) : Fix.FromInt(-5));
+                    aim = FixVec2.Zero;
+                    aimed = false;
+                }
                 var ready = aimed && me.Charge > Fix.Ratio(3, 10) && (toGoal.Length < range || me.Charge >= Fix.One);
                 // charging starts on a press, so if it hasn't started, let go for a tick and press again
                 if (!ready && (me.Charge > Fix.Zero || (s.Tick & 1) == 0)) b |= PlayerInput.ChargeBrake;
