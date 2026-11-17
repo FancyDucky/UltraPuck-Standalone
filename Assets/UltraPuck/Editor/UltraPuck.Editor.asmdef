@@ -1,0 +1,9 @@
+{
+    "name": "UltraPuck.Editor",
+    "rootNamespace": "UltraPuck.Editor",
+    "references": ["UltraPuck.Core", "UltraPuck.Game"],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "autoReferenced": true
+}

@@ -1,0 +1,82 @@
+// Ultra Puck's own cards. Mods can add more files next to this one (every *.json here is read, in name order).
+//   id     unique, never change it once released
+//   tier   S (rarest) A B C D F (most common)
+//   max    most copies one player can hold (0 = no limit)
+//   art    picture in Cards/Art/<art>.jpg or .png (defaults to the id)
+//   color  accent colour for the card frame
+//   text   what the card face says: [good]...[/] green, [bad]...[/] red, [note]...[/] grey
+//   stats  "x1.5" multiplies, "/1.6" divides, "+1" adds; "Opponent..." changes the other team instead
+{
+  "cards": [
+    {
+      "id": "ultrapuck.doubledash",
+      "name": "Double Dash",
+      "tier": "S",
+      "color": "#4D8CF2",
+      "text": "[good]+1 Check Charge[/]\nCheck twice before recharging.",
+      "stats": { "ExtraDashes": "+1" }
+    },
+    {
+      "id": "ultrapuck.speedup",
+      "name": "Speed Up",
+      "tier": "A",
+      "color": "#4DCC66",
+      "text": "[good]+15%[/] Move Speed",
+      "stats": { "MoveSpeed": "x1.15" }
+    },
+    {
+      "id": "ultrapuck.powershot",
+      "name": "Power Shot",
+      "tier": "S",
+      "color": "#EB544D",
+      "text": "[good]+50%[/] Quick Shot Power\n[note]Uncharged shots only.[/]",
+      "stats": { "QuickShotPower": "x1.5" }
+    },
+    {
+      "id": "ultrapuck.quickrecharge",
+      "name": "Quick Recharge",
+      "tier": "A",
+      "max": 3,
+      "color": "#40CCD9",
+      "text": "[good]+60%[/] Check Recharge Speed",
+      "stats": { "DashCooldown": "/1.6" }
+    },
+    {
+      "id": "ultrapuck.heavyweight",
+      "name": "Heavyweight",
+      "tier": "B",
+      "max": 3,
+      "color": "#9E734D",
+      "text": "[good]+80%[/] Knockback Given\n[good]-80%[/] Knockback Taken\n[note]+13% Size[/]",
+      "stats": { "KnockbackGiven": "x1.8", "KnockbackTaken": "x0.2", "Size": "x1.13" }
+    },
+    {
+      "id": "ultrapuck.featherweight",
+      "name": "Featherweight",
+      "tier": "B",
+      "max": 2,
+      "color": "#F2CC4D",
+      "text": "[good]+25%[/] Move Speed [note](+10% with puck)[/]\n[note]-13% Size[/]\n[bad]+80%[/] Knockback Taken\n[bad]-80%[/] Knockback Given",
+      "stats": { "MoveSpeed": "x1.25", "MoveSpeedWithPuck": "x0.88", "Size": "x0.87", "KnockbackTaken": "x1.8", "KnockbackGiven": "x0.2" }
+    },
+    {
+      "id": "ultrapuck.overcharge",
+      "name": "Over Charge",
+      "tier": "A",
+      "max": 4,
+      "art": "ultrapuck.fastercharge",
+      "color": "#F28C33",
+      "text": "[good]-50%[/] Charge-up Time\n[good]+50% Over Charge[/]\nHold past full for a harder shot.",
+      "stats": { "ChargeSpeed": "x2", "OverCharge": "+0.5" }
+    },
+    {
+      "id": "ultrapuck.slowpoke",
+      "name": "Slow Poke",
+      "tier": "F",
+      "max": 3,
+      "color": "#8C66CC",
+      "text": "[good]-10%[/] Opponent Move Speed",
+      "stats": { "OpponentMoveSpeed": "x0.9" }
+    }
+  ]
+}

@@ -1,0 +1,332 @@
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace UltraPuck.Game
+{
+    /// <summary>
+    /// The pause menu (Resume, Settings, Main menu, plus free play's extras) and the settings screen with its
+    /// Graphics / Gameplay / Camera tabs. Works with a controller (stick or d-pad, A, B, LB / RB for tabs), the
+    /// keyboard (arrows or WASD, Enter or Space, Esc, Q / E for tabs) and the mouse (hover, click, drag sliders).
+    /// <see cref="GameRunner"/> opens it and fills in what the buttons do.
+    /// </summary>
+    internal sealed class Menus : MonoBehaviour
+    {
+        public enum Page { None, Pause, Settings }
+
+        public Page Current { get; private set; }
+        public bool IsOpen { get { return Current != Page.None; } }
+
+        // filled in by GameRunner
+        public Action OnResume, OnMainMenu, OnGetCard;
+        public Func<int> BotCount, MaxBots;
+        public Action<int> SetBots;
+        public bool FreePlay;
+
+        private bool _settingsFromLobby;
+        private int _focus, _tab;
+        private float _openedAt, _focusY = -1f, _tabX = -1f;
+        private string _subtitle = "";
+
+        private static readonly string[] Tabs = { "Graphics", "Gameplay", "Camera" };
+
+        // ------------------------------------------------------------------ rows
+
+        private sealed class Row
+        {
+            public string Label;
+            public Func<string> Value;            // choices: the current value's name
+            public Action<int> Step;              // choices and sliders: left / right
+            public Action Press;                  // buttons (and choices: next value)
+            public Func<float> Get01;             // sliders: 0..1
+            public Action<float> Set01;
+            public Func<bool> Toggle;             // switches: on or off
+            public Func<bool> Enabled = () => true;
+            public string Hint;
+        }
+
+        private readonly List<Row> _rows = new List<Row>();
+
+        private static Row Button(string label, Action press) { return new Row { Label = label, Press = press }; }
+
+        private static Row Switch(string label, Func<bool> get, Action<bool> set, string hint = null)
+        {
+            return new Row { Label = label, Toggle = get, Press = () => set(!get()), Step = d => set(d > 0), Hint = hint };
+        }
+
+        private static Row Choice(string label, string[] names, Func<int> get, Action<int> set, string hint = null)
+        {
+            return new Row
+            {
+                Label = label, Hint = hint,
+                Value = () => names[Mathf.Clamp(get(), 0, names.Length - 1)],
+                Step = d => set((get() + d + names.Length) % names.Length),
+                Press = () => set((get() + 1) % names.Length),
+            };
+        }
+
+        private static Row Slider(string label, Func<float> get, Action<float> set, Func<float, string> text, string hint = null)
+        {
+            return new Row { Label = label, Hint = hint, Get01 = get, Set01 = set, Value = () => text(get()), Step = d => set(Mathf.Clamp01(get() + d * 0.05f)) };
+        }
+
+        private void BuildRows()
+        {
+            _rows.Clear();
+            if (Current == Page.Pause)
+            {
+                _rows.Add(Button("Resume", Close));
+                if (FreePlay)
+                {
+                    _rows.Add(new Row
+                    {
+                        Label = "Bots",
+                        Value = () => BotCount() == 0 ? "None" : BotCount().ToString(),
+                        Step = d => SetBots(Mathf.Clamp(BotCount() + d, 0, MaxBots())),
+                        Press = () => SetBots(BotCount() >= MaxBots() ? 0 : BotCount() + 1),
+                    });
+                    _rows.Add(Button("Pick a card", () => { Close(); if (OnGetCard != null) OnGetCard(); }));
+                }
+                _rows.Add(Button("Settings", () => OpenSettings(false)));
+                _rows.Add(Button("Main menu", () => { Close(); if (OnMainMenu != null) OnMainMenu(); }));
+                return;
+            }
+            if (Current != Page.Settings) return;
+            switch (_tab)
+            {
+                case 0:
+                    _rows.Add(Choice("Window", Settings.WindowNames, () => (int)Settings.WindowMode, v => Settings.WindowMode = (Settings.Window)v));
+                    _rows.Add(Switch("V-Sync", () => Settings.VSync, v => Settings.VSync = v, "Matches your monitor's refresh rate and stops tearing."));
+                    var caps = new string[Settings.FpsCaps.Length];
+                    for (var k = 0; k < caps.Length; k++) caps[k] = Settings.FpsCaps[k] == 0 ? "Unlimited" : Settings.FpsCaps[k] + " fps";
+                    var cap = Choice("Frame rate limit", caps, () => Mathf.Max(0, Array.IndexOf(Settings.FpsCaps, Settings.FpsCap)), v => Settings.FpsCap = Settings.FpsCaps[v], "Only used with V-Sync off.");
+                    cap.Enabled = () => !Settings.VSync;
+                    _rows.Add(cap);
+                    _rows.Add(Slider("UI size", () => (Settings.UiScale - 0.6f) / 1.4f, v => Settings.UiScale = 0.6f + v * 1.4f, v => Mathf.RoundToInt((0.6f + v * 1.4f) * 100f) + "%"));
+                    _rows.Add(Switch("Puck trail", () => Settings.PuckTrail, v => Settings.PuckTrail = v));
+                    _rows.Add(Switch("Card effects", () => Settings.CardEffects, v => Settings.CardEffects = v, "Holo foil, glare and sparkle on cards."));
+                    break;
+                case 1:
+                    _rows.Add(Slider("Screen shake", () => Settings.ShakeAmount, v => Settings.ShakeAmount = v, v => v < 0.01f ? "Off" : Mathf.RoundToInt(v * 100f) + "%"));
+                    _rows.Add(Switch("Hit effects", () => Settings.HitEffects, v => Settings.HitEffects = v, "Squash, flash and impact rings when players collide."));
+                    _rows.Add(Choice("Check bar", new[] { "While recharging", "Always" }, () => Settings.DashBarAlways ? 1 : 0, v => Settings.DashBarAlways = v == 1));
+                    break;
+                case 2:
+                    _rows.Add(Choice("Camera", new[] { "Follow the action", "Whole rink" }, () => Settings.FollowCamera ? 0 : 1, v => Settings.FollowCamera = v == 0));
+                    var zoom = Slider("Auto-camera zoom", () => Settings.CameraZoom, v => Settings.CameraZoom = v, ZoomText, "How far the follow camera pulls back from the action.");
+                    zoom.Enabled = () => Settings.FollowCamera;
+                    _rows.Add(zoom);
+                    var smooth = Slider("Camera smoothing", () => Settings.CameraSmoothing, v => Settings.CameraSmoothing = v, v => v < 0.2f ? "Snappy" : v > 0.75f ? "Floaty" : Mathf.RoundToInt(v * 100f) + "%");
+                    smooth.Enabled = () => Settings.FollowCamera;
+                    _rows.Add(smooth);
+                    break;
+            }
+            _rows.Add(Button("Back", Back));
+        }
+
+        private static string ZoomText(float v) { return v < 0.15f ? "Close" : v > 0.85f ? "Wide" : Mathf.RoundToInt(v * 100f) + "%"; }
+
+        // ------------------------------------------------------------------ opening and closing
+
+        public void OpenPause(string subtitle)
+        {
+            Current = Page.Pause;
+            _subtitle = subtitle ?? "";
+            _focus = 0;
+            _openedAt = Time.unscaledTime;
+            _focusY = -1f;
+        }
+
+        /// <summary>Which settings tab is showing (0 Graphics, 1 Gameplay, 2 Camera).</summary>
+        public int Tab { get { return _tab; } set { _tab = Mathf.Clamp(value, 0, Tabs.Length - 1); _focus = 0; } }
+
+        public void OpenSettings(bool fromLobby)
+        {
+            _settingsFromLobby = fromLobby;
+            Current = Page.Settings;
+            _focus = 0;
+            _openedAt = Time.unscaledTime;
+            _focusY = -1f;
+        }
+
+        public void Close()
+        {
+            Current = Page.None;
+            PlayerPrefs.Save();
+            if (OnResume != null) OnResume();
+        }
+
+        private void Back()
+        {
+            PlayerPrefs.Save();
+            if (Current == Page.Settings && !_settingsFromLobby) { Current = Page.Pause; _focus = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }
+            else Close();
+        }
+
+        // ------------------------------------------------------------------ input
+
+        /// <summary>Controller / keyboard input for this frame (from <see cref="LocalPlayers.Menu"/>).</summary>
+        public void Tick(LocalPlayers.MenuInput m)
+        {
+            if (!IsOpen) return;
+            BuildRows();
+            if (_rows.Count == 0) return;
+            if (m.Back) { Back(); return; }
+            if (Current == Page.Settings && m.Tab != 0) { _tab = (_tab + m.Tab + Tabs.Length) % Tabs.Length; _focus = 0; return; }
+            if (m.Y != 0)
+            {
+                // skip greyed-out rows
+                for (var k = 0; k < _rows.Count; k++)
+                {
+                    _focus = (_focus - m.Y + _rows.Count) % _rows.Count;
+                    if (_rows[_focus].Enabled()) break;
+                }
+            }
+            _focus = Mathf.Clamp(_focus, 0, _rows.Count - 1);
+            var row = _rows[_focus];
+            if (!row.Enabled()) return;
+            if (m.X != 0 && row.Step != null) row.Step(m.X);
+            else if (m.Confirm && row.Press != null) row.Press();
+        }
+
+        // ------------------------------------------------------------------ drawing
+
+        private void OnGUI()
+        {
+            if (!IsOpen) return;
+            GUI.depth = 0;
+            Ui.Begin();
+            BuildRows();
+            var t = Time.unscaledTime - _openedAt;
+            var appear = Ui.EaseOutBack(t / 0.28f);
+            Ui.Fill(new Color(0f, 0f, 0f, 0.55f * Ui.EaseOut(t / 0.2f)));
+
+            var pause = Current == Page.Pause;
+            var rowH = pause ? 54f : 50f;
+            var panelW = pause ? 440f : 780f;
+            var top = pause ? 110f : 150f;
+            var panelH = top + _rows.Count * (rowH + 8f) + (pause ? 30f : 92f);
+            var x = Ui.W / 2f - panelW / 2f;
+            var y = Ui.H / 2f - panelH / 2f + (1f - appear) * 40f;
+
+            // the panel pops in from slightly lower and smaller
+            var pivot = new Vector2(Ui.W / 2f, Ui.H / 2f);
+            var oldMatrix = GUI.matrix;
+            var s = 0.94f + 0.06f * appear;
+            GUIUtility.ScaleAroundPivot(new Vector2(s, s), pivot * (GUI.matrix.m00));
+            Ui.Box(new Rect(x - 1f, y - 1f, panelW + 2f, panelH + 2f), new Color(1f, 1f, 1f, 0.06f), 22f);
+            Ui.Box(new Rect(x, y, panelW, panelH), Ui.Panel, 21f);
+
+            Ui.Label(new Rect(x, y + 22f, panelW, 50f), pause ? "Paused" : "Settings", Ui.Font(38, true, TextAnchor.MiddleCenter), Ui.Text);
+            if (pause && _subtitle.Length > 0) Ui.Label(new Rect(x, y + 66f, panelW, 26f), _subtitle, Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
+            if (!pause) Tabs_(x, y + 82f, panelW);
+
+            var mouse = Ui.Mouse;
+            var rowsTop = y + top;
+            var rowW = panelW - 60f;
+            for (var i = 0; i < _rows.Count; i++)
+            {
+                var r = new Rect(x + 30f, rowsTop + i * (rowH + 8f), rowW, rowH);
+                if (r.Contains(mouse) && Ui.MouseMoved && _rows[i].Enabled()) _focus = i;
+            }
+            // the focus highlight glides between rows
+            var focusTarget = rowsTop + _focus * (rowH + 8f);
+            _focusY = _focusY < 0f ? focusTarget : Mathf.Lerp(_focusY, focusTarget, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 22f));
+            for (var i = 0; i < _rows.Count; i++)
+            {
+                var r = new Rect(x + 30f, rowsTop + i * (rowH + 8f), rowW, rowH);
+                Ui.Box(r, Ui.Row, 12f);
+            }
+            Ui.Box(new Rect(x + 30f, _focusY, rowW, rowH), Ui.RowFocus, 12f);
+            Ui.Box(new Rect(x + 30f, _focusY + 12f, 4f, rowH - 24f), Ui.Accent, 2f);
+
+            for (var i = 0; i < _rows.Count; i++)
+            {
+                var r = new Rect(x + 30f, rowsTop + i * (rowH + 8f), rowW, rowH);
+                DrawRow(_rows[i], r, i == _focus, pause, mouse);
+            }
+
+            if (!pause)
+            {
+                var hint = _focus < _rows.Count && _rows[_focus].Hint != null ? _rows[_focus].Hint : "";
+                Ui.Label(new Rect(x, y + panelH - 70f, panelW, 24f), hint, Ui.Font(16, false, TextAnchor.MiddleCenter), Ui.TextDim);
+                Ui.Label(new Rect(x, y + panelH - 40f, panelW, 24f), "LB / RB or Q / E: tabs      B / Esc: back      changes save straight away",
+                    Ui.Font(14, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f));
+            }
+            GUI.matrix = oldMatrix;
+        }
+
+        private void Tabs_(float x, float y, float panelW)
+        {
+            const float tabW = 150f, tabH = 40f, gap = 10f;
+            var total = Tabs.Length * tabW + (Tabs.Length - 1) * gap;
+            var x0 = x + panelW / 2f - total / 2f;
+            var target = x0 + _tab * (tabW + gap);
+            _tabX = _tabX < 0f ? target : Mathf.Lerp(_tabX, target, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 20f));
+            Ui.Box(new Rect(x0 - 6f, y - 6f, total + 12f, tabH + 12f), new Color(1f, 1f, 1f, 0.05f), 14f);
+            Ui.Box(new Rect(_tabX, y, tabW, tabH), new Color(1f, 1f, 1f, 0.92f), 10f);
+            for (var i = 0; i < Tabs.Length; i++)
+            {
+                var r = new Rect(x0 + i * (tabW + gap), y, tabW, tabH);
+                if (r.Contains(Ui.Mouse) && Ui.Clicked && Event.current.type == EventType.Repaint) { _tab = i; _focus = 0; }
+                var on = i == _tab;
+                Ui.Label(r, Tabs[i], Ui.Font(18, on, TextAnchor.MiddleCenter), on ? new Color(0.08f, 0.08f, 0.09f) : Ui.TextDim, !on);
+            }
+        }
+
+        private void DrawRow(Row row, Rect r, bool focused, bool pause, Vector2 mouse)
+        {
+            var enabled = row.Enabled();
+            var textCol = enabled ? (focused ? Ui.Text : new Color(1f, 1f, 1f, 0.8f)) : new Color(1f, 1f, 1f, 0.3f);
+            var clicked = enabled && Ui.Clicked && r.Contains(mouse) && Event.current.type == EventType.Repaint;
+
+            if (pause)
+            {
+                Ui.Label(r, row.Label + (row.Value != null ? ":  " + row.Value() : ""), Ui.Font(21, focused, TextAnchor.MiddleCenter), textCol);
+                if (clicked)
+                {
+                    if (row.Step != null && row.Value != null) row.Step(mouse.x < r.center.x ? -1 : 1);
+                    else if (row.Press != null) row.Press();
+                }
+                return;
+            }
+
+            Ui.Label(new Rect(r.x + 22f, r.y, r.width * 0.45f, r.height), row.Label, Ui.Font(19, focused), textCol);
+            var right = new Rect(r.x + r.width * 0.48f, r.y, r.width * 0.52f - 22f, r.height);
+
+            if (row.Toggle != null)
+            {
+                var on = row.Toggle();
+                var sw = new Rect(right.xMax - 64f, r.center.y - 15f, 64f, 30f);
+                Ui.Box(sw, on ? new Color(1f, 1f, 1f, enabled ? 0.9f : 0.3f) : Ui.Track, 15f);
+                var knobX = on ? sw.xMax - 27f : sw.x + 3f;
+                Ui.Box(new Rect(knobX, sw.y + 3f, 24f, 24f), on ? new Color(0.08f, 0.08f, 0.09f) : new Color(1f, 1f, 1f, enabled ? 0.85f : 0.3f), 12f);
+                Ui.Label(new Rect(right.x, r.y, right.width - 80f, r.height), on ? "On" : "Off", Ui.Font(17, false, TextAnchor.MiddleRight), textCol);
+                if (clicked) row.Press();
+            }
+            else if (row.Get01 != null)
+            {
+                var v = row.Get01();
+                var track = new Rect(right.x + 10f, r.center.y - 4f, right.width - 110f, 8f);
+                Ui.Box(track, Ui.Track, 4f);
+                Ui.Box(new Rect(track.x, track.y, Mathf.Max(8f, track.width * v), track.height), new Color(1f, 1f, 1f, enabled ? 0.9f : 0.3f), 4f);
+                var knob = new Rect(track.x + track.width * v - 11f, r.center.y - 11f, 22f, 22f);
+                Ui.Box(knob, enabled ? Color.white : new Color(1f, 1f, 1f, 0.35f), 11f);
+                Ui.Label(new Rect(track.xMax + 14f, r.y, 90f, r.height), row.Value(), Ui.Font(17, false, TextAnchor.MiddleRight), textCol);
+                // click or drag along the track
+                var grab = new Rect(track.x - 12f, r.y, track.width + 24f, r.height);
+                if (enabled && Ui.MouseHeld && grab.Contains(mouse) && Event.current.type == EventType.Repaint)
+                    row.Set01(Mathf.Clamp01((mouse.x - track.x) / track.width));
+            }
+            else if (row.Value != null)
+            {
+                var col = textCol;
+                Ui.Label(new Rect(right.x, r.y, right.width, r.height), "‹", Ui.Font(26, false, TextAnchor.MiddleLeft), new Color(col.r, col.g, col.b, col.a * 0.6f));
+                Ui.Label(new Rect(right.x, r.y, right.width, r.height), row.Value(), Ui.Font(18, focused, TextAnchor.MiddleCenter), col);
+                Ui.Label(new Rect(right.x, r.y, right.width, r.height), "›", Ui.Font(26, false, TextAnchor.MiddleRight), new Color(col.r, col.g, col.b, col.a * 0.6f));
+                if (clicked) row.Step(mouse.x < right.center.x ? -1 : 1);
+            }
+            else if (clicked && row.Press != null) row.Press();
+        }
+    }
+}

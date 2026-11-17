@@ -1,0 +1,10 @@
+{
+    "name": "UltraPuck.Game",
+    "rootNamespace": "UltraPuck.Game",
+    "references": ["UltraPuck.Core", "Unity.InputSystem", "com.rlabrecque.steamworks.net"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "autoReferenced": true,
+    "noEngineReferences": false
+}
