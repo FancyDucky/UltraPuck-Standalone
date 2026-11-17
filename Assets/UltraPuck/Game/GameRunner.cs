@@ -53,6 +53,10 @@ namespace UltraPuck.Game
         /// <summary>This frame's hits: where (x, y) and how hard (z).</summary>
         private readonly List<Vector3> _hitsThisFrame = new List<Vector3>();
 
+        /// <summary>A taken card's ripple: rings that start one after another where the player is.</summary>
+        private struct Ripple { public Vector2 At; public Color Colour; public float When, Size, Life; }
+        private readonly List<Ripple> _ripples = new List<Ripple>();
+
         public static string MapsFolder { get { return Path.Combine(Application.streamingAssetsPath, "Maps"); } }
         public static string CardsFolder { get { return Path.Combine(Application.streamingAssetsPath, "Cards"); } }
 
@@ -91,6 +95,17 @@ namespace UltraPuck.Game
 
             _cardScreen.Local = _local;
             _cardScreen.PlayerOnScreen = i => i >= 0 && i < _players.Count && _players[i].Root != null ? _cam.WorldToScreenPoint(_players[i].Root.transform.position) : (Vector3?)null;
+            _cardScreen.OnAbsorbed = (i, colour) =>
+            {
+                if (i < 0 || i >= _players.Count || _players[i].Root == null) return;
+                Vector2 at = _players[i].Root.transform.position;
+                // a few rings, one after another, each wider and slower, like a drop landing in water
+                for (var k = 0; k < 4; k++)
+                {
+                    var c = k % 2 == 0 ? colour : Color.Lerp(colour, Color.white, 0.6f);
+                    _ripples.Add(new Ripple { At = at, Colour = c, When = Time.unscaledTime + k * 0.16f, Size = 1.4f + k * 0.75f, Life = 0.7f + k * 0.15f });
+                }
+            };
             LocalCardPicks();
             _menus.OnMainMenu = GoMainMenu;
             _menus.BotCount = () => _local.BotCount;
@@ -274,6 +289,13 @@ namespace UltraPuck.Game
             if (_mode == Mode.Menu && _menus.IsOpen) AttractUpdate();
             if (_menus.IsOpen && _mode == Mode.Match) Show(_state, _state, 0f); // paused: hold the picture still
             UpdateCamera(playing && Settings.FollowCamera);
+            for (var k = _ripples.Count - 1; k >= 0; k--)
+            {
+                if (Time.unscaledTime < _ripples[k].When) continue;
+                var r = _ripples[k];
+                _effects.Ring(r.At, 0.6f, r.Colour, r.Size, r.Life);
+                _ripples.RemoveAt(k);
+            }
             _effects.Update();
             _cardScreen.Sim = _sim;
             _cardScreen.Frame(playing ? _state : null);

@@ -266,7 +266,7 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0.1, s.Players[1].Slow.ToDouble(), 1e-3, "an opponent on the ice is 10% slower");
             Assert.AreEqual(Fix.Zero, s.Players[2].SlowTime, "a teammate isn't");
 
-            for (var t = 0; t < 120 * 7; t++) _sim.Step(s, new PlayerInput[3]);
+            for (var t = 0; t < 120 * 12; t++) _sim.Step(s, new PlayerInput[3]);
             Assert.AreEqual(0, s.Ice.Length, "all melted");
         }
 

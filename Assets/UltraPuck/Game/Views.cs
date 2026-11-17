@@ -87,7 +87,7 @@ namespace UltraPuck.Game
         private float _barAlpha;
 
         // card effects: slowed / boosted rings, a faint outline while invisible (to teammates), small cooldown bars
-        private readonly GameObject _boostRing, _ghost, _shadow;
+        private readonly GameObject _boostRing, _ghost, _ghostWedge, _shadow;
 
         // slowed: a few blue down arrows drifting down over the player, on a loop
         private readonly Transform _slowRoot;
@@ -209,6 +209,11 @@ namespace UltraPuck.Game
             _chargeRoot.SetParent(Root.transform, false);
             _chargeRing = Draw.Make("Charge", _chargeRoot, _chargeMesh, 14);
             _overRing = Draw.Make("OverCharge", _chargeRoot, _overMesh, 14);
+            // invisible (seen by your own team, you included): an outline of the wedge, turning with you
+            var wedge = new List<Vector2> { new Vector2(radius * 1.8f, 0f), new Vector2(radius * 0.6f, radius * 0.7f), new Vector2(radius * 0.6f, -radius * 0.7f) };
+            var ghostTint = Palette.TeamTint(team); ghostTint.a = 0.7f;
+            _ghostWedge = Draw.Make("GhostWedge", _chargeRoot, Draw.Line(wedge, true, radius * 0.12f, ghostTint), 10).gameObject;
+            _ghostWedge.SetActive(false);
 
             _trailColour = Palette.TeamTint(team);
             for (var i = 0; i < TrailLength; i++)
@@ -338,6 +343,7 @@ namespace UltraPuck.Game
             if (_squash.gameObject.activeSelf == faint) _squash.gameObject.SetActive(!faint);
             if (_shadow.activeSelf == faint) _shadow.SetActive(!faint);
             if (_ghost.activeSelf != faint) _ghost.SetActive(faint);
+            if (_ghostWedge.activeSelf != faint) _ghostWedge.SetActive(faint);
             if (_boostRing.activeSelf != boosted) _boostRing.SetActive(boosted);
             var dt = Time.unscaledDeltaTime;
             var t = Time.unscaledTime;
@@ -795,17 +801,15 @@ namespace UltraPuck.Game
         }
     }
 
-    /// <summary>Pylon goalies: dark dummies with a ring in their team's colour.</summary>
     /// <summary>
-    /// Ice Trail: each trail as a strip of ice on the floor, under the players: a deeper blue edge, a pale body, a
-    /// white shine along one side and frosty specks, all in one mesh per trail.
+    /// Ice Trail: each trail as a strip of light blue ice on the floor, under the players, with a soft sheen along
+    /// one side, in one mesh per trail.
     /// </summary>
     internal sealed class IceViews
     {
-        private static readonly Color Edge = Color.Lerp(Palette.Floor, new Color(0.42f, 0.7f, 0.9f), 0.62f);
-        private static readonly Color Body = Color.Lerp(Palette.Floor, new Color(0.78f, 0.92f, 1f), 0.6f);
-        private static readonly Color Shine = Color.Lerp(Palette.Floor, Color.white, 0.82f);
-        private static readonly Color Frost = Color.Lerp(Palette.Floor, Color.white, 0.92f);
+        private static readonly Color Body = Color.Lerp(Palette.Floor, new Color(0.66f, 0.87f, 1f), 0.72f);
+        private static readonly Color Sheen = Color.Lerp(Body, Color.white, 0.2f);
+        private static readonly Color Shine = Color.Lerp(Body, Color.white, 0.5f);
         private readonly Transform _parent;
         private readonly Dictionary<int, MeshFilter> _trails = new Dictionary<int, MeshFilter>();
         private readonly Dictionary<int, long> _drawn = new Dictionary<int, long>();
@@ -863,30 +867,23 @@ namespace UltraPuck.Game
             System.Action<Mesh, Vector2> add = (m, at) => { temp.Add(m); parts.Add(new CombineInstance { mesh = m, transform = Matrix4x4.Translate(at) }); };
             if (_pts.Count < 2)
             {
-                add(Draw.Disc(r, Edge), _pts[0]);
-                add(Draw.Disc(r * 0.8f, Body), _pts[0]);
+                add(Draw.Disc(r, Body), _pts[0]);
+                add(Draw.Disc(r * 0.45f, Sheen), _pts[0] + new Vector2(-r * 0.2f, r * 0.2f));
             }
             else
             {
-                add(Draw.Line(_pts, false, r * 2f, Edge), Vector2.zero);
-                add(Draw.Line(_pts, false, r * 1.55f, Body), Vector2.zero);
-                // the shine: a thin bright line a little to one side
-                var shine = new List<Vector2>();
+                // plain light blue, with a soft sheen: a wide gentle band and a thin brighter line along one side
+                add(Draw.Line(_pts, false, r * 2f, Body), Vector2.zero);
+                List<Vector2> wide = new List<Vector2>(), thin = new List<Vector2>();
                 for (var k = 0; k < _pts.Count; k++)
                 {
                     var d = _pts[Mathf.Min(k + 1, _pts.Count - 1)] - _pts[Mathf.Max(k - 1, 0)];
                     var n = d.sqrMagnitude > 1e-6f ? new Vector2(-d.y, d.x).normalized : Vector2.up;
-                    shine.Add(_pts[k] + n * r * 0.38f);
+                    wide.Add(_pts[k] + n * r * 0.22f);
+                    thin.Add(_pts[k] + n * r * 0.42f);
                 }
-                add(Draw.Line(shine, false, r * 0.2f, Shine), Vector2.zero);
-            }
-            // frost: little white specks scattered over it (the same every time, from where the points are)
-            for (var k = 0; k < _pts.Count; k++)
-            {
-                var h = (uint)_ids[k] * 2654435761u;
-                if ((h >> 28) > 6) continue;
-                var off = new Vector2(((h >> 4) & 255) / 255f - 0.5f, ((h >> 12) & 255) / 255f - 0.5f) * (r * 1.3f);
-                add(Draw.Disc(r * (0.07f + ((h >> 20) & 7) * 0.012f), Frost, 8), _pts[k] + off);
+                add(Draw.Line(wide, false, r * 0.9f, Sheen), Vector2.zero);
+                add(Draw.Line(thin, false, r * 0.22f, Shine), Vector2.zero);
             }
             var mesh = new Mesh();
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
@@ -896,6 +893,7 @@ namespace UltraPuck.Game
         }
     }
 
+    /// <summary>Pylon goalies: dark dummies with a ring in their team's colour.</summary>
     internal sealed class PylonViews
     {
         private readonly Transform _parent;

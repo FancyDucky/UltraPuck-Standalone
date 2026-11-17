@@ -52,6 +52,9 @@ namespace UltraPuck.Game
         /// <summary>Where match player <c>p</c> is on screen (pixels), for the taken card to fly into; null if not shown.</summary>
         public System.Func<int, Vector3?> PlayerOnScreen;
 
+        /// <summary>A taken card reached match player <c>p</c> (with the card's colour): the game shows the ripple.</summary>
+        public System.Action<int, Color> OnAbsorbed;
+
         /// <summary>A player's name for the header (set by GameRunner).</summary>
         public System.Func<int, string> NameOf;
 
@@ -129,7 +132,9 @@ namespace UltraPuck.Game
                 }
             }
 
-            var want = _stage != Stage.Idle ? 0.68f : 0f;
+            // the veil lifts as a taken card dives into its player, so the ripple on the rink can be seen
+            var diving = _stage == Stage.Leaving && _chosen >= 0 && !_editing && Time.unscaledTime - _stageAt > 0.5f && AbsorbPoint() != null;
+            var want = _stage != Stage.Idle && !diving ? 0.68f : 0f;
             _dim = Mathf.MoveTowards(_dim, want, Time.unscaledDeltaTime * 2.5f);
             _dimMat.SetFloat("_Alpha", _dim);
             _root.gameObject.SetActive(_dim > 0.001f || _cards.Count > 0);
@@ -328,7 +333,8 @@ namespace UltraPuck.Game
                         if (!_absorbed && (c.Pos - into.Value).magnitude < 0.6f)
                         {
                             _absorbed = true;
-                            Burst(c);
+                            // the player soaks it up: ripples spread out across the rink from them, like water
+                            if (OnAbsorbed != null) OnAbsorbed(_slot, c.Accent);
                         }
                     }
                 }
@@ -601,6 +607,9 @@ namespace UltraPuck.Game
             if (_state == null || _people.Exists(i => i >= _state.Players.Length)) { EditClose(false); return; }
             var m = Local.MenuJoined();
             var ready = Time.unscaledTime - _stageAt > 0.4f; // a moment for the deal, so a held button doesn't add one
+            // Start (or Enter) applies, first: in the menus it also counts as Back (or Confirm), which here would
+            // take a card away (or add one) just before saving
+            if (ready && Local.StartPressed()) { EditClose(true); return; }
             if (m.Tab != 0 && _people.Count > 1) { _who = (_who + m.Tab + _people.Count) % _people.Count; _slot = _people[_who]; foreach (var c in _cards) c.ScaleVel += 1.5f; }
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, EditCount - 1));
             if (m.Y != 0)
@@ -646,8 +655,7 @@ namespace UltraPuck.Game
                 if (kb != null && (kb.escapeKey.isPressed || kb.backspaceKey.isPressed)) held = true;
             }
             _cancelHeld = held ? _cancelHeld + Time.unscaledDeltaTime : 0f;
-            if (CancelProgress >= 1f) { EditClose(false); return; }
-            if (ready && Local.StartPressed()) EditClose(true);
+            if (CancelProgress >= 1f) EditClose(false);
         }
 
         private float CancelProgress { get { return Mathf.Clamp01((_cancelHeld - CancelWait) / CancelFill); } }
