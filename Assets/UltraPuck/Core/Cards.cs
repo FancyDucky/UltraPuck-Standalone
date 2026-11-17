@@ -27,6 +27,10 @@ namespace UltraPuck.Core
         public CardTier Tier = CardTier.C;
         /// <summary>Most copies one player can hold (0 = no limit).</summary>
         public int MaxPerPlayer;
+        /// <summary>Only offered once someone on your team has this card (an id), e.g. Team Play II needs Team Play.</summary>
+        public string Requires;
+        /// <summary>Only offered on teams at least this big (team cards are no use alone).</summary>
+        public int MinTeam;
         public readonly List<StatMod> Mods = new List<StatMod>();
     }
 
@@ -51,6 +55,7 @@ namespace UltraPuck.Core
         {
             "MoveSpeed", "MoveSpeedWithPuck", "ShotPower", "QuickShotPower", "ChargeSpeed", "OverCharge", "DashCooldown",
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
+            "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "PassRefresh", "PassRefreshTeam",
         };
 
         public CardDef ById(string id) { CardDef c; return id != null && _byId.TryGetValue(id, out c) ? c : null; }
@@ -72,6 +77,8 @@ namespace UltraPuck.Core
                     Art = Json.Str(Json.Get(o, "art"), null),
                     Color = Json.Str(Json.Get(o, "color"), null),
                     MaxPerPlayer = Json.Get(o, "max") != null ? Json.Int(Json.Get(o, "max"), what + ".max") : 0,
+                    Requires = Json.Str(Json.Get(o, "requires"), null),
+                    MinTeam = Json.Get(o, "minTeam") != null ? Json.Int(Json.Get(o, "minTeam"), what + ".minTeam") : 0,
                 };
                 if (string.IsNullOrEmpty(c.Id)) throw new FormatException(what + ": needs an id");
                 if (_byId.ContainsKey(c.Id)) throw new FormatException(what + ": a card with the id \"" + c.Id + "\" already exists");
@@ -146,12 +153,33 @@ namespace UltraPuck.Core
                 case "Weight": st.Weight = Op(st.Weight, m); break;
                 case "KnockbackGiven": st.KnockbackGiven = Op(st.KnockbackGiven, m); break;
                 case "KnockbackTaken": st.KnockbackTaken = Op(st.KnockbackTaken, m); break;
+                case "HeadStart": st.HeadStart = Count(st.HeadStart, m); break;
+                case "DoubleAgent": st.DoubleAgent = Count(st.DoubleAgent, m); break;
+                case "Pylons": st.Pylons = Count(st.Pylons, m); break;
+                case "PuckGun": st.PuckGun = Count(st.PuckGun, m); break;
+                case "Invisibility": st.Invisibility = Count(st.Invisibility, m); break;
+                case "FriendlyFire": st.FriendlyFire = Count(st.FriendlyFire, m); break;
+                case "Shockwave": st.Shockwave = Count(st.Shockwave, m); break;
+                case "PassRefresh": st.PassRefresh = Count(st.PassRefresh, m); break;
+                case "PassRefreshTeam": st.PassRefreshTeam = Count(st.PassRefreshTeam, m); break;
             }
         }
 
         private static Fix Op(Fix v, StatMod m) { return m.Multiply ? v * m.Value : v + m.Value; }
+        private static int Count(int v, StatMod m) { return Op(Fix.FromInt(v), m).FloorToInt(); }
 
         // ------------------------------------------------------------------ offers
+
+        /// <summary>Does anyone on <paramref name="team"/> hold the card <paramref name="id"/>?</summary>
+        private bool TeamHas(GameState s, int team, string id)
+        {
+            var want = ById(id);
+            if (want == null) return false;
+            foreach (var q in s.Players)
+                if (q.Team == team)
+                    foreach (var c in q.Cards) if (c == want.Index) return true;
+            return false;
+        }
 
         /// <summary>How often a tier turns up compared with the others.</summary>
         public static int Weight(CardTier t)
@@ -164,8 +192,12 @@ namespace UltraPuck.Core
         {
             var p = s.Players[i];
             var pool = new List<int>();
+            var teamSize = 0;
+            foreach (var q in s.Players) if (q.Team == p.Team) teamSize++;
             foreach (var c in Cards)
             {
+                if (c.MinTeam > 0 && teamSize < c.MinTeam) continue;
+                if (c.Requires != null && !TeamHas(s, p.Team, c.Requires)) continue;
                 if (c.MaxPerPlayer > 0)
                 {
                     var held = 0;

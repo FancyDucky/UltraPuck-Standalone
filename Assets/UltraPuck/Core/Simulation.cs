@@ -88,6 +88,7 @@ namespace UltraPuck.Core
                 p.Picked = -1;
             }
             Cards.Recompute(s);
+            PlacePylons(s);
             if (T.FreePlay) s.Phase = Phase.Play; // free play: carry on where everyone stands
             else FaceOff(s);
         }
@@ -106,28 +107,88 @@ namespace UltraPuck.Core
             return s;
         }
 
-        /// <summary>Everyone back to their spawn, the puck to its spot, and the countdown starts.</summary>
+        /// <summary>
+        /// Everyone back to their spawn, the puck to its spot, and the countdown starts. Cards come in here too:
+        /// Double Agents start on the other team's side, pylon goalies go up in front of the nets, and the team with
+        /// the most Head Start cards starts with the puck.
+        /// </summary>
         public void FaceOff(GameState s)
         {
             var count = new int[2];
-            foreach (var p in s.Players)
-            {
-                var sp = Map.SpawnFor(p.Team, count[p.Team]++);
-                p.Pos = sp.Pos;
-                p.Vel = FixVec2.Zero;
-                p.Facing = sp.Facing;
-                p.DashCharge = MaxDashes(p);
-                p.DashTime = Fix.Zero;
-                p.Charge = Fix.Zero;
-                p.NoPickup = Fix.Zero;
-                p.Stun = Fix.Zero;
-            }
+            // everyone else first, then the Double Agents take the other team's next spawns
+            for (var pass = 0; pass < 2; pass++)
+                foreach (var p in s.Players)
+                {
+                    var agent = p.Stats.DoubleAgent > 0;
+                    if ((pass == 1) != agent) continue;
+                    var side = agent ? 1 - p.Team : p.Team;
+                    var sp = Map.SpawnFor(side, count[side]++);
+                    p.Pos = sp.Pos;
+                    p.Facing = agent ? Map.SpawnFor(p.Team, 0).Facing : sp.Facing; // agents still face the goal they attack
+                    p.Vel = FixVec2.Zero;
+                    p.DashCharge = MaxDashes(p);
+                    p.DashTime = Fix.Zero;
+                    p.Charge = Fix.Zero;
+                    p.NoPickup = Fix.Zero;
+                    p.Stun = Fix.Zero;
+                    p.GunCooldown = Fix.Zero; p.InvisCooldown = Fix.Zero; p.InvisibleTime = Fix.Zero; p.ShockCooldown = Fix.Zero;
+                    p.SlowTime = Fix.Zero; p.BoostTime = Fix.Zero;
+                }
             s.PuckPos = Map.PuckSpot;
             s.PuckVel = FixVec2.Zero;
             s.Carrier = -1;
             s.PuckTeam = -1;
+            s.PassFrom = -1;
+            s.Shots = new Shot[0];
             s.Phase = Phase.Countdown;
             s.PhaseTime = T.CountdownTime;
+            PlacePylons(s);
+            HeadStart(s);
+        }
+
+        /// <summary>Pylon goalies in front of each net: one per Pylon Goalie card on that team, up to three.</summary>
+        public void PlacePylons(GameState s)
+        {
+            var list = new System.Collections.Generic.List<Pylon>();
+            for (var team = 0; team < 2; team++)
+            {
+                var n = 0;
+                foreach (var p in s.Players) if (p.Team == team) n += p.Stats.Pylons;
+                n = Math.Min(3, n);
+                if (n == 0) continue;
+                var goal = Bot.GoalCentre(Map, team);
+                var inward = Map.PuckSpot.X > goal.X ? Fix.One : -Fix.One;
+                var x = goal.X + inward * T.PylonOut;
+                for (var k = 0; k < n; k++)
+                {
+                    // 1: middle; 2: either side; 3: middle and either side
+                    Fix y = n == 1 ? Fix.Zero : n == 2 ? (k == 0 ? -T.PylonSpread : T.PylonSpread) : T.PylonSpread * Fix.Ratio(3, 2) * (k - 1);
+                    list.Add(new Pylon { Pos = new FixVec2(x, goal.Y + y), Team = team });
+                }
+            }
+            s.Pylons = list.ToArray();
+        }
+
+        /// <summary>Head Start: the team with the most copies starts holding the puck (a tie: it starts in the middle).</summary>
+        private void HeadStart(GameState s)
+        {
+            int a = 0, b = 0;
+            foreach (var p in s.Players) if (p.Team == 0) a += p.Stats.HeadStart; else b += p.Stats.HeadStart;
+            if (a == b) return;
+            var team = a > b ? 0 : 1;
+            // whoever on that team is nearest the puck spot takes it (the first of them on a tie)
+            var best = -1;
+            var bestD = Fix.Zero;
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                if (s.Players[i].Team != team) continue;
+                var d = (s.Players[i].Pos - Map.PuckSpot).SqrLength;
+                if (best < 0 || d < bestD) { best = i; bestD = d; }
+            }
+            if (best < 0) return;
+            s.Carrier = best;
+            s.PuckTeam = team;
+            s.PuckPos = CarrySpot(s.Players[best]);
         }
 
         /// <summary>The puck back to its spot, loose and still; nobody else moves.</summary>
@@ -137,6 +198,7 @@ namespace UltraPuck.Core
             s.PuckVel = FixVec2.Zero;
             s.Carrier = -1;
             s.PuckTeam = -1;
+            s.PassFrom = -1;
             foreach (var p in s.Players) { p.Charge = Fix.Zero; p.NoPickup = Fix.Zero; }
         }
 
@@ -196,10 +258,21 @@ namespace UltraPuck.Core
                 {
                     p.Pos += p.Vel * sub;
                     CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
+                    CollidePylons(s, ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
                 }
                 Bumps(s);
                 MovePuck(s, sub);
+                MoveShots(s, sub);
                 if (s.Phase == Phase.Play) CheckGoal(s);
+            }
+
+            // shots run out
+            if (s.Shots.Length > 0)
+            {
+                var alive = new System.Collections.Generic.List<Shot>();
+                foreach (var sh in s.Shots) { var x = sh; x.Life -= dt; if (x.Life > Fix.Zero) alive.Add(x); }
+                if (alive.Count != s.Shots.Length) s.Shots = alive.ToArray();
+                else for (var k = 0; k < alive.Count; k++) s.Shots[k] = alive[k];
             }
 
             // the puck slows down on its own
@@ -249,8 +322,16 @@ namespace UltraPuck.Core
             else if (move.SqrLength > deadzone * deadzone) TurnTowards(p, move.Normalized, T.TurnRate * dt);
 
             p.Stun = Fix.Max(Fix.Zero, p.Stun - dt);
+            p.GunCooldown = Fix.Max(Fix.Zero, p.GunCooldown - dt);
+            p.InvisCooldown = Fix.Max(Fix.Zero, p.InvisCooldown - dt);
+            p.InvisibleTime = Fix.Max(Fix.Zero, p.InvisibleTime - dt);
+            p.ShockCooldown = Fix.Max(Fix.Zero, p.ShockCooldown - dt);
+            p.SlowTime = Fix.Max(Fix.Zero, p.SlowTime - dt);
+            p.BoostTime = Fix.Max(Fix.Zero, p.BoostTime - dt);
             var control = p.Stun > Fix.Zero ? T.StunControl : Fix.One;
             var speed = p.Stats.MoveSpeed * (carrying ? p.Stats.MoveSpeedWithPuck : Fix.One);
+            if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave
+            if (p.BoostTime > Fix.Zero) speed *= T.FriendlyBoost;           // Friendly Fire
             p.Vel += move * (T.MoveForce * speed * control * dt);
             var braking = !carrying && input.Has(PlayerInput.ChargeBrake);
             var drag = braking ? T.BrakeDrag : T.Drag;
@@ -261,6 +342,13 @@ namespace UltraPuck.Core
             else if (p.DashCharge > maxDashes) p.DashCharge = maxDashes;
             p.DashTime = Fix.Max(Fix.Zero, p.DashTime - dt);
             p.NoPickup = Fix.Max(Fix.Zero, p.NoPickup - dt);
+
+            // utility (Y / Triangle): every utility card you have that's ready
+            if ((pressed & PlayerInput.Utility) != 0)
+            {
+                if (p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero) FireGun(s, i);
+                if (p.Stats.Invisibility > 0 && p.InvisCooldown <= Fix.Zero) { p.InvisibleTime = T.InvisTime; p.InvisCooldown = T.InvisCooldown; }
+            }
 
             if (!carrying)
             {
@@ -304,6 +392,7 @@ namespace UltraPuck.Core
             s.PuckPos = CarrySpot(p);
             s.PuckVel = p.Facing * speed + p.Vel * Fix.Half;
             s.PuckTeam = p.Team;
+            s.PassFrom = i; // a pass, if a teammate gets it before an opponent touches it
             p.Charge = Fix.Zero;
             p.NoPickup = T.ShotPickupDelay;
         }
@@ -362,7 +451,20 @@ namespace UltraPuck.Core
             var before = s.PuckPos;
             s.PuckPos += s.PuckVel * sub;
             CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
+            CollidePylons(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
             KeepPuckIn(s, before);
+
+            // a pass doesn't count once an opponent of the passer has touched (or nearly touched) the puck
+            if (s.PassFrom >= 0 && s.PassFrom < s.Players.Length)
+            {
+                var passer = s.Players[s.PassFrom].Team;
+                foreach (var q in s.Players)
+                {
+                    if (q.Team == passer) continue;
+                    var reach = RadiusOf(q) + T.PuckRadius + T.PassTouch;
+                    if ((s.PuckPos - q.Pos).SqrLength < reach * reach) { s.PassFrom = -1; break; }
+                }
+            }
 
             // pick-up: of everyone touching the puck who may pick it up, the closest gets it. An exact tie (two players
             // reaching a still puck on the same tick, as at a face-off) is settled by the match's random numbers,
@@ -383,6 +485,8 @@ namespace UltraPuck.Core
                 if (best >= 0)
                 {
                     var p = s.Players[best];
+                    if (s.PassFrom >= 0 && s.PassFrom != best && s.PassFrom < s.Players.Length && s.Players[s.PassFrom].Team == p.Team) Passed(s, s.PassFrom);
+                    s.PassFrom = -1;
                     s.Carrier = best;
                     s.PuckTeam = p.Team;
                     p.Charge = Fix.Zero;
@@ -493,7 +597,16 @@ namespace UltraPuck.Core
             PlayerState a = s.Players[from], b = s.Players[to];
             a.DashTime = Fix.Zero; // one hit per dash
             b.Vel += n * (T.DashKnockback * WeightOf(a) / WeightOf(b) * Fix.Clamp(a.Stats.KnockbackGiven * b.Stats.KnockbackTaken, Fix.Ratio(1, 20), Fix.FromInt(10)));
+            if (a.Team == b.Team && b.Stats.FriendlyFire > 0)
+            {
+                // Friendly Fire: a teammate's check launches you with a speed boost instead of dazing you (and you keep the puck)
+                b.BoostTime = T.FriendlyTime;
+                Hit(b, -n, Fix.Ratio(3, 5));
+                Hit(a, n, Fix.Ratio(2, 5));
+                return;
+            }
             b.Stun = T.HitStun;
+            if (a.Team != b.Team) Shockwave(s, from, to);
             Hit(b, -n, Fix.One);
             Hit(a, n, Fix.Ratio(3, 5));
             if (s.Carrier == to)
@@ -523,9 +636,145 @@ namespace UltraPuck.Core
             var p = s.Players[to];
             s.Carrier = to;
             s.PuckTeam = p.Team;
+            s.PassFrom = -1;
             p.Charge = Fix.Zero;
             s.PuckPos = CarrySpot(p);
             s.PuckVel = p.Vel;
+        }
+
+        // ------------------------------------------------------------------ card mechanics
+
+        /// <summary>Puck Gun: fire a shot from in front of the player.</summary>
+        private void FireGun(GameState s, int i)
+        {
+            var p = s.Players[i];
+            p.GunCooldown = T.GunCooldown;
+            var start = p.Pos + p.Facing * (RadiusOf(p) + T.ShotRadius + Fix.Ratio(1, 20));
+            if (!PuckFits(p.Pos, start)) start = p.Pos; // against a wall: it starts from the middle and hits the wall at once
+            var shots = new Shot[s.Shots.Length + 1];
+            Array.Copy(s.Shots, shots, s.Shots.Length);
+            shots[shots.Length - 1] = new Shot { Pos = start, Vel = p.Facing * T.GunSpeed + p.Vel * Fix.Half, Owner = i, Life = T.GunLife };
+            s.Shots = shots;
+        }
+
+        /// <summary>Shots fly straight; the first player they touch (not the shooter) is stunned and drops the puck; walls and pylons stop them.</summary>
+        private void MoveShots(GameState s, Fix sub)
+        {
+            if (s.Shots.Length == 0) return;
+            var keep = new System.Collections.Generic.List<Shot>(s.Shots.Length);
+            foreach (var sh0 in s.Shots)
+            {
+                var sh = sh0;
+                var from = sh.Pos;
+                sh.Pos += sh.Vel * sub;
+                var gone = FirstWallHit(from, sh.Pos) < Fix.One || !Map.Inside(sh.Pos);
+                foreach (var w in Map.Segments) if (!gone && (sh.Pos - Closest(w, sh.Pos)).SqrLength < T.ShotRadius * T.ShotRadius) gone = true;
+                foreach (var py in s.Pylons)
+                {
+                    var r = T.PylonRadius + T.ShotRadius;
+                    if (!gone && (sh.Pos - py.Pos).SqrLength < r * r) gone = true;
+                }
+                if (!gone)
+                    for (var j = 0; j < s.Players.Length; j++)
+                    {
+                        if (j == sh.Owner) continue;
+                        var q = s.Players[j];
+                        var r = RadiusOf(q) + T.ShotRadius;
+                        if ((sh.Pos - q.Pos).SqrLength >= r * r) continue;
+                        q.Stun = Fix.Max(q.Stun, T.GunStun);
+                        q.Vel = q.Vel * Fix.Ratio(3, 10) + sh.Vel.Normalized * Fix.FromInt(3);
+                        Hit(q, (sh.Pos - q.Pos).Normalized, Fix.Ratio(4, 5));
+                        if (s.Carrier == j)
+                        {
+                            s.Carrier = -1;
+                            s.PassFrom = -1;
+                            s.PuckVel = q.Vel;
+                            q.NoPickup = T.StolenPickupDelay;
+                            q.Charge = Fix.Zero;
+                        }
+                        gone = true;
+                        break;
+                    }
+                if (!gone) keep.Add(sh);
+            }
+            s.Shots = keep.ToArray();
+        }
+
+        /// <summary>Pylon goalies are solid: push a circle out of any it overlaps and bounce it off.</summary>
+        private void CollidePylons(GameState s, ref FixVec2 pos, ref FixVec2 vel, Fix r, Fix bounce)
+        {
+            foreach (var py in s.Pylons)
+            {
+                var d = pos - py.Pos;
+                var min = r + T.PylonRadius;
+                if (d.SqrLength >= min * min) continue;
+                var dist = d.Length;
+                var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
+                pos = py.Pos + n * min;
+                var vn = FixVec2.Dot(vel, n);
+                if (vn < Fix.Zero) vel -= n * (vn * (Fix.One + bounce));
+            }
+        }
+
+        /// <summary>
+        /// Shockwave: <paramref name="from"/> checked <paramref name="to"/>. If they have the card and it's ready,
+        /// <paramref name="to"/> and every opponent near them is slowed, and the others are pushed away.
+        /// </summary>
+        private void Shockwave(GameState s, int from, int to)
+        {
+            PlayerState a = s.Players[from], b = s.Players[to];
+            var copies = Math.Min(3, a.Stats.Shockwave);
+            if (copies <= 0 || a.ShockCooldown > Fix.Zero) return;
+            a.ShockCooldown = T.ShockCooldown;
+            var slow = T.ShockSlow + T.ShockSlowPerCopy * (copies - 1);
+            var time = T.ShockTime + T.ShockTimePerCopy * (copies - 1);
+            var radius = RadiusOf(b) * T.ShockRange * (Fix.One + Fix.Ratio(15, 100) * (copies - 1));
+            SlowDown(b, slow, time);
+            for (var j = 0; j < s.Players.Length; j++)
+            {
+                var q = s.Players[j];
+                if (j == to || q.Team == a.Team) continue;
+                var d = q.Pos - b.Pos;
+                var dist = d.Length;
+                if (dist > radius + RadiusOf(q)) continue;
+                var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
+                var falloff = Fix.One - Fix.Half * Fix.Clamp01(dist / radius);
+                q.Vel += n * (T.DashKnockback * T.ShockPush * falloff);
+                SlowDown(q, slow, time);
+                Hit(q, -n, Fix.Half);
+            }
+            a.Shocks++;
+            a.ShockAt = b.Pos;
+            a.ShockRadius = radius;
+        }
+
+        /// <summary>A stronger or longer slow replaces a weaker one.</summary>
+        private static void SlowDown(PlayerState p, Fix slow, Fix time)
+        {
+            if (p.SlowTime > Fix.Zero && p.Slow >= slow && p.SlowTime >= time) return;
+            p.Slow = Fix.Max(p.Slow * (p.SlowTime > Fix.Zero ? Fix.One : Fix.Zero), slow);
+            p.SlowTime = Fix.Max(p.SlowTime, time);
+        }
+
+        /// <summary>Team Play: a clean pass from <paramref name="passer"/> reached a teammate.</summary>
+        private void Passed(GameState s, int passer)
+        {
+            var p = s.Players[passer];
+            if (p.Stats.PassRefreshTeam > 0)
+            {
+                foreach (var q in s.Players) if (q.Team == p.Team) Refresh(q);
+            }
+            else if (p.Stats.PassRefresh > 0) Refresh(p);
+        }
+
+        /// <summary>Every cooldown back to ready: checks, Puck Gun, Invisibility, Shockwave.</summary>
+        private static void Refresh(PlayerState p)
+        {
+            p.DashCharge = MaxDashes(p);
+            p.GunCooldown = Fix.Zero;
+            if (p.InvisibleTime <= Fix.Zero) p.InvisCooldown = Fix.Zero;
+            p.ShockCooldown = Fix.Zero;
+            p.Refreshes++;
         }
 
         /// <summary>Note a hit for the drawing side (it plays an animation when <see cref="PlayerState.Hits"/> goes up).</summary>

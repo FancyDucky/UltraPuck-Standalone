@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="13" result="Passed" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-11-17 01:08:14Z" end-time="2026-11-17 01:08:15Z" duration="1.3348359">
+  <test-suite type="TestSuite" id="1000" name="Ultra Puck" fullname="Ultra Puck" runstate="Runnable" testcasecount="50" result="Passed" start-time="2026-11-17 01:08:14Z" end-time="2026-11-17 01:08:15Z" duration="1.334836" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <test-suite type="Assembly" id="1055" name="UltraPuck.Tests.dll" fullname="C:/Users/Jay/Documents/GitHub/Ultra Puck (Game)/Library/ScriptAssemblies/UltraPuck.Tests.dll" runstate="Runnable" testcasecount="50" result="Passed" start-time="2026-11-17 01:08:14Z" end-time="2026-11-17 01:08:15Z" duration="1.321740" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+      <properties>
+        <property name="_PID" value="20240" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1056" name="UltraPuck" fullname="UltraPuck" runstate="Runnable" testcasecount="50" result="Passed" start-time="2026-11-17 01:08:14Z" end-time="2026-11-17 01:08:15Z" duration="1.320702" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1057" name="Tests" fullname="UltraPuck.Tests" runstate="Runnable" testcasecount="50" result="Passed" start-time="2026-11-17 01:08:14Z" end-time="2026-11-17 01:08:15Z" duration="1.319999" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+          <properties />
+          <test-suite type="TestFixture" id="1001" name="CardMechanicsTests" fullname="UltraPuck.Tests.CardMechanicsTests" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" testcasecount="13" result="Passed" start-time="2026-11-17 01:08:14Z" end-time="2026-11-17 01:08:15Z" duration="1.317743" total="13" passed="13" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-case id="1013" name="AllCardsStayDeterministic" fullname="UltraPuck.Tests.CardMechanicsTests.AllCardsStayDeterministic" methodname="AllCardsStayDeterministic" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="2094982052" result="Passed" start-time="2026-11-17 01:08:14Z" end-time="2026-11-17 01:08:15Z" duration="1.159503" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[shocks + refreshes 2, score 3-0, pylons 2
+]]></output>
+            </test-case>
+            <test-case id="1003" name="DoubleAgentStartsOnTheOtherSide" fullname="UltraPuck.Tests.CardMechanicsTests.DoubleAgentStartsOnTheOtherSide" methodname="DoubleAgentStartsOnTheOtherSide" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="908149482" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.008098" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1008" name="FriendlyFireBoostsInsteadOfDazing" fullname="UltraPuck.Tests.CardMechanicsTests.FriendlyFireBoostsInsteadOfDazing" methodname="FriendlyFireBoostsInsteadOfDazing" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="797415295" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.004726" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1002" name="HeadStartGivesTheTeamThePuck" fullname="UltraPuck.Tests.CardMechanicsTests.HeadStartGivesTheTeamThePuck" methodname="HeadStartGivesTheTeamThePuck" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="608496281" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.001562" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1007" name="InvisibilityLastsFiveSecondsThenCoolsDown" fullname="UltraPuck.Tests.CardMechanicsTests.InvisibilityLastsFiveSecondsThenCoolsDown" methodname="InvisibilityLastsFiveSecondsThenCoolsDown" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="387984642" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.040346" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1005" name="PuckGunStunsAndKnocksThePuckLoose" fullname="UltraPuck.Tests.CardMechanicsTests.PuckGunStunsAndKnocksThePuckLoose" methodname="PuckGunStunsAndKnocksThePuckLoose" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1565600769" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.028220" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1004" name="PylonGoaliesBlockShots" fullname="UltraPuck.Tests.CardMechanicsTests.PylonGoaliesBlockShots" methodname="PylonGoaliesBlockShots" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="714254508" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.016963" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1009" name="ShockwaveSlowsAndPushesTheOthers" fullname="UltraPuck.Tests.CardMechanicsTests.ShockwaveSlowsAndPushesTheOthers" methodname="ShockwaveSlowsAndPushesTheOthers" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="508556911" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.007937" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1014" name="TeamCardsNeedATeamAndTeamPlayTwoNeedsTeamPlay" fullname="UltraPuck.Tests.CardMechanicsTests.TeamCardsNeedATeamAndTeamPlayTwoNeedsTeamPlay" methodname="TeamCardsNeedATeamAndTeamPlayTwoNeedsTeamPlay" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1592579090" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.011805" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1011" name="TeamPlayDoesntCountIfAnOpponentTouchesIt" fullname="UltraPuck.Tests.CardMechanicsTests.TeamPlayDoesntCountIfAnOpponentTouchesIt" methodname="TeamPlayDoesntCountIfAnOpponentTouchesIt" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="471827192" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.007938" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1010" name="TeamPlayRestoresCooldownsAfterACleanPass" fullname="UltraPuck.Tests.CardMechanicsTests.TeamPlayRestoresCooldownsAfterACleanPass" methodname="TeamPlayRestoresCooldownsAfterACleanPass" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1504552866" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.005165" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1012" name="TeamPlayTwoRestoresTheWholeTeam" fullname="UltraPuck.Tests.CardMechanicsTests.TeamPlayTwoRestoresTheWholeTeam" methodname="TeamPlayTwoRestoresTheWholeTeam" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="780234216" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.004822" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1006" name="WithoutTheCardUtilityDoesNothing" fullname="UltraPuck.Tests.CardMechanicsTests.WithoutTheCardUtilityDoesNothing" methodname="WithoutTheCardUtilityDoesNothing" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1870775012" result="Passed" start-time="2026-11-17 01:08:15Z" end-time="2026-11-17 01:08:15Z" duration="0.001448" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[Saving results to: cm.xml
+]]></output>
+            </test-case>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

@@ -61,6 +61,18 @@ namespace UltraPuck.Core
                     b |= PlayerInput.ShootCheck;
             }
 
+            // utility cards: go invisible with the puck; with the Puck Gun ready, aim at an opponent carrying it and fire once lined up
+            if (s.Carrier == i && me.Stats.Invisibility > 0 && me.InvisCooldown <= Fix.Zero && (s.Tick & 1) == 0) b |= PlayerInput.Utility;
+            if (me.Stats.PuckGun > 0 && me.GunCooldown <= Fix.Zero && s.Carrier >= 0 && s.Players[s.Carrier].Team != me.Team)
+            {
+                var to = s.Players[s.Carrier].Pos - pos;
+                if (to.SqrLength < Fix.FromInt(144))
+                {
+                    aim = to.Normalized;
+                    if (FixVec2.Dot(me.Facing, aim) > Fix.Ratio(95, 100) && (s.Tick & 1) == 0) b |= PlayerInput.Utility;
+                }
+            }
+
             var m = target - pos;
             if (m.SqrLength > Fix.One) m = m.Normalized;
             return new PlayerInput { MoveX = Axis(m.X), MoveY = Axis(m.Y), AimX = Axis(aim.X), AimY = Axis(aim.Y), Buttons = b };

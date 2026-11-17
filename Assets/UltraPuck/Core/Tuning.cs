@@ -63,6 +63,21 @@ namespace UltraPuck.Core
         /// <summary>0 = no limit (free play).</summary>
         public int GoalsToWin = 5;
 
+        // card mechanics
+        /// <summary>Puck Gun: shot speed, how long a shot flies, cooldown, stun, and the shot's size.</summary>
+        public Fix GunSpeed = Fix.FromInt(26), GunLife = Fix.Ratio(6, 5), GunCooldown = Fix.FromInt(2), GunStun = Fix.One, ShotRadius = Fix.Ratio(18, 100);
+        /// <summary>Invisibility: how long, and the cooldown.</summary>
+        public Fix InvisTime = Fix.FromInt(5), InvisCooldown = Fix.FromInt(15);
+        /// <summary>Shockwave: cooldown; slow (30%, +5% per extra copy) for 2 s (+0.5 s per copy); reach in player radii; push (share of a check's).</summary>
+        public Fix ShockCooldown = Fix.FromInt(7), ShockSlow = Fix.Ratio(3, 10), ShockSlowPerCopy = Fix.Ratio(5, 100);
+        public Fix ShockTime = Fix.FromInt(2), ShockTimePerCopy = Fix.Half, ShockRange = Fix.FromInt(3), ShockPush = Fix.Ratio(4, 5);
+        /// <summary>Friendly Fire: speed multiplier and how long it lasts.</summary>
+        public Fix FriendlyBoost = Fix.Ratio(9, 5), FriendlyTime = Fix.FromInt(2);
+        /// <summary>Team Play: how close an opponent may get to a passed puck before the pass no longer counts.</summary>
+        public Fix PassTouch = Fix.Ratio(3, 10);
+        /// <summary>Pylon goalies: size, distance out from the goal line, and spacing.</summary>
+        public Fix PylonRadius = Fix.Half, PylonOut = Fix.Ratio(12, 5), PylonSpread = Fix.Ratio(11, 10);
+
         // cards
         /// <summary>After every goal, the team that conceded picks a card (needs a card library).</summary>
         public bool CardsAfterGoals = true;

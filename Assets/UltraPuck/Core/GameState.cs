@@ -80,6 +80,26 @@ namespace UltraPuck.Core
         /// <summary>How far checks push you (on top of weight).</summary>
         public Fix KnockbackTaken = Fix.One;
 
+        // cards with their own rules: copies held (0 = don't have it)
+        /// <summary>The team with the most starts face-offs holding the puck.</summary>
+        public int HeadStart;
+        /// <summary>Start face-offs on the other team's side.</summary>
+        public int DoubleAgent;
+        /// <summary>Pylon goalies in front of your net.</summary>
+        public int Pylons;
+        /// <summary>Utility: fire a shot that stuns.</summary>
+        public int PuckGun;
+        /// <summary>Utility: turn invisible to opponents.</summary>
+        public int Invisibility;
+        /// <summary>A teammate's check boosts you instead of dazing you.</summary>
+        public int FriendlyFire;
+        /// <summary>Your checks on opponents send out a slowing shockwave (stronger with more copies).</summary>
+        public int Shockwave;
+        /// <summary>A clean pass to a teammate restores your cooldowns (Team Play).</summary>
+        public int PassRefresh;
+        /// <summary>...and the whole team's (Team Play II).</summary>
+        public int PassRefreshTeam;
+
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
         internal void Hash(ref ulong h)
@@ -88,6 +108,9 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, QuickShotPower); GameState.Mix(ref h, ChargeSpeed); GameState.Mix(ref h, OverCharge);
             GameState.Mix(ref h, DashCooldown); GameState.Mix(ref h, DashPower); GameState.Mix(ref h, ExtraDashes);
             GameState.Mix(ref h, Size); GameState.Mix(ref h, Weight); GameState.Mix(ref h, KnockbackGiven); GameState.Mix(ref h, KnockbackTaken);
+            GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
+            GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
+            GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam);
         }
     }
 
@@ -124,6 +147,19 @@ namespace UltraPuck.Core
         /// <summary>While picking: the card chosen, or -1.</summary>
         public int Picked = -1;
 
+        // card effects (seconds left, 0 = ready / not active)
+        public Fix GunCooldown, InvisCooldown, InvisibleTime, ShockCooldown;
+        /// <summary>Slowed by a shockwave: for how long, and by how much (0.3 = 30% slower).</summary>
+        public Fix SlowTime, Slow;
+        /// <summary>Boosted by a teammate's check (Friendly Fire).</summary>
+        public Fix BoostTime;
+        /// <summary>Counts shockwaves this player sent out, and where / how big the last one was (for the drawing side).</summary>
+        public int Shocks;
+        public FixVec2 ShockAt;
+        public Fix ShockRadius;
+        /// <summary>Counts Team Play cooldown refreshes (for the drawing side's flash).</summary>
+        public int Refreshes;
+
         public PlayerState Clone()
         {
             var p = (PlayerState)MemberwiseClone();
@@ -132,6 +168,23 @@ namespace UltraPuck.Core
             p.Offer = (int[])Offer.Clone();
             return p;
         }
+    }
+
+    /// <summary>A Puck Gun shot in flight.</summary>
+    [Serializable]
+    public struct Shot
+    {
+        public FixVec2 Pos, Vel;
+        public int Owner;
+        public Fix Life;
+    }
+
+    /// <summary>A pylon goalie: a solid dummy in front of a net.</summary>
+    [Serializable]
+    public struct Pylon
+    {
+        public FixVec2 Pos;
+        public int Team;
     }
 
     public enum Phase : byte
@@ -167,12 +220,21 @@ namespace UltraPuck.Core
         public int LastScorer = -1;
         public uint Rng = 0x9E3779B9u;
 
+        /// <summary>Puck Gun shots in flight.</summary>
+        public Shot[] Shots = new Shot[0];
+        /// <summary>Pylon goalies standing in front of the nets (from the Pylon Goalie card).</summary>
+        public Pylon[] Pylons = new Pylon[0];
+        /// <summary>Team Play: who last let go of the puck, while it hasn't been touched by an opponent since (-1 = no pass going).</summary>
+        public int PassFrom = -1;
+
         public GameState Clone()
         {
             var s = (GameState)MemberwiseClone();
             s.Players = new PlayerState[Players.Length];
             for (var i = 0; i < Players.Length; i++) s.Players[i] = Players[i].Clone();
             s.Score = (int[])Score.Clone();
+            s.Shots = (Shot[])Shots.Clone();
+            s.Pylons = (Pylon[])Pylons.Clone();
             return s;
         }
 
@@ -190,7 +252,9 @@ namespace UltraPuck.Core
         {
             ulong h = 14695981039346656037UL;
             Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, (long)Rng);
-            Mix(ref h, PuckPos); Mix(ref h, PuckVel);
+            Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
+            foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
+            foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Team); }
             foreach (var sc in Score) Mix(ref h, sc);
             foreach (var p in Players)
             {
@@ -201,6 +265,9 @@ namespace UltraPuck.Core
                 Mix(ref h, p.Cards.Length); foreach (var c in p.Cards) Mix(ref h, c);
                 Mix(ref h, p.Offer.Length); foreach (var c in p.Offer) Mix(ref h, c);
                 Mix(ref h, p.Picked);
+                Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
+                Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.BoostTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
+                Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes);
             }
             return h;
         }

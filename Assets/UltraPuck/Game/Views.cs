@@ -71,6 +71,13 @@ namespace UltraPuck.Game
         private float[] _segPulse = new float[0], _segLast = new float[0];
         private float _barAlpha;
 
+        // card effects: slowed / boosted rings, a faint outline while invisible (to teammates), small cooldown bars
+        private readonly GameObject _slowRing, _boostRing, _ghost, _shadow;
+        private readonly Transform _cdRoot;
+        private readonly Mesh[] _cdBack = new Mesh[3], _cdFill = new Mesh[3];
+        private readonly Transform[] _cdFillT = new Transform[3];
+        private static readonly Color[] CooldownColours = { new Color(1f, 0.42f, 0.37f), new Color(0.65f, 0.79f, 1f), new Color(0.35f, 0.65f, 1f) };
+
         // hit animation
         private readonly Mesh _flashMesh;
         private readonly GameObject _flash;
@@ -85,7 +92,13 @@ namespace UltraPuck.Game
             Root = new GameObject("Player");
             Root.transform.SetParent(parent, false);
             // a drop shadow that doesn't turn with the player, so the light always comes from the same side
-            Draw.Make("Shadow", Root.transform, Draw.Disc(radius * 1.04f, Palette.Shadow), 7).transform.localPosition = new Vector3(radius * 0.18f, -radius * 0.32f, 0f);
+            _shadow = Draw.Make("Shadow", Root.transform, Draw.Disc(radius * 1.04f, Palette.Shadow), 7).gameObject;
+            _shadow.transform.localPosition = new Vector3(radius * 0.18f, -radius * 0.32f, 0f);
+            _slowRing = Draw.Make("Slowed", Root.transform, Draw.Ring(radius * 1.55f, radius * 1.72f, 1f, new Color(0.45f, 0.85f, 1f, 0.8f)), 9).gameObject;
+            _boostRing = Draw.Make("Boosted", Root.transform, Draw.Ring(radius * 1.55f, radius * 1.72f, 1f, new Color(1f, 0.62f, 0.3f, 0.85f)), 9).gameObject;
+            var tint = Palette.TeamTint(team); tint.a = 0.45f;
+            _ghost = Draw.Make("Ghost", Root.transform, Draw.Ring(radius * 0.86f, radius, 1f, tint), 10).gameObject;
+            _slowRing.SetActive(false); _boostRing.SetActive(false); _ghost.SetActive(false);
 
             // squash: stretched along the hit direction, then turned back so the body still faces its own way
             _squash = new GameObject("Squash").transform;
@@ -113,6 +126,22 @@ namespace UltraPuck.Game
             _barRoot.SetParent(Root.transform, false);
             _barRoot.localPosition = new Vector3(0f, radius + 0.42f, 0f);
             _barRoot.gameObject.SetActive(false);
+
+            _cdRoot = new GameObject("Cooldowns").transform;
+            _cdRoot.SetParent(Root.transform, false);
+            _cdRoot.localPosition = new Vector3(0f, radius + 0.24f, 0f);
+            for (var k = 0; k < 3; k++)
+            {
+                const float h = 0.08f;
+                var y = -k * 0.13f;
+                _cdBack[k] = Draw.Rect(new Vector2(-BarLength / 2f, y - h / 2f), new Vector2(BarLength / 2f, y + h / 2f), new Color(0.08f, 0.08f, 0.1f, 0.75f));
+                Draw.Make("Track" + k, _cdRoot, _cdBack[k], 15);
+                _cdFill[k] = Draw.Rect(new Vector2(0f, -0.5f), new Vector2(1f, 0.5f), CooldownColours[k]);
+                _cdFillT[k] = Draw.Make("Fill" + k, _cdRoot, _cdFill[k], 16).transform;
+                _cdFillT[k].localPosition = new Vector3(-BarLength / 2f, y, 0f);
+                _cdFillT[k].gameObject.SetActive(false);
+                _cdRoot.Find("Track" + k).gameObject.SetActive(false);
+            }
         }
 
         /// <summary>
@@ -148,6 +177,40 @@ namespace UltraPuck.Game
             _hitsSeen = hits;
             HitAnimation();
             return fresh;
+        }
+
+        /// <summary>
+        /// Card effects on this player. <paramref name="hidden"/>: invisible and the viewer is on the other team (not
+        /// drawn at all); <paramref name="faint"/>: invisible but the viewer is a teammate (an outline only).
+        /// <paramref name="cooldowns"/>: Puck Gun, Invisibility and Shockwave readiness (0..1, or -1 without the card).
+        /// </summary>
+        public void Status(bool hidden, bool faint, bool slowed, bool boosted, float[] cooldowns)
+        {
+            if (Root.activeSelf == hidden) Root.SetActive(!hidden);
+            if (hidden) return;
+            if (_squash.gameObject.activeSelf == faint) _squash.gameObject.SetActive(!faint);
+            if (_shadow.activeSelf == faint) _shadow.SetActive(!faint);
+            if (_ghost.activeSelf != faint) _ghost.SetActive(faint);
+            if (_slowRing.activeSelf != slowed) _slowRing.SetActive(slowed);
+            if (_boostRing.activeSelf != boosted) _boostRing.SetActive(boosted);
+            // the cooldown bars, stacked under the check bar, while recharging (or always, by setting)
+            var row = 0;
+            for (var k = 0; k < 3; k++)
+            {
+                var v = cooldowns != null && k < cooldowns.Length ? cooldowns[k] : -1f;
+                var show = v >= 0f && (v < 1f || Settings.DashBarAlways);
+                var track = _cdRoot.Find("Track" + k).gameObject;
+                if (!show) { if (track.activeSelf) track.SetActive(false); if (_cdFillT[k].gameObject.activeSelf) _cdFillT[k].gameObject.SetActive(false); continue; }
+                track.SetActive(true);
+                _cdFillT[k].gameObject.SetActive(true);
+                // bars that are showing close up the gaps, so they always stack neatly
+                var y = -row * 0.13f;
+                track.transform.localPosition = new Vector3(0f, y + k * 0.13f, 0f);
+                _cdFillT[k].localPosition = new Vector3(-BarLength / 2f, y, 0f);
+                _cdFillT[k].localScale = new Vector3(Mathf.Max(0.001f, BarLength * Mathf.Clamp01(v)), 0.08f, 1f);
+                row++;
+            }
+            _cdRoot.localPosition = new Vector3(0f, _barRoot.gameObject.activeSelf ? _r + 0.24f : _r + 0.42f, 0f);
         }
 
         private void DashBar(float value, int segments)
@@ -229,13 +292,16 @@ namespace UltraPuck.Game
     /// <summary>Rings that burst out from where players hit each other, then fade.</summary>
     internal sealed class Effects
     {
-        private sealed class Burst { public GameObject Go; public Mesh Mesh; public float Age, Life, Size; }
+        private sealed class Burst { public GameObject Go; public Mesh Mesh; public float Age, Life, Size; public Color Colour = Color.white; }
         private readonly List<Burst> _live = new List<Burst>(), _spare = new List<Burst>();
         private readonly Transform _parent;
 
         public Effects(Transform parent) { _parent = parent; }
 
-        public void Impact(Vector2 at, float power)
+        public void Impact(Vector2 at, float power) { Ring(at, power, Color.white, 0.35f + 0.6f * power, 0.18f + 0.14f * power); }
+
+        /// <summary>A ring that bursts out to <paramref name="size"/> (radius) in <paramref name="colour"/> over <paramref name="life"/> seconds.</summary>
+        public void Ring(Vector2 at, float power, Color colour, float size, float life)
         {
             Burst b;
             if (_spare.Count > 0) { b = _spare[_spare.Count - 1]; _spare.RemoveAt(_spare.Count - 1); }
@@ -247,8 +313,9 @@ namespace UltraPuck.Game
             b.Go.SetActive(true);
             b.Go.transform.localPosition = new Vector3(at.x, at.y, 0f);
             b.Age = 0f;
-            b.Life = 0.18f + 0.14f * power;
-            b.Size = 0.35f + 0.6f * power;
+            b.Life = life;
+            b.Size = size;
+            b.Colour = colour;
             _live.Add(b);
             Step(b);
         }
@@ -269,7 +336,8 @@ namespace UltraPuck.Game
             var k = b.Age / b.Life;
             var ease = 1f - (1f - k) * (1f - k);
             b.Go.transform.localScale = Vector3.one * (0.25f + ease) * b.Size;
-            Draw.Recolor(b.Mesh, new Color(1f, 1f, 1f, 0.85f * (1f - k)));
+            var c = b.Colour; c.a *= 0.85f * (1f - k);
+            Draw.Recolor(b.Mesh, c);
         }
     }
 
@@ -355,6 +423,76 @@ namespace UltraPuck.Game
                 }
                 _trail[i].gameObject.SetActive(on);
             }
+        }
+    }
+
+    /// <summary>Puck Gun shots: small glowing discs in the shooter's team colour.</summary>
+    internal sealed class ShotViews
+    {
+        private readonly Transform _parent;
+        private readonly List<GameObject> _pool = new List<GameObject>();
+        private readonly List<int> _team = new List<int>();
+
+        public ShotViews(Transform parent) { _parent = parent; }
+
+        public void Show(GameState s, float radius)
+        {
+            for (var k = 0; k < s.Shots.Length; k++)
+            {
+                var sh = s.Shots[k];
+                var team = sh.Owner >= 0 && sh.Owner < s.Players.Length ? s.Players[sh.Owner].Team : -1;
+                if (k >= _pool.Count) { _pool.Add(null); _team.Add(-2); }
+                if (_pool[k] == null || _team[k] != team)
+                {
+                    if (_pool[k] != null) Object.Destroy(_pool[k]);
+                    var go = new GameObject("Shot");
+                    go.transform.SetParent(_parent, false);
+                    var tint = team < 0 ? Color.white : Palette.TeamTint(team);
+                    var glow = tint; glow.a = 0.45f;
+                    Draw.Make("Glow", go.transform, Draw.SoftDisc(radius * 2.6f, glow, Palette.Clear(glow)), 22);
+                    Draw.Make("Body", go.transform, Draw.Disc(radius, tint), 23);
+                    Draw.Make("Core", go.transform, Draw.Disc(radius * 0.5f, Color.white), 24);
+                    _pool[k] = go;
+                    _team[k] = team;
+                }
+                _pool[k].SetActive(true);
+                _pool[k].transform.localPosition = new Vector3(sh.Pos.X.ToFloat(), sh.Pos.Y.ToFloat(), 0f);
+            }
+            for (var k = s.Shots.Length; k < _pool.Count; k++) if (_pool[k] != null && _pool[k].activeSelf) _pool[k].SetActive(false);
+        }
+    }
+
+    /// <summary>Pylon goalies: dark dummies with a ring in their team's colour.</summary>
+    internal sealed class PylonViews
+    {
+        private readonly Transform _parent;
+        private readonly List<GameObject> _pool = new List<GameObject>();
+        private readonly List<int> _team = new List<int>();
+
+        public PylonViews(Transform parent) { _parent = parent; }
+
+        public void Show(GameState s, float radius)
+        {
+            for (var k = 0; k < s.Pylons.Length; k++)
+            {
+                var py = s.Pylons[k];
+                if (k >= _pool.Count) { _pool.Add(null); _team.Add(-1); }
+                if (_pool[k] == null || _team[k] != py.Team)
+                {
+                    if (_pool[k] != null) Object.Destroy(_pool[k]);
+                    var go = new GameObject("Pylon");
+                    go.transform.SetParent(_parent, false);
+                    Draw.Make("Shadow", go.transform, Draw.Disc(radius * 1.04f, Palette.Shadow), 6).transform.localPosition = new Vector3(radius * 0.18f, -radius * 0.32f, 0f);
+                    Draw.Make("Rim", go.transform, Draw.Disc(radius, Palette.Team(py.Team)), 8);
+                    Draw.Make("Body", go.transform, Draw.Disc(radius * 0.8f, new Color(0.2f, 0.2f, 0.22f)), 9);
+                    Draw.Make("Top", go.transform, Draw.Disc(radius * 0.32f, new Color(0.42f, 0.42f, 0.45f)), 10);
+                    _pool[k] = go;
+                    _team[k] = py.Team;
+                }
+                _pool[k].SetActive(true);
+                _pool[k].transform.localPosition = new Vector3(py.Pos.X.ToFloat(), py.Pos.Y.ToFloat(), 0f);
+            }
+            for (var k = s.Pylons.Length; k < _pool.Count; k++) if (_pool[k] != null && _pool[k].activeSelf) _pool[k].SetActive(false);
         }
     }
 }

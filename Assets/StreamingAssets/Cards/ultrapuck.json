@@ -77,6 +77,92 @@
       "color": "#8C66CC",
       "text": "[good]-10%[/] Opponent Move Speed",
       "stats": { "OpponentMoveSpeed": "x0.9" }
+    },
+    {
+      "id": "ultrapuck.headstart",
+      "name": "Head Start",
+      "tier": "B",
+      "max": 3,
+      "art": "ultrapuck.betterspawn",
+      "color": "#66D9A6",
+      "text": "[good]Your team starts face-offs with the puck[/]\nMost copies wins; a tie: it starts in the middle.",
+      "stats": { "HeadStart": "+1" }
+    },
+    {
+      "id": "ultrapuck.doubleagent",
+      "name": "Double Agent",
+      "tier": "B",
+      "max": 1,
+      "color": "#59618C",
+      "text": "You start every face-off [good]on the other team's side[/].",
+      "stats": { "DoubleAgent": "+1" }
+    },
+    {
+      "id": "ultrapuck.pylongoalie",
+      "name": "Pylon Goalie",
+      "tier": "F",
+      "max": 2,
+      "color": "#B3B8C2",
+      "text": "[good]+1 Pylon Goalie[/]\nA dummy at your net that blocks shots.",
+      "stats": { "Pylons": "+1" }
+    },
+    {
+      "id": "ultrapuck.puckgun",
+      "name": "Puck Gun",
+      "tier": "S",
+      "max": 1,
+      "color": "#CC3340",
+      "text": "Utility (Y): fire a shot. The first player it hits gets a [good]1 s Stun[/] and drops the puck. [note]2 s cooldown.[/]",
+      "stats": { "PuckGun": "+1" }
+    },
+    {
+      "id": "ultrapuck.invisibility",
+      "name": "Invisibility",
+      "tier": "A",
+      "max": 1,
+      "color": "#8CBFF2",
+      "text": "Utility (Y): turn [good]invisible for 5 s[/] to opponents. [note]15 s cooldown.[/]",
+      "stats": { "Invisibility": "+1" }
+    },
+    {
+      "id": "ultrapuck.friendlyfire",
+      "name": "Friendly Fire",
+      "tier": "A",
+      "max": 1,
+      "minTeam": 2,
+      "color": "#FF7359",
+      "text": "A teammate checking you gives [good]+80% Move Speed for 2 s[/] instead of a daze.",
+      "stats": { "FriendlyFire": "+1" }
+    },
+    {
+      "id": "ultrapuck.shockwave",
+      "name": "Shockwave",
+      "tier": "A",
+      "max": 3,
+      "color": "#59A6FF",
+      "text": "Check an opponent to [good]slow them and everyone near them by 30% for 2 s[/] and [good]push the others away[/]. [note]7 s cooldown.[/]",
+      "stats": { "Shockwave": "+1" }
+    },
+    {
+      "id": "ultrapuck.teamplay",
+      "name": "Team Play",
+      "tier": "A",
+      "max": 1,
+      "minTeam": 2,
+      "color": "#4DC78C",
+      "text": "Pass to a teammate to [good]restore all your cooldowns[/].\n[note]Doesn't count if an opponent touches the puck first.[/]",
+      "stats": { "PassRefresh": "+1" }
+    },
+    {
+      "id": "ultrapuck.teamplay2",
+      "name": "Team Play II",
+      "tier": "S",
+      "max": 1,
+      "minTeam": 2,
+      "requires": "ultrapuck.teamplay",
+      "color": "#33D980",
+      "text": "Your passes [good]restore the whole team's cooldowns[/].\n[note]Only offered once your team has Team Play.[/]",
+      "stats": { "PassRefresh": "+1", "PassRefreshTeam": "+1" }
     }
   ]
 }

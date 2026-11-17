@@ -41,6 +41,11 @@ namespace UltraPuck.Game
         private Menus _menus;
         private CardScreen _cardScreen;
         private Effects _effects;
+        private ShotViews _shots;
+        private PylonViews _pylons;
+        // what each player's effect counters were last frame, to spot new shockwaves and Team Play refreshes
+        private readonly List<int> _seenShocks = new List<int>(), _seenRefreshes = new List<int>();
+        private readonly float[] _cooldowns = new float[3];
         private float _shake;
         private readonly List<Vector2> _impactsThisFrame = new List<Vector2>();
 
@@ -92,6 +97,8 @@ namespace UltraPuck.Game
             _entities = new GameObject("Entities").transform;
             _puck = new PuckView(_sim.T.PuckRadius.ToFloat(), _entities);
             _effects = new Effects(_entities);
+            _shots = new ShotViews(_entities);
+            _pylons = new PylonViews(_entities);
             SetUpCamera();
             _mainMenu.Show(MainMenu.Page.Main);
             if (_local.AddDemoPlayers() > 0) StartMatch(System.Environment.GetEnvironmentVariable("ULTRAPUCK_FREEPLAY") == "1");
@@ -568,6 +575,47 @@ namespace UltraPuck.Game
         private float _testPause;
 
         /// <summary>Draw the moment <paramref name="t"/> of the way from <paramref name="a"/> to <paramref name="b"/>.</summary>
+        /// <summary>Which teams have a person on this PC (to decide who can see an invisible player).</summary>
+        private void LocalTeams(out bool orange, out bool blue)
+        {
+            orange = blue = false;
+            if (_mode == Mode.Online && _session != null)
+            {
+                foreach (var seat in _session.Seats) if (!seat.Bot && seat.Peer == _session.MyPeer) { if (seat.Team == 0) orange = true; else blue = true; }
+                return;
+            }
+            if (_mode != Mode.Match) return;
+            foreach (var sl in _local.Slots) if (!sl.Demo) { if (sl.Team == 0) orange = true; else blue = true; }
+        }
+
+        /// <summary>Card effects for one player: invisibility, slowed / boosted, cooldown bars, shockwave and Team Play bursts.</summary>
+        private void CardEffects(int i, PlayerState p, Vector2 pos)
+        {
+            bool orange, blue;
+            LocalTeams(out orange, out blue);
+            var invisible = p.InvisibleTime > Fix.Zero;
+            var teammateHere = p.Team == 0 ? orange : blue;
+            var opponentHere = p.Team == 0 ? blue : orange;
+            // hidden from a screen with only opponents on it; an outline for a screen with a teammate (or nobody, like the menu)
+            var hidden = invisible && opponentHere && !teammateHere;
+            var faint = invisible && !hidden;
+            _cooldowns[0] = p.Stats.PuckGun > 0 ? 1f - p.GunCooldown.ToFloat() / _sim.T.GunCooldown.ToFloat() : -1f;
+            _cooldowns[1] = p.Stats.Invisibility > 0 ? (invisible ? 0f : 1f - p.InvisCooldown.ToFloat() / _sim.T.InvisCooldown.ToFloat()) : -1f;
+            _cooldowns[2] = p.Stats.Shockwave > 0 ? 1f - p.ShockCooldown.ToFloat() / _sim.T.ShockCooldown.ToFloat() : -1f;
+            _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.BoostTime > Fix.Zero, _cooldowns);
+
+            while (_seenShocks.Count <= i) { _seenShocks.Add(-1); _seenRefreshes.Add(-1); }
+            if (_seenShocks[i] >= 0 && p.Shocks > _seenShocks[i] && Settings.HitEffects)
+            {
+                _effects.Ring(V.Of(p.ShockAt), 1f, new Color(0.45f, 0.8f, 1f), p.ShockRadius.ToFloat() * 1.15f, 0.45f);
+                _shake = Mathf.Max(_shake, 0.25f);
+            }
+            if (_seenRefreshes[i] >= 0 && p.Refreshes > _seenRefreshes[i])
+                _effects.Ring(pos, 0.6f, new Color(0.35f, 0.95f, 0.55f), 1.3f, 0.5f);
+            _seenShocks[i] = p.Shocks;
+            _seenRefreshes[i] = p.Refreshes;
+        }
+
         private void Show(GameState a, GameState b, float t)
         {
             while (_players.Count > b.Players.Length) { Destroy(_players[_players.Count - 1].Root); _players.RemoveAt(_players.Count - 1); }
@@ -590,6 +638,7 @@ namespace UltraPuck.Game
                 var full = Simulation.MaxDashes(pb).ToFloat();
                 Vector2 hitAt;
                 var hit = _players[i].Show(pos, facing, pb.DashCharge.ToFloat(), Mathf.RoundToInt(full), pb.Charge.ToFloat(), pb.Hits, pb.HitPower.ToFloat(), V.Of(pb.HitDir), out hitAt);
+                CardEffects(i, pb, pos);
                 if (hit > 0f)
                 {
                     // both players in a hit report it; one ring per contact is enough
@@ -601,6 +650,9 @@ namespace UltraPuck.Game
                 }
             }
             _impactsThisFrame.Clear();
+            if (_seenShocks.Count > b.Players.Length) { _seenShocks.RemoveRange(b.Players.Length, _seenShocks.Count - b.Players.Length); _seenRefreshes.RemoveRange(b.Players.Length, _seenRefreshes.Count - b.Players.Length); }
+            _shots.Show(b, _sim.T.ShotRadius.ToFloat());
+            _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);
             _puck.Show((pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t), b.PuckTeam);
