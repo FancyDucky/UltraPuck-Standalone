@@ -48,7 +48,8 @@ namespace UltraPuck.Game
         private IEnumerator Check()
         {
             string latest;
-            using (var req = UnityWebRequest.Get(Repo + "/releases/latest/download/version.txt"))
+            // a throwaway query string: GitHub caches the "latest" link for a few minutes after a release, and this skips that
+            using (var req = UnityWebRequest.Get(Repo + "/releases/latest/download/version.txt?t=" + DateTime.UtcNow.Ticks))
             {
                 req.timeout = 6;
                 yield return req.SendWebRequest();

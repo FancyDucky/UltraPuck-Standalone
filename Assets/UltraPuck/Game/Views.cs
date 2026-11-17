@@ -15,7 +15,7 @@ namespace UltraPuck.Game
     {
         public readonly GameObject Root;
 
-        public RinkView(MapDef map)
+        public RinkView(MapDef map, float wallThickness)
         {
             Root = new GameObject("Rink");
             var outline = new List<Vector2>();
@@ -44,7 +44,7 @@ namespace UltraPuck.Game
             {
                 var pts = new List<Vector2>();
                 foreach (var p in map.WallLines[w]) pts.Add(V.Of(p));
-                Draw.Make("Wall" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], 0.34f, Palette.Wall), 4);
+                Draw.Make("Wall" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], wallThickness, Palette.Wall), 4);
             }
         }
     }
@@ -58,6 +58,19 @@ namespace UltraPuck.Game
         public readonly GameObject Root;
         private readonly Transform _body, _squash, _unsquash;
         private readonly MeshFilter _chargeRing;
+        private readonly Transform _chargeRoot;
+
+        // speed trail: fading copies of the body left behind while going faster than skating speed (a dash, a boost)
+        private const int TrailLength = 5;
+        private const float TrailStep = 1f / 60f, TrailFrom = 9.5f, TrailFull = 15f;
+        private readonly Transform[] _trail = new Transform[TrailLength];
+        private readonly Mesh[] _trailMesh = new Mesh[TrailLength];
+        private readonly Vector2[] _trailAt = new Vector2[TrailLength];
+        private int _trailCount;
+        private float _trailClock, _trailAlpha;
+        private Vector2 _lastPos;
+        private bool _hasLast;
+        private readonly Color _trailColour;
         private readonly Mesh _chargeMesh = new Mesh();
         private float _chargeShown = -1f;
         private readonly float _r;
@@ -120,7 +133,18 @@ namespace UltraPuck.Game
                 ? Draw.Triangle(new Vector2(0f, sym * 1.15f), new Vector2(sym, -sym * 0.75f), new Vector2(-sym, -sym * 0.75f), Color.white)
                 : Draw.Rect(new Vector2(-sym * 0.8f, -sym * 0.8f), new Vector2(sym * 0.8f, sym * 0.8f), Color.white);
             Draw.Make("Symbol", _unsquash, symbol, 13);
-            _chargeRing = Draw.Make("Charge", Root.transform, _chargeMesh, 14);
+            // the charge bar turns with the player: it starts behind them and wraps round both sides to the front
+            _chargeRoot = new GameObject("ChargeBar").transform;
+            _chargeRoot.SetParent(Root.transform, false);
+            _chargeRing = Draw.Make("Charge", _chargeRoot, _chargeMesh, 14);
+
+            _trailColour = Palette.TeamTint(team);
+            for (var i = 0; i < TrailLength; i++)
+            {
+                _trailMesh[i] = Draw.Disc(radius * (0.95f - i * 0.12f), Color.clear);
+                _trail[i] = Draw.Make("Trail" + i, Root.transform, _trailMesh[i], 6).transform;
+                _trail[i].gameObject.SetActive(false);
+            }
 
             _barRoot = new GameObject("DashBar").transform;
             _barRoot.SetParent(Root.transform, false);
@@ -151,15 +175,23 @@ namespace UltraPuck.Game
         public float Show(Vector2 pos, Vector2 facing, float dashCharge, int dashMax, float charge, int hits, float hitPower, Vector2 hitDir, out Vector2 hitAt)
         {
             Root.transform.localPosition = new Vector3(pos.x, pos.y, 0f);
-            if (facing.sqrMagnitude > 1e-6f) _body.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(facing.y, facing.x) * Mathf.Rad2Deg);
+            if (facing.sqrMagnitude > 1e-6f)
+            {
+                var turn = Quaternion.Euler(0f, 0f, Mathf.Atan2(facing.y, facing.x) * Mathf.Rad2Deg);
+                _body.localRotation = turn;
+                _chargeRoot.localRotation = turn;
+            }
 
-            charge = Mathf.Round(charge * 48f) / 48f;
+            charge = Mathf.Round(Mathf.Clamp01(charge) * 48f) / 48f;
             if (charge != _chargeShown)
             {
                 _chargeShown = charge;
                 _chargeRing.gameObject.SetActive(charge > 0f);
-                if (charge > 0f) Draw.Ring(_r * 1.3f, _r * 1.5f, charge, Palette.Charge, _chargeMesh);
+                // centred behind the player (local angle 180 degrees), growing round both sides until it meets at the front
+                if (charge > 0f) Draw.Arc(_r * 1.3f, _r * 1.5f, Mathf.PI, charge * Mathf.PI, Palette.Charge, _chargeMesh);
             }
+
+            SpeedTrail(pos);
 
             DashBar(Mathf.Clamp(dashCharge, 0f, dashMax), Mathf.Max(1, dashMax));
 
@@ -177,6 +209,36 @@ namespace UltraPuck.Game
             _hitsSeen = hits;
             HitAnimation();
             return fresh;
+        }
+
+        private void SpeedTrail(Vector2 pos)
+        {
+            var dt = Time.deltaTime;
+            var speed = _hasLast && dt > 1e-5f ? (pos - _lastPos).magnitude / dt : 0f;
+            // a jump (face-off, respawn) isn't speed
+            if (_hasLast && (pos - _lastPos).sqrMagnitude > 4f) { speed = 0f; _trailCount = 0; }
+            _lastPos = pos; _hasLast = true;
+            var want = Mathf.Clamp01((speed - TrailFrom) / (TrailFull - TrailFrom));
+            _trailAlpha = Mathf.MoveTowards(_trailAlpha, want, dt * (want > _trailAlpha ? 12f : 4f));
+
+            _trailClock += dt;
+            if (_trailClock >= TrailStep)
+            {
+                _trailClock = 0f;
+                for (var i = TrailLength - 1; i > 0; i--) _trailAt[i] = _trailAt[i - 1];
+                _trailAt[0] = pos;
+                _trailCount = Mathf.Min(TrailLength, _trailCount + 1);
+            }
+            for (var i = 0; i < TrailLength; i++)
+            {
+                var on = _trailAlpha > 0.01f && i < _trailCount && (_trailAt[i] - pos).sqrMagnitude > _r * _r * 0.2f;
+                if (_trail[i].gameObject.activeSelf != on) _trail[i].gameObject.SetActive(on);
+                if (!on) continue;
+                _trail[i].position = new Vector3(_trailAt[i].x, _trailAt[i].y, 0f);
+                var c = _trailColour;
+                c.a = 0.4f * _trailAlpha * (1f - (i + 1f) / (TrailLength + 1f));
+                Draw.Recolor(_trailMesh[i], c);
+            }
         }
 
         /// <summary>
@@ -372,10 +434,10 @@ namespace UltraPuck.Game
                 _trail[i] = Draw.Make("Trail" + i, parent, _trailMesh[i], 18).transform;
                 _trail[i].gameObject.SetActive(false);
             }
-            _glow = Draw.SoftDisc(radius * 2.4f, Color.white, Palette.Clear(Color.white));
+            _glow = Draw.SoftDisc(radius * 1.6f, Color.white, Palette.Clear(Color.white));
             Draw.Make("Glow", Root.transform, _glow, 19);
             Draw.Make("Edge", Root.transform, Draw.Disc(radius, Palette.PuckEdge), 20);
-            Draw.Make("Fill", Root.transform, Draw.Disc(radius * 0.84f, Palette.Puck), 21);
+            Draw.Make("Fill", Root.transform, Draw.Disc(radius * 0.68f, Palette.Puck), 21);
         }
 
         /// <summary>The glow and trail colour: the team's light tint, or white for nobody (-1).</summary>
@@ -383,7 +445,7 @@ namespace UltraPuck.Game
         {
             if (team != _team) { _team = team; _target = team < 0 ? Color.white : Palette.TeamTint(team); }
             _colour = Color.Lerp(_colour, _target, 1f - Mathf.Exp(-Time.deltaTime * 14f)); // a quick fade, not a snap
-            var centre = _colour; centre.a = _team < 0 ? 0.22f : 0.42f;
+            var centre = _colour; centre.a = _team < 0 ? 0.3f : 0.55f; // a smaller glow, so a little stronger
             var cols = _glow.colors;
             cols[0] = centre;
             for (var k = 1; k < cols.Length; k++) cols[k] = Palette.Clear(_colour);

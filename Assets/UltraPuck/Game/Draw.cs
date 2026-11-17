@@ -97,6 +97,31 @@ namespace UltraPuck.Game
             return Build(v, t, c, reuse);
         }
 
+        /// <summary>
+        /// Part of a ring, centred on the angle <paramref name="centre"/> (radians, 0 = +x) and reaching
+        /// <paramref name="half"/> radians either side of it: an arc that grows out both ways from one point.
+        /// </summary>
+        public static Mesh Arc(float inner, float outer, float centre, float half, Color c, Mesh reuse = null, int segments = 48)
+        {
+            var v = new List<Vector3>();
+            var t = new List<int>();
+            half = Mathf.Clamp(half, 0f, Mathf.PI);
+            var n = Mathf.Max(1, Mathf.CeilToInt(segments * half / Mathf.PI));
+            for (var k = 0; k <= n; k++)
+            {
+                var a = centre - half + 2f * half * k / n;
+                var d = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+                v.Add(d * inner); v.Add(d * outer);
+                if (k > 0)
+                {
+                    var i = k * 2;
+                    t.Add(i - 2); t.Add(i - 1); t.Add(i + 1);
+                    t.Add(i - 2); t.Add(i + 1); t.Add(i);
+                }
+            }
+            return Build(v, t, c, reuse);
+        }
+
         /// <summary>A filled polygon (any simple outline, either winding).</summary>
         public static Mesh Polygon(IList<Vector2> pts, Color c)
         {

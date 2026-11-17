@@ -16,6 +16,11 @@ namespace UltraPuck.Core
 
         public Fix PlayerRadius = Fix.Ratio(1, 2);
         public Fix PuckRadius = Fix.Ratio(27, 80); // 0.3375: 35% bigger than the first 0.25
+        /// <summary>
+        /// How thick the walls are. A map's wall line is the middle of the wall: things stop half this far from it,
+        /// at the wall's drawn edge (and a fast puck has a whole wall's width to be caught in).
+        /// </summary>
+        public Fix WallThickness = Fix.Ratio(17, 25); // 0.68
 
         // moving: the stick pushes with MoveForce; Drag slows you, so top speed = MoveForce / Drag
         public Fix MoveForce = Fix.FromInt(24);
@@ -45,16 +50,16 @@ namespace UltraPuck.Core
         // the puck
         public Fix PuckDrag = Fix.Ratio(7, 10);
         public Fix PuckWallBounce = Fix.Ratio(4, 5);
-        public Fix PuckMaxSpeed = Fix.FromInt(60);
+        public Fix PuckMaxSpeed = Fix.FromInt(69);
         /// <summary>A quick shot (shoot/check with the puck).</summary>
-        public Fix ShotSpeed = Fix.FromInt(15);
+        public Fix ShotSpeed = Fix.Ratio(69, 4); // 17.25 (15, +15%)
         /// <summary>
         /// A charged shot's speed goes up in a straight line with how long you held charge: from
         /// <see cref="ChargedShotMin"/> for a tap to <see cref="ChargedShotMax"/> at <see cref="ChargeTime"/> seconds.
         /// Held half the time = half way. Holding longer than ChargeTime keeps it at full.
         /// </summary>
         public Fix ChargedShotMin = Fix.FromInt(5);
-        public Fix ChargedShotMax = Fix.FromInt(45);
+        public Fix ChargedShotMax = Fix.Ratio(207, 4); // 51.75 (45, +15%)
         public Fix ChargeTime = Fix.Ratio(9, 10);
         public Fix ShotPickupDelay = Fix.Ratio(1, 5);
         /// <summary>Checking the carrier knocks the puck loose: how fast it pops out, and how long the checker must wait to grab it.</summary>

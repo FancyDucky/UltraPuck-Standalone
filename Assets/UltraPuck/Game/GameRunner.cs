@@ -92,7 +92,7 @@ namespace UltraPuck.Game
             _menus.Cards = _cards;
             _hud.PlayerName = NameOf;
 
-            _rink = new RinkView(_map);
+            _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat());
             _entities = new GameObject("Entities").transform;
             _puck = new PuckView(_sim.T.PuckRadius.ToFloat(), _entities);
             _effects = new Effects(_entities);
@@ -412,7 +412,7 @@ namespace UltraPuck.Game
             BuildSims(index);
             PlayerPrefs.SetString("map_file", _mapFiles[_mapIndex]);
             if (_rink != null) Destroy(_rink.Root);
-            _rink = new RinkView(_map);
+            _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat());
             if (_session != null && _session.IsHost) _session.Map = _mapIndex;
             if (_cam != null) UpdateCamera(false, true);
         }

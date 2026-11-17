@@ -91,7 +91,7 @@ namespace UltraPuck.Game
             Ui.Label(new Rect(0, 44, w, 60), "ULTRA PUCK", Ui.Font(50, true, TextAnchor.MiddleCenter), Color.white);
             var small = Ui.Font(18, false, TextAnchor.MiddleCenter);
             Glyphs.Hint(new Rect(0, 106, w, 28), "{join} Join   (up to " + LocalPlayers.MaxPlayers + " players)", 18, Ui.Text);
-            Glyphs.Hint(new Rect(0, 134, w, 28), "{side} Pick a side      Hold {leave} Leave", 18, Ui.TextDim);
+            Glyphs.Hint(new Rect(0, 134, w, 28), "{side} Pick a side      {leave} Leave your seat      Hold {leave} Main menu", 18, Ui.TextDim);
             if (_local.Slots.Count > 0) Glyphs.Hint(new Rect(0, 162, w, 28), "{start} Play a match  (first to " + (_sim != null && _sim.T.GoalsToWin > 0 ? _sim.T.GoalsToWin : 5) + ", cards after every goal)", 18, Ui.Text);
             else Ui.Label(new Rect(0, 162, w, 28), "Waiting for players...", small, Ui.Text);
             Glyphs.Hint(new Rect(0, 190, w, 28), "{freeplay} Free play      {settings} Settings" + (MapName != null ? "      {tabs} Rink: " + MapName : ""), 18, Ui.Text);
@@ -103,12 +103,6 @@ namespace UltraPuck.Game
             {
                 var s = _local.Slots[i];
                 Ui.Swatch(new Rect(w / 2 - 252, y + i * 36 + 5, 24, 24), s.Team);
-                var leaving = s.BackHeld / LocalPlayers.HoldToLeave;
-                if (leaving > 0.02f)
-                {
-                    Ui.Box(new Rect(w / 2 - 260, y + i * 36 + 1, 520 * Mathf.Clamp01(leaving), 32), new Color(0.9f, 0.3f, 0.3f, 0.35f), 8f);
-                    Ui.Label(new Rect(w / 2 - 216, y + i * 36, 460, 34), "Leaving...", Ui.Font(18, true, TextAnchor.MiddleRight), Color.white);
-                }
                 Ui.Label(new Rect(w / 2 - 216, y + i * 36, 460, 34), "P" + (i + 1) + "   " + NameOf(i, s) + "   ·   " + Palette.TeamName(s.Team) + " (" + Palette.SymbolName(s.Team) + ")", Ui.Font(18), Color.white);
             }
 
@@ -117,12 +111,12 @@ namespace UltraPuck.Game
                 16, new Color(1f, 1f, 1f, 0.7f));
         }
 
-        /// <summary>The name shown for a local lobby seat: yours for the first person, then P2, P3...</summary>
+        /// <summary>The name shown for a local lobby seat: yours for the first person, then P2, P3... (not the controller's model).</summary>
         private string NameOf(int i, LocalPlayers.Slot s)
         {
             if (s.Demo) return "Bot";
-            for (var k = 0; k < i; k++) if (!_local.Slots[k].Demo) return s.Label;
-            return Settings.PlayerName + "  (" + s.Label + ")";
+            for (var k = 0; k < i; k++) if (!_local.Slots[k].Demo) return "Guest";
+            return Settings.PlayerName;
         }
 
         /// <summary>A bar that fills while B / Escape is held to leave.</summary>

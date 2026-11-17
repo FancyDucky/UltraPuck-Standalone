@@ -54,7 +54,7 @@ namespace UltraPuck.Game
         /// <summary>The Steam overlay is open: the game ignores controllers and the keyboard until it closes.</summary>
         public static bool Blocked;
 
-        /// <summary>Seconds B / Escape must be held to leave (a tap does nothing, so nobody leaves by accident).</summary>
+        /// <summary>Seconds B / Escape must be held (by someone who hasn't joined) to leave the lobby.</summary>
         public const float HoldToLeave = 0.8f;
 
         /// <summary>How far an unjoined controller or keyboard has got with holding B / Escape (0..1): leaving the lobby itself.</summary>
@@ -104,11 +104,19 @@ namespace UltraPuck.Game
             return t;
         }
 
-        /// <summary>Holding B long enough leaves your seat; letting go early cancels.</summary>
+        /// <summary>
+        /// B / Escape gives up your seat straight away. Holding it on after that doesn't also leave the lobby: that
+        /// takes a fresh press and hold (the hold counts from minus a lot until it's let go).
+        /// </summary>
         private void Hold(Slot s, bool down, float dt)
         {
-            s.BackHeld = down ? s.BackHeld + dt : 0f;
-            if (s.BackHeld >= HoldToLeave) { Slots.Remove(s); _nobodyHeld[s.Device] = -10f; } // keep holding: don't leave the lobby too
+            s.BackHeld = 0f;
+            var g = s.Device as Gamepad;
+            var kb = s.Device as Keyboard;
+            var pressed = g != null ? g.buttonEast.wasPressedThisFrame : kb != null && kb.escapeKey.wasPressedThisFrame;
+            if (!pressed) return;
+            Slots.Remove(s);
+            _nobodyHeld[s.Device] = -1000f;
         }
 
         /// <summary>Someone who hasn't joined held B / Escape long enough: leave the lobby.</summary>

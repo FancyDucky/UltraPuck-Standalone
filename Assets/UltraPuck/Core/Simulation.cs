@@ -451,7 +451,8 @@ namespace UltraPuck.Core
         private bool PuckFits(FixVec2 from, FixVec2 at)
         {
             if (FirstWallHit(from, at) < Fix.One) return false;
-            var r2 = T.PuckRadius * T.PuckRadius;
+            var r = T.PuckRadius + WallHalf;
+            var r2 = r * r;
             foreach (var seg in Map.Segments) if ((at - Closest(seg, at)).SqrLength < r2) return false;
             return true;
         }
@@ -481,9 +482,22 @@ namespace UltraPuck.Core
             }
 
             var before = s.PuckPos;
-            s.PuckPos += s.PuckVel * sub;
-            CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
-            CollidePylons(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
+            var steps = 1;
+            var travel = (s.PuckVel * sub).Length;
+            var most = T.PuckRadius * Fix.Half;
+            if (travel > most) steps = Math.Min(8, (travel / most).FloorToInt() + 1);
+            var part = sub / steps;
+            for (var k = 0; k < steps; k++)
+            {
+                var from = s.PuckPos;
+                s.PuckPos += s.PuckVel * part;
+                // never through a wall: if the step crossed one, stop just before it and bounce
+                var hit = FirstWallHit(from, s.PuckPos);
+                if (hit < Fix.One) s.PuckPos = from;
+                CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
+                if (hit < Fix.One && FixVec2.Dot(s.PuckVel, s.PuckPos - from) >= Fix.Zero) s.PuckVel = -s.PuckVel * T.PuckWallBounce;
+                CollidePylons(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
+            }
             KeepPuckIn(s, before);
 
             // a pass doesn't count once an opponent of the passer has touched (or nearly touched) the puck
@@ -544,6 +558,7 @@ namespace UltraPuck.Core
                 var vn = FixVec2.Dot(rel, n);
                 if (vn < Fix.Zero) s.PuckVel -= n * (vn * Fix.Ratio(11, 10));
                 // a player against the boards mustn't push the puck through them
+                if (FirstWallHit(pushedFrom, s.PuckPos) < Fix.One) s.PuckPos = pushedFrom;
                 CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
                 KeepPuckIn(s, pushedFrom);
             }
@@ -605,6 +620,8 @@ namespace UltraPuck.Core
                     if (pos == before) break;
                 }
             }
+
+            if (FirstWallHit(c.Pos, pos) < Fix.One) pos = CarrySpot(c);
 
             // still in control? Not if it's been pushed too far round the wedge or away from it
             var away = pos - c.Pos;
@@ -824,7 +841,8 @@ namespace UltraPuck.Core
                 var from = sh.Pos;
                 sh.Pos += sh.Vel * sub;
                 var gone = FirstWallHit(from, sh.Pos) < Fix.One || !Map.Inside(sh.Pos);
-                foreach (var w in Map.Segments) if (!gone && (sh.Pos - Closest(w, sh.Pos)).SqrLength < T.ShotRadius * T.ShotRadius) gone = true;
+                var sr = T.ShotRadius + WallHalf;
+                foreach (var w in Map.Segments) if (!gone && (sh.Pos - Closest(w, sh.Pos)).SqrLength < sr * sr) gone = true;
                 foreach (var py in s.Pylons)
                 {
                     var r = T.PylonRadius + T.ShotRadius;
@@ -956,6 +974,7 @@ namespace UltraPuck.Core
         /// <summary>Push a circle out of any wall it overlaps and bounce its velocity off.</summary>
         private void CollideWalls(ref FixVec2 pos, ref FixVec2 vel, Fix r, Fix bounce)
         {
+            r += WallHalf;
             var segs = Map.Segments;
             for (var pass = 0; pass < 2; pass++)
                 for (var k = 0; k < segs.Count; k++)
@@ -978,6 +997,9 @@ namespace UltraPuck.Core
         /// is its own mirror image (one straight wall across both halves of the rink) gives exactly mirrored answers
         /// for mirrored points: the rules must never favour a side.
         /// </summary>
+        /// <summary>Half the wall thickness: how far from a wall's middle line things stop.</summary>
+        private Fix WallHalf { get { return T.WallThickness * Fix.Half; } }
+
         private static FixVec2 Closest(WallSegment s, FixVec2 p)
         {
             var half = (s.B - s.A) * Fix.Half;

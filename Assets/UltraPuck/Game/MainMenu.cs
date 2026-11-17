@@ -228,7 +228,7 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(x + 6f, Ui.H - 198f, 510f, 66f), Message, WrapStyle(), Color.white);
             }
 
-            if (Current == Page.OnlineLobby) { Players(); Hud.LeavingBar(new Rect(x, Ui.H - 160f, 300f, 26f), Local.NobodyLeaving, "Leaving the game"); Hud.LeavingBar(new Rect(x, Ui.H - 160f, 300f, 26f), SeatLeaving(), "Leaving your seat"); }
+            if (Current == Page.OnlineLobby) { Players(); Hud.LeavingBar(new Rect(x, Ui.H - 160f, 300f, 26f), Local.NobodyLeaving, "Leaving the game"); }
             Glyphs.Hint(new Rect(x, Ui.H - 38f, 900f, 28f), Hint(), 15, new Color(1f, 1f, 1f, 0.55f), TextAnchor.MiddleLeft);
             Ui.Label(new Rect(Ui.W - 220f, Ui.H - 36f, 200f, 24f), "v" + Updater.Current, Ui.Font(14, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.35f));
         }
@@ -297,18 +297,11 @@ namespace UltraPuck.Game
         {
             switch (Current)
             {
-                case Page.OnlineLobby: return "{join} Join on this PC      {side} Pick a side      Hold {leave} Leave";
+                case Page.OnlineLobby: return "{join} Join on this PC      {side} Pick a side      {leave} Leave your seat      Hold {leave} Leave the game";
                 case Page.JoinIp: return _typing ? "Type the address, then Enter      Esc: back" : "{confirm} Choose      {back} Back";
                 case Page.Main: return "{confirm} Choose";
                 default: return "{confirm} Choose      {back} Back";
             }
-        }
-
-        private float SeatLeaving()
-        {
-            var t = 0f;
-            foreach (var sl in Local.Slots) t = Mathf.Max(t, sl.BackHeld / LocalPlayers.HoldToLeave);
-            return t;
         }
 
         /// <summary>The online lobby's player list, on the right.</summary>

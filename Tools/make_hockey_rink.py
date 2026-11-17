@@ -6,7 +6,7 @@ W, H, R = 24.0, 13.5, 6.0      # half width, half height, corner radius
 ARC = 10                       # segments per corner
 NET_X = 18.5                   # where the back of each net stands (from the middle)
 DEPTH, MOUTH = 2.0, 2.6        # net depth, mouth half height
-CHAMFER = 0.5                  # the back corners of the net are cut off a little, so nothing snags there
+WALL = 0.68                    # wall thickness (the game's Tuning.WallThickness): the goal area stops at the walls' inner edge
 
 def r3(v): return round(v + 0.0, 3)
 
@@ -29,10 +29,8 @@ def net(side):
     mouth = side * (NET_X - DEPTH)
     return [
         [r3(mouth), r3(MOUTH)],
-        [r3(back + -side * CHAMFER), r3(MOUTH)],
-        [r3(back), r3(MOUTH - CHAMFER)],
-        [r3(back), r3(-MOUTH + CHAMFER)],
-        [r3(back + -side * CHAMFER), r3(-MOUTH)],
+        [r3(back), r3(MOUTH)],
+        [r3(back), r3(-MOUTH)],
         [r3(mouth), r3(-MOUTH)],
     ]
 
@@ -52,8 +50,8 @@ m = {
         {"closed": False, "points": net(1)},
     ],
     "goals": [
-        {"team": 0, "min": [-NET_X, -MOUTH], "max": [-goal_in, MOUTH]},
-        {"team": 1, "min": [goal_in, -MOUTH], "max": [NET_X, MOUTH]},
+        {"team": 0, "min": [r3(-NET_X + WALL / 2), r3(-MOUTH + WALL / 2)], "max": [r3(-goal_in), r3(MOUTH - WALL / 2)]},
+        {"team": 1, "min": [r3(goal_in), r3(-MOUTH + WALL / 2)], "max": [r3(NET_X - WALL / 2), r3(MOUTH - WALL / 2)]},
     ],
     "spawns": spawns,
     "puck": [0, 0],

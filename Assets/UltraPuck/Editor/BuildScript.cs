@@ -24,6 +24,8 @@ namespace UltraPuck.Editor
             Prepare();
             // the version comes from version.txt (the release script bumps it; the updater compares it)
             if (File.Exists("version.txt")) PlayerSettings.bundleVersion = File.ReadAllText("version.txt").Trim();
+            // straight into the game: no "Made with Unity" logo first (allowed on every Unity 6 plan)
+            PlayerSettings.SplashScreen.show = false;
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { ScenePath },
