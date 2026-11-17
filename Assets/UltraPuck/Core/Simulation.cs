@@ -415,12 +415,9 @@ namespace UltraPuck.Core
             if ((pressed & PlayerInput.ShootCheck) != 0) { Shoot(s, i, false); return; }
             var step = dt * Fix.Clamp(p.Stats.ChargeSpeed, Fix.Ratio(1, 10), Fix.FromInt(10)) / T.ChargeTime;
             var full = Fix.One + Fix.Clamp(p.Stats.OverCharge, Fix.Zero, Fix.FromInt(5));
-            if ((pressed & PlayerInput.ChargeBrake) != 0) p.Charge = Fix.Min(full, step);
-            else if (p.Charge > Fix.Zero)
-            {
-                if (input.Has(PlayerInput.ChargeBrake)) p.Charge = Fix.Min(full, p.Charge + step);
-                else Shoot(s, i, true);
-            }
+            // holding charge/brake as you pick the puck up starts charging straight away
+            if (input.Has(PlayerInput.ChargeBrake)) p.Charge = Fix.Min(full, p.Charge + step);
+            else if (p.Charge > Fix.Zero) Shoot(s, i, true);
         }
 
         private static void TurnTowards(PlayerState p, FixVec2 want, Fix share)
@@ -717,7 +714,7 @@ namespace UltraPuck.Core
         {
             foreach (var g in Map.Goals)
             {
-                if (!g.Contains(s.PuckPos)) continue;
+                if (!g.Touches(s.PuckPos, T.PuckRadius)) continue; // the moment the puck touches the goal box
                 var scorer = 1 - g.Team;
                 s.Score[scorer]++;
                 s.LastScorer = scorer;
@@ -758,10 +755,10 @@ namespace UltraPuck.Core
                     else if (bChecks) Knock(s, j, i, -n);
                     else if (closing >= T.BumpHitSpeed)
                     {
-                        // a plain hard bump: no knockback, but both feel it
+                        // a plain hard bump: no knockback, but both feel it (never a lightning-sized hit: that's for checks)
                         var power = Fix.Clamp01(closing / T.BumpHitMax);
-                        Hit(a, n, power);
-                        Hit(b, -n, power);
+                        Hit(a, n, Fix.Min(power, Fix.Ratio(7, 10)));
+                        Hit(b, -n, Fix.Min(power, Fix.Ratio(7, 10)));
                         if (power > Fix.Ratio(3, 10)) { var lag = T.HitLagMax * power * Fix.Half; a.HitLag = Fix.Max(a.HitLag, lag); b.HitLag = Fix.Max(b.HitLag, lag); }
                     }
 
@@ -783,23 +780,29 @@ namespace UltraPuck.Core
         {
             PlayerState a = s.Players[from], b = s.Players[to];
             a.DashTime = Fix.Zero; // one hit per dash
-            // hit lag, by how hard it was: the checker's speed into the other player
+            // how hard it was: the checker's speed into the other player, times how much heavier the checker is
+            // (weight, Knockback Given and Taken). An even check is a solid hit; a much heavier checker's is a big one.
             var hard = Fix.Clamp(FixVec2.Dot(a.Vel - b.Vel, n) / (T.DashSpeed * Fix.Ratio(3, 2)), Fix.Ratio(2, 5), Fix.One);
-            a.HitLag = Fix.Max(a.HitLag, T.HitLagMax * hard);
-            b.HitLag = Fix.Max(b.HitLag, T.HitLagMax * hard);
-            b.Vel += n * (T.DashKnockback * WeightOf(a) / WeightOf(b) * Fix.Clamp(a.Stats.KnockbackGiven * b.Stats.KnockbackTaken, Fix.Ratio(1, 20), Fix.FromInt(10)));
+            var heavier = WeightOf(a) / WeightOf(b) * Fix.Clamp(a.Stats.KnockbackGiven * b.Stats.KnockbackTaken, Fix.Ratio(1, 20), Fix.FromInt(10));
+            var force = hard * heavier;
+            var lag = T.HitLagMax * Fix.Clamp(force, Fix.Ratio(2, 5), Fix.One);
+            a.HitLag = Fix.Max(a.HitLag, lag);
+            b.HitLag = Fix.Max(b.HitLag, lag);
+            b.Vel += n * (T.DashKnockback * heavier);
+            // what the screen shows: an even check at full speed is 0.6; lightning needs a clearly heavier checker
+            var power = Fix.Clamp(force * Fix.Ratio(3, 5), Fix.Ratio(2, 5), Fix.One);
             if (a.Team == b.Team && b.Stats.FriendlyFire > 0)
             {
                 // Friendly Fire: a teammate's check launches you with a speed boost instead of dazing you (and you keep the puck)
                 b.BoostTime = T.FriendlyTime;
-                Hit(b, -n, Fix.Ratio(3, 5));
+                Hit(b, -n, Fix.Ratio(1, 2));
                 Hit(a, n, Fix.Ratio(2, 5));
                 return;
             }
             // no daze from a check (only the Puck Gun stuns): the hit lag above is the pause
             if (a.Team != b.Team) Shockwave(s, from, to);
-            Hit(b, -n, Fix.One);
-            Hit(a, n, Fix.Ratio(3, 5));
+            Hit(b, -n, power);
+            Hit(a, n, power * Fix.Half);
             if (s.Carrier == to)
             {
                 // checking the carrier knocks the puck loose: it pops out the way the check was going, and nobody

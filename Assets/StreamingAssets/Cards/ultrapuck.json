@@ -13,7 +13,7 @@
       "name": "Double Dash",
       "tier": "S",
       "color": "#4D8CF2",
-      "text": "[good]+1 Check Charge[/]\nCheck twice before recharging.",
+      "text": "[good]+1 Check[/]\nCheck twice in a row before you wait for a recharge.",
       "stats": { "ExtraDashes": "+1" }
     },
     {
@@ -21,7 +21,7 @@
       "name": "Speed Up",
       "tier": "A",
       "color": "#4DCC66",
-      "text": "[good]+15%[/] Move Speed",
+      "text": "[good]+15%[/] Move Speed\nWith or without the puck.",
       "stats": { "MoveSpeed": "x1.15" }
     },
     {
@@ -29,7 +29,7 @@
       "name": "Power Shot",
       "tier": "S",
       "color": "#EB544D",
-      "text": "[good]+50%[/] Quick Shot Power\n[note]Uncharged shots only.[/]",
+      "text": "[good]+50%[/] Quick Shot Power\nTap shots fly much faster.\n[note]Charged shots are unchanged.[/]",
       "stats": { "QuickShotPower": "x1.5" }
     },
     {
@@ -38,7 +38,7 @@
       "tier": "A",
       "max": 3,
       "color": "#40CCD9",
-      "text": "[good]+60%[/] Check Recharge Speed",
+      "text": "Checks recharge [good]60% faster[/].",
       "stats": { "DashCooldown": "/1.6" }
     },
     {
@@ -47,7 +47,7 @@
       "tier": "B",
       "max": 3,
       "color": "#9E734D",
-      "text": "[good]+80%[/] Knockback Given\n[good]-80%[/] Knockback Taken\n[note]+13% Size[/]",
+      "text": "Your checks knock people [good]80% further[/], and theirs barely move you [good](-80%)[/]. Your hardest hits crackle with lightning.\n[note]13% bigger.[/]",
       "stats": { "KnockbackGiven": "x1.8", "KnockbackTaken": "x0.2", "Size": "x1.13" }
     },
     {
@@ -56,7 +56,7 @@
       "tier": "B",
       "max": 2,
       "color": "#F2CC4D",
-      "text": "[good]+25%[/] Move Speed [note](+10% with puck)[/]\n[note]-13% Size[/]\n[bad]+80%[/] Knockback Taken\n[bad]-80%[/] Knockback Given",
+      "text": "[good]+25%[/] Move Speed [note](+10% with the puck)[/]\n[note]13% smaller.[/]\n[bad]Checks knock you 80% further[/], and [bad]yours barely move anyone[/].",
       "stats": { "MoveSpeed": "x1.25", "MoveSpeedWithPuck": "x0.88", "Size": "x0.87", "KnockbackTaken": "x1.8", "KnockbackGiven": "x0.2" }
     },
     {
@@ -66,7 +66,7 @@
       "max": 4,
       "art": "ultrapuck.fastercharge",
       "color": "#F28C33",
-      "text": "[good]-50%[/] Charge-up Time\n[good]+50% Over Charge[/]\nHold past full for a harder shot.",
+      "text": "[good]Charge twice as fast[/], and keep holding past full for [good]+50% shot power[/]. The meter turns orange past full (then blue, with more copies).",
       "stats": { "ChargeSpeed": "x2", "OverCharge": "+0.5" }
     },
     {
@@ -75,7 +75,7 @@
       "tier": "F",
       "max": 3,
       "color": "#8C66CC",
-      "text": "[good]-10%[/] Opponent Move Speed",
+      "text": "Opponents move [good]10% slower[/].",
       "stats": { "OpponentMoveSpeed": "x0.9" }
     },
     {
@@ -85,7 +85,7 @@
       "max": 3,
       "art": "ultrapuck.betterspawn",
       "color": "#66D9A6",
-      "text": "[good]Your team starts face-offs with the puck[/]\nMost copies wins; a tie: it starts in the middle.",
+      "text": "[good]Your team gets the puck at face-offs.[/]\n[note]The team with more copies gets it; a tie starts it in the middle.[/]",
       "stats": { "HeadStart": "+1" }
     },
     {
@@ -103,7 +103,7 @@
       "tier": "F",
       "max": 2,
       "color": "#B3B8C2",
-      "text": "[good]+1 Pylon Goalie[/]\nA dummy at your net that blocks shots.",
+      "text": "[good]+1 Pylon Goalie[/]: a heavy dummy in front of your net that blocks shots. It can be shoved aside, and it's back in place at every face-off.",
       "stats": { "Pylons": "+1" }
     },
     {
@@ -112,7 +112,7 @@
       "tier": "S",
       "max": 1,
       "color": "#CC3340",
-      "text": "Brake to fire a shot. The first player it hits gets a [good]1.25 s Stun[/] and a hard shove and drops the puck; it knocks the puck too. [note]2 s cooldown.[/]",
+      "text": "Without the puck, [good]brake to fire a shot[/]. The first player it hits is [good]stunned for 1.25 s[/], shoved hard, and drops the puck. [note]2 s cooldown.[/]",
       "stats": { "PuckGun": "+1" }
     },
     {
@@ -121,7 +121,7 @@
       "tier": "A",
       "max": 1,
       "color": "#8CBFF2",
-      "text": "Utility (Y): turn [good]invisible for 5 s[/] to opponents. [note]15 s cooldown.[/]",
+      "text": "Utility: turn [good]invisible to opponents for 5 s[/]. [note]15 s cooldown.[/]",
       "stats": { "Invisibility": "+1" }
     },
     {
@@ -131,7 +131,7 @@
       "max": 1,
       "minTeam": 2,
       "color": "#FF7359",
-      "text": "A teammate checking you gives [good]+80% Move Speed for 2 s[/], and you keep the puck.",
+      "text": "A teammate's check [good]launches you with +80% Move Speed for 2 s[/], and you keep the puck.",
       "stats": { "FriendlyFire": "+1" }
     },
     {
@@ -140,7 +140,7 @@
       "tier": "A",
       "max": 3,
       "color": "#59A6FF",
-      "text": "Check an opponent to [good]slow them and everyone near them by 30% for 2 s[/] and [good]push the others away[/]. [note]7 s cooldown.[/]",
+      "text": "Checking an opponent sends out a shockwave: [good]they and everyone near them are 30% slower for 2 s[/], and [good]the others are pushed away[/]. [note]7 s cooldown.[/]",
       "stats": { "Shockwave": "+1" }
     },
     {
@@ -150,7 +150,7 @@
       "max": 1,
       "minTeam": 2,
       "color": "#4DC78C",
-      "text": "Pass to a teammate to [good]restore all your cooldowns[/].\n[note]Doesn't count if an opponent touches the puck first.[/]",
+      "text": "Pass to a teammate to [good]refresh all your cooldowns[/].\n[note]Doesn't count if an opponent touches the puck first.[/]",
       "stats": { "PassRefresh": "+1" }
     },
     {
@@ -161,7 +161,7 @@
       "minTeam": 2,
       "requires": "ultrapuck.teamplay",
       "color": "#33D980",
-      "text": "Your passes [good]restore the whole team's cooldowns[/].\n[note]Only offered once your team has Team Play.[/]",
+      "text": "Your passes [good]refresh the whole team's cooldowns[/].\n[note]Only offered once your team has Team Play.[/]",
       "stats": { "PassRefresh": "+1", "PassRefreshTeam": "+1" }
     }
   ]

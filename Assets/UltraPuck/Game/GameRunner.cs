@@ -49,6 +49,8 @@ namespace UltraPuck.Game
         private readonly float[] _cooldowns = new float[3];
         private float _shake;
         private readonly List<Vector2> _impactsThisFrame = new List<Vector2>();
+        /// <summary>This frame's hits: where (x, y) and how hard (z).</summary>
+        private readonly List<Vector3> _hitsThisFrame = new List<Vector3>();
 
         public static string MapsFolder { get { return Path.Combine(Application.streamingAssetsPath, "Maps"); } }
         public static string CardsFolder { get { return Path.Combine(Application.streamingAssetsPath, "Cards"); } }
@@ -980,20 +982,24 @@ namespace UltraPuck.Game
                     _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.62f, 0f), Name = NameOf(i), Team = pb.Team });
                 if (hit > 0f)
                 {
-                    // both players in a hit report it; one ring per contact is enough
-                    var near = false;
-                    foreach (var h in _impactsThisFrame) if ((h - hitAt).sqrMagnitude < 0.6f) near = true;
-                    // small bumps only squash; a ring is for the real hits
-                    if (!near && hit >= 0.35f && Settings.HitEffects)
-                    {
-                        // sparks for every real hit; lightning crackling out of the hard ones
-                        _effects.Sparks(hitAt, hit, new Color(1f, 0.85f, 0.4f));
-                        if (hit >= 0.6f) _effects.Lightning(hitAt, hit, new Color(0.85f, 0.08f, 0.1f), new Color(0.16f, 0.02f, 0.03f));
-                        _impactsThisFrame.Add(hitAt);
-                    }
+                    _hitsThisFrame.Add(new Vector3(hitAt.x, hitAt.y, hit));
                     _shake = Mathf.Max(_shake, 0.06f + 0.22f * hit * hit);
                 }
             }
+            // both players in a hit report it: one effect per contact, as hard as the harder report
+            _hitsThisFrame.Sort((p, q) => q.z.CompareTo(p.z));
+            foreach (var h in _hitsThisFrame)
+            {
+                var at = new Vector2(h.x, h.y);
+                var near = false;
+                foreach (var o in _impactsThisFrame) if ((o - at).sqrMagnitude < 0.6f) near = true;
+                // small bumps only squash; sparks for every real hit; lightning only for the big ones (a much heavier checker)
+                if (near || h.z < 0.35f || !Settings.HitEffects) continue;
+                _effects.Sparks(at, h.z, new Color(1f, 0.85f, 0.4f));
+                if (h.z >= 0.75f) _effects.Lightning(at, h.z, new Color(0.85f, 0.08f, 0.1f), new Color(0.16f, 0.02f, 0.03f));
+                _impactsThisFrame.Add(at);
+            }
+            _hitsThisFrame.Clear();
             _impactsThisFrame.Clear();
             if (_seenShocks.Count > b.Players.Length) { _seenShocks.RemoveRange(b.Players.Length, _seenShocks.Count - b.Players.Length); _seenRefreshes.RemoveRange(b.Players.Length, _seenRefreshes.Count - b.Players.Length); }
             _shots.Show(b, _sim.T.ShotRadius.ToFloat());

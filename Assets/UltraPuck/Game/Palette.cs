@@ -22,15 +22,17 @@ namespace UltraPuck.Game
         public static readonly Color Charge = Hex(0xF0E442); // Okabe-Ito yellow
 
         /// <summary>
-        /// The team colours players pick from. Orange and blue (Okabe-Ito, easy to tell apart with the common kinds of
-        /// colour blindness) come first and are the defaults; every team also shows its colour's name.
+        /// The team colours. Red and blue come first and are the defaults; every team also shows its colour's name
+        /// and players have their own symbols, so colour is never the only way to tell teams apart.
         /// </summary>
         public static readonly Color[] Colours =
         {
-            Hex(0xE69F00), Hex(0x0072B2), Hex(0xE5484D), Hex(0x2FB463),
+            Hex(0xE5484D), Hex(0x2F7FD8), Hex(0xE69F00), Hex(0x2FB463),
             Hex(0xF2D024), Hex(0xA25FE0), Hex(0xEC5FA6), Hex(0x2BB8AE),
         };
-        public static readonly string[] ColourNames = { "Orange", "Blue", "Red", "Green", "Yellow", "Purple", "Pink", "Teal" };
+        public static readonly string[] ColourNames = { "Red", "Blue", "Orange", "Green", "Yellow", "Purple", "Pink", "Teal" };
+        /// <summary>How many of <see cref="Colours"/> players can pick for now: just red and blue, so teams are clear.</summary>
+        public const int Choosable = 2;
 
         private static readonly int[] _teamColour = { 0, 1 };
         /// <summary>Goes up whenever the teams' colours change (things drawn in team colours are built again).</summary>

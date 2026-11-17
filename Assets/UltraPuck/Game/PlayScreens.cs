@@ -64,7 +64,7 @@ namespace UltraPuck.Game
             if (Local.HumanCount > 0 && Local.StartPressed())
             {
                 var colours = Local.AssignTeams();
-                if (colours > 2) Problem("Only two teams: pick two colours between you.");
+                if (colours > 2) Problem("Only two teams: red and blue.");
                 else if (colours < 2 && Local.Slots.Count > 1) Problem("Everyone's on the same team: pick another colour, or add a bot with " + (InputMode.Pad ? "RB" : "="));
                 else if (Local.Slots.Count < 2) Problem("Add a bot (" + (InputMode.Pad ? "RB" : "=") + ") or another player to play against.");
                 else Open(Page.Map);
@@ -221,7 +221,7 @@ namespace UltraPuck.Game
             if (_typist != null) DrawKeyboard(w, h);
         }
 
-        private static void Title(float w, string title, string sub, float appear)
+        public static void Title(float w, string title, string sub, float appear)
         {
             Ui.Label(new Rect(0, 26 - (1f - appear) * 20f, w, 60), title, Ui.Font(44, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, appear));
             if (sub != null) Ui.Label(new Rect(0, 82, w, 30), sub, Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * appear));
@@ -231,20 +231,16 @@ namespace UltraPuck.Game
         private void DrawJoin(float w, float h, float appear)
         {
             Ui.Box(new Rect(0, 0, w, h), Palette.Background, 0f); // a plain backdrop: the rink moving behind is too busy here
-            Title(w, "PLAYERS", "Same colour, same team", appear);
-            Glyphs.Hint(new Rect(0, 112, w, 30), "{side} Team colour      {profile} Name      {shape} Symbol      {bots} Bots", 17, new Color(1f, 1f, 1f, 0.75f));
+            Title(w, "PLAYERS", "Up to " + LocalPlayers.MaxPlayers + " players, red against blue", appear);
+            Glyphs.Hint(new Rect(0, 108, w, 30), "{side} Red or blue      {profile} Name      {shape} Symbol      {bots} Bots", 17, new Color(1f, 1f, 1f, 0.75f));
 
             var slots = LocalPlayers.MaxPlayers;
-            const float gap = 16f;
-            var cw = Mathf.Min(270f, (w - 80f - gap * (slots - 1)) / slots);
-            var ch = 300f;
-            var x0 = w / 2 - (cw * slots + gap * (slots - 1)) / 2;
-            var y = h - ch - 70f + (1f - appear) * 60f;
+            var area = new Rect(40f, 146f + (1f - appear) * 40f, w - 80f, h - 146f - 104f);
             for (var i = 0; i < slots; i++)
             {
-                var r = new Rect(x0 + i * (cw + gap), y, cw, ch);
+                var r = CardRect(area, i, slots);
                 if (i < Local.Slots.Count) PlayerCard(r, i, Local.Slots[i]);
-                else EmptyCard(r, i);
+                else EmptyCard(r, "P" + (i + 1), i, true);
             }
 
             var ready = Local.HumanCount > 0;
@@ -254,40 +250,67 @@ namespace UltraPuck.Game
 
         private void PlayerCard(Rect r, int i, LocalPlayers.Slot s)
         {
-            var colour = Palette.Colours[s.Colour & 7];
-            Ui.Box(new Rect(r.x - 3, r.y - 3, r.width + 6, r.height + 6), new Color(1f, 1f, 1f, 0.9f), 18f);
-            Ui.Box(r, Palette.Darker(colour, 0.55f), 16f);
-            Ui.Box(new Rect(r.x, r.y, r.width, r.height * 0.62f), colour, 16f);
-            Ui.Box(new Rect(r.x, r.y + r.height * 0.5f, r.width, r.height * 0.12f), colour, 0f);
-            // player number and kind
-            Ui.Box(new Rect(r.x + 12, r.y + 12, 54, 30), new Color(0f, 0f, 0f, 0.35f), 8f);
-            Ui.Label(new Rect(r.x + 12, r.y + 12, 54, 30), s.Demo ? "CPU" : "P" + (i + 1), Ui.Font(18, true, TextAnchor.MiddleCenter), Color.white);
-            // the symbol, big, on a puck-like disc in the team colour
-            var d = Mathf.Min(r.width * 0.5f, 120f);
-            var disc = new Rect(r.center.x - d / 2, r.y + r.height * 0.31f - d / 2, d, d);
-            Ui.Box(new Rect(disc.x - 5, disc.y - 5, d + 10, d + 10), Palette.PlayerRim, (d + 10) / 2f);
-            Ui.Box(disc, Palette.Darker(colour, 0.8f), d / 2f);
-            Ui.Symbol(new Rect(disc.x + d * 0.18f, disc.y + d * 0.18f, d * 0.64f, d * 0.64f), s.Symbol, Color.white);
-            // colour with arrows (left / right changes it)
-            var cy = r.y + r.height * 0.62f + 8f;
-            Ui.Label(new Rect(r.x, cy, r.width, 30), "‹   " + Palette.ColourNames[s.Colour & 7] + "   ›", Ui.Font(19, true, TextAnchor.MiddleCenter), Color.white);
-            // name
             var name = string.IsNullOrEmpty(s.Name) ? (s.Demo ? "Bot" : "P" + (i + 1)) : s.Name;
-            Ui.Label(new Rect(r.x + 8, cy + 34, r.width - 16, 40), name, Ui.Font(24, true, TextAnchor.MiddleCenter), Color.white);
-            if (!s.Demo)
-                Glyphs.Hint(new Rect(r.x, r.yMax - 38, r.width, 26), "{profile} Name   {shape} Symbol", 13, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter, s.Device);
-            else
-                Ui.Label(new Rect(r.x, r.yMax - 38, r.width, 26), Symbols.Names[s.Symbol & 7], Ui.Font(14, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f));
+            Card(r, s.Demo ? "CPU" : "P" + (i + 1), s.Colour, s.Symbol, name, true,
+                s.Demo ? Symbols.Names[s.Symbol & 7] : "{profile} Name   {shape} Symbol", !s.Demo, s.Device);
         }
 
-        private void EmptyCard(Rect r, int i)
+        // ------------------------------------------------------------------ player cards (the join screen and the online lobby)
+
+        /// <summary>Where card <paramref name="i"/> goes: rows of four, as big as fits in <paramref name="area"/>.</summary>
+        public static Rect CardRect(Rect area, int i, int count)
+        {
+            const int cols = 4;
+            const float gap = 14f;
+            var rows = (count + cols - 1) / cols;
+            var cw = Mathf.Min(270f, (area.width - gap * (cols - 1)) / cols);
+            var ch = Mathf.Min(cw * 0.95f, (area.height - gap * (rows - 1)) / rows);
+            var x0 = area.center.x - (cw * cols + gap * (cols - 1)) / 2;
+            var y0 = area.center.y - (ch * rows + gap * (rows - 1)) / 2;
+            return new Rect(x0 + (i % cols) * (cw + gap), y0 + (i / cols) * (ch + gap), cw, ch);
+        }
+
+        /// <summary>
+        /// A player's card: their symbol on a disc in their team colour, the colour's name (with arrows if they can
+        /// change it), their name, and a line at the bottom (button hints for <paramref name="device"/>, or plain text).
+        /// </summary>
+        public static void Card(Rect r, string tag, int colourIndex, int symbol, string name, bool arrows, string footer, bool footerIsHint, UnityEngine.InputSystem.InputDevice device)
+        {
+            var colour = Palette.Colours[colourIndex & 7];
+            var band = r.height * 0.56f;
+            Ui.Box(new Rect(r.x - 3, r.y - 3, r.width + 6, r.height + 6), new Color(1f, 1f, 1f, 0.9f), 18f);
+            Ui.Box(r, Palette.Darker(colour, 0.55f), 16f);
+            Ui.Box(new Rect(r.x, r.y, r.width, band), colour, 16f);
+            Ui.Box(new Rect(r.x, r.y + band - 16f, r.width, 16f), colour, 0f);
+            // player number and kind
+            Ui.Box(new Rect(r.x + 10, r.y + 10, 50, 26), new Color(0f, 0f, 0f, 0.35f), 8f);
+            Ui.Label(new Rect(r.x + 10, r.y + 10, 50, 26), tag, Ui.Font(16, true, TextAnchor.MiddleCenter), Color.white);
+            // the symbol, big, on a puck-like disc in the team colour
+            var d = Mathf.Min(band - 22f, r.width * 0.42f, 110f);
+            var disc = new Rect(r.center.x - d / 2, r.y + band / 2 - d / 2, d, d);
+            Ui.Box(new Rect(disc.x - 4, disc.y - 4, d + 8, d + 8), Palette.PlayerRim, (d + 8) / 2f);
+            Ui.Box(disc, Palette.Darker(colour, 0.8f), d / 2f);
+            Ui.Symbol(new Rect(disc.x + d * 0.18f, disc.y + d * 0.18f, d * 0.64f, d * 0.64f), symbol, Color.white);
+            // colour (left / right changes it), name, and the line at the bottom
+            var cy = r.y + band + 2f;
+            var cname = Palette.ColourNames[colourIndex & 7];
+            Ui.Label(new Rect(r.x, cy, r.width, 24), arrows ? "‹   " + cname + "   ›" : cname, Ui.Font(17, true, TextAnchor.MiddleCenter), Color.white);
+            Ui.Label(new Rect(r.x + 6, cy + 24, r.width - 12, 32), name, Ui.Font(21, true, TextAnchor.MiddleCenter), Color.white);
+            var foot = new Rect(r.x, r.yMax - 26, r.width, 22);
+            if (footerIsHint) Glyphs.Hint(foot, footer, 12, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter, device);
+            else Ui.Label(foot, footer, Ui.Font(13, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f));
+        }
+
+        /// <summary>An empty seat: "Press A to join" (or just "Open" when nobody here can join).</summary>
+        public static void EmptyCard(Rect r, string tag, int i, bool canJoin)
         {
             var pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 3f + i);
             Ui.Box(r, new Color(1f, 1f, 1f, 0.05f + 0.03f * pulse), 16f);
-            Ui.Box(new Rect(r.x + 12, r.y + 12, 54, 30), new Color(1f, 1f, 1f, 0.06f), 8f);
-            Ui.Label(new Rect(r.x + 12, r.y + 12, 54, 30), "P" + (i + 1), Ui.Font(18, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f));
-            Glyphs.Hint(new Rect(r.x, r.center.y - 30, r.width, 34), "Press {join}", 20, new Color(1f, 1f, 1f, 0.55f + 0.35f * pulse));
-            Ui.Label(new Rect(r.x, r.center.y + 6, r.width, 30), "to join", Ui.Font(18, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.45f));
+            Ui.Box(new Rect(r.x + 10, r.y + 10, 50, 26), new Color(1f, 1f, 1f, 0.06f), 8f);
+            Ui.Label(new Rect(r.x + 10, r.y + 10, 50, 26), tag, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f));
+            if (!canJoin) { Ui.Label(new Rect(r.x, r.center.y - 15, r.width, 30), "Open", Ui.Font(18, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f)); return; }
+            Glyphs.Hint(new Rect(r.x, r.center.y - 28, r.width, 32), "Press {join}", 18, new Color(1f, 1f, 1f, 0.55f + 0.35f * pulse));
+            Ui.Label(new Rect(r.x, r.center.y + 4, r.width, 26), "to join", Ui.Font(16, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.45f));
         }
 
         // the rink: a big preview of the one chosen, with its neighbours either side

@@ -17,8 +17,8 @@ namespace UltraPuck.Core.Net
     /// </summary>
     public sealed class NetSession : IDisposable
     {
-        public const int Version = 7; // 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets
-        public const int MaxPlayers = 4;
+        public const int Version = 8; // 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight
+        public const int MaxPlayers = 8;
         /// <summary>Your own controls take effect this many ticks later (25 ms at 120 a second), which hides a little lag for free.</summary>
         public const int InputDelay = 3;
         private const double HelloEvery = 0.5, LobbyEvery = 0.5, PingEvery = 0.5, Timeout = 8, ConnectTimeout = 10;

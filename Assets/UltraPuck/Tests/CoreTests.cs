@@ -234,7 +234,9 @@ namespace UltraPuck.Tests
             Assert.AreEqual(Fix.Zero, s.Players[1].Stun, "a check doesn't daze (only the Puck Gun does): hit lag is the pause");
             Assert.Greater(s.Players[1].Hits, 0, "the hit was recorded for the animation");
             Assert.Greater(s.Players[0].Hits, 0, "the checker feels it too");
-            Assert.AreEqual(1.0, s.Players[1].HitPower.ToDouble(), 1e-6);
+            // an even check is a solid hit, but not a lightning one (that takes a much heavier checker)
+            Assert.GreaterOrEqual(s.Players[1].HitPower.ToDouble(), 0.39);
+            Assert.Less(s.Players[1].HitPower.ToDouble(), 0.75);
         }
 
         [Test]
@@ -422,7 +424,7 @@ namespace UltraPuck.Tests
         }
 
         [Test]
-        public void HoldingChargeWhenYouPickUpThePuckDoesNotFire()
+        public void HoldingChargeWhenYouPickUpThePuckStartsCharging()
         {
             var sim = new Simulation(LoadRink());
             var s = sim.NewGame(new[] { 0 });
@@ -431,8 +433,24 @@ namespace UltraPuck.Tests
             s.PuckPos = new FixVec2(Fix.Ratio(7, 10), Fix.Zero); // touching
             for (var t = 0; t < 10; t++) sim.Step(s, new[] { Press(PlayerInput.ChargeBrake) }); // braking, then picks it up
             Assert.AreEqual(0, s.Carrier);
-            sim.Step(s, new[] { default(PlayerInput) }); // let go of the brake
-            Assert.AreEqual(0, s.Carrier, "letting go of a brake isn't a shot");
+            Assert.Greater(s.Players[0].Charge.ToDouble(), 0.0, "charging from the moment of the pickup");
+            sim.Step(s, new[] { default(PlayerInput) }); // let go
+            Assert.AreEqual(-1, s.Carrier, "letting go fires the charged shot");
+        }
+
+        [Test]
+        public void TheGoalCountsWhenThePuckTouchesTheGoalBox()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = sim.NewGame(new[] { 0, 1 });
+            PlayNow(s);
+            var g = sim.Map.Goals.Find(x => x.Team == 1);
+            // the puck's edge just over the box's front, its centre still outside
+            s.PuckPos = new FixVec2(g.Min.X - sim.T.PuckRadius + Fix.Ratio(1, 50), Fix.Zero);
+            s.PuckVel = FixVec2.Zero;
+            sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(Phase.Scored, s.Phase);
+            Assert.AreEqual(1, s.Score[0]);
         }
 
         [Test]

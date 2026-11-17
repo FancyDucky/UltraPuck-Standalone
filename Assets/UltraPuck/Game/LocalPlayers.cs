@@ -22,7 +22,7 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class LocalPlayers
     {
-        public const int MaxPlayers = 4;
+        public const int MaxPlayers = 8;
 
         public sealed class Slot
         {
@@ -96,7 +96,7 @@ namespace UltraPuck.Game
             {
                 if (s.Demo || s.Typing || !Slots.Contains(s)) continue;
                 var nav = Nav(s);
-                if (nav.x != 0) { s.Colour = (s.Colour + nav.x + Palette.Colours.Length) % Palette.Colours.Length; AssignTeams(); }
+                if (nav.x != 0) { s.Colour = ((s.Colour + nav.x) % Palette.Choosable + Palette.Choosable) % Palette.Choosable; AssignTeams(); }
                 var pad = s.Device as Gamepad;
                 var keys = s.Device as Keyboard;
                 var name = pad != null ? pad.buttonNorth.wasPressedThisFrame : keys != null && keys.nKey.wasPressedThisFrame;

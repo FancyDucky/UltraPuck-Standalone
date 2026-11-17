@@ -177,6 +177,7 @@ namespace UltraPuck.Game
 
             // the main page shows the live match behind; the other pages a plain backdrop (it's too busy there)
             if (Current != Page.Main) Ui.Box(new Rect(0f, 0f, Ui.W, Ui.H), Palette.Background, 0f);
+            if (Current == Page.OnlineLobby) { Lobby(t); return; }
             Ui.Box(new Rect(0f, 0f, 620f, Ui.H), new Color(0f, 0f, 0f, 0.62f), 0f);
             Ui.Box(new Rect(620f, 0f, 120f, Ui.H), new Color(0f, 0f, 0f, 0.3f), 0f);
 
@@ -185,8 +186,55 @@ namespace UltraPuck.Game
             if (Current == Page.Main) Ui.Label(new Rect(x + 4f, 46f, 300f, 26f), "v" + Updater.Current, Ui.Font(16, true), new Color(1f, 1f, 1f, 0.5f));
             Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim);
 
-            var top = 220f;
-            const float rowH = 64f, gap = 10f, w = 460f;
+            Rows(x, 220f, 460f, 64f, 10f, 26, t);
+
+            var status = Status();
+            if (!string.IsNullOrEmpty(status)) Ui.Label(new Rect(x, Ui.H - 120f, 540f, 80f), status, WrapStyle(), new Color(1f, 1f, 1f, 0.65f));
+            if (!string.IsNullOrEmpty(Message))
+            {
+                Ui.Box(new Rect(x - 10f, Ui.H - 200f, 540f, 70f), new Color(0.55f, 0.15f, 0.15f, 0.85f), 12f);
+                Ui.Label(new Rect(x + 6f, Ui.H - 198f, 510f, 66f), Message, WrapStyle(), Color.white);
+            }
+
+            Glyphs.Hint(new Rect(x, Ui.H - 38f, 900f, 28f), Hint(), 15, new Color(1f, 1f, 1f, 0.55f), TextAnchor.MiddleLeft);
+            Ui.Label(new Rect(Ui.W - 220f, Ui.H - 36f, 200f, 24f), "v" + Updater.Current, Ui.Font(14, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.35f));
+        }
+
+        /// <summary>The online lobby: like the local join screen, a card per player, with the options down the left.</summary>
+        private void Lobby(float t)
+        {
+            float w = Ui.W, h = Ui.H;
+            var s = Session;
+            PlayScreens.Title(w, "PLAYERS", Subtitle() + "   ·   red against blue", Ui.EaseOut(t / 0.3f));
+            Rows(36f, 140f, 300f, 48f, 8f, 19, t);
+
+            var status = Status();
+            if (!string.IsNullOrEmpty(status)) Ui.Label(new Rect(36f, h - 230f, 300f, 140f), status, WrapStyle(), new Color(1f, 1f, 1f, 0.6f));
+            if (!string.IsNullOrEmpty(Message))
+            {
+                Ui.Box(new Rect(30f, h - 330f, 312f, 90f), new Color(0.55f, 0.15f, 0.15f, 0.85f), 12f);
+                Ui.Label(new Rect(42f, h - 326f, 290f, 82f), Message, WrapStyle(), Color.white);
+            }
+
+            var area = new Rect(360f, 128f, w - 390f, h - 128f - 96f);
+            for (var k = 0; k < NetSession.MaxPlayers; k++)
+            {
+                var r = PlayScreens.CardRect(area, k, NetSession.MaxPlayers);
+                if (s == null || k >= s.Seats.Count) { PlayScreens.EmptyCard(r, "P" + (k + 1), k, s != null && s.Current != NetSession.Stage.Connecting); continue; }
+                var seat = s.Seats[k];
+                var mine = !seat.Bot && seat.Peer == s.MyPeer;
+                var device = mine && seat.Local >= 0 && seat.Local < Local.Slots.Count ? Local.Slots[seat.Local].Device : null;
+                PlayScreens.Card(r, seat.Bot ? "CPU" : "P" + (k + 1), seat.Colour, seat.Symbol, seat.Name, mine,
+                    mine ? "{profile} Name   {shape} Symbol" : seat.Bot ? "Bot" : "Online", mine, device);
+            }
+
+            Hud.LeavingBar(new Rect(w / 2 - 150f, h - 84f, 300f, 24f), Local.NobodyLeaving, "Leaving the game");
+            Glyphs.Hint(new Rect(0f, h - 44f, w, 28f), Hint(), 15, new Color(1f, 1f, 1f, 0.6f));
+        }
+
+        /// <summary>The page's buttons, in a column at (<paramref name="x"/>, <paramref name="top"/>).</summary>
+        private void Rows(float x, float top, float w, float rowH, float gap, int font, float t)
+        {
             var mouse = Ui.Mouse;
             for (var i = 0; i < _rows.Count; i++)
             {
@@ -213,26 +261,16 @@ namespace UltraPuck.Game
                 if (row.TextField) { AddressField(r, i == _focus); continue; }
                 var label = row.Label;
                 if (row.Value != null) label += ":   ‹  " + row.Value() + "  ›";
-                Ui.Label(new Rect(r.x + 26f, r.y + (row.Detail != null ? 6f : 0f), r.width - 40f, row.Detail != null ? 36f : r.height), label, Ui.Font(26, i == _focus), col);
-                if (row.Detail != null) Ui.Label(new Rect(r.x + 27f, r.y + 36f, r.width - 40f, 22f), row.Detail, Ui.Font(14), new Color(1f, 1f, 1f, 0.5f * appear));
+                var detail = row.Detail != null && rowH >= 60f;
+                var pad = rowH >= 60f ? 26f : 16f;
+                Ui.Label(new Rect(r.x + pad, r.y + (detail ? 6f : 0f), r.width - pad - 10f, detail ? 36f : r.height), label, Ui.Font(font, i == _focus), col);
+                if (detail) Ui.Label(new Rect(r.x + pad + 1f, r.y + 36f, r.width - 40f, 22f), row.Detail, Ui.Font(14), new Color(1f, 1f, 1f, 0.5f * appear));
                 if (on && Ui.Clicked && r.Contains(mouse) && Event.current.type == EventType.Repaint)
                 {
                     if (row.Step != null) row.Step(mouse.x < r.center.x ? -1 : 1);
                     else if (row.Press != null) row.Press();
                 }
             }
-
-            var status = Status();
-            if (!string.IsNullOrEmpty(status)) Ui.Label(new Rect(x, Ui.H - 120f, 540f, 80f), status, WrapStyle(), new Color(1f, 1f, 1f, 0.65f));
-            if (!string.IsNullOrEmpty(Message))
-            {
-                Ui.Box(new Rect(x - 10f, Ui.H - 200f, 540f, 70f), new Color(0.55f, 0.15f, 0.15f, 0.85f), 12f);
-                Ui.Label(new Rect(x + 6f, Ui.H - 198f, 510f, 66f), Message, WrapStyle(), Color.white);
-            }
-
-            if (Current == Page.OnlineLobby) { Players(); Hud.LeavingBar(new Rect(x, Ui.H - 160f, 300f, 26f), Local.NobodyLeaving, "Leaving the game"); }
-            Glyphs.Hint(new Rect(x, Ui.H - 38f, 900f, 28f), Hint(), 15, new Color(1f, 1f, 1f, 0.55f), TextAnchor.MiddleLeft);
-            Ui.Label(new Rect(Ui.W - 220f, Ui.H - 36f, 200f, 24f), "v" + Updater.Current, Ui.Font(14, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.35f));
         }
 
         private GUIStyle _wrap;
@@ -290,7 +328,7 @@ namespace UltraPuck.Game
                     }
                     if (Session.Connected > 0) s += ".   Ping " + Mathf.RoundToInt(Session.Ping * 1000f) + " ms";
                     if (Runner.MapCount > 1) s += ".   Rink: " + Runner.MapName(Session.Map);
-                    if (Session.TooManyTeams) s += ".   More than two colours: only two teams can play";
+                    if (Session.TooManyTeams) s += ".   Only two teams: red and blue";
                     return s;
                 default: return "";
             }
@@ -300,31 +338,10 @@ namespace UltraPuck.Game
         {
             switch (Current)
             {
-                case Page.OnlineLobby: return "{join} Join      {side} Colour      {profile} Name      {shape} Symbol      {leave} Leave seat      Hold {leave} Leave game";
+                case Page.OnlineLobby: return "{join} Join      {side} Red or blue      {profile} Name      {shape} Symbol      {leave} Leave seat      Hold {leave} Leave game";
                 case Page.JoinIp: return _typing ? "Type the address, then Enter      Esc: back" : "{confirm} Choose      {back} Back";
                 case Page.Main: return "{confirm} Choose";
                 default: return "{confirm} Choose      {back} Back";
-            }
-        }
-
-        /// <summary>The online lobby's player list, on the right.</summary>
-        private void Players()
-        {
-            var s = Session;
-            if (s == null) return;
-            var x = Ui.W - 520f;
-            var y = 120f;
-            Ui.Box(new Rect(x - 20f, y - 20f, 470f, 70f + Mathf.Max(1, s.Seats.Count) * 50f), new Color(0f, 0f, 0f, 0.6f), 16f);
-            Ui.Label(new Rect(x, y - 12f, 430f, 40f), "Players  " + s.Seats.Count + " / " + NetSession.MaxPlayers, Ui.Font(22, true), Color.white);
-            if (s.Seats.Count == 0) Ui.Label(new Rect(x, y + 34f, 430f, 40f), s.Current == NetSession.Stage.Connecting ? "Connecting..." : InputMode.Pad ? "Press A / Cross to join" : "Press Space to join", Ui.Font(18), Ui.TextDim);
-            for (var k = 0; k < s.Seats.Count; k++)
-            {
-                var seat = s.Seats[k];
-                var ry = y + 34f + k * 50f;
-                Ui.Box(new Rect(x, ry + 6f, 32f, 32f), Palette.Colours[seat.Colour & 7], 8f);
-                Ui.Symbol(new Rect(x + 6f, ry + 12f, 20f, 20f), seat.Symbol, Color.white);
-                var you = !seat.Bot && seat.Peer == s.MyPeer ? "   (this PC)" : "";
-                Ui.Label(new Rect(x + 42f, ry, 380f, 44f), seat.Name + you, Ui.Font(20, you.Length > 0), seat.Bot ? Ui.TextDim : Color.white);
             }
         }
     }

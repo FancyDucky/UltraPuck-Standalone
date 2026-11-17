@@ -57,7 +57,7 @@ namespace UltraPuck.Game
     {
         public readonly GameObject Root;
         private readonly Transform _body, _squash, _unsquash;
-        private readonly MeshFilter _chargeRing;
+        private readonly MeshFilter _chargeRing, _overRing;
         private readonly Transform _chargeRoot;
 
         // speed trail: fading copies of the body left behind while going faster than skating speed (a dash, a boost)
@@ -71,7 +71,9 @@ namespace UltraPuck.Game
         private Vector2 _lastPos;
         private bool _hasLast;
         private readonly Color _trailColour;
-        private readonly Mesh _chargeMesh = new Mesh();
+        private readonly Mesh _chargeMesh = new Mesh(), _overMesh = new Mesh();
+        /// <summary>The charge meter's colours: a normal charge, then each +100% of Over Charge past full.</summary>
+        private static readonly Color[] ChargeColours = { Palette.Charge, new Color(1f, 0.55f, 0.1f), new Color(0.25f, 0.6f, 1f), new Color(0.75f, 0.4f, 1f), Color.white };
         private float _chargeShown = -1f;
         private readonly float _r;
 
@@ -195,6 +197,7 @@ namespace UltraPuck.Game
             _chargeRoot = new GameObject("ChargeBar").transform;
             _chargeRoot.SetParent(Root.transform, false);
             _chargeRing = Draw.Make("Charge", _chargeRoot, _chargeMesh, 14);
+            _overRing = Draw.Make("OverCharge", _chargeRoot, _overMesh, 14);
 
             _trailColour = Palette.TeamTint(team);
             for (var i = 0; i < TrailLength; i++)
@@ -240,13 +243,23 @@ namespace UltraPuck.Game
                 _chargeRoot.localRotation = turn;
             }
 
-            charge = Mathf.Round(Mathf.Clamp01(charge) * 48f) / 48f;
+            charge = Mathf.Round(Mathf.Clamp(charge, 0f, ChargeColours.Length - 1f) * 48f) / 48f;
             if (charge != _chargeShown)
             {
                 _chargeShown = charge;
                 _chargeRing.gameObject.SetActive(charge > 0f);
-                // centred behind the player (local angle 180 degrees), growing round both sides until it meets at the front
-                if (charge > 0f) Draw.Arc(_r * 1.3f, _r * 1.5f, Mathf.PI, charge * Mathf.PI, Palette.Charge, _chargeMesh);
+                // centred behind the player (local angle 180 degrees), growing round both sides until it meets at the front.
+                // Past full (Over Charge) the ring changes colour the same way: a new colour grows from the back over the
+                // old one, orange for the first +100%, then blue.
+                var level = charge <= 1f ? 0 : Mathf.Min(Mathf.CeilToInt(charge - 1f), ChargeColours.Length - 1);
+                var fill = level == 0 ? charge : charge - level;
+                _overRing.gameObject.SetActive(level > 0 && fill < 1f);
+                if (level == 0) { if (charge > 0f) Draw.Arc(_r * 1.3f, _r * 1.5f, Mathf.PI, charge * Mathf.PI, ChargeColours[0], _chargeMesh); }
+                else
+                {
+                    Draw.Arc(_r * 1.3f, _r * 1.5f, Mathf.PI, fill * Mathf.PI, ChargeColours[level], _chargeMesh);
+                    if (fill < 1f) Draw.Arc(_r * 1.3f, _r * 1.5f, 0f, (1f - fill) * Mathf.PI, ChargeColours[level - 1], _overMesh);
+                }
             }
 
             SpeedTrail(pos);

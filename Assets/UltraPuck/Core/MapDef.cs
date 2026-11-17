@@ -46,12 +46,19 @@ namespace UltraPuck.Core
         }
     }
 
-    /// <summary>A goal: the puck's centre entering the box scores against <see cref="Team"/>.</summary>
+    /// <summary>A goal: the puck touching the box scores against <see cref="Team"/>.</summary>
     public sealed class GoalDef
     {
         public int Team;
         public FixVec2 Min, Max;
         public bool Contains(FixVec2 p) { return p.X >= Min.X && p.X <= Max.X && p.Y >= Min.Y && p.Y <= Max.Y; }
+
+        /// <summary>Whether a circle (the puck) at <paramref name="p"/> with radius <paramref name="r"/> touches the box.</summary>
+        public bool Touches(FixVec2 p, Fix r)
+        {
+            var near = new FixVec2(Fix.Clamp(p.X, Min.X, Max.X), Fix.Clamp(p.Y, Min.Y, Max.Y));
+            return (p - near).SqrLength <= r * r;
+        }
     }
 
     public sealed class SpawnDef
