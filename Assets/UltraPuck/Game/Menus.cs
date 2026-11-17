@@ -100,7 +100,7 @@ namespace UltraPuck.Game
                         Step = d => SetBots(Mathf.Clamp(BotCount() + d, 0, MaxBots())),
                         Press = () => SetBots(BotCount() >= MaxBots() ? 0 : BotCount() + 1),
                     });
-                    _rows.Add(Button("Pick a card", () => { Close(); if (OnGetCard != null) OnGetCard(); }));
+                    _rows.Add(Button("Cards", () => { Close(); if (OnGetCard != null) OnGetCard(); }));
                 }
                 _rows.Add(Button("Settings", () => OpenSettings(false)));
                 _rows.Add(Button("Main menu", () => { Close(); if (OnMainMenu != null) OnMainMenu(); }));

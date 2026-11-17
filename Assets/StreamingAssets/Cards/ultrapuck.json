@@ -125,6 +125,16 @@
       "stats": { "Invisibility": "+1" }
     },
     {
+      "id": "ultrapuck.icetrail",
+      "name": "Ice Trail",
+      "tier": "B",
+      "max": 3,
+      "color": "#8FD3F5",
+      "text": "Fully charged shots leave [good]a trail of ice[/] that slows opponents on it by [good]10%[/]. It lasts 3 s, then melts from where you shot it.
+[note]Picking up the puck ends the trail there.[/]",
+      "stats": { "IceTrail": "+1" }
+    },
+    {
       "id": "ultrapuck.friendlyfire",
       "name": "Friendly Fire",
       "tier": "A",
@@ -140,7 +150,7 @@
       "tier": "A",
       "max": 3,
       "color": "#59A6FF",
-      "text": "Checking an opponent sends out a shockwave: [good]they and everyone near them are 30% slower for 2 s[/], and [good]the others are pushed away[/]. [note]7 s cooldown.[/]",
+      "text": "Checking an opponent sends out a shockwave: [good]they and everyone near them are 45% slower for 2 s[/], and [good]the others are pushed away[/]. [note]7 s cooldown.[/]",
       "stats": { "Shockwave": "+1" }
     },
     {

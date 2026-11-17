@@ -697,7 +697,7 @@ namespace UltraPuck.Game
             return m;
         }
 
-        private Texture2D Art(string id)
+        public Texture2D Art(string id)
         {
             Texture2D tex;
             if (id != null && _art.TryGetValue(id, out tex)) return tex;

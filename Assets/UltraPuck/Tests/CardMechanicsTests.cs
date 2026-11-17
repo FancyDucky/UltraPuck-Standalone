@@ -235,10 +235,61 @@ namespace UltraPuck.Tests
             _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput), default(PlayerInput) });
             for (var t = 0; t < 40 && s.Players[0].Shocks == 0; t++) _sim.Step(s, new[] { new PlayerInput { MoveX = 127 }, default(PlayerInput), default(PlayerInput) });
             Assert.AreEqual(1, s.Players[0].Shocks, "a shockwave went out");
-            Assert.AreEqual(0.3, s.Players[1].Slow.ToDouble(), 1e-3, "the one checked is slowed 30%");
+            Assert.AreEqual(0.45, s.Players[1].Slow.ToDouble(), 1e-3, "the one checked is slowed 45%");
             Assert.Greater(s.Players[2].SlowTime.ToDouble(), 1.5, "so is the one next to them");
             Assert.Greater(s.Players[2].Vel.X.ToDouble(), 0.5, "and they were pushed away");
             Assert.Greater(s.Players[0].ShockCooldown.ToDouble(), 6.0, "cooling down");
+        }
+
+        /// <summary>Ice Trail: a fully charged shot lays ice behind the puck that slows opponents (not teammates), then melts.</summary>
+        [Test]
+        public void IceTrailSlowsOpponentsAndMelts()
+        {
+            var s = Game(0, 1, 0);
+            Give(s, 0, "ultrapuck.icetrail");
+            Play(s);
+            s.Players[0].Pos = At(-8, -6); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(8, 7);
+            s.Players[2].Pos = At(-8, 7);
+            s.Carrier = 0; s.PuckPos = At(-7.15, -6);
+            for (var t = 0; t < 300; t++) _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput), default(PlayerInput) });
+            Assert.GreaterOrEqual(s.Players[0].Charge.ToDouble(), 1.0, "fully charged");
+            _sim.Step(s, new PlayerInput[3]); // let go: the shot
+            Assert.AreEqual(-1, s.Carrier);
+            for (var t = 0; t < 30; t++) _sim.Step(s, new PlayerInput[3]);
+            Assert.Greater(s.Ice.Length, 3, "ice behind the puck");
+            Assert.Greater(s.IceLaying.ToDouble(), 0.0, "still laying it");
+
+            s.Players[1].Pos = s.Ice[1].Pos; s.Players[1].Vel = FixVec2.Zero;
+            s.Players[2].Pos = s.Ice[1].Pos + At(0, 0.1); s.Players[2].Vel = FixVec2.Zero;
+            _sim.Step(s, new PlayerInput[3]);
+            Assert.AreEqual(0.1, s.Players[1].Slow.ToDouble(), 1e-3, "an opponent on the ice is 10% slower");
+            Assert.AreEqual(Fix.Zero, s.Players[2].SlowTime, "a teammate isn't");
+
+            for (var t = 0; t < 120 * 5; t++) _sim.Step(s, new PlayerInput[3]);
+            Assert.AreEqual(0, s.Ice.Length, "all melted");
+        }
+
+        /// <summary>Picking the puck up ends the trail there, and it starts melting straight away.</summary>
+        [Test]
+        public void PickingUpThePuckEndsTheIceTrail()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.icetrail");
+            Play(s);
+            s.Players[0].Pos = At(-8, -6); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(-2, -6); // right in the way
+            s.Carrier = 0; s.PuckPos = At(-7.15, -6);
+            for (var t = 0; t < 300; t++) _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
+            _sim.Step(s, new PlayerInput[2]);
+            for (var t = 0; t < 60 && s.Carrier != 1; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(1, s.Carrier, "the opponent caught it");
+            _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(Fix.Zero, s.IceLaying, "the trail ended at the pickup");
+            var n = s.Ice.Length;
+            Assert.Greater(n, 0);
+            for (var t = 0; t < 120 * 2; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(0, s.Ice.Length, "melted within the melt time, not 3 s later");
         }
 
         /// <summary>Player 0 passes along y = -5 to teammate 1; an opponent (2) waits somewhere.</summary>

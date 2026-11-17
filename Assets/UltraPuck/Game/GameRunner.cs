@@ -41,9 +41,11 @@ namespace UltraPuck.Game
         private PlayScreens _play;
         private Menus _menus;
         private CardScreen _cardScreen;
+        private CardEditor _cardEditor;
         private Effects _effects;
         private ShotViews _shots;
         private PylonViews _pylons;
+        private IceViews _ice;
         // what each player's effect counters were last frame, to spot new shockwaves and Team Play refreshes
         private readonly List<int> _seenShocks = new List<int>(), _seenRefreshes = new List<int>();
         private readonly float[] _cooldowns = new float[3];
@@ -61,6 +63,7 @@ namespace UltraPuck.Game
             _hud = gameObject.AddComponent<Hud>();
             _menus = gameObject.AddComponent<Menus>();
             _cardScreen = gameObject.AddComponent<CardScreen>();
+            _cardEditor = gameObject.AddComponent<CardEditor>();
             _mainMenu = gameObject.AddComponent<MainMenu>();
             _play = gameObject.AddComponent<PlayScreens>();
             _play.Runner = this;
@@ -89,12 +92,14 @@ namespace UltraPuck.Game
             SteamNet.OnFailed = why => _mainMenu.Message = why;
 
             _cardScreen.Local = _local;
+            _cardEditor.Local = _local;
+            _cardEditor.Art = _cardScreen.Art;
             LocalCardPicks();
             _menus.OnMainMenu = GoMainMenu;
             _menus.BotCount = () => _local.BotCount;
             _menus.MaxBots = () => LocalPlayers.MaxPlayers - _local.HumanCount;
             _menus.SetBots = SetBots;
-            _menus.OnGetCard = PickACard;
+            _menus.OnGetCard = EditCards;
             _menus.Cards = _cards;
             _hud.PlayerName = NameOf;
 
@@ -104,6 +109,7 @@ namespace UltraPuck.Game
             _effects = new Effects(_entities);
             _shots = new ShotViews(_entities);
             _pylons = new PylonViews(_entities);
+            _ice = new IceViews(_entities);
             SetUpCamera();
             _mainMenu.Show(MainMenu.Page.Main);
             if (_local.AddDemoPlayers() > 0) StartMatch(System.Environment.GetEnvironmentVariable("ULTRAPUCK_FREEPLAY") == "1");
@@ -259,7 +265,13 @@ namespace UltraPuck.Game
             var playing = _mode == Mode.Match || (_mode == Mode.Online && OnlinePlaying);
             if (_mode == Mode.Online) OnlineUpdate();
             else if (_menus.IsOpen) _menus.Tick(_local.Menu());
-            else if (_mode == Mode.Menu) { _mainMenu.Tick(); AttractUpdate(); }
+            else if (_mode == Mode.Menu)
+            {
+                _mainMenu.Tick();
+                // only if the menu is still up: a button may just have started free play, and running the menu's
+                // match now would put its bots (and its card-less rules) back in place of the new game
+                if (_mode == Mode.Menu) AttractUpdate();
+            }
             else if (_mode == Mode.Lobby) LobbyUpdate();
             else MatchUpdate();
             if (_mode == Mode.Menu && _menus.IsOpen) AttractUpdate();
@@ -744,6 +756,15 @@ namespace UltraPuck.Game
             _prev = _state.Clone();
         }
 
+        /// <summary>Free play: the card editor, for everyone here (not the bots), to try any cards out.</summary>
+        private void EditCards()
+        {
+            if (!_free || _state == null) return;
+            var people = new List<int>();
+            for (var i = 0; i < _local.Slots.Count && i < _state.Players.Length; i++) if (!_local.Slots[i].Demo) people.Add(i);
+            _cardEditor.Open(_sim, _state, people);
+        }
+
         /// <summary>Free play: everyone here (not the bots) picks a card, to try the cards out.</summary>
         private void PickACard()
         {
@@ -757,6 +778,13 @@ namespace UltraPuck.Game
 
         private void MatchUpdate()
         {
+            if (_cardEditor.IsOpen)
+            {
+                // free play's card editor: the match waits
+                _cardEditor.Tick();
+                Show(_state, _state, 0f);
+                return;
+            }
             if (!_free && _state.Phase == Phase.GameOver)
             {
                 if (_local.StartPressed()) { StartMatch(false); return; }
@@ -1004,6 +1032,7 @@ namespace UltraPuck.Game
             if (_seenShocks.Count > b.Players.Length) { _seenShocks.RemoveRange(b.Players.Length, _seenShocks.Count - b.Players.Length); _seenRefreshes.RemoveRange(b.Players.Length, _seenRefreshes.Count - b.Players.Length); }
             _shots.Show(b, _sim.T.ShotRadius.ToFloat());
             _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
+            _ice.Show(b, _sim.T.IceRadius.ToFloat());
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);
             // a goal: the puck blows up in the net, and stays gone until the next face-off

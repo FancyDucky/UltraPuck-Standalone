@@ -97,6 +97,8 @@ namespace UltraPuck.Core
         public int FriendlyFire;
         /// <summary>Your checks on opponents send out a slowing shockwave (stronger with more copies).</summary>
         public int Shockwave;
+        /// <summary>Fully charged shots leave a trail of ice that slows opponents (10% per copy).</summary>
+        public int IceTrail;
         /// <summary>A clean pass to a teammate restores your cooldowns (Team Play).</summary>
         public int PassRefresh;
         /// <summary>...and the whole team's (Team Play II).</summary>
@@ -112,7 +114,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, Size); GameState.Mix(ref h, Weight); GameState.Mix(ref h, KnockbackGiven); GameState.Mix(ref h, KnockbackTaken);
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
-            GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam);
+            GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
         }
     }
 
@@ -185,6 +187,23 @@ namespace UltraPuck.Core
         public Fix Life;
     }
 
+    /// <summary>
+    /// A bit of an Ice Trail. Points of one trail are next to each other in <see cref="GameState.Ice"/>, oldest
+    /// first. <see cref="Melt"/> is the time left before it melts, once the trail is finished (<see cref="Laying"/> off).
+    /// </summary>
+    [Serializable]
+    public struct IcePoint
+    {
+        public FixVec2 Pos;
+        /// <summary>Which trail it belongs to (they're drawn separately), and the team whose ice it is.</summary>
+        public int Trail, Team;
+        /// <summary>How much it slows opponents on it.</summary>
+        public Fix Slow;
+        public Fix Melt;
+        /// <summary>Still being laid behind the puck (not melting yet).</summary>
+        public bool Laying;
+    }
+
     /// <summary>A pylon goalie: a solid dummy in front of a net.</summary>
     [Serializable]
     public struct Pylon
@@ -236,6 +255,12 @@ namespace UltraPuck.Core
         public Shot[] Shots = new Shot[0];
         /// <summary>Pylon goalies standing in front of the nets (from the Pylon Goalie card).</summary>
         public Pylon[] Pylons = new Pylon[0];
+        /// <summary>Ice Trail: the ice on the rink.</summary>
+        public IcePoint[] Ice = new IcePoint[0];
+        /// <summary>Ice Trail: time left laying the trail behind the puck (0 = not laying one).</summary>
+        public Fix IceLaying;
+        /// <summary>Ice Trail: number of the newest trail.</summary>
+        public int IceTrails;
         /// <summary>Team Play: who last let go of the puck, while it hasn't been touched by an opponent since (-1 = no pass going).</summary>
         public int PassFrom = -1;
 
@@ -247,6 +272,7 @@ namespace UltraPuck.Core
             s.Score = (int[])Score.Clone();
             s.Shots = (Shot[])Shots.Clone();
             s.Pylons = (Pylon[])Pylons.Clone();
+            s.Ice = (IcePoint[])Ice.Clone();
             return s;
         }
 
@@ -268,6 +294,8 @@ namespace UltraPuck.Core
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); }
+            Mix(ref h, IceLaying); Mix(ref h, IceTrails);
+            foreach (var ice in Ice) { Mix(ref h, ice.Pos); Mix(ref h, ice.Trail); Mix(ref h, ice.Team); Mix(ref h, ice.Slow); Mix(ref h, ice.Melt); Mix(ref h, ice.Laying ? 1 : 0); }
             foreach (var sc in Score) Mix(ref h, sc);
             foreach (var p in Players)
             {

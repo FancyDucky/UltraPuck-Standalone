@@ -55,7 +55,7 @@ namespace UltraPuck.Core
         {
             "MoveSpeed", "MoveSpeedWithPuck", "ShotPower", "QuickShotPower", "ChargeSpeed", "OverCharge", "DashCooldown",
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
-            "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "PassRefresh", "PassRefreshTeam",
+            "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "PassRefresh", "PassRefreshTeam", "IceTrail",
         };
 
         public CardDef ById(string id) { CardDef c; return id != null && _byId.TryGetValue(id, out c) ? c : null; }
@@ -160,6 +160,7 @@ namespace UltraPuck.Core
                 case "Invisibility": st.Invisibility = Count(st.Invisibility, m); break;
                 case "FriendlyFire": st.FriendlyFire = Count(st.FriendlyFire, m); break;
                 case "Shockwave": st.Shockwave = Count(st.Shockwave, m); break;
+                case "IceTrail": st.IceTrail = Count(st.IceTrail, m); break;
                 case "PassRefresh": st.PassRefresh = Count(st.PassRefresh, m); break;
                 case "PassRefreshTeam": st.PassRefreshTeam = Count(st.PassRefreshTeam, m); break;
             }

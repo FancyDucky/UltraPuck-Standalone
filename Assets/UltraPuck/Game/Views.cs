@@ -92,7 +92,7 @@ namespace UltraPuck.Game
         // slowed: a few blue down arrows drifting down over the player, on a loop
         private readonly Transform _slowRoot;
         private readonly Transform[] _slowArrows = new Transform[3];
-        private readonly Mesh[] _slowMesh = new Mesh[3];
+        private readonly Mesh[] _slowMesh = new Mesh[3], _slowOutline = new Mesh[3];
         private float _slowAlpha;
 
         // stunned: little stars circling the player
@@ -103,6 +103,7 @@ namespace UltraPuck.Game
         // dashing: speed streaks behind and a bright rim, fading as the dash ends
         private readonly Transform _dashRoot;
         private readonly Mesh[] _dashMesh = new Mesh[4];
+        private readonly Transform[] _streak = new Transform[3];
         private float _dashShown = -1f;
         private readonly Transform _cdRoot;
         private readonly Mesh[] _cdBack = new Mesh[3], _cdFill = new Mesh[3];
@@ -140,6 +141,12 @@ namespace UltraPuck.Game
                 };
                 _slowMesh[k] = Draw.Polygon(pts, new Color(0.45f, 0.75f, 1f, 0f));
                 _slowArrows[k] = Draw.Make("Arrow" + k, _slowRoot, _slowMesh[k], 25).transform;
+                // a black outline behind it, so it reads on any colour: the same arrow, a little bigger
+                var centre = new Vector2(0f, w * 0.15f);
+                var outline = new List<Vector2>();
+                foreach (var p in pts) outline.Add(centre + (p - centre) * 1.45f);
+                _slowOutline[k] = Draw.Polygon(outline, new Color(0f, 0f, 0f, 0f));
+                Draw.Make("Outline", _slowArrows[k], _slowOutline[k], 24);
             }
             _slowRoot.gameObject.SetActive(false);
 
@@ -167,8 +174,12 @@ namespace UltraPuck.Game
             {
                 var y = (k - 1) * radius * 0.55f;
                 var len = k == 1 ? radius * 1.6f : radius * 1.1f;
-                _dashMesh[k] = Draw.Rect(new Vector2(-radius * 1.15f - len, y - radius * 0.06f), new Vector2(-radius * 1.15f, y + radius * 0.06f), Color.clear);
-                Draw.Make("Streak" + k, _dashRoot, _dashMesh[k], 9);
+                // each streak hangs off the back of the player, so it can be drawn growing outwards from there
+                _streak[k] = new GameObject("Streak" + k).transform;
+                _streak[k].SetParent(_dashRoot, false);
+                _streak[k].localPosition = new Vector3(-radius * 1.15f, y, 0f);
+                _dashMesh[k] = Draw.Rect(new Vector2(-len, -radius * 0.06f), new Vector2(0f, radius * 0.06f), Color.clear);
+                Draw.Make("Line", _streak[k], _dashMesh[k], 9);
             }
             _dashMesh[3] = Draw.Ring(radius * 1.02f, radius * 1.18f, 1f, Color.clear);
             Draw.Make("DashRim", _dashRoot, _dashMesh[3], 12);
@@ -342,7 +353,8 @@ namespace UltraPuck.Game
                     var x = (k - 1) * _r * 0.75f;
                     _slowArrows[k].localPosition = new Vector3(x, _r * (0.9f - 1.6f * phase), 0f);
                     var a = Mathf.Sin(phase * Mathf.PI) * 0.95f * _slowAlpha;
-                    Draw.Recolor(_slowMesh[k], new Color(0.45f, 0.75f, 1f, a));
+                    Draw.Recolor(_slowMesh[k], new Color(0.5f, 0.8f, 1f, a));
+                    Draw.Recolor(_slowOutline[k], new Color(0f, 0f, 0f, a));
                 }
 
             // stunned: stars circling
@@ -361,14 +373,20 @@ namespace UltraPuck.Game
 
             // dashing: streaks behind (along the way they're facing) and a bright rim
             dash = faint ? 0f : Mathf.Clamp01(dash);
-            dash = Mathf.Round(dash * 24f) / 24f;
+            dash = Mathf.Round(dash * 60f) / 60f; // fine steps: the streaks grow smoothly
             if (dash != _dashShown)
             {
                 _dashShown = dash;
                 _dashRoot.gameObject.SetActive(dash > 0f);
                 if (dash > 0f)
                 {
-                    for (var k = 0; k < 3; k++) Draw.Recolor(_dashMesh[k], new Color(1f, 1f, 1f, 0.75f * dash));
+                    for (var k = 0; k < 3; k++)
+                    {
+                        Draw.Recolor(_dashMesh[k], new Color(1f, 1f, 1f, 0.75f * dash));
+                        // drawn outwards from the player over the first part of the dash (the middle one a touch first)
+                        var grow = Ui.EaseOut(Mathf.Clamp01((1f - dash) / 0.4f - (k == 1 ? 0f : 0.15f)));
+                        _streak[k].localScale = new Vector3(Mathf.Max(0.001f, grow), 1f, 1f);
+                    }
                     Draw.Recolor(_dashMesh[3], new Color(1f, 1f, 1f, 0.9f * dash));
                 }
             }
@@ -778,6 +796,56 @@ namespace UltraPuck.Game
     }
 
     /// <summary>Pylon goalies: dark dummies with a ring in their team's colour.</summary>
+    /// <summary>Ice Trail: each trail as a pale icy stripe on the floor, under the players.</summary>
+    internal sealed class IceViews
+    {
+        private static readonly Color IceColour = Color.Lerp(Palette.Floor, new Color(0.62f, 0.86f, 1f), 0.42f);
+        private readonly Transform _parent;
+        private readonly Dictionary<int, MeshFilter> _trails = new Dictionary<int, MeshFilter>();
+        private readonly Dictionary<int, long> _drawn = new Dictionary<int, long>();
+        private readonly List<int> _gone = new List<int>();
+        private readonly List<Vector2> _pts = new List<Vector2>();
+
+        public IceViews(Transform parent) { _parent = parent; }
+
+        public void Show(GameState s, float radius)
+        {
+            var seen = new HashSet<int>();
+            var i = 0;
+            while (i < s.Ice.Length)
+            {
+                var id = s.Ice[i].Trail;
+                _pts.Clear();
+                var j = i;
+                for (; j < s.Ice.Length && s.Ice[j].Trail == id; j++) _pts.Add(new Vector2(s.Ice[j].Pos.X.ToFloat(), s.Ice[j].Pos.Y.ToFloat()));
+                seen.Add(id);
+                // build it again only when it grew or melted
+                long key = ((long)_pts.Count << 32) ^ s.Ice[i].Pos.X.Raw ^ (s.Ice[j - 1].Pos.Y.Raw << 7);
+                long old;
+                if (!_drawn.TryGetValue(id, out old) || old != key)
+                {
+                    MeshFilter mf;
+                    if (_trails.TryGetValue(id, out mf)) Object.Destroy(mf.sharedMesh);
+                    var mesh = _pts.Count >= 2 ? Draw.Line(_pts, false, radius * 2f, IceColour) : Draw.Disc(radius, IceColour);
+                    if (mf == null) { mf = Draw.Make("Ice" + id, _parent, mesh, 3); _trails[id] = mf; }
+                    else mf.sharedMesh = mesh;
+                    mf.transform.localPosition = _pts.Count >= 2 ? Vector3.zero : (Vector3)_pts[0];
+                    _drawn[id] = key;
+                }
+                i = j;
+            }
+            _gone.Clear();
+            foreach (var id in _trails.Keys) if (!seen.Contains(id)) _gone.Add(id);
+            foreach (var id in _gone)
+            {
+                Object.Destroy(_trails[id].sharedMesh);
+                Object.Destroy(_trails[id].gameObject);
+                _trails.Remove(id);
+                _drawn.Remove(id);
+            }
+        }
+    }
+
     internal sealed class PylonViews
     {
         private readonly Transform _parent;
