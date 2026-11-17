@@ -40,6 +40,7 @@ namespace UltraPuck.Game
         {
             Debug.Log("Ultra Puck version " + Current);
             if (Application.isEditor || Environment.GetEnvironmentVariable("ULTRAPUCK_NOUPDATE") == "1") return;
+            if (!Settings.AutoUpdate) { Debug.Log("Ultra Puck: auto-update is off (Settings > Gameplay)"); return; }
             foreach (var a in Environment.GetCommandLineArgs()) if (a == "-justupdated") return; // don't loop
             StartCoroutine(Check());
         }

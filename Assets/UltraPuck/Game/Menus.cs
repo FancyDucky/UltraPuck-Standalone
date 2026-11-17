@@ -12,7 +12,10 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class Menus : MonoBehaviour
     {
-        public enum Page { None, Pause, Settings }
+        public enum Page { None, Pause, Settings, Cards }
+
+        /// <summary>The card list for the Toggle Cards page (set by GameRunner).</summary>
+        public UltraPuck.Core.CardLibrary Cards;
 
         public Page Current { get; private set; }
         public bool IsOpen { get { return Current != Page.None; } }
@@ -28,7 +31,10 @@ namespace UltraPuck.Game
         private float _openedAt, _focusY = -1f, _tabX = -1f;
         private string _subtitle = "";
 
-        private static readonly string[] Tabs = { "Graphics", "Gameplay", "Camera" };
+        private static readonly string[] Tabs = { "Graphics", "Gameplay", "Camera", "Match" };
+        /// <summary>Rows shown at once; longer pages scroll with the focus.</summary>
+        private const int MaxVisible = 8;
+        private int _first;
 
         // ------------------------------------------------------------------ rows
 
@@ -100,6 +106,17 @@ namespace UltraPuck.Game
                 _rows.Add(Button("Main menu", () => { Close(); if (OnMainMenu != null) OnMainMenu(); }));
                 return;
             }
+            if (Current == Page.Cards)
+            {
+                if (Cards != null)
+                    foreach (var c in Cards.Cards)
+                    {
+                        var id = c.Id;
+                        _rows.Add(Switch(c.Name + "  (" + c.Tier + ")", () => Settings.CardOn(id), v => Settings.SetCardOn(id, v), CleanText(c.Text)));
+                    }
+                _rows.Add(Button("Back", () => { Current = Page.Settings; _focus = 4; _first = 0; _focusY = -1f; }));
+                return;
+            }
             if (Current != Page.Settings) return;
             switch (_tab)
             {
@@ -127,6 +144,9 @@ namespace UltraPuck.Game
                     _rows.Add(Slider("Screen shake", () => Settings.ShakeAmount, v => Settings.ShakeAmount = v, v => v < 0.01f ? "Off" : Mathf.RoundToInt(v * 100f) + "%"));
                     _rows.Add(Switch("Hit effects", () => Settings.HitEffects, v => Settings.HitEffects = v, "Squash, flash and impact rings when players collide."));
                     _rows.Add(Choice("Check bar", new[] { "While recharging", "Always" }, () => Settings.DashBarAlways ? 1 : 0, v => Settings.DashBarAlways = v == 1));
+                    _rows.Add(Choice("Corner card list", new[] { "Shown", "Hidden" }, () => Settings.CornerCards ? 0 : 1, v => Settings.CornerCards = v == 0,
+                        "Everyone's cards in the lower-left corner during a match. Tab / View in a match hides or shows it."));
+                    _rows.Add(Switch("Auto-update", () => Settings.AutoUpdate, v => Settings.AutoUpdate = v, "Check for a new version when the game starts, and install it."));
                     break;
                 case 2:
                     _rows.Add(Choice("Camera", new[] { "Follow the action", "Whole rink" }, () => Settings.FollowCamera ? 0 : 1, v => Settings.FollowCamera = v == 0));
@@ -136,6 +156,29 @@ namespace UltraPuck.Game
                     var smooth = Slider("Camera smoothing", () => Settings.CameraSmoothing, v => Settings.CameraSmoothing = v, v => v < 0.2f ? "Snappy" : v > 0.75f ? "Floaty" : Mathf.RoundToInt(v * 100f) + "%");
                     smooth.Enabled = () => Settings.FollowCamera;
                     _rows.Add(smooth);
+                    _rows.Add(Switch("Charge zoom", () => Settings.ChargeZoom, v => Settings.ChargeZoom = v, "While you charge a shot, the camera pulls back until the goal you're aiming at is in view."));
+                    var caps2 = new string[Settings.ChargeZoomCaps.Length];
+                    for (var k = 0; k < caps2.Length; k++) caps2[k] = Settings.ChargeZoomCaps[k] == 0 ? "No limit" : Settings.ChargeZoomCaps[k] + "%";
+                    var cz = Choice("Max zoom out", caps2, () => Mathf.Max(0, Array.IndexOf(Settings.ChargeZoomCaps, Settings.ChargeZoomMax)), v => Settings.ChargeZoomMax = Settings.ChargeZoomCaps[v],
+                        "How far charge zoom may pull back from the normal view.");
+                    cz.Enabled = () => Settings.ChargeZoom && Settings.FollowCamera;
+                    _rows.Add(cz);
+                    break;
+                case 3:
+                    _rows.Add(Switch("Rounds mode", () => Settings.Rounds, v => Settings.Rounds = v, "After each goal, the team that conceded picks a card that powers them up for the rest of the match."));
+                    var vote = Choice("Picking", new[] { "Each player", "Team vote" }, () => Settings.TeamVote ? 1 : 0, v => Settings.TeamVote = v == 1,
+                        "Each player: everyone gets their own card. Team vote: each team votes on one card the whole team gets (a tie is random).");
+                    vote.Enabled = () => Settings.Rounds;
+                    _rows.Add(vote);
+                    var offered = new string[Settings.OfferCounts.Length];
+                    for (var k = 0; k < offered.Length; k++) offered[k] = Settings.OfferCounts[k].ToString();
+                    _rows.Add(Choice("Cards offered", offered, () => Mathf.Max(0, Array.IndexOf(Settings.OfferCounts, Settings.CardsOffered)), v => Settings.CardsOffered = Settings.OfferCounts[v]));
+                    var times = new string[Settings.PickTimes.Length];
+                    for (var k = 0; k < times.Length; k++) times[k] = Settings.PickTimes[k] == 0 ? "No limit" : Settings.PickTimes[k] + " s";
+                    _rows.Add(Choice("Pick time", times, () => Mathf.Max(0, Array.IndexOf(Settings.PickTimes, Settings.PickTime)), v => Settings.PickTime = Settings.PickTimes[v],
+                        "How long players have to pick. Anyone who hasn't picked in time gets a random card."));
+                    _rows.Add(new Row { Label = "Toggle cards", Value = CardsOnText, Press = () => { Current = Page.Cards; _focus = 0; _first = 0; _focusY = -1f; },
+                        Hint = "Choose which cards can be offered. Online, the host's choices apply." });
                     break;
             }
             _rows.Add(Button("Back", Back));
@@ -201,6 +244,27 @@ namespace UltraPuck.Game
             PlayerPrefs.Save();
         }
 
+        private string CardsOnText()
+        {
+            if (Cards == null) return "";
+            var on = 0;
+            foreach (var c in Cards.Cards) if (Settings.CardOn(c.Id)) on++;
+            return on + " of " + Cards.Cards.Count + " on";
+        }
+
+        /// <summary>Card text without its colour tags, for a hint line.</summary>
+        private static string CleanText(string t)
+        {
+            if (string.IsNullOrEmpty(t)) return null;
+            var sb = new System.Text.StringBuilder();
+            for (var i = 0; i < t.Length; i++)
+            {
+                if (t[i] == '[') { var end = t.IndexOf(']', i); if (end > i) { i = end; continue; } }
+                sb.Append(t[i] == '\n' ? ' ' : t[i]);
+            }
+            return sb.ToString();
+        }
+
         private static string ZoomText(float v) { return v < 0.15f ? "Close" : v > 0.85f ? "Wide" : Mathf.RoundToInt(v * 100f) + "%"; }
 
         // ------------------------------------------------------------------ opening and closing
@@ -251,8 +315,8 @@ namespace UltraPuck.Game
             if (_typing) { TypingTick(); return; }
             BuildRows();
             if (_rows.Count == 0) return;
-            if (m.Back) { Back(); return; }
-            if (Current == Page.Settings && m.Tab != 0) { _tab = (_tab + m.Tab + Tabs.Length) % Tabs.Length; _focus = 0; return; }
+            if (m.Back) { if (Current == Page.Cards) { Current = Page.Settings; _focus = 4; _first = 0; _focusY = -1f; } else Back(); return; }
+            if (Current == Page.Settings && m.Tab != 0) { _tab = (_tab + m.Tab + Tabs.Length) % Tabs.Length; _focus = 0; _first = 0; return; }
             if (m.Y != 0)
             {
                 // skip greyed-out rows
@@ -286,7 +350,10 @@ namespace UltraPuck.Game
             var panelW = pause ? 440f : 780f;
             var top = pause ? 110f : 150f;
             // the settings panel is as tall as its longest tab, so it doesn't jump about between tabs
-            var panelH = top + (pause ? _rows.Count : SettingsRows()) * (rowH + 8f) + (pause ? 30f : 92f);
+            var panelH = top + (pause ? _rows.Count : Mathf.Min(MaxVisible, SettingsRows())) * (rowH + 8f) + (pause ? 30f : 92f);
+            // long pages (the card list) scroll: keep the focused row in view
+            var visible = pause ? _rows.Count : Mathf.Min(MaxVisible, _rows.Count);
+            _first = Mathf.Clamp(_first, Mathf.Max(0, _focus - visible + 1), Mathf.Min(_focus, Mathf.Max(0, _rows.Count - visible)));
             var x = Ui.W / 2f - panelW / 2f;
             var y = Ui.H / 2f - panelH / 2f + (1f - appear) * 40f;
 
@@ -298,32 +365,36 @@ namespace UltraPuck.Game
             Ui.Box(new Rect(x - 1f, y - 1f, panelW + 2f, panelH + 2f), new Color(1f, 1f, 1f, 0.06f), 22f);
             Ui.Box(new Rect(x, y, panelW, panelH), Ui.Panel, 21f);
 
-            Ui.Label(new Rect(x, y + 22f, panelW, 50f), pause ? "Paused" : "Settings", Ui.Font(38, true, TextAnchor.MiddleCenter), Ui.Text);
+            var cardsPage = Current == Page.Cards;
+            Ui.Label(new Rect(x, y + 22f, panelW, 50f), pause ? "Paused" : cardsPage ? "Toggle cards" : "Settings", Ui.Font(38, true, TextAnchor.MiddleCenter), Ui.Text);
             if (pause && _subtitle.Length > 0) Ui.Label(new Rect(x, y + 66f, panelW, 26f), _subtitle, Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
-            if (!pause) Tabs_(x, y + 82f, panelW);
+            if (cardsPage) Ui.Label(new Rect(x, y + 82f, panelW, 40f), "Which cards can be offered" + (_rows.Count > visible ? "   (" + (_first + 1) + "-" + (_first + visible) + " of " + (_rows.Count - 1) + ")" : ""), Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
+            else if (!pause) Tabs_(x, y + 82f, panelW);
 
             var mouse = Ui.Mouse;
             var rowsTop = y + top;
             var rowW = panelW - 60f;
-            for (var i = 0; i < _rows.Count; i++)
+            var last = Mathf.Min(_rows.Count, _first + visible);
+            for (var i = _first; i < last; i++)
             {
-                var r = new Rect(x + 30f, rowsTop + i * (rowH + 8f), rowW, rowH);
+                var r = new Rect(x + 30f, rowsTop + (i - _first) * (rowH + 8f), rowW, rowH);
                 if (r.Contains(mouse) && Ui.MouseMoved && _rows[i].Enabled()) _focus = i;
             }
+            if (Event.current.type == EventType.ScrollWheel && _rows.Count > visible)
+                _focus = Mathf.Clamp(_focus + (Event.current.delta.y > 0 ? 1 : -1), 0, _rows.Count - 1);
             // the focus highlight glides between rows
-            var focusTarget = rowsTop + _focus * (rowH + 8f);
+            var focusTarget = rowsTop + (_focus - _first) * (rowH + 8f);
             _focusY = _focusY < 0f ? focusTarget : Mathf.Lerp(_focusY, focusTarget, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 22f));
-            for (var i = 0; i < _rows.Count; i++)
+            for (var i = _first; i < last; i++)
             {
-                var r = new Rect(x + 30f, rowsTop + i * (rowH + 8f), rowW, rowH);
+                var r = new Rect(x + 30f, rowsTop + (i - _first) * (rowH + 8f), rowW, rowH);
                 Ui.Box(r, Ui.Row, 12f);
             }
             Ui.Box(new Rect(x + 30f, _focusY, rowW, rowH), Ui.RowFocus, 12f);
-            Ui.Box(new Rect(x + 30f, _focusY + 12f, 4f, rowH - 24f), Ui.Accent, 2f);
 
-            for (var i = 0; i < _rows.Count; i++)
+            for (var i = _first; i < last; i++)
             {
-                var r = new Rect(x + 30f, rowsTop + i * (rowH + 8f), rowW, rowH);
+                var r = new Rect(x + 30f, rowsTop + (i - _first) * (rowH + 8f), rowW, rowH);
                 DrawRow(_rows[i], r, i == _focus, pause, mouse);
             }
 
@@ -333,7 +404,7 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(x, y + panelH - 70f, panelW, 24f), hint, Ui.Font(16, false, TextAnchor.MiddleCenter), Ui.TextDim);
                 Glyphs.Hint(new Rect(x, y + panelH - 40f, panelW, 24f),
                     _typing ? (InputMode.Pad ? "Type on the keyboard    {confirm} Done    {back} Cancel" : "Type your name    {confirm} Done    {back} Cancel")
-                            : "{tabs} Tabs      {back} Back      Changes save straight away",
+                            : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : "{tabs} Tabs      {back} Back      Changes save straight away",
                     14, new Color(1f, 1f, 1f, 0.45f));
             }
             GUI.matrix = oldMatrix;

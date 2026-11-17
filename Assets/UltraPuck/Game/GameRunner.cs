@@ -62,24 +62,12 @@ namespace UltraPuck.Game
             gameObject.AddComponent<Updater>();
             _mainMenu.Runner = this;
             _mainMenu.Local = _local;
-            try
-            {
-                _map = MapDef.FromJson(File.ReadAllText(Path.Combine(MapsFolder, "test-rink.json")));
-            }
-            catch (System.Exception ex)
-            {
-                _error = "Couldn't load the map: " + ex.Message;
-                Debug.LogError(_error);
-                return;
-            }
+            LoadMaps();
+            if (_maps.Count == 0) { _error = "Couldn't load any map: " + _mapProblem; Debug.LogError(_error); return; }
             _cards = LoadCards();
-            _matchSim = new Simulation(_map, null, _cards);
-            _freeSim = new Simulation(_map, Tuning.ForFreePlay(), _cards);
-            _sim = _matchSim;
             _fingerprint = Fingerprint();
-            _attractSim = new Simulation(_map, Tuning.ForFreePlay());
-            _attract = _attractSim.NewGame(new[] { 0, 1, 0, 1 }, (uint)System.Environment.TickCount | 1u);
-            _attractPrev = _attract.Clone();
+            var saved = PlayerPrefs.GetString("map_file", "test-rink.json");
+            BuildSims(Mathf.Max(0, _mapFiles.IndexOf(saved)));
 
             SteamNet.Init();
             LogDevices("at start");
@@ -101,8 +89,10 @@ namespace UltraPuck.Game
             _menus.MaxBots = () => LocalPlayers.MaxPlayers - _local.HumanCount;
             _menus.SetBots = SetBots;
             _menus.OnGetCard = PickACard;
+            _menus.Cards = _cards;
+            _hud.PlayerName = NameOf;
 
-            new RinkView(_map);
+            _rink = new RinkView(_map);
             _entities = new GameObject("Entities").transform;
             _puck = new PuckView(_sim.T.PuckRadius.ToFloat(), _entities);
             _effects = new Effects(_entities);
@@ -208,10 +198,23 @@ namespace UltraPuck.Game
                 }
                 lo -= Vector2.one * padding; hi += Vector2.one * padding;
             }
+            var normalSize = Mathf.Max((hi.y - lo.y) / 2f / keep, (hi.x - lo.x) / 2f / aspect, minHalfHeight);
+
+            // Charge Zoom: while someone on this PC charges a shot, pull back until the goal they're attacking is in view
+            var goal = Vector2.zero; var charge = 0f;
+            var zooming = follow && Settings.ChargeZoom && LocalCharge(out goal, out charge);
+            if (zooming)
+            {
+                var gLo = Vector2.Min(lo, goal - Vector2.one * 2.5f);
+                var gHi = Vector2.Max(hi, goal + Vector2.one * 2.5f);
+                lo = Vector2.Lerp(lo, gLo, charge);
+                hi = Vector2.Lerp(hi, gHi, charge);
+            }
 
             // half the view height that fits the box below the score bar, not closer than the minimum, not wider than the rink
             var whole = Mathf.Max((mapMax.y - mapMin.y) / 2f / keep, (mapMax.x - mapMin.x) / 2f / aspect);
             var size = Mathf.Max((hi.y - lo.y) / 2f / keep, (hi.x - lo.x) / 2f / aspect, minHalfHeight);
+            if (zooming && Settings.ChargeZoomMax > 0) size = Mathf.Min(size, normalSize * Settings.ChargeZoomMax / 100f);
             size = Mathf.Min(size, whole);
 
             // centre on the box, then keep the view inside the rink (centred when the view is wider than the rink)
@@ -321,13 +324,108 @@ namespace UltraPuck.Game
 
         private bool OnlinePlaying { get { return _session != null && _session.Current == NetSession.Stage.Playing && _session.Match != null; } }
 
-        private Simulation MakeOnlineSim() { return new Simulation(_map, null, _cards); }
+        private Simulation MakeOnlineSim()
+        {
+            // the host's choice of rink (everyone has the same list: the fingerprint check makes sure)
+            if (_session != null && _session.Map != _mapIndex && _session.Map < _maps.Count) UseMap(_session.Map);
+            return new Simulation(_map, RulesTuning(_session != null ? _session.Rules : null, false), _cards);
+        }
+
+        // ------------------------------------------------------------------ rinks
+
+        private readonly List<MapDef> _maps = new List<MapDef>();
+        private readonly List<string> _mapFiles = new List<string>();
+        private string _mapProblem;
+        private int _mapIndex;
+        private RinkView _rink;
+
+        public int MapIndex { get { return _mapIndex; } }
+        public int MapCount { get { return _maps.Count; } }
+        public string MapName(int i) { return i >= 0 && i < _maps.Count ? (string.IsNullOrEmpty(_maps[i].Name) ? _mapFiles[i] : _maps[i].Name) : "?"; }
+
+        /// <summary>Every map in the Maps folder (the Test Rink first, then the rest by file name).</summary>
+        private void LoadMaps()
+        {
+            var files = Directory.Exists(MapsFolder) ? Directory.GetFiles(MapsFolder, "*.json") : new string[0];
+            System.Array.Sort(files, System.StringComparer.Ordinal);
+            var list = new List<string>(files);
+            var test = list.FindIndex(f => Path.GetFileName(f) == "test-rink.json");
+            if (test > 0) { var t = list[test]; list.RemoveAt(test); list.Insert(0, t); }
+            foreach (var f in list)
+            {
+                try { _maps.Add(MapDef.FromJson(File.ReadAllText(f))); _mapFiles.Add(Path.GetFileName(f)); }
+                catch (System.Exception ex) { _mapProblem = Path.GetFileName(f) + ": " + ex.Message; Debug.LogWarning("Ultra Puck: couldn't load map " + _mapProblem); }
+            }
+        }
+
+        private void BuildSims(int index)
+        {
+            _mapIndex = Mathf.Clamp(index, 0, _maps.Count - 1);
+            _map = _maps[_mapIndex];
+            _matchSim = new Simulation(_map, MatchTuning(false), _cards);
+            _freeSim = new Simulation(_map, MatchTuning(true), _cards);
+            _sim = _matchSim;
+            _attractSim = new Simulation(_map, Tuning.ForFreePlay());
+            _attract = _attractSim.NewGame(new[] { 0, 1, 0, 1 }, (uint)System.Environment.TickCount | 1u);
+            _attractPrev = _attract.Clone();
+        }
+
+        // ------------------------------------------------------------------ match rules
+
+        /// <summary>The rules from the Match settings (rounds, picking, cards offered, pick time, cards switched off).</summary>
+        private Tuning MatchTuning(bool free) { return RulesTuning(PackRules(), free); }
+
+        /// <summary>The match rules as a few bytes, to send to everyone online (the host's rules apply).</summary>
+        private byte[] PackRules()
+        {
+            var b = new List<byte>();
+            b.Add((byte)((Settings.Rounds ? 1 : 0) | (Settings.TeamVote ? 2 : 0)));
+            b.Add((byte)Settings.CardsOffered);
+            b.Add((byte)Mathf.Clamp(Settings.PickTime, 0, 255));
+            var off = new List<byte>();
+            if (_cards != null) foreach (var c in _cards.Cards) if (!Settings.CardOn(c.Id) && c.Index < 256) off.Add((byte)c.Index);
+            b.Add((byte)off.Count);
+            b.AddRange(off);
+            return b.ToArray();
+        }
+
+        private static Tuning RulesTuning(byte[] rules, bool free)
+        {
+            var t = free ? Tuning.ForFreePlay() : new Tuning();
+            if (rules == null || rules.Length < 4) return t;
+            if (!free) t.CardsAfterGoals = (rules[0] & 1) != 0;
+            t.TeamVote = (rules[0] & 2) != 0;
+            t.CardsOffered = Mathf.Clamp(rules[1], 1, 5);
+            t.PickTime = Fix.FromInt(rules[2]);
+            var n = Mathf.Min(rules[3], rules.Length - 4);
+            t.CardsOff = new int[n];
+            for (var k = 0; k < n; k++) t.CardsOff[k] = rules[4 + k];
+            return t;
+        }
+
+        /// <summary>Switch rinks (between matches): new rules objects, the new rink drawn, the camera reset.</summary>
+        public void UseMap(int index)
+        {
+            if (_maps.Count == 0) return;
+            index = ((index % _maps.Count) + _maps.Count) % _maps.Count;
+            if (index == _mapIndex && _rink != null) return;
+            BuildSims(index);
+            PlayerPrefs.SetString("map_file", _mapFiles[_mapIndex]);
+            if (_rink != null) Destroy(_rink.Root);
+            _rink = new RinkView(_map);
+            if (_session != null && _session.IsHost) _session.Map = _mapIndex;
+            if (_cam != null) UpdateCamera(false, true);
+        }
+
+        /// <summary>Next / previous rink.</summary>
+        public void StepMap(int d) { UseMap(_mapIndex + d); }
 
         /// <summary>A hash of the map and card files: everyone in an online game must have the same ones.</summary>
         private uint Fingerprint()
         {
             var h = 2166136261u;
-            var files = new List<string> { Path.Combine(MapsFolder, "test-rink.json") };
+            var files = new List<string>();
+            foreach (var m in _mapFiles) files.Add(Path.Combine(MapsFolder, m));
             if (Directory.Exists(CardsFolder)) { var c = Directory.GetFiles(CardsFolder, "*.json"); System.Array.Sort(c, System.StringComparer.Ordinal); files.AddRange(c); }
             foreach (var f in files)
                 foreach (var b in File.ReadAllBytes(f)) { h ^= b; h *= 16777619u; }
@@ -363,6 +461,7 @@ namespace UltraPuck.Game
         {
             if (_session != null) _session.Dispose();
             _session = session;
+            if (session.IsHost) session.Map = _mapIndex;
             _mainMenu.Session = session;
             _mainMenu.Message = null;
             _local.Slots.Clear();
@@ -375,6 +474,7 @@ namespace UltraPuck.Game
         public void StartOnlineMatch()
         {
             if (_session == null || !_session.IsHost) return;
+            _session.Rules = PackRules();
             _session.StartMatch((uint)System.Environment.TickCount * 2654435761u | 1u);
         }
 
@@ -475,6 +575,8 @@ namespace UltraPuck.Game
         {
             _cardScreen.SlotOf = p => p;
             _local.PickFor = slot => _cardScreen.PickFor(slot);
+            _local.HoverFor = slot => _cardScreen.HoverFor(slot);
+            _cardScreen.NameOf = NameOf;
         }
 
         /// <summary>Card picks online: this PC's players are some of the match's players.</summary>
@@ -487,6 +589,8 @@ namespace UltraPuck.Game
                 return !seat.Bot && seat.Peer == _session.MyPeer ? seat.Local : -1;
             };
             _local.PickFor = slot => _session == null ? (byte)0 : _cardScreen.PickFor(_session.PlayerOf(slot));
+            _local.HoverFor = slot => _session == null ? (byte)0 : _cardScreen.HoverFor(_session.PlayerOf(slot));
+            _cardScreen.NameOf = NameOf;
         }
 
         // ------------------------------------------------------------------ lobby
@@ -496,6 +600,9 @@ namespace UltraPuck.Game
             if (_local.SettingsPressed()) { _menus.OpenSettings(true); return; }
             _local.LobbyUpdate();
             if (_local.LeaveLobbyHeld()) { GoMainMenu(); return; }
+            var tab = _local.TabPressed();
+            if (tab != 0) UseMap(_mapIndex + tab);
+            _hud.MapName = MapCount > 1 ? MapName(_mapIndex) : null;
             // show everyone who has joined standing at their spawn
             _state = _matchSim.NewGame(_local.Teams());
             Show(_state, _state, 0f);
@@ -506,6 +613,9 @@ namespace UltraPuck.Game
         private void StartMatch(bool free)
         {
             _free = free;
+            // the settings may have changed since: the rules come from them now
+            _matchSim = new Simulation(_map, MatchTuning(false), _cards);
+            _freeSim = new Simulation(_map, MatchTuning(true), _cards);
             _sim = free ? _freeSim : _matchSim;
             // a fresh seed every match, so games (and the cards offered) don't replay the same way each time
             _state = _sim.NewGame(_local.Teams(), (uint)System.Environment.TickCount * 2654435761u | 1u);
@@ -575,6 +685,7 @@ namespace UltraPuck.Game
                 return;
             }
             if (_free) FreePlayJoins();
+            else if (_local.SettingsPressed()) Settings.CornerCards = !Settings.CornerCards; // View / Tab: hide or show the card list
 
             _local.LatchPresses();
             var dt = 1f / _sim.T.TicksPerSecond;
@@ -595,6 +706,23 @@ namespace UltraPuck.Game
         }
 
         private float _testPause;
+
+        /// <summary>A person on this PC (not a bot) who's charging a shot: the goal they're attacking and how far charged (0..1, Over Charge doesn't add).</summary>
+        private bool LocalCharge(out Vector2 goal, out float charge)
+        {
+            goal = Vector2.zero; charge = 0f;
+            if (_state == null || _sim == null || _state.Carrier < 0 || _state.Carrier >= _state.Players.Length) return false;
+            var i = _state.Carrier;
+            var p = _state.Players[i];
+            if (p.Charge <= Fix.Zero) return false;
+            bool human;
+            if (_mode == Mode.Online && _session != null) human = i < _session.Seats.Count && !_session.Seats[i].Bot && _session.Seats[i].Peer == _session.MyPeer;
+            else human = _mode == Mode.Match && i < _local.Slots.Count && !_local.Slots[i].Demo;
+            if (!human) return false;
+            goal = V.Of(Bot.GoalCentre(_sim.Map, 1 - p.Team));
+            charge = Mathf.Clamp01(p.Charge.ToFloat());
+            return true;
+        }
 
         /// <summary>Draw the moment <paramref name="t"/> of the way from <paramref name="a"/> to <paramref name="b"/>.</summary>
         /// <summary>Which teams have a person on this PC (to decide who can see an invisible player).</summary>
@@ -675,7 +803,7 @@ namespace UltraPuck.Game
                 Vector2 hitAt;
                 var hit = _players[i].Show(pos, facing, pb.DashCharge.ToFloat(), Mathf.RoundToInt(full), pb.Charge.ToFloat(), pb.Hits, pb.HitPower.ToFloat(), V.Of(pb.HitDir), out hitAt);
                 if (!CardEffects(i, pb, pos))
-                    _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.25f, 0f), Name = NameOf(i), Team = pb.Team });
+                    _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.62f, 0f), Name = NameOf(i), Team = pb.Team });
                 if (hit > 0f)
                 {
                     // both players in a hit report it; one ring per contact is enough

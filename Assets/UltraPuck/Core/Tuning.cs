@@ -60,7 +60,22 @@ namespace UltraPuck.Core
         /// <summary>Checking the carrier knocks the puck loose: how fast it pops out, and how long the checker must wait to grab it.</summary>
         public Fix KnockLooseSpeed = Fix.FromInt(4), CheckerPickupDelay = Fix.Ratio(1, 4);
         /// <summary>How hard a Puck Gun shot knocks the puck.</summary>
-        public Fix GunPuckPush = Fix.FromInt(14);
+        public Fix GunPuckPush = Fix.FromInt(24);
+        /// <summary>How hard a Puck Gun shot shoves the player it hits.</summary>
+        public Fix GunKnockback = Fix.FromInt(8);
+
+        /// <summary>
+        /// Holding the puck. It sits at the front of your wedge, but it's a real object: other players' bodies, the
+        /// boards and pylons push it about. Pushed round past <see cref="CarryHoldCos"/> (the cosine of the angle from
+        /// straight ahead) or further than <see cref="CarrySlack"/> away from you, you lose it.
+        /// </summary>
+        public Fix CarryHoldCos = Fix.Ratio(3, 4), CarrySlack = Fix.Ratio(3, 10);
+        /// <summary>How fast a pushed-aside puck drifts back to the front of your wedge (share per substep).</summary>
+        public Fix CarryFollow = Fix.Ratio(1, 4);
+        /// <summary>Losing control of the puck: how fast it rolls off, and how long before you can grab it again.</summary>
+        public Fix LoseControlSpeed = Fix.FromInt(3), LoseControlDelay = Fix.Ratio(3, 10);
+        /// <summary>Stealing: an opponent whose wedge tip gets this close to the carried puck's edge takes it.</summary>
+        public Fix StealReach = Fix.Ratio(3, 20);
         public Fix StolenPickupDelay = Fix.Ratio(1, 2);
 
         // match flow
@@ -69,7 +84,7 @@ namespace UltraPuck.Core
 
         // card mechanics
         /// <summary>Puck Gun: shot speed, how long a shot flies, cooldown, stun, and the shot's size.</summary>
-        public Fix GunSpeed = Fix.FromInt(26), GunLife = Fix.Ratio(6, 5), GunCooldown = Fix.FromInt(2), GunStun = Fix.One, ShotRadius = Fix.Ratio(18, 100);
+        public Fix GunSpeed = Fix.FromInt(38), GunLife = Fix.One, GunCooldown = Fix.FromInt(2), GunStun = Fix.Ratio(5, 4), ShotRadius = Fix.Ratio(6, 25);
         /// <summary>Invisibility: how long, and the cooldown.</summary>
         public Fix InvisTime = Fix.FromInt(5), InvisCooldown = Fix.FromInt(15);
         /// <summary>Shockwave: cooldown; slow (30%, +5% per extra copy) for 2 s (+0.5 s per copy); reach in player radii; push (share of a check's).</summary>
@@ -85,6 +100,10 @@ namespace UltraPuck.Core
         // cards
         /// <summary>After every goal, the team that conceded picks a card (needs a card library).</summary>
         public bool CardsAfterGoals = true;
+        /// <summary>Team Vote: each team is offered one set of cards, everyone votes, and the whole team gets the winner (a tie is random).</summary>
+        public bool TeamVote;
+        /// <summary>Cards that may not be offered (library indexes), from the settings' card list.</summary>
+        public int[] CardsOff = new int[0];
         public int CardsOffered = 3;
         /// <summary>Seconds to choose before a card is picked at random.</summary>
         public Fix PickTime = Fix.FromInt(30);

@@ -163,6 +163,9 @@ namespace UltraPuck.Core.Net
         public GameState SavedAt(int tick)
         {
             if (tick < 0 || tick >= _tick || tick <= _tick - Ring) return null;
+            // a late input has shown an earlier guess was wrong and the replay hasn't run yet (it runs on the next
+            // Advance): states after that tick are still the old guess, so they aren't ready to compare
+            if (tick > _rewindTo) return null;
             var s = _saved[tick & (Ring - 1)];
             return s != null && s.Tick == tick ? s : null;
         }

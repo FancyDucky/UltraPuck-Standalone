@@ -121,7 +121,82 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("name_tags", value ? 1 : 0); }
         }
 
+        /// <summary>The list of everyone's cards in the lower-left corner during a match.</summary>
+        public static bool CornerCards
+        {
+            get { return PlayerPrefs.GetInt("corner_cards", 1) != 0; }
+            set { PlayerPrefs.SetInt("corner_cards", value ? 1 : 0); }
+        }
+
+        /// <summary>Check for a new version when the game starts, and install it.</summary>
+        public static bool AutoUpdate
+        {
+            get { return PlayerPrefs.GetInt("auto_update", 1) != 0; }
+            set { PlayerPrefs.SetInt("auto_update", value ? 1 : 0); }
+        }
+
+        // ------------------------------------------------------------------ match rules (online, the host's apply)
+
+        /// <summary>Rounds: after every goal the team that conceded picks a card.</summary>
+        public static bool Rounds
+        {
+            get { return PlayerPrefs.GetInt("rounds", 1) != 0; }
+            set { PlayerPrefs.SetInt("rounds", value ? 1 : 0); }
+        }
+
+        /// <summary>Picking: each player gets their own card (false), or each team votes on one card for all of them (true).</summary>
+        public static bool TeamVote
+        {
+            get { return PlayerPrefs.GetInt("team_vote", 0) != 0; }
+            set { PlayerPrefs.SetInt("team_vote", value ? 1 : 0); }
+        }
+
+        public static readonly int[] OfferCounts = { 3, 4, 5 };
+        public static int CardsOffered
+        {
+            get { var v = PlayerPrefs.GetInt("cards_offered", 3); return System.Array.IndexOf(OfferCounts, v) >= 0 ? v : 3; }
+            set { PlayerPrefs.SetInt("cards_offered", value); }
+        }
+
+        /// <summary>Seconds to pick a card (0 = no limit). Anyone who hasn't picked in time gets a random one.</summary>
+        public static readonly int[] PickTimes = { 15, 30, 60, 0 };
+        public static int PickTime
+        {
+            get { var v = PlayerPrefs.GetInt("pick_time", 30); return System.Array.IndexOf(PickTimes, v) >= 0 ? v : 30; }
+            set { PlayerPrefs.SetInt("pick_time", value); }
+        }
+
+        /// <summary>Cards that are switched off (never offered), by id.</summary>
+        public static bool CardOn(string id)
+        {
+            var off = "," + PlayerPrefs.GetString("cards_off", "") + ",";
+            return off.IndexOf("," + id + ",", System.StringComparison.Ordinal) < 0;
+        }
+
+        public static void SetCardOn(string id, bool on)
+        {
+            var list = new System.Collections.Generic.List<string>(PlayerPrefs.GetString("cards_off", "").Split(new[] { ',' }, System.StringSplitOptions.RemoveEmptyEntries));
+            list.Remove(id);
+            if (!on) list.Add(id);
+            PlayerPrefs.SetString("cards_off", string.Join(",", list.ToArray()));
+        }
+
         // ------------------------------------------------------------------ camera
+
+        /// <summary>While you charge a shot, the camera pulls back until the goal you're attacking is in view.</summary>
+        public static bool ChargeZoom
+        {
+            get { return PlayerPrefs.GetInt("charge_zoom", 1) != 0; }
+            set { PlayerPrefs.SetInt("charge_zoom", value ? 1 : 0); }
+        }
+
+        /// <summary>How far Charge Zoom may pull back, in % of the normal view (0 = no limit).</summary>
+        public static readonly int[] ChargeZoomCaps = { 150, 200, 250, 300, 0 };
+        public static int ChargeZoomMax
+        {
+            get { var v = PlayerPrefs.GetInt("charge_zoom_max", 250); return System.Array.IndexOf(ChargeZoomCaps, v) >= 0 ? v : 250; }
+            set { PlayerPrefs.SetInt("charge_zoom_max", value); }
+        }
 
         /// <summary>The camera follows the action and zooms (on), or always shows the whole rink (off).</summary>
         public static bool FollowCamera

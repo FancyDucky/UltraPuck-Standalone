@@ -196,6 +196,20 @@ namespace UltraPuck.Game
             return false;
         }
 
+        /// <summary>LB / RB or Q / E on any controller or the keyboard: -1, +1, or 0.</summary>
+        public int TabPressed()
+        {
+            if (Blocked) return 0;
+            foreach (var g in Gamepad.all)
+            {
+                if (g.leftShoulder.wasPressedThisFrame) return -1;
+                if (g.rightShoulder.wasPressedThisFrame) return 1;
+            }
+            var kb = Keyboard.current;
+            if (kb == null) return 0;
+            return kb.qKey.wasPressedThisFrame ? -1 : kb.eKey.wasPressedThisFrame ? 1 : 0;
+        }
+
         /// <summary>Lobby: View (Select) / Tab on any controller or the keyboard opens the settings.</summary>
         public bool SettingsPressed()
         {
@@ -214,6 +228,8 @@ namespace UltraPuck.Game
 
         /// <summary>While picking cards: the pick a local player has confirmed on the card screen (1-based), or 0.</summary>
         public System.Func<int, byte> PickFor;
+        /// <summary>While picking cards: the card a local player is looking at (1-based), or 0.</summary>
+        public System.Func<int, byte> HoverFor;
 
         public int BotCount { get { var n = 0; foreach (var s in Slots) if (s.Demo) n++; return n; } }
         public int HumanCount { get { return Slots.Count - BotCount; } }
@@ -368,6 +384,7 @@ namespace UltraPuck.Game
                     AimY = PlayerInput.Axis(a.y),
                     Buttons = (byte)(Buttons(s.Device, false) | s.Latched),
                     Pick = state != null && state.Phase == Phase.Picking && PickFor != null ? PickFor(i) : (byte)0,
+                    Hover = state != null && state.Phase == Phase.Picking && HoverFor != null ? HoverFor(i) : (byte)0,
                 };
                 s.Latched = 0;
             }

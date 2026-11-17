@@ -43,10 +43,19 @@ namespace UltraPuck.Core.Net
             return this;
         }
 
+        /// <summary>Up to 255 raw bytes, with their length first.</summary>
+        public Writer Bytes(byte[] bytes)
+        {
+            var n = bytes == null ? 0 : Math.Min(bytes.Length, 255);
+            _b.Add((byte)n);
+            for (var k = 0; k < n; k++) _b.Add(bytes[k]);
+            return this;
+        }
+
         public Writer Input(PlayerInput i)
         {
             _b.Add((byte)i.MoveX); _b.Add((byte)i.MoveY); _b.Add((byte)i.AimX); _b.Add((byte)i.AimY);
-            _b.Add(i.Buttons); _b.Add(i.Pick);
+            _b.Add(i.Buttons); _b.Add(i.Pick); _b.Add(i.Hover);
             return this;
         }
 
@@ -69,6 +78,7 @@ namespace UltraPuck.Core.Net
 
         public int U8() { Need(1); return _b[_i++]; }
         public sbyte S8() { Need(1); return (sbyte)_b[_i++]; }
+        public byte[] Bytes() { var n = U8(); Need(n); var b = new byte[n]; Array.Copy(_b, _i, b, 0, n); _i += n; return b; }
         public int I32() { Need(4); var v = _b[_i] | (_b[_i + 1] << 8) | (_b[_i + 2] << 16) | (_b[_i + 3] << 24); _i += 4; return v; }
         public uint U32() { return (uint)I32(); }
         public ulong U64() { Need(8); ulong v = 0; for (var k = 0; k < 8; k++) v |= (ulong)_b[_i + k] << (8 * k); _i += 8; return v; }
@@ -85,13 +95,13 @@ namespace UltraPuck.Core.Net
 
         public PlayerInput Input()
         {
-            Need(6);
+            Need(7);
             var i = new PlayerInput
             {
                 MoveX = (sbyte)_b[_i], MoveY = (sbyte)_b[_i + 1], AimX = (sbyte)_b[_i + 2], AimY = (sbyte)_b[_i + 3],
-                Buttons = _b[_i + 4], Pick = _b[_i + 5],
+                Buttons = _b[_i + 4], Pick = _b[_i + 5], Hover = _b[_i + 6],
             };
-            _i += 6;
+            _i += 7;
             return i;
         }
     }

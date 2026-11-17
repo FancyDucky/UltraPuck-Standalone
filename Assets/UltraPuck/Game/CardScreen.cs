@@ -46,6 +46,17 @@ namespace UltraPuck.Game
         /// <summary>The pick a local player confirmed (1-based) for the game to read, or 0 while they're still choosing.</summary>
         public byte PickFor(int player) { byte b; return _ready.TryGetValue(player, out b) ? b : (byte)0; }
 
+        /// <summary>The card a local player is looking at right now (1-based), sent along so the other team can watch.</summary>
+        public byte HoverFor(int player) { return _stage == Stage.Choosing && !_watching && _slot == player ? (byte)(_focus + 1) : (byte)0; }
+
+        /// <summary>A player's name for the header (set by GameRunner).</summary>
+        public System.Func<int, string> NameOf;
+
+        // watching someone else choose (the other team, or a bot): their offer, their highlight, then their pick
+        private bool _watching;
+        private int[] _watchOffer = new int[0];
+        private readonly HashSet<int> _watched = new HashSet<int>();
+
         /// <summary>
         /// Which local controller slot plays match player <c>p</c> (-1: not on this PC). The same number in a local
         /// game; online, the game sets this from the seats.
@@ -87,7 +98,12 @@ namespace UltraPuck.Game
         {
             _state = s;
             var picking = s != null && s.Phase == Phase.Picking && Sim != null && Sim.Cards != null;
-            if (!picking) { _ready.Clear(); if (_stage == Stage.Choosing) Leave(-1); }
+            if (!picking)
+            {
+                _ready.Clear();
+                _watched.Clear();
+                if (_stage == Stage.Choosing) Leave(_watching ? WatchedPick(s) : -1);
+            }
             else
             {
                 // forget confirmed picks once the game has taken them
@@ -97,7 +113,12 @@ namespace UltraPuck.Game
                 if (_stage == Stage.Idle)
                 {
                     var next = NextPicker(s);
-                    if (next >= 0) Deal(next, s.Players[next].Offer);
+                    if (next >= 0) { _watching = false; Deal(next, s.Players[next].Offer); }
+                    else
+                    {
+                        var w = NextWatched(s);
+                        if (w >= 0) { _watching = true; _watchOffer = (int[])s.Players[w].Offer.Clone(); _watched.Add(w); Deal(w, _watchOffer); }
+                    }
                 }
             }
 
@@ -111,7 +132,8 @@ namespace UltraPuck.Game
             Motes();
             if (_stage == Stage.Leaving && Time.unscaledTime - _stageAt > 0.85f)
             {
-                if (_chosen >= 0 && _slot >= 0) _ready[_slot] = (byte)(_chosen + 1);
+                if (_chosen >= 0 && _slot >= 0 && !_watching) _ready[_slot] = (byte)(_chosen + 1);
+                _watching = false;
                 foreach (var c in _cards) { Destroy(c.Root.gameObject); Destroy(c.Shadow.gameObject); }
                 foreach (var m in _motes) if (m.Go != null) Destroy(m.Go);
                 _motes.Clear();
@@ -132,6 +154,43 @@ namespace UltraPuck.Game
                 if (p.Offer.Length > 0 && p.Picked < 0) return i;
             }
             return -1;
+        }
+
+        /// <summary>Someone else still choosing (not a person on this PC) whom we haven't watched yet this time.</summary>
+        private int NextWatched(GameState s)
+        {
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                if (_watched.Contains(i)) continue;
+                var slot = SlotOf(i);
+                if (slot >= 0 && slot < Local.Slots.Count && !Local.Slots[slot].Demo) continue; // on this PC: they pick themselves
+                var p = s.Players[i];
+                if (p.Offer.Length > 0 && p.Picked < 0) return i;
+            }
+            return -1;
+        }
+
+        /// <summary>Which of the watched offer was taken (from the pick, or the card they ended up with), or -1.</summary>
+        private int WatchedPick(GameState s)
+        {
+            if (s == null || _slot < 0 || _slot >= s.Players.Length) return -1;
+            var p = s.Players[_slot];
+            var card = p.Picked >= 0 ? p.Picked : p.Offer.Length == 0 && p.Cards.Length > 0 ? p.Cards[p.Cards.Length - 1] : -1;
+            return card < 0 ? -1 : System.Array.IndexOf(_watchOffer, card);
+        }
+
+        /// <summary>Watching: follow their highlight, and show their pick once they've made it.</summary>
+        private void Watch()
+        {
+            if (_state == null || _slot < 0 || _slot >= _state.Players.Length) return;
+            var p = _state.Players[_slot];
+            var since = Time.unscaledTime - _stageAt;
+            if (p.Hover >= 1 && p.Hover <= _cards.Count && since > 0.5f) SetFocus(p.Hover - 1);
+            if (since > 1.1f)
+            {
+                var pick = WatchedPick(_state);
+                if (pick >= 0) { SetFocus(pick); Leave(pick); }
+            }
         }
 
         // ------------------------------------------------------------------ dealing, choosing, leaving
@@ -161,6 +220,7 @@ namespace UltraPuck.Game
         private void Choose()
         {
             if (_cards.Count == 0) return;
+            if (_watching) { Watch(); return; }
             var m = Local.MenuFor(Slot);
             if (TestMode)
             {
@@ -392,17 +452,22 @@ namespace UltraPuck.Game
             var appear = Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.4f);
             var a = _stage == Stage.Leaving ? 1f - Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.3f) : appear;
             var y = 34f + (1f - appear) * -20f;
-            var who = "P" + (Slot + 1) + "  ·  " + Palette.TeamName(team);
+            var name = NameOf != null ? NameOf(_slot) : "";
+            if (string.IsNullOrEmpty(name)) name = "P" + (_slot + 1);
+            var who = name + "  ·  " + Palette.TeamName(team);
             Ui.Swatch(new Rect(Ui.W / 2f - 150f, y + 6f, 26f, 26f), team);
             Ui.Label(new Rect(Ui.W / 2f - 115f, y, 400f, 40f), who, Ui.Font(22, true), new Color(1f, 1f, 1f, a));
-            Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), "Choose a card", Ui.Font(40, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+            Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? (_stage == Stage.Leaving && _chosen >= 0 ? name + " took a card" : name + " is choosing...") : "Choose a card",
+                Ui.Font(40, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
 
             // time left
-            var left = Mathf.Clamp01(_state.PhaseTime.ToFloat() / Mathf.Max(0.01f, Sim.T.PickTime.ToFloat()));
+            var noLimit = Sim.T.PickTime <= Fix.Zero;
+            var left = noLimit ? 1f : Mathf.Clamp01(_state.PhaseTime.ToFloat() / Mathf.Max(0.01f, Sim.T.PickTime.ToFloat()));
             var bar = new Rect(Ui.W / 2f - 160f, y + 98f, 320f, 6f);
             Ui.Box(bar, new Color(1f, 1f, 1f, 0.12f * a), 3f);
             Ui.Box(new Rect(bar.x, bar.y, bar.width * left, bar.height), new Color(1f, 1f, 1f, (left < 0.2f ? 0.9f : 0.6f) * a), 3f);
 
+            if (_watching) { Ui.Label(new Rect(0f, Ui.H - 46f, Ui.W, 30f), "Watching the other team pick", Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a)); return; }
             var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
             var hint = device is UnityEngine.InputSystem.Keyboard ? "{look} Look      {join} Take it  (or click)" : "{side} Look      {aim} Tilt      {confirm} Take it";
             Glyphs.Hint(new Rect(0f, Ui.H - 46f, Ui.W, 30f), hint, 17, new Color(1f, 1f, 1f, 0.6f * a), TextAnchor.MiddleCenter, device);

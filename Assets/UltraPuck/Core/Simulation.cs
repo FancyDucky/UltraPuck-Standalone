@@ -38,12 +38,17 @@ namespace UltraPuck.Core
         {
             if (Cards == null || Cards.Cards.Count == 0) return;
             var any = false;
+            var teamOffer = new int[2][];
             foreach (var i in pickers)
             {
                 if (i < 0 || i >= s.Players.Length) continue;
                 var p = s.Players[i];
-                p.Offer = Cards.DrawOffer(s, i, T.CardsOffered);
+                // Team Vote: the first picker on a team draws the offer, and the rest of the team sees the same cards
+                if (T.TeamVote && teamOffer[p.Team & 1] != null) p.Offer = (int[])teamOffer[p.Team & 1].Clone();
+                else p.Offer = Cards.DrawOffer(s, i, Math.Max(1, Math.Min(5, T.CardsOffered)), T.CardsOff);
+                if (T.TeamVote && teamOffer[p.Team & 1] == null) teamOffer[p.Team & 1] = p.Offer;
                 p.Picked = -1;
+                p.Hover = 0;
                 any |= p.Offer.Length > 0;
             }
             if (!any) return;
@@ -69,11 +74,15 @@ namespace UltraPuck.Core
                 var input = InputOf(inputs, i);
                 p.PrevButtons = input.Buttons;
                 if (p.Offer.Length == 0 || p.Picked >= 0) continue;
+                p.Hover = input.Hover <= p.Offer.Length ? input.Hover : (byte)0;
                 if (input.Pick >= 1 && input.Pick <= p.Offer.Length) p.Picked = p.Offer[input.Pick - 1];
                 else waiting = true;
             }
             s.PhaseTime -= dt;
-            if (waiting && s.PhaseTime > Fix.Zero) return;
+            if (waiting && (T.PickTime <= Fix.Zero || s.PhaseTime > Fix.Zero)) return; // a pick time of 0: no limit
+
+            // Team Vote: each team's most-voted card (a tie, or nobody voting, is settled at random) goes to everyone on it
+            if (T.TeamVote) for (var team = 0; team < 2; team++) TeamVoteResult(s, team);
 
             // everyone chose (or time's up: a random card for anyone who didn't)
             foreach (var p in s.Players)
@@ -86,11 +95,28 @@ namespace UltraPuck.Core
                 p.Cards = cards;
                 p.Offer = new int[0];
                 p.Picked = -1;
+                p.Hover = 0;
             }
             Cards.Recompute(s);
             PlacePylons(s);
             if (T.FreePlay) s.Phase = Phase.Play; // free play: carry on where everyone stands
             else FaceOff(s);
+        }
+
+        private static void TeamVoteResult(GameState s, int team)
+        {
+            int[] offer = null;
+            foreach (var p in s.Players) if (p.Team == team && p.Offer.Length > 0) { offer = p.Offer; break; }
+            if (offer == null) return;
+            var votes = new int[offer.Length];
+            foreach (var p in s.Players)
+                if (p.Team == team && p.Offer.Length > 0 && p.Picked >= 0) { var k = Array.IndexOf(offer, p.Picked); if (k >= 0) votes[k]++; }
+            var most = 0;
+            foreach (var v in votes) most = Math.Max(most, v);
+            var tied = new System.Collections.Generic.List<int>();
+            for (var k = 0; k < offer.Length; k++) if (votes[k] == most) tied.Add(k);
+            var won = offer[tied[(int)(s.NextRandom() % (uint)tied.Count)]];
+            foreach (var p in s.Players) if (p.Team == team && p.Offer.Length > 0) p.Picked = won;
         }
 
         /// <summary>
@@ -390,7 +416,9 @@ namespace UltraPuck.Core
             var quick = T.ShotSpeed * p.Stats.QuickShotPower;
             var speed = (released ? charged : Fix.Max(quick, p.Charge > Fix.Zero ? charged : Fix.Zero)) * p.Stats.ShotPower;
             s.Carrier = -1;
-            s.PuckPos = CarrySpot(p);
+            // from where the puck is (it may have been pushed aside), unless it isn't actually at the wedge yet
+            var reach = RadiusOf(p) + T.PuckRadius + T.CarrySlack;
+            if ((s.PuckPos - p.Pos).SqrLength > reach * reach || !PuckFits(p.Pos, s.PuckPos)) s.PuckPos = CarrySpot(p);
             s.PuckVel = p.Facing * speed + p.Vel * Fix.Half;
             s.PuckTeam = p.Team;
             s.PassFrom = i; // a pass, if a teammate gets it before an opponent touches it
@@ -433,8 +461,9 @@ namespace UltraPuck.Core
             if (s.Carrier >= 0)
             {
                 var c = s.Players[s.Carrier];
-                s.PuckPos = CarrySpot(c);
-                s.PuckVel = c.Vel;
+                if (!Carry(s, sub)) return; // lost control of it
+                if (s.Phase == Phase.Play && Steal(s)) return;
+                c = s.Players[s.Carrier];
                 // an opponent checking straight into the carried puck knocks it loose
                 for (var j = 0; j < s.Players.Length; j++)
                 {
@@ -518,6 +547,121 @@ namespace UltraPuck.Core
                 CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
                 KeepPuckIn(s, pushedFrom);
             }
+        }
+
+        /// <summary>
+        /// Where the carried puck goes this substep. Out in the open it sits at the front of the wedge. When something
+        /// is in the way (the boards, a pylon, another player's body) it gets pushed about: into the boards it slides
+        /// off to the side rather than into you, and once it's pushed far enough round (or away) you lose it.
+        /// Returns false if the carrier lost control.
+        /// </summary>
+        private bool Carry(GameState s, Fix sub)
+        {
+            var ci = s.Carrier;
+            var c = s.Players[ci];
+            var reach = RadiusOf(c) + T.PuckRadius + Fix.Ratio(1, 50);
+            var spot = c.Pos + c.Facing * reach;
+            FixVec2 pos;
+            if (!CarryBlocked(s, ci, spot)) pos = spot;
+            else
+            {
+                // blocked: carry on from where it was, drifting back towards the front, kept at the wedge's edge
+                pos = s.PuckPos + (spot - s.PuckPos) * T.CarryFollow;
+                var off = pos - c.Pos;
+                pos = off.SqrLength.Raw > 0 ? c.Pos + off.Normalized * reach : spot;
+                var side = Fix.Zero;
+                for (var iter = 0; iter < 3; iter++)
+                {
+                    var before = pos;
+                    // other players' bodies push it
+                    for (var j = 0; j < s.Players.Length; j++)
+                    {
+                        if (j == ci) continue;
+                        var q = s.Players[j];
+                        var min = RadiusOf(q) + T.PuckRadius;
+                        var d = pos - q.Pos;
+                        if (d.SqrLength >= min * min) continue;
+                        var dist = d.Length;
+                        pos = q.Pos + (dist.Raw > 0 ? d / dist : c.Facing) * min;
+                    }
+                    var v = FixVec2.Zero;
+                    CollideWalls(ref pos, ref v, T.PuckRadius, Fix.Zero);
+                    CollidePylons(s, ref pos, ref v, T.PuckRadius, Fix.Zero);
+                    // squeezed back into the carrier: slide it round the wedge, to whichever side it's already on
+                    var o = pos - c.Pos;
+                    var od = o.Length;
+                    if (od < reach - Fix.Ratio(1, 100))
+                    {
+                        var dir = od.Raw > 0 ? o / od : c.Facing;
+                        if (side == Fix.Zero)
+                        {
+                            var cross = FixVec2.Cross(c.Facing, dir);
+                            side = cross > Fix.Zero ? Fix.One : cross < Fix.Zero ? -Fix.One : ((s.NextRandom() & 1) == 0 ? Fix.One : -Fix.One);
+                        }
+                        var tangent = new FixVec2(-dir.Y, dir.X) * side;
+                        var slid = dir * reach + tangent * (reach - od + Fix.Ratio(1, 50));
+                        pos = c.Pos + slid.Normalized * reach;
+                    }
+                    if (pos == before) break;
+                }
+            }
+
+            // still in control? Not if it's been pushed too far round the wedge or away from it
+            var away = pos - c.Pos;
+            var len = away.Length;
+            var lost = len > reach + T.CarrySlack || (len.Raw > 0 && FixVec2.Dot(away / len, c.Facing) < T.CarryHoldCos);
+            s.PuckPos = pos;
+            s.PuckVel = c.Vel;
+            if (!lost) return true;
+            s.Carrier = -1;
+            s.PassFrom = -1;
+            s.PuckVel = c.Vel * Fix.Half + (len.Raw > 0 ? away / len : c.Facing) * T.LoseControlSpeed;
+            c.NoPickup = Fix.Max(c.NoPickup, T.LoseControlDelay);
+            c.Charge = Fix.Zero;
+            return false;
+        }
+
+        /// <summary>Would a carried puck at <paramref name="at"/> touch the boards, a pylon or another player (or be the other side of a wall)?</summary>
+        private bool CarryBlocked(GameState s, int carrier, FixVec2 at)
+        {
+            if (!PuckFits(s.Players[carrier].Pos, at)) return true;
+            foreach (var py in s.Pylons)
+            {
+                var r = T.PylonRadius + T.PuckRadius;
+                if ((at - py.Pos).SqrLength < r * r) return true;
+            }
+            for (var j = 0; j < s.Players.Length; j++)
+            {
+                if (j == carrier) continue;
+                var r = RadiusOf(s.Players[j]) + T.PuckRadius;
+                if ((at - s.Players[j].Pos).SqrLength < r * r) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// An opponent who gets the tip of their wedge onto the carried puck takes it (no bump needed). Of several,
+        /// the closest; an exact tie is a coin toss. Returns true if the puck changed hands.
+        /// </summary>
+        private bool Steal(GameState s)
+        {
+            var c = s.Players[s.Carrier];
+            int best = -1, ties = 0;
+            var bestD = Fix.Zero;
+            for (var j = 0; j < s.Players.Length; j++)
+            {
+                var q = s.Players[j];
+                if (j == s.Carrier || q.Team == c.Team || q.NoPickup > Fix.Zero || q.Stun > Fix.Zero) continue;
+                var tip = q.Pos + q.Facing * RadiusOf(q);
+                var r = T.PuckRadius + T.StealReach;
+                var d2 = (s.PuckPos - tip).SqrLength;
+                if (d2 >= r * r) continue;
+                if (best < 0 || d2 < bestD) { best = j; bestD = d2; ties = 1; }
+                else if (d2 == bestD && s.NextRandom() % (uint)(++ties) == 0) best = j;
+            }
+            if (best < 0) return false;
+            TakePuck(s, best);
+            return true;
         }
 
         /// <summary>
@@ -704,7 +848,7 @@ namespace UltraPuck.Core
                         var r = RadiusOf(q) + T.ShotRadius;
                         if ((sh.Pos - q.Pos).SqrLength >= r * r) continue;
                         q.Stun = Fix.Max(q.Stun, T.GunStun);
-                        q.Vel = q.Vel * Fix.Ratio(3, 10) + sh.Vel.Normalized * Fix.FromInt(3);
+                        q.Vel = q.Vel * Fix.Ratio(3, 10) + sh.Vel.Normalized * T.GunKnockback;
                         Hit(q, (sh.Pos - q.Pos).Normalized, Fix.Ratio(4, 5));
                         if (s.Carrier == j)
                         {

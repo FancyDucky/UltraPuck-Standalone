@@ -188,7 +188,7 @@ namespace UltraPuck.Core
         }
 
         /// <summary>Up to <paramref name="count"/> different cards player <paramref name="i"/> may still take, picked at random by rarity.</summary>
-        public int[] DrawOffer(GameState s, int i, int count)
+        public int[] DrawOffer(GameState s, int i, int count, int[] off = null)
         {
             var p = s.Players[i];
             var pool = new List<int>();
@@ -196,6 +196,7 @@ namespace UltraPuck.Core
             foreach (var q in s.Players) if (q.Team == p.Team) teamSize++;
             foreach (var c in Cards)
             {
+                if (off != null && Array.IndexOf(off, c.Index) >= 0) continue;
                 if (c.MinTeam > 0 && teamSize < c.MinTeam) continue;
                 if (c.Requires != null && !TeamHas(s, p.Team, c.Requires)) continue;
                 if (c.MaxPerPlayer > 0)

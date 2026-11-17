@@ -32,6 +32,7 @@ namespace UltraPuck.Game
             public string Label, Detail;
             public Action Press;
             public Action<int> Step;
+            public Func<string> Value;            // a choice's current value, shown as  ‹ value ›
             public Func<bool> Enabled = () => true;
             public bool TextField;
         }
@@ -92,7 +93,8 @@ namespace UltraPuck.Game
                     if (s.IsHost)
                     {
                         _rows.Add(new Row { Label = "Start match", Press = () => Runner.StartOnlineMatch(), Enabled = () => Session != null && Session.Seats.Count >= 2 });
-                        _rows.Add(new Row { Label = "Bots", Detail = null, Step = d => s.Bots = Mathf.Clamp(s.Bots + d, 0, NetSession.MaxPlayers), Press = () => s.Bots = s.Bots >= NetSession.MaxPlayers - 1 ? 0 : s.Bots + 1 });
+                        _rows.Add(new Row { Label = "Bots", Detail = null, Value = () => s.Bots.ToString(), Step = d => s.Bots = Mathf.Clamp(s.Bots + d, 0, NetSession.MaxPlayers), Press = () => s.Bots = s.Bots >= NetSession.MaxPlayers - 1 ? 0 : s.Bots + 1 });
+                        if (Runner.MapCount > 1) _rows.Add(new Row { Label = "Rink", Value = () => Runner.MapName(Runner.MapIndex), Step = d => Runner.StepMap(d), Press = () => Runner.StepMap(1) });
                         if (SteamNet.InLobby) _rows.Add(new Row { Label = "Invite Steam friends", Press = () => { _friends = SteamNet.OnlineFriends(); _friendsAt = Time.unscaledTime; Show(Page.Friends); } });
                     }
                     _rows.Add(new Row { Label = "Leave", Press = () => Runner.LeaveOnline(null) });
@@ -195,7 +197,6 @@ namespace UltraPuck.Game
             if (_rows.Count > 0)
             {
                 Ui.Box(new Rect(x, _focusY, w, rowH), new Color(1f, 1f, 1f, 0.12f), 12f);
-                Ui.Box(new Rect(x, _focusY + 14f, 5f, rowH - 28f), Color.white, 2.5f);
             }
 
             for (var i = 0; i < _rows.Count; i++)
@@ -209,7 +210,7 @@ namespace UltraPuck.Game
                 col.a *= appear;
                 if (row.TextField) { AddressField(r, i == _focus); continue; }
                 var label = row.Label;
-                if (row.Step != null && Session != null) label += ":   ‹  " + Session.Bots + "  ›";
+                if (row.Value != null) label += ":   ‹  " + row.Value() + "  ›";
                 Ui.Label(new Rect(r.x + 26f, r.y + (row.Detail != null ? 6f : 0f), r.width - 40f, row.Detail != null ? 36f : r.height), label, Ui.Font(26, i == _focus), col);
                 if (row.Detail != null) Ui.Label(new Rect(r.x + 27f, r.y + 36f, r.width - 40f, 22f), row.Detail, Ui.Font(14), new Color(1f, 1f, 1f, 0.5f * appear));
                 if (on && Ui.Clicked && r.Contains(mouse) && Event.current.type == EventType.Repaint)
@@ -286,6 +287,7 @@ namespace UltraPuck.Game
                         if (ips.Count > 0) s += ". Others join " + string.Join(" or ", ips.ToArray());
                     }
                     if (Session.Connected > 0) s += ".   Ping " + Mathf.RoundToInt(Session.Ping * 1000f) + " ms";
+                    if (Runner.MapCount > 1) s += ".   Rink: " + Runner.MapName(Session.Map);
                     return s;
                 default: return "";
             }

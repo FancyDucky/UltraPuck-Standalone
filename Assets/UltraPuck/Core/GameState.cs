@@ -24,6 +24,8 @@ namespace UltraPuck.Core
         public byte Buttons;
         /// <summary>While picking a card: 1, 2, 3... = take that card from your offer; 0 = still choosing.</summary>
         public byte Pick;
+        /// <summary>While picking: the card you're looking at (1, 2, 3...; 0 = none), so the other team can watch you choose.</summary>
+        public byte Hover;
 
         public bool Has(byte b) { return (Buttons & b) != 0; }
 
@@ -44,7 +46,7 @@ namespace UltraPuck.Core
             return (sbyte)Math.Round(v * 127f);
         }
 
-        public bool Equals(PlayerInput o) { return MoveX == o.MoveX && MoveY == o.MoveY && AimX == o.AimX && AimY == o.AimY && Buttons == o.Buttons && Pick == o.Pick; }
+        public bool Equals(PlayerInput o) { return MoveX == o.MoveX && MoveY == o.MoveY && AimX == o.AimX && AimY == o.AimY && Buttons == o.Buttons && Pick == o.Pick && Hover == o.Hover; }
         public override bool Equals(object obj) { return obj is PlayerInput && Equals((PlayerInput)obj); }
         public override int GetHashCode() { return ((byte)MoveX | ((byte)MoveY << 8) | ((byte)AimX << 16) | ((byte)AimY << 24)) ^ (Buttons * 31 + Pick * 7919); }
     }
@@ -146,6 +148,8 @@ namespace UltraPuck.Core
         public int[] Offer = new int[0];
         /// <summary>While picking: the card chosen, or -1.</summary>
         public int Picked = -1;
+        /// <summary>While picking: the offered card this player is looking at (1-based, 0 = none). Only for showing.</summary>
+        public byte Hover;
 
         // card effects (seconds left, 0 = ready / not active)
         public Fix GunCooldown, InvisCooldown, InvisibleTime, ShockCooldown;

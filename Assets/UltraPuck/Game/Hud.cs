@@ -22,6 +22,10 @@ namespace UltraPuck.Game
         public struct Tag { public Vector3 World; public string Name; public int Team; }
         public readonly System.Collections.Generic.List<Tag> Tags = new System.Collections.Generic.List<Tag>();
         public Camera Cam;
+        /// <summary>The local lobby: the rink being played on (null when there's only one).</summary>
+        public string MapName;
+        /// <summary>A player's name (for the corner card list).</summary>
+        public System.Func<int, string> PlayerName;
 
         /// <param name="covered">A menu or the card screen is up: keep the score and messages out of the way.</param>
         public void Show(bool lobby, bool free, LocalPlayers local, GameState state, Simulation sim, string error, bool covered)
@@ -41,6 +45,7 @@ namespace UltraPuck.Game
             if (_lobby) { if (!_covered) Lobby(w, h); return; }
             if (_state == null || _covered) return;
             NameTags();
+            CornerCards(h);
 
             // score: team name, symbol and colour, so it reads without relying on colour
             var score = Palette.TeamName(0) + "    " + _state.Score[0] + "   :   " + _state.Score[1] + "    " + Palette.TeamName(1);
@@ -89,7 +94,7 @@ namespace UltraPuck.Game
             Glyphs.Hint(new Rect(0, 134, w, 28), "{side} Pick a side      Hold {leave} Leave", 18, Ui.TextDim);
             if (_local.Slots.Count > 0) Glyphs.Hint(new Rect(0, 162, w, 28), "{start} Play a match  (first to " + (_sim != null && _sim.T.GoalsToWin > 0 ? _sim.T.GoalsToWin : 5) + ", cards after every goal)", 18, Ui.Text);
             else Ui.Label(new Rect(0, 162, w, 28), "Waiting for players...", small, Ui.Text);
-            Glyphs.Hint(new Rect(0, 190, w, 28), "{freeplay} Free play      {settings} Settings", 18, Ui.Text);
+            Glyphs.Hint(new Rect(0, 190, w, 28), "{freeplay} Free play      {settings} Settings" + (MapName != null ? "      {tabs} Rink: " + MapName : ""), 18, Ui.Text);
             LeavingBar(new Rect(w / 2 - 150, 252, 300, 26), _local.NobodyLeaving, "Back to the main menu");
 
             var y = h - 104 - _local.Slots.Count * 36;
@@ -129,22 +134,51 @@ namespace UltraPuck.Game
             Ui.Label(r, what + "...", Ui.Font(14, true, TextAnchor.MiddleCenter), Color.white);
         }
 
+        /// <summary>Everyone's cards, small, in the lower-left corner (Settings > Gameplay, or View / Tab in a match).</summary>
+        private void CornerCards(float h)
+        {
+            if (!Settings.CornerCards || _sim == null || _sim.Cards == null) return;
+            var lines = new System.Collections.Generic.List<int>();
+            for (var i = 0; i < _state.Players.Length; i++) if (_state.Players[i].Cards.Length > 0) lines.Add(i);
+            if (lines.Count == 0) return;
+            var style = Ui.Font(13);
+            var y = h - 46f - lines.Count * 20f;
+            foreach (var i in lines)
+            {
+                var p = _state.Players[i];
+                var names = new System.Text.StringBuilder();
+                // the same card more than once: "Speed Up x2"
+                var seen = new System.Collections.Generic.List<int>();
+                foreach (var c in p.Cards)
+                {
+                    if (seen.Contains(c)) continue;
+                    seen.Add(c);
+                    var n = 0;
+                    foreach (var d in p.Cards) if (d == c) n++;
+                    if (names.Length > 0) names.Append(",  ");
+                    names.Append(_sim.Cards.Cards[c].Name);
+                    if (n > 1) names.Append(" x" + n);
+                }
+                var who = PlayerName != null ? PlayerName(i) : "P" + (i + 1);
+                Ui.Swatch(new Rect(14f, y + 3f, 14f, 14f), p.Team);
+                Ui.Label(new Rect(34f, y, 900f, 20f), "<b>" + who + "</b>   " + names, style, new Color(1f, 1f, 1f, 0.75f));
+                y += 20f;
+            }
+        }
+
         /// <summary>Names over the players, so it's easy to tell who is who.</summary>
         private void NameTags()
         {
             if (!Settings.NameTags || Cam == null || Event.current.type != EventType.Repaint) return;
             var k = Screen.height / 720f * Settings.UiScale;
-            var style = Ui.Font(14, true, TextAnchor.MiddleCenter);
+            // small, plain text just above the check and cooldown bars (no box: it shouldn't cover anything)
+            var style = Ui.Font(12, true, TextAnchor.LowerCenter);
             foreach (var t in Tags)
             {
                 if (string.IsNullOrEmpty(t.Name)) continue;
                 var sp = Cam.WorldToScreenPoint(t.World);
                 var p = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
-                var tw = style.CalcSize(new GUIContent(t.Name)).x + 16f;
-                var r = new Rect(p.x - tw / 2f, p.y - 22f, tw, 20f);
-                Ui.Box(r, new Color(0f, 0f, 0f, 0.5f), 10f);
-                Ui.Box(new Rect(r.x + 6f, r.yMax - 3f, r.width - 12f, 2f), Palette.Team(t.Team), 1f);
-                Ui.Label(r, t.Name, style, Color.white);
+                Ui.Label(new Rect(p.x - 100f, p.y - 18f, 200f, 18f), t.Name, style, new Color(1f, 1f, 1f, 0.85f));
             }
         }
     }

@@ -39,6 +39,37 @@ namespace UltraPuck.Tests
             _lib.Recompute(s);
         }
 
+        /// <summary>Team Vote: one offer per team, and everyone on the team gets the card most of them voted for.</summary>
+        [Test]
+        public void TeamVoteGivesTheWholeTeamTheWinningCard()
+        {
+            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3 }, _lib);
+            var s = sim.NewGame(new[] { 0, 0, 0, 1 }, 7u);
+            sim.StartPicking(s, new[] { 0, 1, 2 });
+            CollectionAssert.AreEqual(s.Players[0].Offer, s.Players[1].Offer, "the same offer for the whole team");
+            CollectionAssert.AreEqual(s.Players[0].Offer, s.Players[2].Offer);
+            // two vote for the second card, one for the first
+            sim.Step(s, new[] { new PlayerInput { Pick = 2 }, new PlayerInput { Pick = 2 }, new PlayerInput { Pick = 1 }, default(PlayerInput) });
+            var won = s.Players[0].Cards[s.Players[0].Cards.Length - 1];
+            for (var i = 0; i < 3; i++) Assert.AreEqual(won, s.Players[i].Cards[s.Players[i].Cards.Length - 1], "player " + i + " got the team's card");
+            Assert.AreEqual(0, s.Players[3].Cards.Length, "the other team didn't pick");
+        }
+
+        /// <summary>Switched-off cards are never offered.</summary>
+        [Test]
+        public void SwitchedOffCardsAreNeverOffered()
+        {
+            var off = new System.Collections.Generic.List<int>();
+            foreach (var c in _lib.Cards) if (c.Index % 2 == 0) off.Add(c.Index);
+            var sim = new Simulation(Rink(), new Tuning { CardsOff = off.ToArray() }, _lib);
+            for (uint seed = 1; seed < 40; seed++)
+            {
+                var s = sim.NewGame(new[] { 0, 1 }, seed);
+                sim.StartPicking(s, new[] { 0 });
+                foreach (var c in s.Players[0].Offer) Assert.IsFalse(off.Contains(c), "card " + c + " is switched off");
+            }
+        }
+
         private static void Play(GameState s) { s.Phase = Phase.Play; s.PhaseTime = Fix.Zero; }
         private static FixVec2 At(double x, double y) { return new FixVec2(Fix.FromDecimal((decimal)x), Fix.FromDecimal((decimal)y)); }
         private static PlayerInput Press(byte b) { return new PlayerInput { Buttons = b }; }

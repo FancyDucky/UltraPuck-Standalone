@@ -238,7 +238,7 @@ namespace UltraPuck.Tests
         }
 
         [Test]
-        public void CheckingIntoTheCarriedPuckKnocksItLoose()
+        public void ReachingTheCarriedPuckWithYourWedgeStealsIt()
         {
             var sim = new Simulation(LoadRink());
             var s = sim.NewGame(new[] { 0, 1 });
@@ -250,7 +250,51 @@ namespace UltraPuck.Tests
             s.Players[0].Facing = FixVec2.Right;
             sim.Step(s, new[] { new PlayerInput { Buttons = PlayerInput.ShootCheck }, default(PlayerInput) });
             for (var t = 0; t < 60 && s.Carrier == 1; t++) sim.Step(s, new[] { new PlayerInput { MoveX = 127 }, default(PlayerInput) });
-            Assert.AreEqual(-1, s.Carrier, "checking into the puck knocked it loose");
+            Assert.AreEqual(0, s.Carrier, "the wedge got to the puck: it's stolen, no bump needed");
+            Assert.Greater(s.Players[1].NoPickup.ToDouble(), 0.0, "the old carrier can't snatch it straight back");
+        }
+
+        [Test]
+        public void TheCarriedPuckSlidesAlongTheBoardsInsteadOfIntoYou()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = sim.NewGame(new[] { 0 });
+            PlayNow(s);
+            var top = sim.Map.BoundsMax.Y;
+            s.Players[0].Pos = new FixVec2(Fix.Zero, top - Fix.FromInt(3));
+            s.Players[0].Facing = new FixVec2(Fix.Zero, Fix.One);
+            s.Carrier = 0;
+            var r = (sim.RadiusOf(s.Players[0]) + sim.T.PuckRadius).ToDouble();
+            var sideways = 0.0;
+            for (var t = 0; t < 360 && s.Carrier == 0; t++)
+            {
+                sim.Step(s, new[] { new PlayerInput { MoveY = 127 } });
+                if (s.Carrier != 0) break;
+                var d = s.PuckPos - s.Players[0].Pos;
+                Assert.GreaterOrEqual(d.Length.ToDouble(), r - 0.03, "the puck never gets pushed into the player (tick " + t + ")");
+                sideways = System.Math.Max(sideways, System.Math.Abs(d.X.ToDouble()));
+            }
+            Assert.AreEqual(-1, s.Carrier, "pressing into the boards, you lose it in the end");
+            Assert.Greater(sideways, 0.3, "it slid off to the side first");
+        }
+
+        [Test]
+        public void AnotherPlayersBodyCanPushTheCarriedPuckAway()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = sim.NewGame(new[] { 0, 1 });
+            PlayNow(s);
+            // the carrier faces right; an opponent backs into the puck, body first (facing away, so it isn't a steal)
+            s.Players[0].Pos = new FixVec2(Fix.FromInt(-2), Fix.Ratio(1, 10));
+            s.Players[0].Facing = FixVec2.Right;
+            s.Carrier = 0;
+            s.Players[1].Pos = new FixVec2(Fix.FromInt(1), Fix.Zero);
+            s.Players[1].Facing = FixVec2.Right;
+            for (var t = 0; t < 240 && s.Carrier == 0; t++)
+            {
+                sim.Step(s, new[] { default(PlayerInput), new PlayerInput { MoveX = -127, AimX = 127 } });
+            }
+            Assert.AreEqual(-1, s.Carrier, "the body pushed the puck off the wedge: loose, not handed over");
         }
 
         [Test]
@@ -414,9 +458,54 @@ namespace UltraPuck.Tests
         /// down to the last bit: the rules may not favour a side. Bots on both, so it's a real game.
         /// </summary>
         [Test]
-        public void MirroredMatchesStayMirrored()
+        public void MirroredMatchesStayMirrored() { Mirrored(LoadRink()); }
+
+        [Test]
+        public void MirroredMatchesStayMirroredOnTheHockeyRink() { Mirrored(LoadMap("hockey-rink.json")); }
+
+        private static MapDef LoadMap(string file)
         {
-            var sim = new Simulation(LoadRink());
+            return MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));
+        }
+
+        /// <summary>The Hockey Rink: bots can score into the nets, and both teams about as often.</summary>
+        [Test]
+        public void BotsScoreOnTheHockeyRink()
+        {
+            var sim = new Simulation(LoadMap("hockey-rink.json"));
+            int[] goals = new int[2];
+            for (var k = 0; k < 8; k++)
+            {
+                var score = BotMatch(sim, new[] { 0, 1, 0, 1 }, 0x51ED27u + (uint)k * 7919u, 150);
+                goals[0] += score[0]; goals[1] += score[1];
+            }
+            Assert.Greater(goals[0] + goals[1], 10, "goals: orange " + goals[0] + " blue " + goals[1]);
+            Assert.Greater(goals[0], 0); Assert.Greater(goals[1], 0);
+        }
+
+        /// <summary>The nets are solid from behind: a puck fired at the back of a net bounces off without scoring.</summary>
+        [Test]
+        public void TheHockeyNetsBlockShotsFromBehind()
+        {
+            var sim = new Simulation(LoadMap("hockey-rink.json"));
+            var s = sim.NewGame(new[] { 0 });
+            PlayNow(s);
+            s.Players[0].Pos = new FixVec2(Fix.Zero, Fix.FromInt(10));
+            s.PuckPos = new FixVec2(Fix.FromInt(-22), Fix.Zero);
+            s.PuckVel = new FixVec2(Fix.FromInt(40), Fix.Zero);
+            for (var t = 0; t < 60; t++) sim.Step(s, null);
+            Assert.AreEqual(0, s.Score[0] + s.Score[1], "no goal from behind");
+            Assert.Less(s.PuckPos.X.ToDouble(), -18.5, "it stayed behind the net");
+            // and from the front it goes in
+            s.PuckPos = new FixVec2(Fix.FromInt(-10), Fix.Zero);
+            s.PuckVel = new FixVec2(Fix.FromInt(-30), Fix.Zero);
+            for (var t = 0; t < 60 && s.Phase == Phase.Play; t++) sim.Step(s, null);
+            Assert.AreEqual(1, s.Score[1], "a shot into the mouth scores for the team attacking that net");
+        }
+
+        private static void Mirrored(MapDef map)
+        {
+            var sim = new Simulation(map);
             var a = sim.NewGame(new[] { 0, 1, 0, 1 }, 4242u);
             var b = sim.NewGame(new[] { 1, 0, 1, 0 }, 4242u);
             // the same slots start on mirrored spawns, since each team's spawns mirror the other's

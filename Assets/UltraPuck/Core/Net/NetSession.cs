@@ -17,7 +17,7 @@ namespace UltraPuck.Core.Net
     /// </summary>
     public sealed class NetSession : IDisposable
     {
-        public const int Version = 2; // 2: knock-loose checks, bigger puck, Puck Gun on brake
+        public const int Version = 3; // 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover
         public const int MaxPlayers = 4;
         /// <summary>Your own controls take effect this many ticks later (25 ms at 120 a second), which hides a little lag for free.</summary>
         public const int InputDelay = 3;
@@ -113,6 +113,17 @@ namespace UltraPuck.Core.Net
         }
 
         /// <summary>Host: how many bots to add to the game.</summary>
+        /// <summary>Which rink (an index into everyone's map list, which the fingerprint check keeps the same). The host picks it.</summary>
+        public int Map
+        {
+            get { return _map; }
+            set { if (!IsHost || value == _map) return; _map = Math.Max(0, Math.Min(255, value)); _lobbyVersion++; }
+        }
+        private int _map;
+
+        /// <summary>The host's match rules (rounds, picking, which cards...), packed by the game; sent with every match start.</summary>
+        public byte[] Rules = new byte[0];
+
         public int Bots
         {
             get { return _bots; }
@@ -328,6 +339,9 @@ namespace UltraPuck.Core.Net
                     var id = r.I32();
                     var seed = r.U32();
                     ReadSeats(r);
+                    _map = r.U8();
+                    var rules = r.Bytes();
+                    if (id != MatchId || Match == null) Rules = rules;
                     if (id != MatchId || Match == null) { MatchId = id; Seed = seed; for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = -1; Begin(); }
                     break;
                 case Msg.Inputs:
@@ -407,6 +421,7 @@ namespace UltraPuck.Core.Net
         {
             var w = new Writer(Msg.Lobby).I32(_lobbyVersion).U8(Current == Stage.Playing ? 1 : 0).I32(MatchId);
             WriteSeats(w);
+            w.U8(_map);
             var bytes = w.ToArray();
             foreach (var l in _links.Values) if (l.Peer > 0) _t.Send(l.Conn, bytes);
         }
@@ -419,12 +434,15 @@ namespace UltraPuck.Core.Net
             if (Current == Stage.Playing && !playing) { Match = null; Current = Stage.Lobby; } // the host went back to the lobby
             if (Current == Stage.Playing) return; // the seats are fixed for the match
             ReadSeats(r);
+            _map = r.U8();
         }
 
         private void SendStartToAll()
         {
             var w = new Writer(Msg.Start).I32(MatchId).U32(Seed);
             WriteSeats(w);
+            w.U8(_map);
+            w.Bytes(Rules);
             var bytes = w.ToArray();
             foreach (var l in _links.Values) if (l.Peer > 0 && !l.StartAcked) _t.Send(l.Conn, bytes);
         }
@@ -496,8 +514,9 @@ namespace UltraPuck.Core.Net
             for (var t = _lastChecked + ChecksumEvery; t <= confirmed && t < Match.Tick; t += ChecksumEvery)
             {
                 var s = Match.SavedAt(t);
+                if (s == null && t > Match.Tick - Rollback.Ring + 8) break; // not settled yet (a replay is pending): try again next time
+                if (s == null) { _lastChecked = t; continue; }             // fell out of the history: skip it
                 _lastChecked = t;
-                if (s == null) continue;
                 var hash = s.Checksum();
                 _myChecks[t] = hash;
                 var bytes = new Writer(Msg.Checksum).I32(MatchId).I32(t).U64(hash).ToArray();
