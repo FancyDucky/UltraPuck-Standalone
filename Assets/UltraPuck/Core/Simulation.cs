@@ -297,8 +297,9 @@ namespace UltraPuck.Core
                     if (p.HitLag > Fix.Zero) continue; // frozen by a hit
                     p.Pos += p.Vel * sub;
                     CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
-                    CollidePylons(s, ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
+                    PushPylons(s, p);
                 }
+                MovePylons(s, sub);
                 Bumps(s);
                 MovePuck(s, sub);
                 MoveShots(s, sub);
@@ -795,7 +796,7 @@ namespace UltraPuck.Core
                 Hit(a, n, Fix.Ratio(2, 5));
                 return;
             }
-            b.Stun = T.HitStun;
+            // no daze from a check (only the Puck Gun stuns): the hit lag above is the pause
             if (a.Team != b.Team) Shockwave(s, from, to);
             Hit(b, -n, Fix.One);
             Hit(a, n, Fix.Ratio(3, 5));
@@ -910,6 +911,51 @@ namespace UltraPuck.Core
         }
 
         /// <summary>Pylon goalies are solid: push a circle out of any it overlaps and bounce it off.</summary>
+        /// <summary>Pylon goalies slide when pushed, slow down quickly, and stop at the boards.</summary>
+        private void MovePylons(GameState s, Fix sub)
+        {
+            for (var k = 0; k < s.Pylons.Length; k++)
+            {
+                var py = s.Pylons[k];
+                if (py.Vel.SqrLength.Raw == 0) continue;
+                py.Pos += py.Vel * sub;
+                py.Vel -= py.Vel * Fix.Min(Fix.One, T.PylonDrag * sub);
+                if (py.Vel.SqrLength < Fix.Ratio(1, 400)) py.Vel = FixVec2.Zero;
+                CollideWalls(ref py.Pos, ref py.Vel, T.PylonRadius, T.WallBounce);
+                s.Pylons[k] = py;
+            }
+        }
+
+        /// <summary>A player and a pylon goalie push each other apart: the pylon is heavier, but it moves.</summary>
+        private void PushPylons(GameState s, PlayerState p)
+        {
+            var r = RadiusOf(p);
+            for (var k = 0; k < s.Pylons.Length; k++)
+            {
+                var py = s.Pylons[k];
+                var d = p.Pos - py.Pos;
+                var min = r + T.PylonRadius;
+                if (d.SqrLength >= min * min) continue;
+                var dist = d.Length;
+                var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
+                Fix wp = WeightOf(p), wy = T.PylonWeight, sum = wp + wy;
+                var overlap = min - dist;
+                p.Pos += n * (overlap * wy / sum);
+                py.Pos -= n * (overlap * wp / sum);
+                var rv = FixVec2.Dot(p.Vel - py.Vel, n);
+                if (rv < Fix.Zero)
+                {
+                    var impulse = -(Fix.One + T.WallBounce) * rv * wp * wy / sum;
+                    p.Vel += n * (impulse / wp);
+                    py.Vel -= n * (impulse / wy);
+                }
+                var v = py.Vel;
+                CollideWalls(ref py.Pos, ref v, T.PylonRadius, T.WallBounce);
+                py.Vel = v;
+                s.Pylons[k] = py;
+            }
+        }
+
         private void CollidePylons(GameState s, ref FixVec2 pos, ref FixVec2 vel, Fix r, Fix bounce)
         {
             foreach (var py in s.Pylons)

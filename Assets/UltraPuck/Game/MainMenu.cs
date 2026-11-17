@@ -175,7 +175,8 @@ namespace UltraPuck.Game
             BuildRows();
             var t = Time.unscaledTime - _openedAt;
 
-            // a dark wash on the left so the buttons read over the live match
+            // the main page shows the live match behind; the other pages a plain backdrop (it's too busy there)
+            if (Current != Page.Main) Ui.Box(new Rect(0f, 0f, Ui.W, Ui.H), Palette.Background, 0f);
             Ui.Box(new Rect(0f, 0f, 620f, Ui.H), new Color(0f, 0f, 0f, 0.62f), 0f);
             Ui.Box(new Rect(620f, 0f, 120f, Ui.H), new Color(0f, 0f, 0f, 0.3f), 0f);
 

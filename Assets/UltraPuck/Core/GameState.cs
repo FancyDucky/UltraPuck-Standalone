@@ -190,6 +190,8 @@ namespace UltraPuck.Core
     public struct Pylon
     {
         public FixVec2 Pos;
+        /// <summary>Pushed pylons slide (and slow down quickly).</summary>
+        public FixVec2 Vel;
         public int Team;
     }
 
@@ -265,7 +267,7 @@ namespace UltraPuck.Core
             Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, (long)Rng);
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
-            foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Team); }
+            foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); }
             foreach (var sc in Score) Mix(ref h, sc);
             foreach (var p in Players)
             {

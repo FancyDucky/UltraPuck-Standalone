@@ -230,7 +230,7 @@ namespace UltraPuck.Game
         // the join screen: a card per player along the bottom, like a fighting game's character select
         private void DrawJoin(float w, float h, float appear)
         {
-            Ui.Box(new Rect(0, 0, w, h), new Color(0f, 0f, 0f, 0.35f), 0f);
+            Ui.Box(new Rect(0, 0, w, h), Palette.Background, 0f); // a plain backdrop: the rink moving behind is too busy here
             Title(w, "PLAYERS", "Same colour, same team", appear);
             Glyphs.Hint(new Rect(0, 112, w, 30), "{side} Team colour      {profile} Name      {shape} Symbol      {bots} Bots", 17, new Color(1f, 1f, 1f, 0.75f));
 
@@ -293,7 +293,7 @@ namespace UltraPuck.Game
         // the rink: a big preview of the one chosen, with its neighbours either side
         private void DrawMap(float w, float h, float appear)
         {
-            Ui.Box(new Rect(0, 0, w, h), new Color(0f, 0f, 0f, 0.75f), 0f);
+            Ui.Box(new Rect(0, 0, w, h), Palette.Background, 0f);
             Title(w, "CHOOSE A RINK", null, appear);
             var count = Runner.MapCount;
             var cur = Runner.MapIndex;
@@ -329,7 +329,7 @@ namespace UltraPuck.Game
         // the rules: first to so many goals, or a time limit
         private void DrawRules(float w, float h, float appear)
         {
-            Ui.Box(new Rect(0, 0, w, h), new Color(0f, 0f, 0f, 0.75f), 0f);
+            Ui.Box(new Rect(0, 0, w, h), Palette.Background, 0f);
             Title(w, "HOW TO WIN", Runner.MapName(Runner.MapIndex), appear);
             var labels = new[] { "Score", "Time" };
             var values = new[] { "First to  ‹ " + Settings.GoalsToWin + " ›  goals", "‹ " + Settings.MatchMinutes + " ›  " + (Settings.MatchMinutes == 1 ? "minute" : "minutes") };

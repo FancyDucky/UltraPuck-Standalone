@@ -231,7 +231,7 @@ namespace UltraPuck.Tests
             Assert.AreEqual(-1, s.Carrier, "knocked loose: nobody has it");
             Assert.Greater(s.Players[0].NoPickup.ToDouble(), 0.0, "the checker can't just scoop it up in the same instant");
             Assert.Greater(s.Players[1].NoPickup.ToDouble(), 0.0, "the old carrier can't grab it straight back");
-            Assert.Greater(s.Players[1].Stun.ToDouble(), 0.0, "a check dazes");
+            Assert.AreEqual(Fix.Zero, s.Players[1].Stun, "a check doesn't daze (only the Puck Gun does): hit lag is the pause");
             Assert.Greater(s.Players[1].Hits, 0, "the hit was recorded for the animation");
             Assert.Greater(s.Players[0].Hits, 0, "the checker feels it too");
             Assert.AreEqual(1.0, s.Players[1].HitPower.ToDouble(), 1e-6);

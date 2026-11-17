@@ -131,7 +131,7 @@
       "max": 1,
       "minTeam": 2,
       "color": "#FF7359",
-      "text": "A teammate checking you gives [good]+80% Move Speed for 2 s[/] instead of a daze.",
+      "text": "A teammate checking you gives [good]+80% Move Speed for 2 s[/], and you keep the puck.",
       "stats": { "FriendlyFire": "+1" }
     },
     {

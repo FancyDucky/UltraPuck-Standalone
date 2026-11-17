@@ -131,7 +131,8 @@ namespace UltraPuck.Game
         }
 
         /// <summary>A line of the given width through the points, with rounded joints.</summary>
-        public static Mesh Line(IList<Vector2> pts, bool closed, float width, Color c)
+        /// <param name="square">Square joints and ends (net posts) instead of round ones.</param>
+        public static Mesh Line(IList<Vector2> pts, bool closed, float width, Color c, bool square = false)
         {
             var v = new List<Vector3>();
             var t = new List<int>();
@@ -147,6 +148,22 @@ namespace UltraPuck.Game
                 v.Add(a + n); v.Add(a - n); v.Add(b - n); v.Add(b + n);
                 t.Add(i); t.Add(i + 2); t.Add(i + 1);
                 t.Add(i); t.Add(i + 3); t.Add(i + 2);
+            }
+            if (square)
+            {
+                // square joints and ends, lined up with the line through them
+                for (var k = 0; k < pts.Count; k++)
+                {
+                    var p = pts[k];
+                    var q = k + 1 < pts.Count ? pts[k + 1] : pts[k - 1];
+                    var d = (q - p).normalized * h;
+                    var n = new Vector2(-d.y, d.x);
+                    var i = v.Count;
+                    v.Add(p - d - n); v.Add(p + d - n); v.Add(p + d + n); v.Add(p - d + n);
+                    t.Add(i); t.Add(i + 2); t.Add(i + 1);
+                    t.Add(i); t.Add(i + 3); t.Add(i + 2);
+                }
+                return Build(v, t, c);
             }
             // round joints
             foreach (var p in pts)

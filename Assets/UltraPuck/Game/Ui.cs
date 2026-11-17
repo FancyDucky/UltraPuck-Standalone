@@ -17,8 +17,8 @@ namespace UltraPuck.Game
         public static readonly Color Track = new Color(1f, 1f, 1f, 0.14f);
         public static readonly Color Dim = new Color(0f, 0f, 0f, 0.6f);
 
-        private static Texture2D _round, _white;
-        private static GUIStyle _roundStyle;
+        private static Texture2D _round, _white, _roundBig;
+        private static GUIStyle _roundStyle, _roundBigStyle;
         private static GUIStyle[] _fonts = new GUIStyle[0];
 
         /// <summary>Width and height of the canvas this frame (1280 x 720 at UI size 100% on a 16:9 window).</summary>
@@ -83,6 +83,21 @@ namespace UltraPuck.Game
             _round.SetPixels32(px);
             _round.Apply();
             _roundStyle = new GUIStyle { normal = { background = _round }, border = new RectOffset(r, r, r, r) };
+            // a big one for big curves (circles on the player cards), so they stay sharp
+            const int bigSize = 256, br = 96;
+            _roundBig = new Texture2D(bigSize, bigSize, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var bpx = new Color32[bigSize * bigSize];
+            for (var y = 0; y < bigSize; y++)
+                for (var x = 0; x < bigSize; x++)
+                {
+                    float cx = Mathf.Clamp(x + 0.5f, br, bigSize - br), cy = Mathf.Clamp(y + 0.5f, br, bigSize - br);
+                    var d = Mathf.Sqrt((x + 0.5f - cx) * (x + 0.5f - cx) + (y + 0.5f - cy) * (y + 0.5f - cy));
+                    var a = Mathf.Clamp01(br - d + 0.5f);
+                    bpx[y * bigSize + x] = new Color32(255, 255, 255, (byte)(a * 255));
+                }
+            _roundBig.SetPixels32(bpx);
+            _roundBig.Apply();
+            _roundBigStyle = new GUIStyle { normal = { background = _roundBig }, border = new RectOffset(br, br, br, br) };
         }
 
         /// <summary>A filled rounded rectangle. <paramref name="radius"/> is in canvas units (0 = square corners).</summary>
@@ -95,11 +110,12 @@ namespace UltraPuck.Game
             if (radius <= 0.5f) GUI.DrawTexture(r, _white);
             else
             {
-                // the 9-slice border is 16 px; scale the drawn rect so the corner comes out at the asked radius
-                var k = radius / 16f;
+                // the 9-slice border is 16 px (96 for big curves); scale the drawn rect so the corner comes out at the asked radius
+                var big = radius > 20f;
+                var k = radius / (big ? 96f : 16f);
                 var m = GUI.matrix;
                 GUI.matrix = m * Matrix4x4.TRS(new Vector3(r.x, r.y, 0f), Quaternion.identity, new Vector3(k, k, 1f));
-                _roundStyle.Draw(new Rect(0f, 0f, r.width / k, r.height / k), false, false, false, false);
+                (big ? _roundBigStyle : _roundStyle).Draw(new Rect(0f, 0f, r.width / k, r.height / k), false, false, false, false);
                 GUI.matrix = m;
             }
             GUI.color = old;

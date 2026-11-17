@@ -55,6 +55,24 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0, s.Players[3].Cards.Length, "the other team didn't pick");
         }
 
+        /// <summary>Pylon goalies can be pushed around (they're heavier than a player), and go back to their spot at a face-off.</summary>
+        [Test]
+        public void PylonGoaliesCanBePushed()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.pylongoalie");
+            _sim.PlacePylons(s);
+            Play(s);
+            Assert.AreEqual(1, s.Pylons.Length);
+            var home = s.Pylons[0].Pos;
+            // the other player skates straight through it
+            s.Players[1].Pos = home + new FixVec2(Fix.FromInt(3), Fix.Zero);
+            for (var t = 0; t < 120; t++) _sim.Step(s, new[] { default(PlayerInput), new PlayerInput { MoveX = -127 } });
+            Assert.Greater((s.Pylons[0].Pos - home).Length.ToDouble(), 0.3, "pushed off its spot");
+            _sim.FaceOff(s);
+            Assert.AreEqual(home, s.Pylons[0].Pos, "back on its spot for the face-off");
+        }
+
         /// <summary>Switched-off cards are never offered.</summary>
         [Test]
         public void SwitchedOffCardsAreNeverOffered()
@@ -202,7 +220,7 @@ namespace UltraPuck.Tests
             Assert.Greater(s.Players[1].BoostTime.ToDouble(), 1.5, "boosted");
             Assert.AreEqual(Fix.Zero, s.Players[1].Stun, "not dazed");
             var plain = Check(true, null);
-            Assert.Greater(plain.Players[1].Stun.ToDouble(), 0.0, "without the card a teammate's check dazes as usual");
+            Assert.AreEqual(Fix.Zero, plain.Players[1].BoostTime, "without the card, no boost");
         }
 
         [Test]

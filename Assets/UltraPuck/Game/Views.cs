@@ -44,7 +44,7 @@ namespace UltraPuck.Game
             {
                 var pts = new List<Vector2>();
                 foreach (var p in map.WallLines[w]) pts.Add(V.Of(p));
-                Draw.Make("Wall" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], wallThickness, Palette.Wall), 4);
+                Draw.Make("Wall" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], wallThickness, Palette.Wall, !map.WallClosed[w]), 4);
             }
         }
     }
@@ -475,7 +475,7 @@ namespace UltraPuck.Game
         private readonly List<Spark> _sparks = new List<Spark>(), _spareSparks = new List<Spark>();
 
         // lightning: jagged forked bolts that crackle out from a hard hit for a moment (like a fighting game's big hits)
-        private sealed class Bolt { public GameObject Go, Glow; public float Age, Life; public Color Colour; public Mesh Mesh, GlowMesh; }
+        private sealed class Bolt { public GameObject Go, Glow; public float Age, Life; public Color Colour, Core; public Mesh Mesh, GlowMesh; }
         private readonly List<Bolt> _bolts = new List<Bolt>();
 
         /// <summary>Sparks out of a collision: more, faster and longer the harder it was.</summary>
@@ -507,7 +507,10 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Forked lightning crackling out of a hard hit.</summary>
-        public void Lightning(Vector2 at, float power, Color colour)
+        public void Lightning(Vector2 at, float power, Color colour) { Lightning(at, power, colour, Color.white); }
+
+        /// <summary>Lightning with its own core colour (hits: a near-black red core in a red glow).</summary>
+        public void Lightning(Vector2 at, float power, Color colour, Color core)
         {
             var bolts = Random.Range(3, 5 + Mathf.RoundToInt(2f * power));
             var start = Random.Range(0f, Mathf.PI * 2f);
@@ -515,11 +518,11 @@ namespace UltraPuck.Game
             {
                 var a = start + k * Mathf.PI * 2f / bolts + Random.Range(-0.35f, 0.35f);
                 var length = Random.Range(1.1f, 1.8f) * (0.8f + power);
-                AddBolt(at, a, length, colour, 0.075f, 2);
+                AddBolt(at, a, length, colour, core, 0.075f, 2);
             }
         }
 
-        private void AddBolt(Vector2 from, float angle, float length, Color colour, float width, int forks)
+        private void AddBolt(Vector2 from, float angle, float length, Color colour, Color core, float width, int forks)
         {
             var pts = new List<Vector2> { from };
             var steps = 6;
@@ -532,9 +535,9 @@ namespace UltraPuck.Game
                 pts.Add(p);
                 // a fork off the side now and then
                 if (forks > 0 && i > 1 && i < steps && Random.value < 0.35f)
-                    AddBolt(p, angle + Random.Range(0.5f, 0.9f) * (Random.value < 0.5f ? -1f : 1f), length * Random.Range(0.3f, 0.5f), colour, width * 0.7f, forks - 1);
+                    AddBolt(p, angle + Random.Range(0.5f, 0.9f) * (Random.value < 0.5f ? -1f : 1f), length * Random.Range(0.3f, 0.5f), colour, core, width * 0.7f, forks - 1);
             }
-            var b = new Bolt { Age = 0f, Life = Random.Range(0.16f, 0.26f), Colour = colour };
+            var b = new Bolt { Age = 0f, Life = Random.Range(0.16f, 0.26f), Colour = colour, Core = core };
             b.GlowMesh = Draw.Line(pts, false, width * 3.2f, Palette.Clear(colour));
             b.Glow = Draw.Make("BoltGlow", _parent, b.GlowMesh, 22).gameObject;
             b.Mesh = Draw.Line(pts, false, width, Color.white);
@@ -614,7 +617,8 @@ namespace UltraPuck.Game
                 // a crackle: flickers as it fades
                 var k = b.Age / b.Life;
                 var flicker = Random.value < 0.25f ? 0.35f : 1f;
-                Draw.Recolor(b.Mesh, new Color(1f, 1f, 1f, (1f - k) * flicker));
+                var c = b.Core; c.a = (1f - k) * flicker;
+                Draw.Recolor(b.Mesh, c);
                 var g = b.Colour; g.a = 0.55f * (1f - k) * flicker;
                 Draw.Recolor(b.GlowMesh, g);
             }

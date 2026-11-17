@@ -321,7 +321,7 @@ namespace UltraPuck.Game
         {
             _mainMenu.Show(MainMenu.Page.None);
             _mainMenu.Message = null;
-            _local.Slots.Clear();
+            _local.Slots.Clear(); // no bots to start with: add them from the pause menu when you want them
             _local.JoinDevice(device ?? (UnityEngine.InputSystem.InputDevice)UnityEngine.InputSystem.Keyboard.current);
             StartMatch(true);
         }
@@ -988,7 +988,7 @@ namespace UltraPuck.Game
                     {
                         // sparks for every real hit; lightning crackling out of the hard ones
                         _effects.Sparks(hitAt, hit, new Color(1f, 0.85f, 0.4f));
-                        if (hit >= 0.6f) _effects.Lightning(hitAt, hit, new Color(0.55f, 0.8f, 1f));
+                        if (hit >= 0.6f) _effects.Lightning(hitAt, hit, new Color(0.85f, 0.08f, 0.1f), new Color(0.16f, 0.02f, 0.03f));
                         _impactsThisFrame.Add(hitAt);
                     }
                     _shake = Mathf.Max(_shake, 0.06f + 0.22f * hit * hit);

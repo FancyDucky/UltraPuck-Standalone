@@ -344,7 +344,9 @@ namespace UltraPuck.Game
             BuildRows();
             var t = Time.unscaledTime - _openedAt;
             var appear = Ui.EaseOutBack(t / 0.28f);
-            Ui.Fill(new Color(0f, 0f, 0f, 0.55f * Ui.EaseOut(t / 0.2f)));
+            // over a match: a dim, so you can still see it; from the menus: a plain backdrop
+            if (_settingsFromLobby && Current != Page.Pause) Ui.Fill(Palette.Background);
+            else Ui.Fill(new Color(0f, 0f, 0f, 0.55f * Ui.EaseOut(t / 0.2f)));
 
             var pause = Current == Page.Pause;
             var rowH = pause ? 54f : 50f;

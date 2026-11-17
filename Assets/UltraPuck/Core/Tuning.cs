@@ -106,6 +106,8 @@ namespace UltraPuck.Core
         public Fix PassTouch = Fix.Ratio(3, 10);
         /// <summary>Pylon goalies: size, distance out from the goal line, and spacing.</summary>
         public Fix PylonRadius = Fix.Half, PylonOut = Fix.Ratio(12, 5), PylonSpread = Fix.Ratio(11, 10);
+        /// <summary>Pylon goalies can be pushed: how heavy they are (a player is 1) and how fast they slow down.</summary>
+        public Fix PylonWeight = Fix.Two, PylonDrag = Fix.FromInt(6);
 
         // cards
         /// <summary>After every goal, the team that conceded picks a card (needs a card library).</summary>
