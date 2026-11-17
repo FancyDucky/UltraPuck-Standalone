@@ -130,6 +130,8 @@ namespace UltraPuck.Core
         public Fix Charge;
         /// <summary>Seconds left of being dazed after a check: you push the stick with much less force.</summary>
         public Fix Stun;
+        /// <summary>Hit lag left (seconds): frozen in place after a hit, keeping the speed for when it ends.</summary>
+        public Fix HitLag;
         /// <summary>
         /// Counts every hard hit this player has taken or given, so the drawing side can play a hit animation when
         /// it goes up. <see cref="HitPower"/> (0..1) and <see cref="HitDir"/> (from them towards what they hit) describe the last one.
@@ -222,6 +224,10 @@ namespace UltraPuck.Core
         public Fix PhaseTime;
         /// <summary>Team that scored last (-1 = nobody yet), or the winner once the game is over.</summary>
         public int LastScorer = -1;
+        /// <summary>A timed match: time left on the clock (counts down only while the puck is in play).</summary>
+        public Fix Clock;
+        /// <summary>A timed match ended level: the next goal wins.</summary>
+        public bool Overtime;
         public uint Rng = 0x9E3779B9u;
 
         /// <summary>Puck Gun shots in flight.</summary>
@@ -255,6 +261,7 @@ namespace UltraPuck.Core
         public ulong Checksum()
         {
             ulong h = 14695981039346656037UL;
+            Mix(ref h, Clock); Mix(ref h, Overtime ? 1 : 0);
             Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, (long)Rng);
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
@@ -264,7 +271,7 @@ namespace UltraPuck.Core
             {
                 Mix(ref h, p.Team); Mix(ref h, p.Pos); Mix(ref h, p.Vel); Mix(ref h, p.Facing);
                 Mix(ref h, p.DashCharge); Mix(ref h, p.DashTime); Mix(ref h, p.Charge); Mix(ref h, p.NoPickup); Mix(ref h, p.PrevButtons);
-                Mix(ref h, p.Stun); Mix(ref h, p.Hits); Mix(ref h, p.HitPower); Mix(ref h, p.HitDir);
+                Mix(ref h, p.Stun); Mix(ref h, p.HitLag); Mix(ref h, p.Hits); Mix(ref h, p.HitPower); Mix(ref h, p.HitDir);
                 p.Stats.Hash(ref h);
                 Mix(ref h, p.Cards.Length); foreach (var c in p.Cards) Mix(ref h, c);
                 Mix(ref h, p.Offer.Length); foreach (var c in p.Offer) Mix(ref h, c);

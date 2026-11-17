@@ -297,6 +297,51 @@ namespace UltraPuck.Tests
             Assert.AreEqual(-1, s.Carrier, "the body pushed the puck off the wedge: loose, not handed over");
         }
 
+        /// <summary>Hit lag: a check freezes both players for a moment, then the one hit flies off.</summary>
+        [Test]
+        public void ACheckFreezesBothPlayersForAMoment()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = sim.NewGame(new[] { 0, 1 });
+            PlayNow(s);
+            s.Players[0].Pos = new FixVec2(Fix.FromInt(-1), Fix.Zero); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = new FixVec2(Fix.FromInt(1), Fix.Zero);
+            sim.Step(s, new[] { new PlayerInput { Buttons = PlayerInput.ShootCheck }, default(PlayerInput) });
+            for (var t = 0; t < 60 && s.Players[1].HitLag <= Fix.Zero; t++) sim.Step(s, new PlayerInput[2]);
+            Assert.Greater(s.Players[1].HitLag.ToDouble(), 0.05, "the one checked is frozen");
+            Assert.Greater(s.Players[0].HitLag.ToDouble(), 0.05, "and so is the checker");
+            var frozenAt = s.Players[1].Pos;
+            sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(frozenAt, s.Players[1].Pos, "frozen: not moving");
+            for (var t = 0; t < 40; t++) sim.Step(s, new PlayerInput[2]);
+            Assert.Greater((s.Players[1].Pos - frozenAt).Length.ToDouble(), 0.5, "then knocked away");
+        }
+
+        /// <summary>A timed match: the team ahead when the clock runs out wins; level, the next goal wins.</summary>
+        [Test]
+        public void TimedMatchesEndOnTheClockOrInOvertime()
+        {
+            var sim = new Simulation(LoadRink(), new Tuning { TimeLimit = Fix.FromInt(2), GoalsToWin = 0, CardsAfterGoals = false });
+            var s = sim.NewGame(new[] { 0, 1 });
+            PlayNow(s);
+            s.Score[1] = 1;
+            for (var t = 0; t < 3 * sim.T.TicksPerSecond && s.Phase != Phase.GameOver; t++) sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(Phase.GameOver, s.Phase, "time's up");
+            Assert.AreEqual(1, s.LastScorer, "the team ahead won");
+
+            var level = sim.NewGame(new[] { 0, 1 });
+            PlayNow(level);
+            level.Players[0].Pos = new FixVec2(Fix.Zero, Fix.FromInt(10)); level.Players[1].Pos = new FixVec2(Fix.Zero, Fix.FromInt(-10));
+            for (var t = 0; t < 3 * sim.T.TicksPerSecond; t++) sim.Step(level, new PlayerInput[2]);
+            Assert.IsTrue(level.Overtime, "level at the end: overtime");
+            Assert.AreEqual(Phase.Play, level.Phase);
+            level.PuckPos = new FixVec2(Fix.FromInt(-20), Fix.Zero);
+            level.PuckVel = new FixVec2(Fix.FromInt(-30), Fix.Zero);
+            for (var t = 0; t < 10 * sim.T.TicksPerSecond && level.Phase != Phase.GameOver; t++) sim.Step(level, new PlayerInput[2]);
+            Assert.AreEqual(Phase.GameOver, level.Phase, "the next goal won it");
+            Assert.AreEqual(1, level.LastScorer);
+        }
+
         [Test]
         public void CheckingIntoALoosePuckPicksItUp()
         {

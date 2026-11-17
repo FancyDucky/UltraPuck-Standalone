@@ -144,12 +144,54 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("rounds", value ? 1 : 0); }
         }
 
+        /// <summary>Every goal is shown again, with slow motion on the shot.</summary>
+        public static bool Replays
+        {
+            get { return PlayerPrefs.GetInt("replays", 1) != 0; }
+            set { PlayerPrefs.SetInt("replays", value ? 1 : 0); }
+        }
+
         /// <summary>Picking: each player gets their own card (false), or each team votes on one card for all of them (true).</summary>
         public static bool TeamVote
         {
             get { return PlayerPrefs.GetInt("team_vote", 0) != 0; }
             set { PlayerPrefs.SetInt("team_vote", value ? 1 : 0); }
         }
+
+        /// <summary>How a match is won: 0 = first to <see cref="GoalsToWin"/> goals, 1 = most goals when <see cref="MatchMinutes"/> run out.</summary>
+        public static int MatchMode
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("match_mode", 0), 0, 1); }
+            set { PlayerPrefs.SetInt("match_mode", Mathf.Clamp(value, 0, 1)); }
+        }
+
+        public static int GoalsToWin
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("goals_to_win", 5), 1, 20); }
+            set { PlayerPrefs.SetInt("goals_to_win", Mathf.Clamp(value, 1, 20)); }
+        }
+
+        public static int MatchMinutes
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("match_minutes", 3), 1, 15); }
+            set { PlayerPrefs.SetInt("match_minutes", Mathf.Clamp(value, 1, 15)); }
+        }
+
+        private static readonly int[][] MatchPresets = { new[] { 0, 3 }, new[] { 0, 5 }, new[] { 0, 7 }, new[] { 0, 10 }, new[] { 1, 2 }, new[] { 1, 3 }, new[] { 1, 5 }, new[] { 1, 8 } };
+
+        /// <summary>The online lobby's Match row: steps through a few common choices.</summary>
+        public static void StepMatch(int d)
+        {
+            var at = 0;
+            for (var k = 0; k < MatchPresets.Length; k++)
+                if (MatchPresets[k][0] == MatchMode && MatchPresets[k][1] == (MatchMode == 0 ? GoalsToWin : MatchMinutes)) at = k;
+            at = (at + d + MatchPresets.Length) % MatchPresets.Length;
+            MatchMode = MatchPresets[at][0];
+            if (MatchMode == 0) GoalsToWin = MatchPresets[at][1]; else MatchMinutes = MatchPresets[at][1];
+        }
+
+        /// <summary>The match rule as a few words: "First to 5" or "3 minutes".</summary>
+        public static string MatchText { get { return MatchMode == 0 ? "First to " + GoalsToWin : MatchMinutes + (MatchMinutes == 1 ? " minute" : " minutes"); } }
 
         public static readonly int[] OfferCounts = { 3, 4, 5 };
         public static int CardsOffered

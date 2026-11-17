@@ -94,6 +94,7 @@ namespace UltraPuck.Game
                     {
                         _rows.Add(new Row { Label = "Start match", Press = () => Runner.StartOnlineMatch(), Enabled = () => Session != null && Session.Seats.Count >= 2 });
                         _rows.Add(new Row { Label = "Bots", Detail = null, Value = () => s.Bots.ToString(), Step = d => s.Bots = Mathf.Clamp(s.Bots + d, 0, NetSession.MaxPlayers), Press = () => s.Bots = s.Bots >= NetSession.MaxPlayers - 1 ? 0 : s.Bots + 1 });
+                        _rows.Add(new Row { Label = "Match", Value = () => Settings.MatchText, Step = Settings.StepMatch, Press = () => Settings.StepMatch(1) });
                         if (Runner.MapCount > 1) _rows.Add(new Row { Label = "Rink", Value = () => Runner.MapName(Runner.MapIndex), Step = d => Runner.StepMap(d), Press = () => Runner.StepMap(1) });
                         if (SteamNet.InLobby) _rows.Add(new Row { Label = "Invite Steam friends", Press = () => { _friends = SteamNet.OnlineFriends(); _friendsAt = Time.unscaledTime; Show(Page.Friends); } });
                     }
@@ -288,6 +289,7 @@ namespace UltraPuck.Game
                     }
                     if (Session.Connected > 0) s += ".   Ping " + Mathf.RoundToInt(Session.Ping * 1000f) + " ms";
                     if (Runner.MapCount > 1) s += ".   Rink: " + Runner.MapName(Session.Map);
+                    if (Session.TooManyTeams) s += ".   More than two colours: only two teams can play";
                     return s;
                 default: return "";
             }
@@ -297,7 +299,7 @@ namespace UltraPuck.Game
         {
             switch (Current)
             {
-                case Page.OnlineLobby: return "{join} Join on this PC      {side} Pick a side      {leave} Leave your seat      Hold {leave} Leave the game";
+                case Page.OnlineLobby: return "{join} Join      {side} Colour      {profile} Name      {shape} Symbol      {leave} Leave seat      Hold {leave} Leave game";
                 case Page.JoinIp: return _typing ? "Type the address, then Enter      Esc: back" : "{confirm} Choose      {back} Back";
                 case Page.Main: return "{confirm} Choose";
                 default: return "{confirm} Choose      {back} Back";
@@ -318,7 +320,8 @@ namespace UltraPuck.Game
             {
                 var seat = s.Seats[k];
                 var ry = y + 34f + k * 50f;
-                Ui.Swatch(new Rect(x, ry + 8f, 28f, 28f), seat.Team);
+                Ui.Box(new Rect(x, ry + 6f, 32f, 32f), Palette.Colours[seat.Colour & 7], 8f);
+                Ui.Symbol(new Rect(x + 6f, ry + 12f, 20f, 20f), seat.Symbol, Color.white);
                 var you = !seat.Bot && seat.Peer == s.MyPeer ? "   (this PC)" : "";
                 Ui.Label(new Rect(x + 42f, ry, 380f, 44f), seat.Name + you, Ui.Font(20, you.Length > 0), seat.Bot ? Ui.TextDim : Color.white);
             }

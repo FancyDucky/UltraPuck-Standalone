@@ -27,7 +27,14 @@ namespace UltraPuck.Game
         public sealed class Slot
         {
             public InputDevice Device;
+            /// <summary>Team 0 or 1, worked out from the colours picked (see <see cref="AssignTeams"/>).</summary>
             public int Team;
+            /// <summary>The team colour picked (index into <see cref="Palette.Colours"/>) and the player's symbol.</summary>
+            public int Colour, Symbol;
+            /// <summary>The name shown over the player (set on the join screen).</summary>
+            public string Name = "";
+            /// <summary>Typing a name on the join screen: their controls go to the keyboard, not the lobby.</summary>
+            public bool Typing;
             /// <summary>Buttons pressed since the last tick, so a tap shorter than a tick still counts.</summary>
             public byte Latched;
             public bool PrevLeft, PrevRight, PrevUp, PrevDown;
@@ -70,7 +77,7 @@ namespace UltraPuck.Game
             {
                 var s = Find(g);
                 if (s == null && g.buttonSouth.wasPressedThisFrame) Join(g);
-                else if (s != null) Hold(s, g.buttonEast.isPressed, dt);
+                else if (s != null) { if (!s.Typing) Hold(s, g.buttonEast.isPressed, dt); }
                 else if (g.buttonEast.isPressed) nobody = Mathf.Max(nobody, Held(g, dt));
                 else _nobodyHeld.Remove(g);
             }
@@ -79,17 +86,25 @@ namespace UltraPuck.Game
             {
                 var s = Find(kb);
                 if (s == null && kb.spaceKey.wasPressedThisFrame) Join(kb);
-                else if (s != null) Hold(s, kb.escapeKey.isPressed, dt);
+                else if (s != null) { if (!s.Typing) Hold(s, kb.escapeKey.isPressed, dt); }
                 else if (kb.escapeKey.isPressed) nobody = Mathf.Max(nobody, Held(kb, dt));
                 else _nobodyHeld.Remove(kb);
             }
             NobodyLeaving = Mathf.Clamp01(nobody / HoldToLeave);
-            foreach (var s in Slots)
+            BotRequest = 0;
+            foreach (var s in Slots.ToArray())
             {
-                if (s.Demo) continue;
+                if (s.Demo || s.Typing || !Slots.Contains(s)) continue;
                 var nav = Nav(s);
-                if (nav.x < 0) s.Team = 0;
-                if (nav.x > 0) s.Team = 1;
+                if (nav.x != 0) { s.Colour = (s.Colour + nav.x + Palette.Colours.Length) % Palette.Colours.Length; AssignTeams(); }
+                var pad = s.Device as Gamepad;
+                var keys = s.Device as Keyboard;
+                var name = pad != null ? pad.buttonNorth.wasPressedThisFrame : keys != null && keys.nKey.wasPressedThisFrame;
+                var symbol = pad != null ? pad.buttonWest.wasPressedThisFrame : keys != null && keys.mKey.wasPressedThisFrame;
+                if (name) NameRequest = s;
+                if (symbol) s.Symbol = (s.Symbol + 1) % Symbols.Count;
+                if (pad != null) { if (pad.leftShoulder.wasPressedThisFrame) BotRequest = -1; if (pad.rightShoulder.wasPressedThisFrame) BotRequest = 1; }
+                if (keys != null) { if (keys.minusKey.wasPressedThisFrame) BotRequest = -1; if (keys.equalsKey.wasPressedThisFrame) BotRequest = 1; }
             }
         }
 
@@ -116,6 +131,7 @@ namespace UltraPuck.Game
             var pressed = g != null ? g.buttonEast.wasPressedThisFrame : kb != null && kb.escapeKey.wasPressedThisFrame;
             if (!pressed) return;
             Slots.Remove(s);
+            AssignTeams();
             _nobodyHeld[s.Device] = -1000f;
         }
 
@@ -125,10 +141,57 @@ namespace UltraPuck.Game
         private bool Join(InputDevice d)
         {
             if (Slots.Count >= MaxPlayers) return false;
-            Slots.Add(new Slot { Device = d, Team = SmallerTeam() });
+            var s = new Slot { Device = d, Colour = ColourForNewcomer(), Symbol = FreeSymbol() };
+            var humans = 0;
+            foreach (var o in Slots) if (!o.Demo) humans++;
+            s.Name = humans == 0 ? Settings.PlayerName : "P" + (Slots.Count + 1);
+            Slots.Add(s);
+            AssignTeams();
             Debug.Log("Ultra Puck: P" + Slots.Count + " joined with " + d.displayName + " (" + d.layout + ")");
             return true;
         }
+
+        // ------------------------------------------------------------------ colours, teams, symbols
+
+        /// <summary>The first colour picked (in slot order) is team 0, the second team 1. Returns how many colours there are.</summary>
+        public int AssignTeams()
+        {
+            var colours = Colours();
+            foreach (var s in Slots) { var i = colours.IndexOf(s.Colour); s.Team = i < 0 ? 0 : i & 1; }
+            if (colours.Count >= 2) Palette.SetTeams(colours[0], colours[1]);
+            else if (colours.Count == 1) Palette.SetTeams(colours[0], colours[0] == 1 ? 0 : 1);
+            return colours.Count;
+        }
+
+        /// <summary>The colours picked, in slot order, each once.</summary>
+        public List<int> Colours()
+        {
+            var colours = new List<int>();
+            foreach (var s in Slots) if (!colours.Contains(s.Colour)) colours.Add(s.Colour);
+            return colours;
+        }
+
+        /// <summary>A newcomer goes on the smaller team, in its colour (or the other default colour if nobody's there yet).</summary>
+        private int ColourForNewcomer()
+        {
+            var colours = Colours();
+            if (colours.Count == 0) return 0;
+            if (colours.Count == 1) return colours[0] == 1 ? 0 : 1;
+            int a = 0, b = 0;
+            foreach (var s in Slots) if (s.Colour == colours[0]) a++; else if (s.Colour == colours[1]) b++;
+            return a <= b ? colours[0] : colours[1];
+        }
+
+        private int FreeSymbol()
+        {
+            for (var k = 0; k < Symbols.Count; k++) if (!Slots.Exists(s => s.Symbol == k)) return k;
+            return Slots.Count % Symbols.Count;
+        }
+
+        /// <summary>Join screen: a player asked to type their name (Triangle / Y, or N on the keyboard). Read once.</summary>
+        public Slot NameRequest;
+        /// <summary>Join screen: LB / RB (or - / =) asked for one bot fewer (-1) or more (+1).</summary>
+        public int BotRequest;
 
         private int SmallerTeam()
         {
@@ -246,7 +309,8 @@ namespace UltraPuck.Game
         public bool AddBot()
         {
             if (Slots.Count >= MaxPlayers) return false;
-            Slots.Add(new Slot { Team = SmallerTeam(), Demo = true });
+            Slots.Add(new Slot { Demo = true, Colour = ColourForNewcomer(), Symbol = FreeSymbol(), Name = "Bot" });
+            AssignTeams();
             return true;
         }
 

@@ -124,7 +124,9 @@ namespace UltraPuck.Game
             {
                 case "confirm": case "join": case "shoot": return new[] { B.South };
                 case "back": case "charge": case "leave": return new[] { B.East };
-                case "utility": case "freeplay": return new[] { B.North };
+                case "utility": case "freeplay": case "profile": return new[] { B.North };
+                case "shape": return new[] { B.West };
+                case "bots": return new[] { B.LB, B.RB };
                 case "start": case "menu": return new[] { B.Start };
                 case "settings": case "reset": return new[] { B.Select };
                 case "tabs": return new[] { B.LB, B.RB };
@@ -147,6 +149,9 @@ namespace UltraPuck.Game
                 case "charge": return new[] { "Shift" };
                 case "utility": return new[] { "E" };
                 case "freeplay": return new[] { "F" };
+                case "profile": return new[] { "N" };
+                case "shape": return new[] { "M" };
+                case "bots": return new[] { "-", "=" };
                 case "start": return new[] { "Enter" };
                 case "menu": return new[] { "Esc" };
                 case "settings": return new[] { "Tab" };

@@ -17,7 +17,7 @@ namespace UltraPuck.Core.Net
     /// </summary>
     public sealed class NetSession : IDisposable
     {
-        public const int Version = 5; // 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets
+        public const int Version = 6; // 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols
         public const int MaxPlayers = 4;
         /// <summary>Your own controls take effect this many ticks later (25 ms at 120 a second), which hides a little lag for free.</summary>
         public const int InputDelay = 3;
@@ -31,9 +31,20 @@ namespace UltraPuck.Core.Net
             public int Peer;     // which PC (0 = host)
             public int Local;    // which player on that PC
             public int Team;
+            /// <summary>The team colour this player picked (0..7, the game's colour list) and their symbol (0..7).</summary>
+            public int Colour, Symbol;
             public bool Bot;
             public string Name = "";
         }
+
+        /// <summary>
+        /// A player's look, as sent around: colour in the low 3 bits, symbol in the next 3. Players who picked the same
+        /// colour are a team; the first colour (in seat order) is team 0, the next team 1.
+        /// </summary>
+        public static int Look(int colour, int symbol) { return (colour & 7) | ((symbol & 7) << 3); }
+
+        /// <summary>More than two colours picked: there can only be two teams.</summary>
+        public bool TooManyTeams { get; private set; }
 
         public readonly bool IsHost;
         public Stage Current { get; private set; }
@@ -133,19 +144,27 @@ namespace UltraPuck.Core.Net
         private void RebuildSeats()
         {
             Seats.Clear();
-            for (var k = 0; k < _localPlayers.Count; k++) Seats.Add(new Seat { Peer = 0, Local = k, Name = _localPlayers[k].Key, Team = _localPlayers[k].Value });
+            for (var k = 0; k < _localPlayers.Count; k++) Seats.Add(new Seat { Peer = 0, Local = k, Name = _localPlayers[k].Key, Colour = _localPlayers[k].Value & 7, Symbol = (_localPlayers[k].Value >> 3) & 7 });
             var peers = new List<Link>();
             foreach (var l in _links.Values) if (l.Peer > 0) peers.Add(l);
             peers.Sort((a, b) => a.Peer.CompareTo(b.Peer));
             foreach (var l in peers)
-                for (var k = 0; k < l.Players.Count; k++) Seats.Add(new Seat { Peer = l.Peer, Local = k, Name = l.Players[k].Key, Team = l.Players[k].Value });
+                for (var k = 0; k < l.Players.Count; k++) Seats.Add(new Seat { Peer = l.Peer, Local = k, Name = l.Players[k].Key, Colour = l.Players[k].Value & 7, Symbol = (l.Players[k].Value >> 3) & 7 });
             if (Seats.Count > MaxPlayers) Seats.RemoveRange(MaxPlayers, Seats.Count - MaxPlayers);
-            // bots fill in on the smaller team
+            // teams from colours: the first colour picked is team 0, the second team 1 (a third can't play)
+            var colours = new List<int>();
+            foreach (var s in Seats) if (!colours.Contains(s.Colour)) colours.Add(s.Colour);
+            TooManyTeams = colours.Count > 2;
+            if (colours.Count == 0) colours.Add(0);
+            if (colours.Count == 1) colours.Add(colours[0] == 1 ? 0 : 1); // nobody on the other side yet: red, or blue
+            foreach (var s in Seats) { var i = colours.IndexOf(s.Colour); s.Team = i < 0 ? 0 : i & 1; }
+            // bots fill in on the smaller team, in its colour
             for (var b = 0; b < _bots && Seats.Count < MaxPlayers; b++)
             {
                 int a = 0, c = 0;
                 foreach (var s in Seats) if (s.Team == 0) a++; else c++;
-                Seats.Add(new Seat { Peer = 0, Local = -1, Bot = true, Team = a <= c ? 0 : 1, Name = "Bot" });
+                var team = a <= c ? 0 : 1;
+                Seats.Add(new Seat { Peer = 0, Local = -1, Bot = true, Team = team, Colour = colours[team], Symbol = b & 7, Name = "Bot" });
             }
             _lobbyVersion++;
             _lastLobby = -1;
@@ -327,7 +346,7 @@ namespace UltraPuck.Core.Net
                     if (!IsHost) return;
                     var n = r.U8();
                     l.Players.Clear();
-                    for (var k = 0; k < n && k < MaxPlayers; k++) { var name = r.Str(); l.Players.Add(new KeyValuePair<string, int>(name, r.U8() & 1)); }
+                    for (var k = 0; k < n && k < MaxPlayers; k++) { var name = r.Str(); l.Players.Add(new KeyValuePair<string, int>(name, r.U8() & 63)); }
                     RebuildSeats();
                     break;
                 case Msg.Lobby:
@@ -406,7 +425,8 @@ namespace UltraPuck.Core.Net
         private void WriteSeats(Writer w)
         {
             w.U8(Seats.Count);
-            foreach (var s in Seats) w.U8(s.Peer).S8((sbyte)s.Local).U8(s.Team).U8(s.Bot ? 1 : 0).Str(s.Name);
+            foreach (var s in Seats) w.U8(s.Peer).S8((sbyte)s.Local).U8(s.Team).U8(Look(s.Colour, s.Symbol)).U8(s.Bot ? 1 : 0).Str(s.Name);
+            w.U8(TooManyTeams ? 1 : 0);
         }
 
         private void ReadSeats(Reader r)
@@ -414,7 +434,15 @@ namespace UltraPuck.Core.Net
             var n = r.U8();
             Seats.Clear();
             for (var k = 0; k < n && k < MaxPlayers; k++)
-                Seats.Add(new Seat { Peer = r.U8(), Local = r.S8(), Team = r.U8() & 1, Bot = r.U8() != 0, Name = r.Str() });
+            {
+                var seat = new Seat { Peer = r.U8(), Local = r.S8(), Team = r.U8() & 1 };
+                var look = r.U8();
+                seat.Colour = look & 7; seat.Symbol = (look >> 3) & 7;
+                seat.Bot = r.U8() != 0;
+                seat.Name = r.Str();
+                Seats.Add(seat);
+            }
+            TooManyTeams = r.U8() != 0;
         }
 
         private void SendLobby()

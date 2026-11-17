@@ -24,6 +24,8 @@ namespace UltraPuck.Game
         public Camera Cam;
         /// <summary>The local lobby: the rink being played on (null when there's only one).</summary>
         public string MapName;
+        /// <summary>A goal replay is on screen (and whether A skips it, and whether it's in slow motion right now).</summary>
+        public bool Replay, ReplaySkippable, ReplaySlow;
         /// <summary>A player's name (for the corner card list).</summary>
         public System.Func<int, string> PlayerName;
 
@@ -53,6 +55,15 @@ namespace UltraPuck.Game
             Ui.Swatch(new Rect(w / 2 - 216, 24, 26, 26), 0);
             Ui.Swatch(new Rect(w / 2 + 190, 24, 26, 26), 1);
             Ui.Label(new Rect(w / 2 - 190, 12, 380, 50), score, Ui.Font(23, true, TextAnchor.MiddleCenter), Color.white);
+            // a timed match: the clock under the score (overtime: next goal wins)
+            if (_sim != null && _sim.T.TimeLimit > Fix.Zero && !_free)
+            {
+                var left = Mathf.CeilToInt(_state.Clock.ToFloat());
+                var clock = _state.Overtime ? "OVERTIME  ·  next goal wins" : (left / 60) + ":" + (left % 60).ToString("00");
+                var hurry = !_state.Overtime && left <= 10;
+                Ui.Box(new Rect(w / 2 - 110, 64, 220, 30), new Color(0f, 0f, 0f, 0.55f), 10f);
+                Ui.Label(new Rect(w / 2 - 110, 64, 220, 30), clock, Ui.Font(18, true, TextAnchor.MiddleCenter), hurry || _state.Overtime ? new Color(1f, 0.55f, 0.45f) : Color.white);
+            }
 
             if (!string.IsNullOrEmpty(Banner))
             {
@@ -75,7 +86,18 @@ namespace UltraPuck.Game
                     if (!_free) Ui.Label(new Rect(0, h * 0.28f, w, 70), _state.Score[0] + _state.Score[1] == 0 ? "Ready..." : "Face-off", big, Color.white);
                     break;
                 case Phase.Scored:
-                    Ui.Label(new Rect(0, h * 0.28f, w, 70), "GOAL!  " + Palette.TeamName(_state.LastScorer) + " scores", big, Palette.Team(_state.LastScorer));
+                    if (Replay)
+                    {
+                        // a "REPLAY" badge that pulses, and a bar top and bottom like a broadcast
+                        Ui.Box(new Rect(0, 0, w, 10), new Color(0f, 0f, 0f, 0.6f), 0f);
+                        Ui.Box(new Rect(0, h - 10, w, 10), new Color(0f, 0f, 0f, 0.6f), 0f);
+                        var pulse = 0.7f + 0.3f * Mathf.Sin(Time.unscaledTime * 6f);
+                        Ui.Box(new Rect(24, 80, 150, 40), new Color(0.85f, 0.15f, 0.15f, 0.9f * pulse), 8f);
+                        Ui.Label(new Rect(24, 80, 150, 40), "REPLAY", Ui.Font(22, true, TextAnchor.MiddleCenter), Color.white);
+                        if (ReplaySlow) Ui.Label(new Rect(184, 80, 300, 40), "slow motion", Ui.Font(17, false), new Color(1f, 1f, 1f, 0.7f));
+                        if (ReplaySkippable) Glyphs.Hint(new Rect(24, h - 50, 300, 28), "{confirm} Skip", 16, new Color(1f, 1f, 1f, 0.7f), TextAnchor.MiddleLeft);
+                    }
+                    else Ui.Label(new Rect(0, h * 0.28f, w, 70), "GOAL!  " + Palette.TeamName(_state.LastScorer) + " scores", big, Palette.Team(_state.LastScorer));
                     break;
                 case Phase.GameOver:
                     Ui.Box(new Rect(w / 2 - 330, h * 0.28f, 660, 150), Ui.Panel, 20f);
@@ -103,7 +125,7 @@ namespace UltraPuck.Game
             {
                 var s = _local.Slots[i];
                 Ui.Swatch(new Rect(w / 2 - 252, y + i * 36 + 5, 24, 24), s.Team);
-                Ui.Label(new Rect(w / 2 - 216, y + i * 36, 460, 34), "P" + (i + 1) + "   " + NameOf(i, s) + "   ·   " + Palette.TeamName(s.Team) + " (" + Palette.SymbolName(s.Team) + ")", Ui.Font(18), Color.white);
+                Ui.Label(new Rect(w / 2 - 216, y + i * 36, 460, 34), "P" + (i + 1) + "   " + NameOf(i, s) + "   ·   " + Palette.TeamName(s.Team), Ui.Font(18), Color.white);
             }
 
             Glyphs.Hint(new Rect(0, h - 40, w, 28),

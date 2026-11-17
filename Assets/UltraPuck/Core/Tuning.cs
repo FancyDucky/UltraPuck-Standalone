@@ -38,6 +38,11 @@ namespace UltraPuck.Core
         public Fix DashKnockback = Fix.FromInt(17);
         /// <summary>How long a checked player is dazed, and how much of their stick force they keep meanwhile.</summary>
         public Fix HitStun = Fix.Ratio(7, 20);
+        /// <summary>
+        /// Hit lag: after a hit both players freeze for a moment (like a fighting game), longer for a harder hit. A full
+        /// check freezes them this long; a bump, a share of it. They keep their speed and fly off when it ends.
+        /// </summary>
+        public Fix HitLagMax = Fix.Ratio(3, 20);
         public Fix StunControl = Fix.Ratio(1, 4);
 
         // bumping
@@ -114,6 +119,10 @@ namespace UltraPuck.Core
         public Fix PickTime = Fix.FromInt(30);
         public Fix CountdownTime = Fix.Ratio(3, 2);
         public Fix CelebrateTime = Fix.FromInt(2);
+        /// <summary>A timed match: seconds on the clock (0 = play to <see cref="GoalsToWin"/> instead). Level at the end: next goal wins.</summary>
+        public Fix TimeLimit = Fix.Zero;
+        /// <summary>Goals are shown again (the celebration is long enough for the replay; the replay itself is just drawing).</summary>
+        public bool Replays;
 
         /// <summary>
         /// Free play: practice with no winner. Goals still count, but only the puck goes back to its spot (players

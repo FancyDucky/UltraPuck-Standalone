@@ -38,6 +38,7 @@ namespace UltraPuck.Game
         private PuckView _puck;
         private Camera _cam;
         private Hud _hud;
+        private PlayScreens _play;
         private Menus _menus;
         private CardScreen _cardScreen;
         private Effects _effects;
@@ -59,6 +60,9 @@ namespace UltraPuck.Game
             _menus = gameObject.AddComponent<Menus>();
             _cardScreen = gameObject.AddComponent<CardScreen>();
             _mainMenu = gameObject.AddComponent<MainMenu>();
+            _play = gameObject.AddComponent<PlayScreens>();
+            _play.Runner = this;
+            _play.Local = _local;
             gameObject.AddComponent<Updater>();
             _mainMenu.Runner = this;
             _mainMenu.Local = _local;
@@ -245,6 +249,8 @@ namespace UltraPuck.Game
         {
             if (_sim == null) return;
             SteamNet.Update();
+            if (_mode == Mode.Online) OnlineColours();
+            RinkColours();
             LocalPlayers.Blocked = SteamNet.OverlayOpen;
             InputMode.Update();
             if (Updater.Busy) { AttractUpdate(); UpdateCamera(false); return; } // updating: the bots play on behind, nothing else
@@ -260,7 +266,7 @@ namespace UltraPuck.Game
             _effects.Update();
             _cardScreen.Sim = _sim;
             _cardScreen.Frame(playing ? _state : null);
-            _hud.Show(_mode == Mode.Lobby, _free, _local, _state, _sim, _error, _menus.IsOpen || _cardScreen.Showing || !playing && _mode != Mode.Lobby);
+            _hud.Show(false, _free, _local, _state, _sim, _error, _menus.IsOpen || _cardScreen.Showing || !playing);
             _hud.Banner = _mode == Mode.Online && _session != null && OnlinePlaying ? OnlineBanner() : null;
         }
 
@@ -292,6 +298,7 @@ namespace UltraPuck.Game
 
         public void GoMainMenu()
         {
+            _play.Open(PlayScreens.Page.None);
             if (_session != null) LeaveOnline(null);
             _local.Slots.Clear();
             _mode = Mode.Menu;
@@ -307,6 +314,7 @@ namespace UltraPuck.Game
             _local.Slots.Clear();
             _sim = _matchSim;
             _mode = Mode.Lobby;
+            _play.Open(PlayScreens.Page.Join);
         }
 
         public void StartFreePlayFrom(UnityEngine.InputSystem.InputDevice device)
@@ -379,9 +387,12 @@ namespace UltraPuck.Game
         private byte[] PackRules()
         {
             var b = new List<byte>();
-            b.Add((byte)((Settings.Rounds ? 1 : 0) | (Settings.TeamVote ? 2 : 0)));
+            b.Add((byte)((Settings.Rounds ? 1 : 0) | (Settings.TeamVote ? 2 : 0) | (Settings.Replays ? 4 : 0)));
             b.Add((byte)Settings.CardsOffered);
             b.Add((byte)Mathf.Clamp(Settings.PickTime, 0, 255));
+            b.Add((byte)Settings.MatchMode);
+            b.Add((byte)Settings.GoalsToWin);
+            b.Add((byte)Settings.MatchMinutes);
             var off = new List<byte>();
             if (_cards != null) foreach (var c in _cards.Cards) if (!Settings.CardOn(c.Id) && c.Index < 256) off.Add((byte)c.Index);
             b.Add((byte)off.Count);
@@ -394,12 +405,20 @@ namespace UltraPuck.Game
             var t = free ? Tuning.ForFreePlay() : new Tuning();
             if (rules == null || rules.Length < 4) return t;
             if (!free) t.CardsAfterGoals = (rules[0] & 1) != 0;
+            if (!free && (rules[0] & 4) != 0) { t.Replays = true; t.CelebrateTime = Fix.FromInt(11); } // the explosion, then the replay
             t.TeamVote = (rules[0] & 2) != 0;
             t.CardsOffered = Mathf.Clamp(rules[1], 1, 5);
             t.PickTime = Fix.FromInt(rules[2]);
-            var n = Mathf.Min(rules[3], rules.Length - 4);
+            if (rules.Length < 7) return t;
+            if (!free)
+            {
+                // how it's won: first to N goals, or most goals when the clock runs out (level: next goal wins)
+                if (rules[3] == 1) { t.TimeLimit = Fix.FromInt(Mathf.Clamp(rules[5], 1, 15) * 60); t.GoalsToWin = 0; }
+                else t.GoalsToWin = Mathf.Clamp(rules[4], 1, 20);
+            }
+            var n = Mathf.Min(rules[6], rules.Length - 7);
             t.CardsOff = new int[n];
-            for (var k = 0; k < n; k++) t.CardsOff[k] = rules[4 + k];
+            for (var k = 0; k < n; k++) t.CardsOff[k] = rules[7 + k];
             return t;
         }
 
@@ -509,15 +528,21 @@ namespace UltraPuck.Game
                 if (_menus.IsOpen) _menus.Close();
                 _mainMenu.Show(MainMenu.Page.OnlineLobby);
                 _mainMenu.Message = s.Problem;
+                if (_play.Typing) { _play.Tick(); AttractUpdate(); return; } // typing a name: the keyboard has the controls
                 _mainMenu.Tick(); // before joining: pressing A to join mustn't also press the highlighted button
                 if (_mode != Mode.Online || _session == null) return;
                 _local.LobbyUpdate();
+                if (_local.NameRequest != null) { _play.OpenKeyboard(_local.NameRequest); _local.NameRequest = null; }
                 if (_local.LeaveLobbyHeld()) { LeaveOnline(null); return; }
                 var mine = new List<KeyValuePair<string, int>>();
                 for (var k = 0; k < _local.Slots.Count; k++)
-                    mine.Add(new KeyValuePair<string, int>(Settings.PlayerName + (k > 0 ? " (" + (k + 1) + ")" : ""), _local.Slots[k].Team));
+                {
+                    var sl = _local.Slots[k];
+                    var nm = !string.IsNullOrEmpty(sl.Name) ? sl.Name : Settings.PlayerName + (k > 0 ? " (" + (k + 1) + ")" : "");
+                    mine.Add(new KeyValuePair<string, int>(nm, NetSession.Look(sl.Colour, sl.Symbol)));
+                }
                 s.SetLocalPlayers(mine);
-                if (s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2) StartOnlineMatch();
+                if (s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2 && !s.TooManyTeams) StartOnlineMatch();
                 AttractUpdate();
                 return;
             }
@@ -557,6 +582,8 @@ namespace UltraPuck.Game
                 steps++;
             }
             _state = match.State;
+            Recorder.Record(_state);
+            if (ReplayFrame(false)) return;
             Show(match.Previous, match.State, Mathf.Clamp01(_onlineAcc / dt));
         }
 
@@ -595,19 +622,73 @@ namespace UltraPuck.Game
 
         // ------------------------------------------------------------------ lobby
 
+        /// <summary>Setting up a local match: the join screen, then the rink, then how to win (see <see cref="PlayScreens"/>).</summary>
         private void LobbyUpdate()
         {
-            if (_local.SettingsPressed()) { _menus.OpenSettings(true); return; }
-            _local.LobbyUpdate();
-            if (_local.LeaveLobbyHeld()) { GoMainMenu(); return; }
-            var tab = _local.TabPressed();
-            if (tab != 0) UseMap(_mapIndex + tab);
-            _hud.MapName = MapCount > 1 ? MapName(_mapIndex) : null;
-            // show everyone who has joined standing at their spawn
+            if (_play.Current == PlayScreens.Page.None) _play.Open(PlayScreens.Page.Join);
+            _play.Tick();
+            if (_mode != Mode.Lobby) return;
+            // everyone who has joined, standing at their spawn behind the screens
+            _local.AssignTeams();
             _state = _matchSim.NewGame(_local.Teams());
             Show(_state, _state, 0f);
-            if (_local.FreePlayPressed()) StartMatch(true);
-            else if (_local.Slots.Count > 0 && _local.StartPressed()) StartMatch(false);
+        }
+
+        /// <summary>The play screens are done: start the match with the rink and rules they chose.</summary>
+        public void StartLocalMatch()
+        {
+            _local.AssignTeams();
+            StartMatch(false);
+        }
+
+        private readonly Dictionary<int, Texture2D> _previews = new Dictionary<int, Texture2D>();
+
+        /// <summary>A small picture of rink <paramref name="i"/> for the rink select screen: the floor, walls and goals.</summary>
+        public Texture2D MapPreview(int i)
+        {
+            if (i < 0 || i >= _maps.Count) return null;
+            Texture2D tex;
+            if (_previews.TryGetValue(i, out tex) && tex != null) return tex;
+            var map = _maps[i];
+            const int W = 384, H = 216;
+            var min = V.Of(map.BoundsMin) - Vector2.one; var max = V.Of(map.BoundsMax) + Vector2.one;
+            var scale = Mathf.Min(W / (max.x - min.x), H / (max.y - min.y));
+            var off = new Vector2((W - (max.x - min.x) * scale) / 2f, (H - (max.y - min.y) * scale) / 2f);
+            var outline = new List<Vector2>();
+            foreach (var p in map.WallLines[0]) outline.Add(V.Of(p));
+            var segs = new List<Vector2[]>();
+            foreach (var sg in map.Segments) segs.Add(new[] { V.Of(sg.A), V.Of(sg.B) });
+            var half = _matchSim.T.WallThickness.ToFloat() / 2f;
+            var px = new Color32[W * H];
+            for (var y = 0; y < H; y++)
+                for (var x = 0; x < W; x++)
+                {
+                    var p = new Vector2((x + 0.5f - off.x) / scale + min.x, (y + 0.5f - off.y) / scale + min.y);
+                    Color c = Color.clear;
+                    if (InsidePoly(outline, p)) c = Palette.Floor;
+                    foreach (var g in map.Goals)
+                        if (p.x >= g.Min.X.ToFloat() && p.x <= g.Max.X.ToFloat() && p.y >= g.Min.Y.ToFloat() && p.y <= g.Max.Y.ToFloat()) c = Palette.Goal(g.Team);
+                    foreach (var sg in segs)
+                    {
+                        var ab = sg[1] - sg[0];
+                        var t = Mathf.Clamp01(Vector2.Dot(p - sg[0], ab) / Mathf.Max(1e-6f, ab.sqrMagnitude));
+                        if ((p - (sg[0] + ab * t)).sqrMagnitude <= half * half) { c = new Color(0.62f, 0.62f, 0.64f); break; }
+                    }
+                    px[y * W + x] = c;
+                }
+            tex = new Texture2D(W, H, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            tex.SetPixels32(px);
+            tex.Apply();
+            _previews[i] = tex;
+            return tex;
+        }
+
+        private static bool InsidePoly(List<Vector2> poly, Vector2 p)
+        {
+            var inside = false;
+            for (int i = 0, j = poly.Count - 1; i < poly.Count; j = i++)
+                if ((poly[i].y > p.y) != (poly[j].y > p.y) && p.x < (poly[j].x - poly[i].x) * (p.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x) inside = !inside;
+            return inside;
         }
 
         private void StartMatch(bool free)
@@ -621,6 +702,8 @@ namespace UltraPuck.Game
             _state = _sim.NewGame(_local.Teams(), (uint)System.Environment.TickCount * 2654435761u | 1u);
             _prev = _state.Clone();
             _acc = 0f;
+            Recorder.Clear();
+            _replay = null;
             _mode = Mode.Match;
             _menus.FreePlay = free;
             foreach (var s in _local.Slots) s.Latched = 0;
@@ -628,9 +711,9 @@ namespace UltraPuck.Game
 
         private void BackToLobby()
         {
-            // computer players only exist in free play (or the ULTRAPUCK_DEMO test)
-            for (var i = _local.LastBot(); i >= 0; i = _local.LastBot()) _local.Slots.RemoveAt(i);
+            // back to the join screen with everyone (and the bots) still there
             _mode = Mode.Lobby;
+            _play.Open(PlayScreens.Page.Join);
             _free = false;
             _sim = _matchSim;
         }
@@ -694,8 +777,10 @@ namespace UltraPuck.Game
             {
                 _prev = _state.Clone();
                 _sim.Step(_state, _local.Sample(_sim, _state));
+                Recorder.Record(_state);
                 _acc -= dt;
             }
+            if (!_free && ReplayFrame(true)) return;
             Show(_prev, _state, _acc / dt);
 
             if (CardScreen.TestMode && _free && _state.Phase == Phase.Play && !_cardScreen.Showing)
@@ -706,6 +791,65 @@ namespace UltraPuck.Game
         }
 
         private float _testPause;
+
+        // ------------------------------------------------------------------ goal replays
+
+        private ReplayBuffer _recorder;
+        private ReplayBuffer Recorder { get { return _recorder ?? (_recorder = new ReplayBuffer(_sim.T.TicksPerSecond)); } }
+        private GoalReplay _replay;
+        private bool _replayPending;
+        private float _replayStartAt;
+        private int _goalTick;
+        private Phase _lastPhase;
+
+        /// <summary>
+        /// After a goal (with replays on): the explosion plays live, then the replay. Returns true while the replay is
+        /// what's on screen. <paramref name="local"/>: a game on this PC only, so A / Start may skip it (online
+        /// everyone's game has to wait the same time, so it just plays).
+        /// </summary>
+        private bool ReplayFrame(bool local)
+        {
+            if (_state == null || _sim == null) return false;
+            var tps = _sim.T.TicksPerSecond;
+            if (_state.Phase != Phase.Scored)
+            {
+                _lastPhase = _state.Phase;
+                _replay = null;
+                _replayPending = false;
+                _hud.Replay = false;
+                return false;
+            }
+            if (_lastPhase != Phase.Scored)
+            {
+                _lastPhase = Phase.Scored;
+                _goalTick = _state.Tick;
+                _replayPending = _sim.T.Replays;
+                _replayStartAt = Time.unscaledTime + 1.4f;
+            }
+            if (_replayPending && Time.unscaledTime >= _replayStartAt)
+            {
+                _replayPending = false;
+                var frames = Recorder.Before(_goalTick + tps * 7 / 10, tps);
+                _replay = new GoalReplay(frames, _state.LastScorer, _sim, _state.PhaseTime.ToFloat() - 0.4f);
+            }
+            if (_replay == null) return false;
+            var skip = local && (_local.StartPressed() || _local.Menu().Confirm);
+            GameState a, b;
+            float t;
+            _replay.Advance(Time.unscaledDeltaTime, tps, out a, out b, out t);
+            if (_replay.Done || skip || a == null)
+            {
+                _replay = null;
+                _hud.Replay = false;
+                if (local) _state.PhaseTime = Fix.Zero; // straight on to the face-off (or the cards)
+                return false;
+            }
+            _hud.Replay = true;
+            _hud.ReplaySkippable = local;
+            _hud.ReplaySlow = _replay.Slow < 0.9f;
+            Show(a, b, t);
+            return true;
+        }
 
         /// <summary>A person on this PC (not a bot) who's charging a shot: the goal they're attacking and how far charged (0..1, Over Charge doesn't add).</summary>
         private bool LocalCharge(out Vector2 goal, out float charge)
@@ -752,7 +896,8 @@ namespace UltraPuck.Game
             _cooldowns[0] = p.Stats.PuckGun > 0 ? 1f - p.GunCooldown.ToFloat() / _sim.T.GunCooldown.ToFloat() : -1f;
             _cooldowns[1] = p.Stats.Invisibility > 0 ? (invisible ? 0f : 1f - p.InvisCooldown.ToFloat() / _sim.T.InvisCooldown.ToFloat()) : -1f;
             _cooldowns[2] = p.Stats.Shockwave > 0 ? 1f - p.ShockCooldown.ToFloat() / _sim.T.ShockCooldown.ToFloat() : -1f;
-            _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.BoostTime > Fix.Zero, _cooldowns);
+            _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.BoostTime > Fix.Zero, _cooldowns,
+                p.Stun > Fix.Zero, p.DashTime.ToFloat() / Mathf.Max(0.01f, _sim.T.DashHitTime.ToFloat()), p.HitLag > Fix.Zero);
 
             while (_seenShocks.Count <= i) { _seenShocks.Add(-1); _seenRefreshes.Add(-1); }
             if (_seenShocks[i] >= 0 && p.Shocks > _seenShocks[i] && Settings.HitEffects)
@@ -767,12 +912,40 @@ namespace UltraPuck.Game
             return hidden;
         }
 
+        /// <summary>Player <paramref name="i"/>'s symbol: their online seat's, or their slot's on this PC.</summary>
+        private int SymbolOf(int i)
+        {
+            if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count ? _session.Seats[i].Symbol : 0;
+            return i < _local.Slots.Count ? _local.Slots[i].Symbol : 0;
+        }
+
+        /// <summary>Online: the teams' colours are the ones their players picked.</summary>
+        private void OnlineColours()
+        {
+            if (_session == null) return;
+            int c0 = -1, c1 = -1;
+            foreach (var seat in _session.Seats) { if (seat.Team == 0 && c0 < 0) c0 = seat.Colour; if (seat.Team == 1 && c1 < 0) c1 = seat.Colour; }
+            Palette.SetTeams(c0 < 0 ? (c1 == 0 ? 1 : 0) : c0, c1 < 0 ? (c0 == 1 ? 0 : 1) : c1);
+        }
+
+        private int _rinkColours = -1;
+
+        /// <summary>The rink's goals are drawn in team colours: build it again when they change.</summary>
+        private void RinkColours()
+        {
+            if (_rinkColours == Palette.Version || _map == null) return;
+            _rinkColours = Palette.Version;
+            if (_rink != null) Destroy(_rink.Root);
+            _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat());
+        }
+
         /// <summary>The name over player <paramref name="i"/>: their online name, yours (then P2, P3...) on this PC, or Bot.</summary>
         private string NameOf(int i)
         {
             if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count ? _session.Seats[i].Name : "";
             if (i >= _local.Slots.Count) return "";
             var s = _local.Slots[i];
+            if (!string.IsNullOrEmpty(s.Name)) return s.Name;
             if (s.Demo) return "Bot";
             for (var k = 0; k < i; k++) if (!_local.Slots[k].Demo) return "P" + (i + 1);
             return Settings.PlayerName;
@@ -788,11 +961,12 @@ namespace UltraPuck.Game
                 var pb = b.Players[i];
                 var pa = i < a.Players.Length ? a.Players[i] : pb;
                 var radius = _sim.RadiusOf(pb).ToFloat();
-                var key = "Player" + pb.Team + "_" + Mathf.RoundToInt(radius * 1000f);
+                var symbol = SymbolOf(i);
+                var key = "Player" + pb.Team + "_" + Mathf.RoundToInt(radius * 1000f) + "_" + symbol + "_" + Palette.Version;
                 if (i >= _players.Count || _players[i].Root.name != key)
                 {
-                    // new player, or their size changed (cards): build them again
-                    var view = new PlayerView(pb.Team, radius, _entities);
+                    // new player, or their size, symbol or team colour changed: build them again
+                    var view = new PlayerView(pb.Team, radius, _entities, symbol);
                     view.Root.name = key;
                     if (i < _players.Count) { Destroy(_players[i].Root); _players[i] = view; }
                     else _players.Add(view);
@@ -810,7 +984,13 @@ namespace UltraPuck.Game
                     var near = false;
                     foreach (var h in _impactsThisFrame) if ((h - hitAt).sqrMagnitude < 0.6f) near = true;
                     // small bumps only squash; a ring is for the real hits
-                    if (!near && hit >= 0.35f && Settings.HitEffects) { _effects.Impact(hitAt, hit); _impactsThisFrame.Add(hitAt); }
+                    if (!near && hit >= 0.35f && Settings.HitEffects)
+                    {
+                        // sparks for every real hit; lightning crackling out of the hard ones
+                        _effects.Sparks(hitAt, hit, new Color(1f, 0.85f, 0.4f));
+                        if (hit >= 0.6f) _effects.Lightning(hitAt, hit, new Color(0.55f, 0.8f, 1f));
+                        _impactsThisFrame.Add(hitAt);
+                    }
                     _shake = Mathf.Max(_shake, 0.06f + 0.22f * hit * hit);
                 }
             }
@@ -820,6 +1000,13 @@ namespace UltraPuck.Game
             _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);
+            // a goal: the puck blows up in the net, and stays gone until the next face-off
+            if (b.Phase == Phase.Scored && a.Phase != Phase.Scored)
+            {
+                _effects.Explosion(pb2, b.LastScorer >= 0 ? Palette.Team(b.LastScorer) : Color.white);
+                _shake = Mathf.Max(_shake, 0.7f);
+            }
+            _puck.Visible(b.Phase != Phase.Scored);
             _puck.Show((pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t), b.PuckTeam);
         }
     }

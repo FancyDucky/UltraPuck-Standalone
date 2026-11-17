@@ -152,25 +152,19 @@ namespace UltraPuck.Game
             return sb.ToString();
         }
 
-        /// <summary>A team's colour square with its symbol on it (so teams never rely on colour alone).</summary>
+        /// <summary>A team's colour, as a small rounded square (with the team's colour name shown next to it wherever it matters).</summary>
         public static void Swatch(Rect r, int team)
         {
             Box(r, Palette.Team(team), r.width * 0.22f);
+        }
+
+        /// <summary>A player symbol (see <see cref="Symbols"/>) in a colour.</summary>
+        public static void Symbol(Rect r, int symbol, Color c)
+        {
             if (Event.current.type != EventType.Repaint) return;
-            Init();
             var old = GUI.color;
-            GUI.color = Color.white;
-            var m = r.width * 0.3f;
-            if (team == 1) GUI.DrawTexture(new Rect(r.x + m, r.y + m, r.width - 2 * m, r.height - 2 * m), _white);
-            else
-            {
-                const int bars = 6;
-                for (var b = 0; b < bars; b++)
-                {
-                    var bw = (r.width - 2 * m) * (b + 1) / bars;
-                    GUI.DrawTexture(new Rect(r.center.x - bw / 2, r.y + m + b * (r.height - 2 * m) / bars, bw, (r.height - 2 * m) / bars + 0.5f), _white);
-                }
-            }
+            GUI.color = c;
+            GUI.DrawTexture(r, Symbols.Texture(symbol));
             GUI.color = old;
         }
 

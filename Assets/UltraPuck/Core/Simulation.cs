@@ -129,6 +129,7 @@ namespace UltraPuck.Core
             var s = new GameState { Players = new PlayerState[teams.Length] };
             if (seed != 0) s.Rng = seed;
             for (var i = 0; i < teams.Length; i++) s.Players[i] = new PlayerState { Team = teams[i] & 1 };
+            s.Clock = T.TimeLimit;
             FaceOff(s);
             return s;
         }
@@ -277,11 +278,23 @@ namespace UltraPuck.Core
 
             for (var i = 0; i < s.Players.Length; i++) Control(s, i, InputOf(inputs, i), dt);
 
+            // the match clock (timed matches): runs while the puck is in play; level at zero: next goal wins
+            if (T.TimeLimit > Fix.Zero && s.Phase == Phase.Play && !s.Overtime)
+            {
+                s.Clock = Fix.Max(Fix.Zero, s.Clock - dt);
+                if (s.Clock <= Fix.Zero)
+                {
+                    if (s.Score[0] != s.Score[1]) { s.Phase = Phase.GameOver; s.LastScorer = s.Score[0] > s.Score[1] ? 0 : 1; return; }
+                    s.Overtime = true;
+                }
+            }
+
             var sub = dt / T.Substeps;
             for (var k = 0; k < T.Substeps; k++)
             {
                 foreach (var p in s.Players)
                 {
+                    if (p.HitLag > Fix.Zero) continue; // frozen by a hit
                     p.Pos += p.Vel * sub;
                     CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
                     CollidePylons(s, ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
@@ -310,10 +323,10 @@ namespace UltraPuck.Core
                 s.PhaseTime -= dt;
                 if (s.PhaseTime <= Fix.Zero)
                 {
-                    if (T.GoalsToWin > 0 && (s.Score[0] >= T.GoalsToWin || s.Score[1] >= T.GoalsToWin))
+                    if (s.Overtime || (T.TimeLimit <= Fix.Zero && T.GoalsToWin > 0 && (s.Score[0] >= T.GoalsToWin || s.Score[1] >= T.GoalsToWin)))
                     {
                         s.Phase = Phase.GameOver;
-                        s.LastScorer = s.Score[0] >= T.GoalsToWin ? 0 : 1;
+                        s.LastScorer = s.Score[0] > s.Score[1] ? 0 : 1;
                     }
                     else if (T.FreePlay) { ResetPuck(s); s.Phase = Phase.Play; }
                     else
@@ -334,6 +347,13 @@ namespace UltraPuck.Core
         private void Control(GameState s, int i, PlayerInput input, Fix dt)
         {
             var p = s.Players[i];
+            if (p.HitLag > Fix.Zero)
+            {
+                // frozen by a hit: no control until it's over (presses made now don't count later either)
+                p.HitLag = Fix.Max(Fix.Zero, p.HitLag - dt);
+                p.PrevButtons = input.Buttons;
+                return;
+            }
             var pressed = (byte)(input.Buttons & ~p.PrevButtons);
             p.PrevButtons = input.Buttons;
             if (T.FreePlay && (pressed & PlayerInput.ResetPuck) != 0) ResetPuck(s);
@@ -741,6 +761,7 @@ namespace UltraPuck.Core
                         var power = Fix.Clamp01(closing / T.BumpHitMax);
                         Hit(a, n, power);
                         Hit(b, -n, power);
+                        if (power > Fix.Ratio(3, 10)) { var lag = T.HitLagMax * power * Fix.Half; a.HitLag = Fix.Max(a.HitLag, lag); b.HitLag = Fix.Max(b.HitLag, lag); }
                     }
 
                     // push apart (the lighter one moves more) and bounce
@@ -761,6 +782,10 @@ namespace UltraPuck.Core
         {
             PlayerState a = s.Players[from], b = s.Players[to];
             a.DashTime = Fix.Zero; // one hit per dash
+            // hit lag, by how hard it was: the checker's speed into the other player
+            var hard = Fix.Clamp(FixVec2.Dot(a.Vel - b.Vel, n) / (T.DashSpeed * Fix.Ratio(3, 2)), Fix.Ratio(2, 5), Fix.One);
+            a.HitLag = Fix.Max(a.HitLag, T.HitLagMax * hard);
+            b.HitLag = Fix.Max(b.HitLag, T.HitLagMax * hard);
             b.Vel += n * (T.DashKnockback * WeightOf(a) / WeightOf(b) * Fix.Clamp(a.Stats.KnockbackGiven * b.Stats.KnockbackTaken, Fix.Ratio(1, 20), Fix.FromInt(10)));
             if (a.Team == b.Team && b.Stats.FriendlyFire > 0)
             {

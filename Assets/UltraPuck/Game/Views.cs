@@ -85,7 +85,23 @@ namespace UltraPuck.Game
         private float _barAlpha;
 
         // card effects: slowed / boosted rings, a faint outline while invisible (to teammates), small cooldown bars
-        private readonly GameObject _slowRing, _boostRing, _ghost, _shadow;
+        private readonly GameObject _boostRing, _ghost, _shadow;
+
+        // slowed: a few blue down arrows drifting down over the player, on a loop
+        private readonly Transform _slowRoot;
+        private readonly Transform[] _slowArrows = new Transform[3];
+        private readonly Mesh[] _slowMesh = new Mesh[3];
+        private float _slowAlpha;
+
+        // stunned: little stars circling the player
+        private readonly Transform _stunRoot;
+        private readonly Mesh[] _stunMesh = new Mesh[3];
+        private float _stunAlpha;
+
+        // dashing: speed streaks behind and a bright rim, fading as the dash ends
+        private readonly Transform _dashRoot;
+        private readonly Mesh[] _dashMesh = new Mesh[4];
+        private float _dashShown = -1f;
         private readonly Transform _cdRoot;
         private readonly Mesh[] _cdBack = new Mesh[3], _cdFill = new Mesh[3];
         private readonly Transform[] _cdFillT = new Transform[3];
@@ -98,7 +114,7 @@ namespace UltraPuck.Game
         private float _hitAge = 10f, _hitPower, _hitAngle;
         private const float HitTime = 0.32f;
 
-        public PlayerView(int team, float radius, Transform parent)
+        public PlayerView(int team, float radius, Transform parent, int symbol)
         {
             _r = radius;
             var c = Palette.Team(team);
@@ -107,11 +123,57 @@ namespace UltraPuck.Game
             // a drop shadow that doesn't turn with the player, so the light always comes from the same side
             _shadow = Draw.Make("Shadow", Root.transform, Draw.Disc(radius * 1.04f, Palette.Shadow), 7).gameObject;
             _shadow.transform.localPosition = new Vector3(radius * 0.18f, -radius * 0.32f, 0f);
-            _slowRing = Draw.Make("Slowed", Root.transform, Draw.Ring(radius * 1.55f, radius * 1.72f, 1f, new Color(0.45f, 0.85f, 1f, 0.8f)), 9).gameObject;
             _boostRing = Draw.Make("Boosted", Root.transform, Draw.Ring(radius * 1.55f, radius * 1.72f, 1f, new Color(1f, 0.62f, 0.3f, 0.85f)), 9).gameObject;
+
+            _slowRoot = new GameObject("Slowed").transform;
+            _slowRoot.SetParent(Root.transform, false);
+            for (var k = 0; k < 3; k++)
+            {
+                // a down arrow: a stem and a head
+                var w = radius * 0.22f;
+                var pts = new List<Vector2>
+                {
+                    new Vector2(-w * 0.45f, w * 1.4f), new Vector2(w * 0.45f, w * 1.4f), new Vector2(w * 0.45f, 0f), new Vector2(w * 1.1f, 0f),
+                    new Vector2(0f, -w * 1.1f), new Vector2(-w * 1.1f, 0f), new Vector2(-w * 0.45f, 0f),
+                };
+                _slowMesh[k] = Draw.Polygon(pts, new Color(0.45f, 0.75f, 1f, 0f));
+                _slowArrows[k] = Draw.Make("Arrow" + k, _slowRoot, _slowMesh[k], 25).transform;
+            }
+            _slowRoot.gameObject.SetActive(false);
+
+            _stunRoot = new GameObject("Stunned").transform;
+            _stunRoot.SetParent(Root.transform, false);
+            for (var k = 0; k < 3; k++)
+            {
+                var star = new List<Vector2>();
+                for (var j = 0; j < 10; j++)
+                {
+                    var a = Mathf.PI / 2f + j * Mathf.PI / 5f;
+                    var rr = (j % 2 == 0 ? 1f : 0.45f) * radius * 0.26f;
+                    star.Add(new Vector2(Mathf.Cos(a) * rr, Mathf.Sin(a) * rr));
+                }
+                _stunMesh[k] = Draw.Polygon(star, new Color(1f, 0.9f, 0.35f, 0f));
+                var t = Draw.Make("Star" + k, _stunRoot, _stunMesh[k], 25).transform;
+                var ang = k * Mathf.PI * 2f / 3f;
+                t.localPosition = new Vector3(Mathf.Cos(ang) * radius * 1.2f, Mathf.Sin(ang) * radius * 1.2f, 0f);
+            }
+            _stunRoot.gameObject.SetActive(false);
+
+            _dashRoot = new GameObject("Dashing").transform;
+            _dashRoot.SetParent(Root.transform, false);
+            for (var k = 0; k < 3; k++)
+            {
+                var y = (k - 1) * radius * 0.55f;
+                var len = k == 1 ? radius * 1.6f : radius * 1.1f;
+                _dashMesh[k] = Draw.Rect(new Vector2(-radius * 1.15f - len, y - radius * 0.06f), new Vector2(-radius * 1.15f, y + radius * 0.06f), Color.clear);
+                Draw.Make("Streak" + k, _dashRoot, _dashMesh[k], 9);
+            }
+            _dashMesh[3] = Draw.Ring(radius * 1.02f, radius * 1.18f, 1f, Color.clear);
+            Draw.Make("DashRim", _dashRoot, _dashMesh[3], 12);
+            _dashRoot.gameObject.SetActive(false);
             var tint = Palette.TeamTint(team); tint.a = 0.45f;
             _ghost = Draw.Make("Ghost", Root.transform, Draw.Ring(radius * 0.86f, radius, 1f, tint), 10).gameObject;
-            _slowRing.SetActive(false); _boostRing.SetActive(false); _ghost.SetActive(false);
+            _boostRing.SetActive(false); _ghost.SetActive(false);
 
             // squash: stretched along the hit direction, then turned back so the body still faces its own way
             _squash = new GameObject("Squash").transform;
@@ -127,12 +189,8 @@ namespace UltraPuck.Game
             _flashMesh = Draw.Disc(radius, Color.clear);
             _flash = Draw.Make("Flash", _unsquash, _flashMesh, 12).gameObject;
             _flash.SetActive(false);
-            // team symbol (doesn't turn with the player, so it always reads the same)
-            var sym = radius * 0.38f;
-            var symbol = team == 0
-                ? Draw.Triangle(new Vector2(0f, sym * 1.15f), new Vector2(sym, -sym * 0.75f), new Vector2(-sym, -sym * 0.75f), Color.white)
-                : Draw.Rect(new Vector2(-sym * 0.8f, -sym * 0.8f), new Vector2(sym * 0.8f, sym * 0.8f), Color.white);
-            Draw.Make("Symbol", _unsquash, symbol, 13);
+            // the player's own symbol (doesn't turn with the player, so it always reads the same)
+            Draw.Make("Symbol", _unsquash, Symbols.Mesh(symbol, radius * 0.95f, Color.white), 13);
             // the charge bar turns with the player: it starts behind them and wraps round both sides to the front
             _chargeRoot = new GameObject("ChargeBar").transform;
             _chargeRoot.SetParent(Root.transform, false);
@@ -246,15 +304,65 @@ namespace UltraPuck.Game
         /// drawn at all); <paramref name="faint"/>: invisible but the viewer is a teammate (an outline only).
         /// <paramref name="cooldowns"/>: Puck Gun, Invisibility and Shockwave readiness (0..1, or -1 without the card).
         /// </summary>
-        public void Status(bool hidden, bool faint, bool slowed, bool boosted, float[] cooldowns)
+        /// <param name="stunned">Dazed (a check or a Puck Gun hit): stars circle them.</param>
+        /// <param name="dash">How much of a dash is left (0..1, 0 = not dashing): streaks behind and a bright rim.</param>
+        /// <param name="lagged">Frozen by hit lag: the body shakes.</param>
+        public void Status(bool hidden, bool faint, bool slowed, bool boosted, float[] cooldowns, bool stunned = false, float dash = 0f, bool lagged = false)
         {
             if (Root.activeSelf == hidden) Root.SetActive(!hidden);
             if (hidden) return;
             if (_squash.gameObject.activeSelf == faint) _squash.gameObject.SetActive(!faint);
             if (_shadow.activeSelf == faint) _shadow.SetActive(!faint);
             if (_ghost.activeSelf != faint) _ghost.SetActive(faint);
-            if (_slowRing.activeSelf != slowed) _slowRing.SetActive(slowed);
             if (_boostRing.activeSelf != boosted) _boostRing.SetActive(boosted);
+            var dt = Time.unscaledDeltaTime;
+            var t = Time.unscaledTime;
+
+            // slowed: three blue down arrows drifting down through the player and fading, one after another
+            _slowAlpha = Mathf.MoveTowards(_slowAlpha, slowed ? 1f : 0f, dt * 5f);
+            var showSlow = _slowAlpha > 0.01f && !faint;
+            if (_slowRoot.gameObject.activeSelf != showSlow) _slowRoot.gameObject.SetActive(showSlow);
+            if (showSlow)
+                for (var k = 0; k < 3; k++)
+                {
+                    var phase = (t * 1.1f + k / 3f) % 1f;
+                    var x = (k - 1) * _r * 0.75f;
+                    _slowArrows[k].localPosition = new Vector3(x, _r * (0.9f - 1.6f * phase), 0f);
+                    var a = Mathf.Sin(phase * Mathf.PI) * 0.95f * _slowAlpha;
+                    Draw.Recolor(_slowMesh[k], new Color(0.45f, 0.75f, 1f, a));
+                }
+
+            // stunned: stars circling
+            _stunAlpha = Mathf.MoveTowards(_stunAlpha, stunned ? 1f : 0f, dt * 6f);
+            var showStun = _stunAlpha > 0.01f && !faint;
+            if (_stunRoot.gameObject.activeSelf != showStun) _stunRoot.gameObject.SetActive(showStun);
+            if (showStun)
+            {
+                _stunRoot.localRotation = Quaternion.Euler(0f, 0f, t * 260f);
+                for (var k = 0; k < 3; k++)
+                {
+                    var twinkle = 0.75f + 0.25f * Mathf.Sin(t * 14f + k * 2f);
+                    Draw.Recolor(_stunMesh[k], new Color(1f, 0.9f, 0.35f, _stunAlpha * twinkle));
+                }
+            }
+
+            // dashing: streaks behind (along the way they're facing) and a bright rim
+            dash = faint ? 0f : Mathf.Clamp01(dash);
+            dash = Mathf.Round(dash * 24f) / 24f;
+            if (dash != _dashShown)
+            {
+                _dashShown = dash;
+                _dashRoot.gameObject.SetActive(dash > 0f);
+                if (dash > 0f)
+                {
+                    for (var k = 0; k < 3; k++) Draw.Recolor(_dashMesh[k], new Color(1f, 1f, 1f, 0.75f * dash));
+                    Draw.Recolor(_dashMesh[3], new Color(1f, 1f, 1f, 0.9f * dash));
+                }
+            }
+            if (dash > 0f) _dashRoot.localRotation = _body.localRotation;
+
+            // hit lag: a quick shake while frozen
+            _squash.localPosition = lagged ? (Vector3)(Random.insideUnitCircle * _r * 0.12f) : Vector3.zero;
             // the cooldown bars, stacked under the check bar, while recharging (or always, by setting)
             var row = 0;
             for (var k = 0; k < 3; k++)
@@ -362,6 +470,100 @@ namespace UltraPuck.Game
 
         public void Impact(Vector2 at, float power) { Ring(at, power, Color.white, 0.35f + 0.6f * power, 0.18f + 0.14f * power); }
 
+        // sparks: thin bright streaks that fly out of a hit and fade, slowing as they go
+        private sealed class Spark { public GameObject Go; public Mesh Mesh; public Vector2 Pos, Vel; public float Age, Life, Length, Width; public Color Colour; }
+        private readonly List<Spark> _sparks = new List<Spark>(), _spareSparks = new List<Spark>();
+
+        // lightning: jagged forked bolts that crackle out from a hard hit for a moment (like a fighting game's big hits)
+        private sealed class Bolt { public GameObject Go, Glow; public float Age, Life; public Color Colour; public Mesh Mesh, GlowMesh; }
+        private readonly List<Bolt> _bolts = new List<Bolt>();
+
+        /// <summary>Sparks out of a collision: more, faster and longer the harder it was.</summary>
+        public void Sparks(Vector2 at, float power, Color colour, int count = 0)
+        {
+            var n = count > 0 ? count : Mathf.RoundToInt(5 + 14 * power);
+            for (var k = 0; k < n; k++)
+            {
+                Spark s;
+                if (_spareSparks.Count > 0) { s = _spareSparks[_spareSparks.Count - 1]; _spareSparks.RemoveAt(_spareSparks.Count - 1); }
+                else
+                {
+                    s = new Spark { Mesh = Draw.Rect(new Vector2(-1f, -0.5f), new Vector2(0f, 0.5f), Color.white) };
+                    s.Go = Draw.Make("Spark", _parent, s.Mesh, 23).gameObject;
+                }
+                var a = Random.Range(0f, Mathf.PI * 2f);
+                var speed = Random.Range(4f, 9f + 12f * power);
+                s.Pos = at;
+                s.Vel = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * speed;
+                s.Age = 0f;
+                s.Life = Random.Range(0.18f, 0.3f + 0.25f * power);
+                s.Length = Random.Range(0.25f, 0.45f + 0.4f * power);
+                s.Width = Random.Range(0.05f, 0.09f);
+                s.Colour = Random.value < 0.45f ? Color.white : colour;
+                s.Go.SetActive(true);
+                _sparks.Add(s);
+                StepSpark(s, 0f);
+            }
+        }
+
+        /// <summary>Forked lightning crackling out of a hard hit.</summary>
+        public void Lightning(Vector2 at, float power, Color colour)
+        {
+            var bolts = Random.Range(3, 5 + Mathf.RoundToInt(2f * power));
+            var start = Random.Range(0f, Mathf.PI * 2f);
+            for (var k = 0; k < bolts; k++)
+            {
+                var a = start + k * Mathf.PI * 2f / bolts + Random.Range(-0.35f, 0.35f);
+                var length = Random.Range(1.1f, 1.8f) * (0.8f + power);
+                AddBolt(at, a, length, colour, 0.075f, 2);
+            }
+        }
+
+        private void AddBolt(Vector2 from, float angle, float length, Color colour, float width, int forks)
+        {
+            var pts = new List<Vector2> { from };
+            var steps = 6;
+            var dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+            var side = new Vector2(-dir.y, dir.x);
+            var p = from;
+            for (var i = 1; i <= steps; i++)
+            {
+                p = from + dir * (length * i / steps) + side * Random.Range(-0.22f, 0.22f) * length * 0.35f;
+                pts.Add(p);
+                // a fork off the side now and then
+                if (forks > 0 && i > 1 && i < steps && Random.value < 0.35f)
+                    AddBolt(p, angle + Random.Range(0.5f, 0.9f) * (Random.value < 0.5f ? -1f : 1f), length * Random.Range(0.3f, 0.5f), colour, width * 0.7f, forks - 1);
+            }
+            var b = new Bolt { Age = 0f, Life = Random.Range(0.16f, 0.26f), Colour = colour };
+            b.GlowMesh = Draw.Line(pts, false, width * 3.2f, Palette.Clear(colour));
+            b.Glow = Draw.Make("BoltGlow", _parent, b.GlowMesh, 22).gameObject;
+            b.Mesh = Draw.Line(pts, false, width, Color.white);
+            b.Go = Draw.Make("Bolt", _parent, b.Mesh, 24).gameObject;
+            _bolts.Add(b);
+        }
+
+        /// <summary>The puck going in: a flash, a ring, and a shower of sparks in the scoring team's colour.</summary>
+        public void Explosion(Vector2 at, Color colour)
+        {
+            Ring(at, 1f, Color.white, 3.2f, 0.45f);
+            Ring(at, 1f, colour, 5.5f, 0.7f);
+            Sparks(at, 1f, colour, 40);
+            Lightning(at, 1f, colour);
+        }
+
+        private static void StepSpark(Spark s, float dt)
+        {
+            s.Pos += s.Vel * dt;
+            s.Vel *= Mathf.Exp(-dt * 5f);
+            var k = s.Age / s.Life;
+            var len = s.Length * (1f - k * 0.6f) * Mathf.Clamp01(s.Vel.magnitude / 3f + 0.3f);
+            s.Go.transform.localPosition = new Vector3(s.Pos.x, s.Pos.y, 0f);
+            s.Go.transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(s.Vel.y, s.Vel.x) * Mathf.Rad2Deg);
+            s.Go.transform.localScale = new Vector3(Mathf.Max(0.01f, len), s.Width, 1f);
+            var c = s.Colour; c.a = 1f - k * k;
+            Draw.Recolor(s.Mesh, c);
+        }
+
         /// <summary>A ring that bursts out to <paramref name="size"/> (radius) in <paramref name="colour"/> over <paramref name="life"/> seconds.</summary>
         public void Ring(Vector2 at, float power, Color colour, float size, float life)
         {
@@ -384,12 +586,37 @@ namespace UltraPuck.Game
 
         public void Update()
         {
+            var dt = Time.unscaledDeltaTime;
             for (var i = _live.Count - 1; i >= 0; i--)
             {
                 var b = _live[i];
-                b.Age += Time.deltaTime;
+                b.Age += dt;
                 if (b.Age >= b.Life) { b.Go.SetActive(false); _live.RemoveAt(i); _spare.Add(b); continue; }
                 Step(b);
+            }
+            for (var i = _sparks.Count - 1; i >= 0; i--)
+            {
+                var s = _sparks[i];
+                s.Age += dt;
+                if (s.Age >= s.Life) { s.Go.SetActive(false); _sparks.RemoveAt(i); _spareSparks.Add(s); continue; }
+                StepSpark(s, dt);
+            }
+            for (var i = _bolts.Count - 1; i >= 0; i--)
+            {
+                var b = _bolts[i];
+                b.Age += dt;
+                if (b.Age >= b.Life)
+                {
+                    Object.Destroy(b.Go); Object.Destroy(b.Glow); Object.Destroy(b.Mesh); Object.Destroy(b.GlowMesh);
+                    _bolts.RemoveAt(i);
+                    continue;
+                }
+                // a crackle: flickers as it fades
+                var k = b.Age / b.Life;
+                var flicker = Random.value < 0.25f ? 0.35f : 1f;
+                Draw.Recolor(b.Mesh, new Color(1f, 1f, 1f, (1f - k) * flicker));
+                var g = b.Colour; g.a = 0.55f * (1f - k) * flicker;
+                Draw.Recolor(b.GlowMesh, g);
             }
         }
 
@@ -458,8 +685,17 @@ namespace UltraPuck.Game
             }
         }
 
+        /// <summary>Hide the puck (and its trail) for a moment, e.g. once it's blown up in the goal.</summary>
+        public void Visible(bool on)
+        {
+            if (Root.activeSelf == on) return;
+            Root.SetActive(on);
+            if (!on) { foreach (var t in _trail) t.gameObject.SetActive(false); _historyCount = 0; }
+        }
+
         public void Show(Vector2 pos, int team)
         {
+            if (!Root.activeSelf) return;
             Tint(team);
             // a jump (face-off) starts the trail again instead of drawing a streak across the rink
             if (_historyCount > 0 && (pos - _history[0]).sqrMagnitude > 4f) _historyCount = 0;

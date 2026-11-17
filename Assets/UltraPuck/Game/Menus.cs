@@ -114,7 +114,7 @@ namespace UltraPuck.Game
                         var id = c.Id;
                         _rows.Add(Switch(c.Name + "  (" + c.Tier + ")", () => Settings.CardOn(id), v => Settings.SetCardOn(id, v), CleanText(c.Text)));
                     }
-                _rows.Add(Button("Back", () => { Current = Page.Settings; _focus = 4; _first = 0; _focusY = -1f; }));
+                _rows.Add(Button("Back", () => { Current = Page.Settings; _focus = 5; _first = 0; _focusY = -1f; }));
                 return;
             }
             if (Current != Page.Settings) return;
@@ -166,6 +166,7 @@ namespace UltraPuck.Game
                     break;
                 case 3:
                     _rows.Add(Switch("Rounds mode", () => Settings.Rounds, v => Settings.Rounds = v, "After each goal, the team that conceded picks a card that powers them up for the rest of the match."));
+                    _rows.Add(Switch("Goal replays", () => Settings.Replays, v => Settings.Replays = v, "Every goal is shown again, up to 10 seconds back, in slow motion on the big moments. A / Start skips it (not online)."));
                     var vote = Choice("Picking", new[] { "Each player", "Team vote" }, () => Settings.TeamVote ? 1 : 0, v => Settings.TeamVote = v == 1,
                         "Each player: everyone gets their own card. Team vote: each team votes on one card the whole team gets (a tie is random).");
                     vote.Enabled = () => Settings.Rounds;
@@ -315,7 +316,7 @@ namespace UltraPuck.Game
             if (_typing) { TypingTick(); return; }
             BuildRows();
             if (_rows.Count == 0) return;
-            if (m.Back) { if (Current == Page.Cards) { Current = Page.Settings; _focus = 4; _first = 0; _focusY = -1f; } else Back(); return; }
+            if (m.Back) { if (Current == Page.Cards) { Current = Page.Settings; _focus = 5; _first = 0; _focusY = -1f; } else Back(); return; }
             if (Current == Page.Settings && m.Tab != 0) { _tab = (_tab + m.Tab + Tabs.Length) % Tabs.Length; _focus = 0; _first = 0; return; }
             if (m.Y != 0)
             {
