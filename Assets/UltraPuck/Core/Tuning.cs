@@ -131,6 +131,8 @@ namespace UltraPuck.Core
         public Fix TimeLimit = Fix.Zero;
         /// <summary>Goals are shown again (the celebration is long enough for the replay; the replay itself is just drawing).</summary>
         public bool Replays;
+        /// <summary>How long after a goal the replay starts; from then on, everyone pressing shoot skips it.</summary>
+        public Fix ReplaySkipFrom = Fix.Ratio(3, 2);
 
         /// <summary>
         /// Free play: practice with no winner. Goals still count, but only the puck goes back to its spot (players

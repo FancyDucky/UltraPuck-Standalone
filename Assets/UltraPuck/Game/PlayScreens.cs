@@ -59,10 +59,13 @@ namespace UltraPuck.Game
             Local.LobbyUpdate();
             if (Local.LeaveLobbyHeld()) { Runner.GoMainMenu(); return; }
             if (Local.NameRequest != null) { OpenKeyboard(Local.NameRequest); Local.NameRequest = null; return; }
-            if (Local.BotRequest > 0) { if (!Local.AddBot()) Problem("The rink is full (" + LocalPlayers.MaxPlayers + " players)."); }
-            if (Local.BotRequest < 0) { var b = Local.LastBot(); if (b >= 0) { Local.Slots.RemoveAt(b); Local.AssignTeams(); } }
-            if (Local.HumanCount > 0 && Local.StartPressed())
+            if (Local.HumanCount > 0 && Local.StartPressed()) Continue();
+        }
+
+        private void Continue()
+        {
             {
+                if (!Local.AllReady) { Problem("Everyone presses " + (InputMode.Pad ? "A" : "Space") + " when they're ready."); return; }
                 var colours = Local.AssignTeams();
                 if (colours > 2) Problem("Only two teams: red and blue.");
                 else if (colours < 2 && Local.Slots.Count > 1) Problem("Everyone's on the same team: pick another colour, or add a bot with " + (InputMode.Pad ? "RB" : "="));
@@ -227,32 +230,176 @@ namespace UltraPuck.Game
             if (sub != null) Ui.Label(new Rect(0, 82, w, 30), sub, Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * appear));
         }
 
-        // the join screen: a card per player along the bottom, like a fighting game's character select
+        // the join screen on this PC: the two teams side by side, like the online lobby
         private void DrawJoin(float w, float h, float appear)
         {
             Ui.Box(new Rect(0, 0, w, h), Palette.Background, 0f); // a plain backdrop: the rink moving behind is too busy here
             Title(w, "PLAYERS", "Up to " + LocalPlayers.MaxPlayers + " players, red against blue", appear);
-            Glyphs.Hint(new Rect(0, 108, w, 30), "{side} Red or blue      {profile} Name      {shape} Symbol      {bots} Bots", 17, new Color(1f, 1f, 1f, 0.75f));
 
-            var slots = LocalPlayers.MaxPlayers;
-            var area = new Rect(40f, 146f + (1f - appear) * 40f, w - 80f, h - 146f - 104f);
-            for (var i = 0; i < slots; i++)
+            var tiles = new List<Tile>();
+            var person = 0;
+            var bot = 0;
+            for (var i = 0; i < Local.Slots.Count; i++)
             {
-                var r = CardRect(area, i, slots);
-                if (i < Local.Slots.Count) PlayerCard(r, i, Local.Slots[i]);
-                else EmptyCard(r, "P" + (i + 1), i, true);
+                var s = Local.Slots[i];
+                var tag = s.Demo ? "Bot" : "P" + (++person) + "  ·  " + s.Label;
+                tiles.Add(new Tile
+                {
+                    Team = (s.Colour & 7) == 1 ? 1 : 0, Symbol = s.Symbol, Name = string.IsNullOrEmpty(s.Name) ? (s.Demo ? "Bot" : "P" + person) : s.Name,
+                    Tag = tag, Mine = !s.Demo, Ready = s.Demo || s.Ready, Bot = s.Demo, Device = s.Device, BotIndex = s.Demo ? bot++ : -1,
+                });
             }
+            MarkCursors(tiles, Local);
+            TeamsView(w, 120f + (1f - appear) * 30f, h - 150f, tiles, Local.Slots.Count < LocalPlayers.MaxPlayers, appear);
 
-            var ready = Local.HumanCount > 0;
-            Glyphs.Hint(new Rect(0, h - 52, w, 30), (ready ? "{start} Continue      " : "") + "{leave} Leave      Hold {leave} Main menu      {settings} Settings", 17, new Color(1f, 1f, 1f, 0.8f));
-            Hud.LeavingBar(new Rect(w / 2 - 150, h - 96, 300, 24), Local.NobodyLeaving, "Back to the main menu");
+            var fy = h - 128f;
+            var ready = Local.AllReady;
+            if (Chip(new Rect(w / 2f - 250f, fy, 240f, 46f), ready ? "{start} Continue" : Local.HumanCount == 0 ? "Press {join} to join" : "Press {join} when ready", ready, true, true) && ready) Continue();
+            if (Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Settings", true, false, true)) Runner.OpenSettings();
+
+            Hud.LeavingBar(new Rect(w / 2 - 150, h - 74, 300, 22), Local.NobodyLeaving, "Back to the main menu");
+            Glyphs.Hint(new Rect(0, h - 44, w, 28), LobbyHint(Local, true), 15, new Color(1f, 1f, 1f, 0.6f));
         }
 
-        private void PlayerCard(Rect r, int i, LocalPlayers.Slot s)
+        // ------------------------------------------------------------------ the teams (this PC's join screen and the online lobby)
+
+        /// <summary>One player on the players screen.</summary>
+        public struct Tile
         {
-            var name = string.IsNullOrEmpty(s.Name) ? (s.Demo ? "Bot" : "P" + (i + 1)) : s.Name;
-            Card(r, s.Demo ? "CPU" : "P" + (i + 1), s.Colour, s.Symbol, name, true,
-                s.Demo ? Symbols.Names[s.Symbol & 7] : "{profile} Name   {shape} Symbol", !s.Demo, s.Device);
+            public int Team, Symbol;
+            public string Name, Tag;
+            /// <summary>Played on this PC (their tile is outlined and shows their buttons).</summary>
+            public bool Mine;
+            public bool Ready, Bot;
+            public InputDevice Device;
+            /// <summary>Bots: which bot this is (for the readied players' cursors), else -1.</summary>
+            public int BotIndex;
+            /// <summary>A readied player here is working on this bot (their number is shown on it).</summary>
+            public string CursorBy;
+        }
+
+        /// <summary>Put each readied player's bot cursor on the bot it's on.</summary>
+        public static void MarkCursors(List<Tile> tiles, LocalPlayers local)
+        {
+            if (local.Bots == null) return;
+            var person = 0;
+            foreach (var s in local.Slots)
+            {
+                if (s.Demo) continue;
+                person++;
+                if (!s.Ready) continue;
+                for (var k = 0; k < tiles.Count; k++)
+                {
+                    if (tiles[k].BotIndex != s.Cursor) continue;
+                    var t = tiles[k];
+                    t.CursorBy = t.CursorBy == null ? "P" + person : t.CursorBy + " P" + person;
+                    tiles[k] = t;
+                }
+            }
+        }
+
+        /// <summary>The button hints along the bottom: what the people here can do right now.</summary>
+        public static string LobbyHint(LocalPlayers local, bool canEditBots)
+        {
+            var anyReady = false;
+            var anyNot = false;
+            foreach (var s in local.Slots) { if (s.Demo) continue; if (s.Ready) anyReady = true; else anyNot = true; }
+            if (local.HumanCount == 0) return "{join} Join      Hold {leave} Leave      {settings} " + "Options";
+            var notReady = "{join} Ready      {side} Switch team      {profile} Name      {shape} Symbol      {leave} Leave seat";
+            var ready = canEditBots && local.Bots != null
+                ? "{nav} Pick a bot      {side} Its team      {shape} Its symbol      {bots} Remove / add bot      {leave} Not ready"
+                : "{leave} Not ready";
+            return anyReady && !anyNot ? ready : anyNot && !anyReady ? notReady : notReady + "      ·      Ready: " + ready;
+        }
+
+        /// <summary>The two teams side by side, between <paramref name="top"/> and <paramref name="bottom"/>.</summary>
+        public static void TeamsView(float w, float top, float bottom, List<Tile> tiles, bool canJoin, float appear)
+        {
+            const float gap = 36f;
+            var pw = Mathf.Min(500f, (w - 80f - gap) / 2f);
+            var red = new List<Tile>();
+            var blue = new List<Tile>();
+            foreach (var t in tiles) (t.Team == 1 ? blue : red).Add(t);
+            TeamPanel(new Rect(w / 2f - gap / 2f - pw, top, pw, bottom - top), 0, red, canJoin);
+            TeamPanel(new Rect(w / 2f + gap / 2f, top, pw, bottom - top), 1, blue, canJoin);
+            Ui.Label(new Rect(w / 2f - 40f, top + 6f, 80f, 40f), "VS", Ui.Font(22, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f * appear));
+        }
+
+        private static void TeamPanel(Rect r, int team, List<Tile> tiles, bool canJoin)
+        {
+            var colour = Palette.Colours[team];
+            Ui.Box(r, new Color(colour.r * 0.25f, colour.g * 0.25f, colour.b * 0.25f, 0.55f), 18f);
+            var head = new Rect(r.x, r.y, r.width, 54f);
+            Ui.Box(head, colour, 18f);
+            Ui.Box(new Rect(r.x, head.yMax - 18f, r.width, 18f), colour, 0f);
+            Ui.Label(new Rect(r.x + 22f, head.y, r.width - 44f, head.height), Palette.ColourNames[team].ToUpperInvariant(), Ui.Font(26, true), Color.white);
+            Ui.Label(new Rect(r.x + 22f, head.y, r.width - 44f, head.height), tiles.Count == 1 ? "1 player" : tiles.Count + " players", Ui.Font(16, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.8f));
+
+            var shown = Mathf.Max(4, tiles.Count);
+            const float gap = 8f;
+            var area = new Rect(r.x + 14f, head.yMax + 12f, r.width - 28f, r.height - head.height - 26f);
+            var th = Mathf.Min(70f, (area.height - gap * (shown - 1)) / shown);
+            var joinShown = false;
+            for (var i = 0; i < shown; i++)
+            {
+                var tr = new Rect(area.x, area.y + i * (th + gap), area.width, th);
+                if (i < tiles.Count) { TileView(tr, team, tiles[i]); continue; }
+                Ui.Box(tr, new Color(1f, 1f, 1f, 0.04f), 12f);
+                if (canJoin && !joinShown)
+                {
+                    joinShown = true;
+                    var pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 3f + team);
+                    Glyphs.Hint(tr, "Press {join} to join", 16, new Color(1f, 1f, 1f, 0.4f + 0.35f * pulse));
+                }
+                else Ui.Label(tr, "Open", Ui.Font(15, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.22f));
+            }
+        }
+
+        private static readonly Color ReadyGreen = new Color(0.45f, 0.9f, 0.5f);
+        private static readonly Color CursorYellow = new Color(1f, 0.85f, 0.25f);
+
+        private static void TileView(Rect r, int team, Tile t)
+        {
+            var colour = Palette.Colours[team];
+            if (t.CursorBy != null)
+            {
+                // a readied player is working on this bot: a pulsing yellow frame with their number
+                var pulse = 0.75f + 0.25f * Mathf.Sin(Time.unscaledTime * 6f);
+                Ui.Box(new Rect(r.x - 4f, r.y - 4f, r.width + 8f, r.height + 8f), new Color(CursorYellow.r, CursorYellow.g, CursorYellow.b, pulse), 15f);
+            }
+            else if (t.Mine) Ui.Box(new Rect(r.x - 3f, r.y - 3f, r.width + 6f, r.height + 6f), new Color(1f, 1f, 1f, 0.9f), 14f);
+            Ui.Box(r, Palette.Darker(colour, t.Mine ? 0.7f : 0.5f), 12f);
+            var d = r.height - 14f;
+            var disc = new Rect(r.x + 10f, r.y + 7f, d, d);
+            Ui.Box(new Rect(disc.x - 2f, disc.y - 2f, d + 4f, d + 4f), Palette.PlayerRim, (d + 4f) / 2f);
+            Ui.Box(disc, colour, d / 2f);
+            Ui.Symbol(new Rect(disc.x + d * 0.2f, disc.y + d * 0.2f, d * 0.6f, d * 0.6f), t.Symbol, Color.white);
+            var x = disc.xMax + 14f;
+            var right = 150f;
+            Ui.Label(new Rect(x, r.y + 4f, r.width - (x - r.x) - right, r.height * 0.58f), t.Name ?? "", Ui.Font(20, true), Color.white);
+            Ui.Label(new Rect(x, r.y + r.height * 0.52f, r.width - (x - r.x) - right, r.height * 0.42f), t.Tag ?? "", Ui.Font(13), new Color(1f, 1f, 1f, 0.6f));
+            var side = new Rect(r.xMax - right, r.y, right - 14f, r.height);
+            if (t.CursorBy != null)
+            {
+                Ui.Label(new Rect(side.x, side.y, side.width, side.height * 0.55f), t.CursorBy, Ui.Font(16, true, TextAnchor.LowerRight), CursorYellow);
+                Ui.Label(new Rect(side.x, side.y + side.height * 0.5f, side.width, side.height * 0.45f), Symbols.Names[t.Symbol & 7], Ui.Font(12, false, TextAnchor.UpperRight), new Color(1f, 1f, 1f, 0.6f));
+            }
+            else if (t.Bot) Ui.Label(side, Symbols.Names[t.Symbol & 7], Ui.Font(13, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.45f));
+            else if (t.Ready) Ui.Label(side, "READY", Ui.Font(18, true, TextAnchor.MiddleRight), ReadyGreen, false);
+            else if (t.Mine) Glyphs.Hint(side, (team == 0 ? "" : "‹ ") + "{join} Ready" + (team == 0 ? " ›" : ""), 14, new Color(1f, 1f, 1f, 0.8f), TextAnchor.MiddleRight, t.Device);
+            else Ui.Label(side, "Not ready", Ui.Font(14, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.4f));
+        }
+
+        /// <summary>A button along the bottom of the players screen; returns true when it's clicked.</summary>
+        public static bool Chip(Rect r, string text, bool on, bool main, bool clickable)
+        {
+            var hover = on && r.Contains(Ui.Mouse);
+            var lit = main && on;
+            var bg = lit ? new Color(1f, 1f, 1f, hover ? 1f : 0.9f) : new Color(1f, 1f, 1f, hover ? 0.2f : on ? 0.12f : 0.05f);
+            Ui.Box(r, bg, 14f);
+            // on the white button: dark bold text, no shadow (a shadow smudges dark text)
+            Glyphs.Hint(r, text, 17, lit ? new Color(0.06f, 0.08f, 0.12f, 1f) : new Color(1f, 1f, 1f, on ? 0.9f : 0.45f), TextAnchor.MiddleCenter, null, true, !lit);
+            return clickable && on && Ui.Clicked && r.Contains(Ui.Mouse) && Event.current.type == EventType.Repaint;
         }
 
         // ------------------------------------------------------------------ player cards (the join screen and the online lobby)

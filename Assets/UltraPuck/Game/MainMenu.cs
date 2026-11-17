@@ -143,7 +143,6 @@ namespace UltraPuck.Game
                             Detail = sent ? "Invited" : friend.Playing ? "In Ultra Puck" : "Online",
                             Press = () => { if (SteamNet.InviteFriend(friend.Id)) _invited.Add(friend.Id.m_SteamID); },
                         });
-                        if (_rows.Count >= 7) break; // the list fits the screen; the most likely friends come first
                     }
                     if (SteamNet.OverlayWorks) _rows.Add(new Row { Label = "Open the Steam overlay", Press = SteamNet.Invite });
                     _rows.Add(new Row { Label = "Back", Press = () => Show(Page.OnlineLobby) });
@@ -154,6 +153,8 @@ namespace UltraPuck.Game
         private UnityEngine.InputSystem.InputDevice _lastDevice;
         private List<SteamNet.Friend> _friends = new List<SteamNet.Friend>();
         private float _friendsAt;
+        private int _scroll;
+        private float _scrollY;
         private readonly HashSet<ulong> _invited = new HashSet<ulong>();
 
         // ------------------------------------------------------------------ input
@@ -189,6 +190,8 @@ namespace UltraPuck.Game
                 return;
             }
             if (_rows.Count == 0) return;
+            var wheel = UnityEngine.InputSystem.Mouse.current != null ? UnityEngine.InputSystem.Mouse.current.scroll.ReadValue().y : 0f;
+            if (wheel != 0f && Current == Page.Friends) m.Y = wheel > 0f ? 1 : -1;
             if (m.Y != 0)
                 for (var k = 0; k < _rows.Count; k++)
                 {
@@ -224,7 +227,7 @@ namespace UltraPuck.Game
             if (Current == Page.Main) Ui.Label(new Rect(x + 4f, 46f, 300f, 26f), "v" + Updater.Current, Ui.Font(16, true), new Color(1f, 1f, 1f, 0.5f));
             Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim);
 
-            Rows(x, 220f, 460f, 64f, 10f, 26, t);
+            Rows(x, 220f, 460f, 64f, 10f, 26, t, Current == Page.Friends ? Ui.H - 130f : float.MaxValue);
 
             var status = Status();
             if (!string.IsNullOrEmpty(status)) Ui.Label(new Rect(x, Ui.H - 120f, 540f, 80f), status, WrapStyle(), new Color(1f, 1f, 1f, 0.65f));
@@ -239,9 +242,9 @@ namespace UltraPuck.Game
         }
 
         /// <summary>
-        /// The online lobby: the two teams side by side, a tile per player. Players join and switch team with their
-        /// own controls; the host's settings, inviting and leaving are in an options panel (Select / Tab), so the
-        /// stick only ever does one thing at a time.
+        /// The online lobby: the same players screen as on this PC (the two teams side by side). Players join, pick a
+        /// team and ready up with their own controls; readied, the host's people work on the bots. The host's settings,
+        /// inviting and leaving are in an options panel (Select / Tab), so the stick only ever does one thing at a time.
         /// </summary>
         private void Lobby(float t)
         {
@@ -250,31 +253,41 @@ namespace UltraPuck.Game
             var appear = Ui.EaseOut(t / 0.3f);
             PlayScreens.Title(w, "PLAYERS", Subtitle(), appear);
             var info = Status();
-            if (!string.IsNullOrEmpty(info)) Ui.Label(new Rect(40f, 108f, w - 80f, 24f), info, Ui.Font(15, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.45f * appear));
+            if (!string.IsNullOrEmpty(info)) Ui.Label(new Rect(40f, 92f, w - 80f, 24f), info, Ui.Font(15, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.45f * appear));
 
-            // the two teams
-            float top = 146f + (1f - appear) * 30f, bottom = h - 150f, gap = 36f;
-            var pw = Mathf.Min(500f, (w - 80f - gap) / 2f);
-            var red = new List<int>();
-            var blue = new List<int>();
-            if (s != null) for (var k = 0; k < s.Seats.Count; k++) ((s.Seats[k].Colour & 7) == 1 ? blue : red).Add(k);
-            var canJoin = s != null && s.Current != NetSession.Stage.Connecting;
-            TeamPanel(new Rect(w / 2f - gap / 2f - pw, top, pw, bottom - top), 0, red, s, canJoin);
-            TeamPanel(new Rect(w / 2f + gap / 2f, top, pw, bottom - top), 1, blue, s, canJoin);
-            Ui.Label(new Rect(w / 2f - 40f, top + 6f, 80f, 40f), "VS", Ui.Font(22, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f * appear));
+            var tiles = new List<PlayScreens.Tile>();
+            if (s != null)
+            {
+                var bot = 0;
+                foreach (var seat in s.Seats)
+                {
+                    var mine = !seat.Bot && seat.Peer == s.MyPeer;
+                    var device = mine && seat.Local >= 0 && seat.Local < Local.Slots.Count ? Local.Slots[seat.Local].Device : null;
+                    tiles.Add(new PlayScreens.Tile
+                    {
+                        Team = (seat.Colour & 7) == 1 ? 1 : 0, Symbol = seat.Symbol, Name = string.IsNullOrEmpty(seat.Name) ? (seat.Bot ? "Bot" : "Player") : seat.Name,
+                        Tag = seat.Bot ? "Bot" : mine ? (seat.Peer == 0 ? "You  ·  host" : "You") : seat.Peer == 0 ? "Host" : "Online",
+                        Mine = mine, Ready = seat.Ready, Bot = seat.Bot, Device = device, BotIndex = seat.Bot ? bot++ : -1,
+                    });
+                }
+                if (s.IsHost) PlayScreens.MarkCursors(tiles, Local);
+            }
+            var canJoin = s != null && s.Current != NetSession.Stage.Connecting && Local.Slots.Count < LocalPlayers.MaxPlayers;
+            PlayScreens.TeamsView(w, 124f + (1f - appear) * 30f, h - 150f, tiles, canJoin, appear);
 
             // what happens next: start (host), or waiting; and the options
             var fy = h - 128f;
             if (s != null && s.IsHost)
             {
-                var ready = s.Seats.Count >= 2 && !s.TooManyTeams;
-                if (Chip(new Rect(w / 2f - 250f, fy, 240f, 46f), ready ? "{start} Start match" : "Need 2 players to start", ready, true) && ready) Runner.StartOnlineMatch();
-                if (Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Options", true, false)) OpenOptions(true);
+                var ready = s.Seats.Count >= 2 && !s.TooManyTeams && s.AllReady;
+                var text = ready ? "{start} Start match" : s.Seats.Count < 2 ? "Need 2 players to start" : !s.AllReady ? "Waiting for everyone to ready up" : "Only two teams";
+                if (PlayScreens.Chip(new Rect(w / 2f - 290f, fy, 280f, 46f), text, ready, true, !OptionsOpen) && ready) Runner.StartOnlineMatch();
+                if (PlayScreens.Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Options", true, false, !OptionsOpen)) OpenOptions(true);
             }
             else
             {
-                Ui.Label(new Rect(w / 2f - 260f, fy, 250f, 46f), "Waiting for the host to start", Ui.Font(17, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.55f));
-                if (Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Options", true, false)) OpenOptions(true);
+                Ui.Label(new Rect(w / 2f - 300f, fy, 290f, 46f), "Waiting for the host to start", Ui.Font(17, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.55f));
+                if (PlayScreens.Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Options", true, false, !OptionsOpen)) OpenOptions(true);
             }
 
             if (!string.IsNullOrEmpty(Message))
@@ -284,75 +297,9 @@ namespace UltraPuck.Game
             }
 
             Hud.LeavingBar(new Rect(w / 2 - 150f, h - 74f, 300f, 22f), Local.NobodyLeaving, "Leaving the game");
-            Glyphs.Hint(new Rect(0f, h - 44f, w, 28f), Hint(), 15, new Color(1f, 1f, 1f, 0.6f));
+            Glyphs.Hint(new Rect(0f, h - 44f, w, 28f), PlayScreens.LobbyHint(Local, s != null && s.IsHost), 15, new Color(1f, 1f, 1f, 0.6f));
 
             if (OptionsOpen) OptionsPanel(w, h);
-        }
-
-        /// <summary>A team: its colour across the top, then a tile per player (open seats below them).</summary>
-        private void TeamPanel(Rect r, int team, List<int> seats, NetSession s, bool canJoin)
-        {
-            var colour = Palette.Colours[team];
-            Ui.Box(r, new Color(colour.r * 0.25f, colour.g * 0.25f, colour.b * 0.25f, 0.55f), 18f);
-            var head = new Rect(r.x, r.y, r.width, 54f);
-            Ui.Box(head, colour, 18f);
-            Ui.Box(new Rect(r.x, head.yMax - 18f, r.width, 18f), colour, 0f);
-            Ui.Label(new Rect(r.x + 22f, head.y, r.width - 44f, head.height), Palette.ColourNames[team].ToUpperInvariant(), Ui.Font(26, true), Color.white);
-            Ui.Label(new Rect(r.x + 22f, head.y, r.width - 44f, head.height), seats.Count == 1 ? "1 player" : seats.Count + " players", Ui.Font(16, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.8f));
-
-            var shown = Mathf.Max(4, seats.Count);
-            const float gap = 8f;
-            var area = new Rect(r.x + 14f, head.yMax + 12f, r.width - 28f, r.height - head.height - 26f);
-            var th = Mathf.Min(70f, (area.height - gap * (shown - 1)) / shown);
-            var joinShown = false;
-            for (var i = 0; i < shown; i++)
-            {
-                var tr = new Rect(area.x, area.y + i * (th + gap), area.width, th);
-                if (i < seats.Count) { SeatTile(tr, team, s.Seats[seats[i]], s); continue; }
-                Ui.Box(tr, new Color(1f, 1f, 1f, 0.04f), 12f);
-                if (canJoin && !joinShown && Local.Slots.Count < LocalPlayers.MaxPlayers)
-                {
-                    joinShown = true;
-                    var pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 3f + team);
-                    Glyphs.Hint(tr, "Press {join} to join", 16, new Color(1f, 1f, 1f, 0.4f + 0.35f * pulse));
-                }
-                else Ui.Label(tr, "Open", Ui.Font(15, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.22f));
-            }
-        }
-
-        private void SeatTile(Rect r, int team, NetSession.Seat seat, NetSession s)
-        {
-            var colour = Palette.Colours[team];
-            var mine = !seat.Bot && seat.Peer == s.MyPeer;
-            if (mine) Ui.Box(new Rect(r.x - 3f, r.y - 3f, r.width + 6f, r.height + 6f), new Color(1f, 1f, 1f, 0.9f), 14f);
-            Ui.Box(r, Palette.Darker(colour, mine ? 0.7f : 0.5f), 12f);
-            var d = r.height - 14f;
-            var disc = new Rect(r.x + 10f, r.y + 7f, d, d);
-            Ui.Box(new Rect(disc.x - 2f, disc.y - 2f, d + 4f, d + 4f), Palette.PlayerRim, (d + 4f) / 2f);
-            Ui.Box(disc, colour, d / 2f);
-            Ui.Symbol(new Rect(disc.x + d * 0.2f, disc.y + d * 0.2f, d * 0.6f, d * 0.6f), seat.Symbol, Color.white);
-            var x = disc.xMax + 14f;
-            var name = string.IsNullOrEmpty(seat.Name) ? (seat.Bot ? "Bot" : "Player") : seat.Name;
-            Ui.Label(new Rect(x, r.y + 4f, r.width - (x - r.x) - 70f, r.height * 0.58f), name, Ui.Font(20, true), Color.white);
-            var device = mine && seat.Local >= 0 && seat.Local < Local.Slots.Count ? Local.Slots[seat.Local].Device : null;
-            var tag = seat.Bot ? "Bot" : mine ? (seat.Peer == 0 ? "You · host" : "You") : seat.Peer == 0 ? "Host" : "Online";
-            Ui.Label(new Rect(x, r.y + r.height * 0.52f, r.width - (x - r.x) - 70f, r.height * 0.42f), tag, Ui.Font(13), new Color(1f, 1f, 1f, 0.6f));
-            // your own: which way you can move, and the buttons for your name and symbol
-            if (mine)
-            {
-                Ui.Label(new Rect(r.xMax - 60f, r.y, 50f, r.height), team == 0 ? "›" : "‹", Ui.Font(34, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.75f));
-                if (r.height >= 56f) Glyphs.Hint(new Rect(x + 120f, r.y + r.height * 0.52f, r.width - (x - r.x) - 190f, r.height * 0.42f), "{profile} Name  {shape} Symbol", 12, new Color(1f, 1f, 1f, 0.6f), TextAnchor.MiddleRight, device);
-            }
-        }
-
-        /// <summary>A button at the bottom of the lobby; returns true when it's clicked.</summary>
-        private bool Chip(Rect r, string text, bool on, bool main)
-        {
-            var hover = on && r.Contains(Ui.Mouse);
-            var bg = main && on ? new Color(1f, 1f, 1f, hover ? 0.95f : 0.85f) : new Color(1f, 1f, 1f, hover ? 0.2f : on ? 0.12f : 0.05f);
-            Ui.Box(r, bg, 14f);
-            Glyphs.Hint(r, text, 17, main && on ? new Color(0.08f, 0.1f, 0.14f, 1f) : new Color(1f, 1f, 1f, on ? 0.9f : 0.4f));
-            return on && !OptionsOpen && Ui.Clicked && r.Contains(Ui.Mouse) && Event.current.type == EventType.Repaint;
         }
 
         /// <summary>The lobby's options: a panel over the players with the host's settings, inviting and leaving.</summary>
@@ -371,11 +318,33 @@ namespace UltraPuck.Game
         }
 
         /// <summary>The page's buttons, in a column at (<paramref name="x"/>, <paramref name="top"/>).</summary>
-        private void Rows(float x, float top, float w, float rowH, float gap, int font, float t)
+        private void Rows(float x, float top, float w, float rowH, float gap, int font, float t, float bottom = float.MaxValue)
         {
             var mouse = Ui.Mouse;
+            // more rows than fit (a long friends list): scroll so the highlighted one is in view
+            var fit = bottom >= float.MaxValue ? _rows.Count : Mathf.Max(1, Mathf.FloorToInt((bottom - top + gap) / (rowH + gap)));
+            if (_rows.Count <= fit) _scroll = 0;
+            else
+            {
+                if (_focus < _scroll) _scroll = _focus;
+                if (_focus >= _scroll + fit) _scroll = _focus - fit + 1;
+                _scroll = Mathf.Clamp(_scroll, 0, _rows.Count - fit);
+            }
+            _scrollY = Mathf.Lerp(_scrollY, _scroll, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 18f));
+            if (Mathf.Abs(_scrollY - _scroll) < 0.01f) _scrollY = _scroll;
+            top -= _scrollY * (rowH + gap);
+            if (_rows.Count > fit)
+            {
+                // a scrollbar down the right
+                var trackH = fit * (rowH + gap) - gap;
+                var trackTop = top + _scrollY * (rowH + gap);
+                Ui.Box(new Rect(x + w + 12f, trackTop, 6f, trackH), new Color(1f, 1f, 1f, 0.1f), 3f);
+                var thumbH = trackH * fit / _rows.Count;
+                Ui.Box(new Rect(x + w + 12f, trackTop + (trackH - thumbH) * _scrollY / (_rows.Count - fit), 6f, thumbH), new Color(1f, 1f, 1f, 0.5f), 3f);
+            }
             for (var i = 0; i < _rows.Count; i++)
             {
+                if (_rows.Count > fit && (i < _scroll || i >= _scroll + fit)) continue;
                 var r = new Rect(x, top + i * (rowH + gap), w, rowH);
                 if (r.Contains(mouse) && Ui.MouseMoved && _rows[i].Enabled()) { _focus = i; if (!_rows[i].TextField) _typing = false; }
             }
@@ -389,6 +358,7 @@ namespace UltraPuck.Game
 
             for (var i = 0; i < _rows.Count; i++)
             {
+                if (_rows.Count > fit && (i < Mathf.FloorToInt(_scrollY) || i > Mathf.CeilToInt(_scrollY) + fit - 1)) continue;
                 var row = _rows[i];
                 // rows slide in one after another when a page opens
                 var appear = Ui.EaseOut((t - i * 0.04f) / 0.3f);
@@ -455,9 +425,7 @@ namespace UltraPuck.Game
                 case Page.Browse:
                     return SteamNet.Found.Count == 0 && !SteamNet.Searching ? "No open games found. Friends can also invite you from Steam." : "";
                 case Page.Friends:
-                    var help = _friends.Count == 0 ? "None of your Steam friends are online." : "The invite arrives in their Steam chat. If they have Ultra Puck open, accepting joins your game; they can also use Online > Find games on Steam, or Join game on you in their Steam friends list.";
-                    if (!SteamNet.OverlayWorks) help += " (The Steam overlay only works when Steam starts the game: add UltraPuck.exe with Games > Add a Non-Steam Game and start it from your Steam library.)";
-                    return help;
+                    return _friends.Count == 0 ? "None of your Steam friends are online." : "";
                 case Page.OnlineLobby:
                     if (Session == null) return "";
                     var s = Session.Describe();

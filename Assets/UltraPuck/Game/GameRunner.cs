@@ -228,8 +228,11 @@ namespace UltraPuck.Game
             {
                 var gLo = Vector2.Min(lo, goal - Vector2.one * 2.5f);
                 var gHi = Vector2.Max(hi, goal + Vector2.one * 2.5f);
-                lo = Vector2.Lerp(lo, gLo, charge);
-                hi = Vector2.Lerp(hi, gHi, charge);
+                // most of the way out early in the charge, so the net is in view while you line the shot up
+                var k = Mathf.Clamp01(charge / 0.4f);
+                k = 1f - (1f - k) * (1f - k);
+                lo = Vector2.Lerp(lo, gLo, k);
+                hi = Vector2.Lerp(hi, gHi, k);
             }
 
             // half the view height that fits the box below the score bar, not closer than the minimum, not wider than the rink
@@ -250,6 +253,7 @@ namespace UltraPuck.Game
             else
             {
                 var smooth = Mathf.Lerp(0.12f, 0.8f, Settings.CameraSmoothing);
+                if (zooming) smooth *= 0.5f; // pulling back for a shot shouldn't lag behind it
                 _camPos = Vector2.SmoothDamp(_camPos, pos, ref _camVel, smooth, Mathf.Infinity, Time.unscaledDeltaTime);
                 _camSize = Mathf.SmoothDamp(_camSize, size, ref _camSizeVel, smooth * 1.3f, Mathf.Infinity, Time.unscaledDeltaTime);
             }
@@ -515,6 +519,8 @@ namespace UltraPuck.Game
             _mainMenu.Message = null;
             _local.Slots.Clear();
             _mode = Mode.Online;
+            // the host's people work on the host's bots; on someone else's game there are none to change
+            _local.Bots = session.IsHost ? new SessionBots(session) : null;
             _mainMenu.Show(MainMenu.Page.OnlineLobby);
             _onlineMatchId = -1;
             OnlineCardPicks();
@@ -534,12 +540,25 @@ namespace UltraPuck.Game
             SteamNet.Leave();
             _mainMenu.Session = null;
             _local.Slots.Clear();
+            _local.Bots = new LocalPlayers.SlotBots(_local);
             LocalCardPicks();
             _menus.Close();
             _mode = Mode.Menu;
             _sim = _matchSim;
             _mainMenu.Show(MainMenu.Page.Online);
             _mainMenu.Message = why;
+        }
+
+        /// <summary>The online host's bots, for the players screen.</summary>
+        private sealed class SessionBots : LocalPlayers.IBotEditor
+        {
+            private readonly NetSession _s;
+            public SessionBots(NetSession s) { _s = s; }
+            public int Count { get { return _s.Bots; } }
+            public void SwitchTeam(int i) { var l = _s.BotLook(i); _s.SetBot(i, (l & 7) == 1 ? 0 : 1, (l >> 3) & 7); }
+            public void NextSymbol(int i) { var l = _s.BotLook(i); _s.SetBot(i, l & 7, (((l >> 3) & 7) + 1) % Symbols.Count); }
+            public bool Add() { if (_s.Seats.Count >= NetSession.MaxPlayers) return false; _s.Bots = _s.Bots + 1; return true; }
+            public void Remove(int i) { _s.RemoveBot(i); }
         }
 
         private int _onlineMatchId = -1;
@@ -567,23 +586,23 @@ namespace UltraPuck.Game
                     _local.LobbyUpdate();
                     if (_local.NameRequest != null) { _play.OpenKeyboard(_local.NameRequest); _local.NameRequest = null; }
                     if (_local.LeaveLobbyHeld()) { LeaveOnline(null); return; }
-                    if (s.IsHost && _local.BotRequest != 0) s.Bots = Mathf.Clamp(s.Bots + _local.BotRequest, 0, NetSession.MaxPlayers);
                 }
                 var mine = new List<KeyValuePair<string, int>>();
                 for (var k = 0; k < _local.Slots.Count; k++)
                 {
                     var sl = _local.Slots[k];
                     var nm = !string.IsNullOrEmpty(sl.Name) ? sl.Name : Settings.PlayerName + (k > 0 ? " (" + (k + 1) + ")" : "");
-                    mine.Add(new KeyValuePair<string, int>(nm, NetSession.Look(sl.Colour, sl.Symbol)));
+                    mine.Add(new KeyValuePair<string, int>(nm, NetSession.Look(sl.Colour, sl.Symbol, sl.Ready)));
                 }
                 s.SetLocalPlayers(mine);
-                if (!busy && s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2 && !s.TooManyTeams) StartOnlineMatch();
+                if (!busy && s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2 && !s.TooManyTeams && s.AllReady) StartOnlineMatch();
                 AttractUpdate();
                 return;
             }
 
-            // the match
+            // the match (everyone readies up again in the lobby afterwards)
             if (_mainMenu.Current != MainMenu.Page.None) _mainMenu.Show(MainMenu.Page.None);
+            _local.UnreadyAll();
             var match = s.Match;
             if (s.MatchId != _onlineMatchId) { _onlineMatchId = s.MatchId; _onlineAcc = 0f; foreach (var sl in _local.Slots) sl.Latched = 0; }
             _sim = match.Sim;
@@ -734,7 +753,9 @@ namespace UltraPuck.Game
             _freeSim = new Simulation(_map, MatchTuning(true), _cards);
             _sim = free ? _freeSim : _matchSim;
             // a fresh seed every match, so games (and the cards offered) don't replay the same way each time
-            _state = _sim.NewGame(_local.Teams(), (uint)System.Environment.TickCount * 2654435761u | 1u);
+            var bots = new bool[_local.Slots.Count];
+            for (var i = 0; i < bots.Length; i++) bots[i] = _local.Slots[i].Demo;
+            _state = _sim.NewGame(_local.Teams(), (uint)System.Environment.TickCount * 2654435761u | 1u, bots);
             _prev = _state.Clone();
             _acc = 0f;
             Recorder.Clear();
@@ -746,7 +767,8 @@ namespace UltraPuck.Game
 
         private void BackToLobby()
         {
-            // back to the join screen with everyone (and the bots) still there
+            // back to the join screen with everyone (and the bots) still there, to ready up again
+            _local.UnreadyAll();
             _mode = Mode.Lobby;
             _play.Open(PlayScreens.Page.Join);
             _free = false;
@@ -883,19 +905,19 @@ namespace UltraPuck.Game
                 _replay = new GoalReplay(frames, _state.LastScorer, _sim, _state.PhaseTime.ToFloat() - 0.4f);
             }
             if (_replay == null) return false;
-            var skip = local && (_local.StartPressed() || _local.Menu().Confirm);
+            // skipping is a vote in the game itself (everyone presses shoot, bots always agree): the celebration
+            // then ends, the phase changes, and the replay stops above
             GameState a, b;
             float t;
             _replay.Advance(Time.unscaledDeltaTime, tps, out a, out b, out t);
-            if (_replay.Done || skip || a == null)
+            if (_replay.Done || a == null)
             {
                 _replay = null;
                 _hud.Replay = false;
-                if (local) _state.PhaseTime = Fix.Zero; // straight on to the face-off (or the cards)
                 return false;
             }
             _hud.Replay = true;
-            _hud.ReplaySkippable = local;
+            _hud.ReplaySkippable = true;
             _hud.ReplaySlow = _replay.Slow < 0.9f;
             Show(a, b, t);
             return true;

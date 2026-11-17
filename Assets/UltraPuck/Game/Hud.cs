@@ -95,7 +95,13 @@ namespace UltraPuck.Game
                         Ui.Box(new Rect(24, 80, 150, 40), new Color(0.85f, 0.15f, 0.15f, 0.9f * pulse), 8f);
                         Ui.Label(new Rect(24, 80, 150, 40), "REPLAY", Ui.Font(22, true, TextAnchor.MiddleCenter), Color.white);
                         if (ReplaySlow) Ui.Label(new Rect(184, 80, 300, 40), "slow motion", Ui.Font(17, false), new Color(1f, 1f, 1f, 0.7f));
-                        if (ReplaySkippable) Glyphs.Hint(new Rect(24, h - 50, 300, 28), "{confirm} Skip", 16, new Color(1f, 1f, 1f, 0.7f), TextAnchor.MiddleLeft);
+                        if (ReplaySkippable)
+                        {
+                            // everyone has to want to skip it (bots always do)
+                            int votes = 0, people = 0;
+                            foreach (var p in _state.Players) { if (p.Bot) continue; people++; if (p.SkipVote) votes++; }
+                            Glyphs.Hint(new Rect(24, h - 50, 500, 28), "{shoot} Skip" + (people > 1 ? "   " + votes + " / " + people : votes > 0 ? "   skipping" : ""), 16, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleLeft);
+                        }
                     }
                     else Ui.Label(new Rect(0, h * 0.28f, w, 70), "GOAL!  " + Palette.TeamName(_state.LastScorer) + " scores", big, Palette.Team(_state.LastScorer));
                     break;

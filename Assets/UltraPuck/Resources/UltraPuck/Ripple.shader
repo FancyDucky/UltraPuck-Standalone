@@ -7,6 +7,7 @@ Shader "UltraPuck/Ripple"
         _Age ("Age", Float) = 0
         _Strength ("Strength", Float) = 0.02
         _Tint ("Tint", Color) = (1, 1, 1, 1)
+        _Aberration ("Colour split", Float) = 0.7
     }
     SubShader
     {
@@ -27,7 +28,7 @@ Shader "UltraPuck/Ripple"
             #include "UnityCG.cginc"
 
             sampler2D _RippleGrab;
-            float _Age, _Strength;
+            float _Age, _Strength, _Aberration;
             float4 _Tint;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; float4 grab : TEXCOORD1; };
@@ -55,8 +56,12 @@ Shader "UltraPuck/Ripple"
                 float slope = cos(phase) * env;
                 float2 dir = r > 1e-4 ? i.uv / r : float2(0, 0);
 
+                // chromatic aberration: red bends a bit further than green, blue a bit less, strongest on the waves
                 float2 uv = i.grab.xy / i.grab.w + dir * wave * _Strength;
+                float2 split = dir * abs(wave) * _Strength * _Aberration;
                 fixed4 col = tex2D(_RippleGrab, uv);
+                col.r = tex2D(_RippleGrab, uv + split).r;
+                col.b = tex2D(_RippleGrab, uv - split).b;
                 // light catches the crests, a hint of the card's colour in it
                 col.rgb += lerp(float3(1, 1, 1), _Tint.rgb, 0.45) * max(0, slope) * 0.22;
                 col.rgb -= max(0, -slope) * 0.06;

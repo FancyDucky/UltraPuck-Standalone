@@ -145,6 +145,10 @@ namespace UltraPuck.Core
         public Fix NoPickup;
         /// <summary>Last tick's buttons, so presses (not holds) can be told apart.</summary>
         public byte PrevButtons;
+        /// <summary>A computer player (it votes to skip goal replays straight away).</summary>
+        public bool Bot;
+        /// <summary>During a goal replay: this player pressed shoot to skip it. When everyone has, it ends.</summary>
+        public bool SkipVote;
         public Stats Stats = new Stats();
         /// <summary>The cards this player has, as indexes into the match's <see cref="CardLibrary"/>, in the order taken.</summary>
         public int[] Cards = new int[0];
@@ -302,7 +306,7 @@ namespace UltraPuck.Core
             foreach (var p in Players)
             {
                 Mix(ref h, p.Team); Mix(ref h, p.Pos); Mix(ref h, p.Vel); Mix(ref h, p.Facing);
-                Mix(ref h, p.DashCharge); Mix(ref h, p.DashTime); Mix(ref h, p.Charge); Mix(ref h, p.NoPickup); Mix(ref h, p.PrevButtons);
+                Mix(ref h, p.DashCharge); Mix(ref h, p.DashTime); Mix(ref h, p.Charge); Mix(ref h, p.NoPickup); Mix(ref h, p.PrevButtons); Mix(ref h, p.Bot ? 1 : 0); Mix(ref h, p.SkipVote ? 1 : 0);
                 Mix(ref h, p.Stun); Mix(ref h, p.HitLag); Mix(ref h, p.Hits); Mix(ref h, p.HitPower); Mix(ref h, p.HitDir);
                 p.Stats.Hash(ref h);
                 Mix(ref h, p.Cards.Length); foreach (var c in p.Cards) Mix(ref h, c);

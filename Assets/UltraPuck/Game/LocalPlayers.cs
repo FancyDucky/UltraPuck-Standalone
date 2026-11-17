@@ -42,6 +42,12 @@ namespace UltraPuck.Game
             public bool Demo;
             /// <summary>How long B / Escape has been held (holding it long enough leaves).</summary>
             public float BackHeld;
+            /// <summary>Readied up on the players screen: from then on their controls work the bots instead.</summary>
+            public bool Ready;
+            /// <summary>Which bot a readied player is working on (index among the bots).</summary>
+            public int Cursor;
+            /// <summary>The frame they joined on (the press that joined them mustn't also ready them).</summary>
+            public int JoinedFrame;
             public string Label { get { return Demo ? "Bot" : Device is Keyboard ? "Keyboard" : Device != null ? Device.displayName : "Disconnected"; } }
         }
 
@@ -67,7 +73,48 @@ namespace UltraPuck.Game
         /// <summary>How far an unjoined controller or keyboard has got with holding B / Escape (0..1): leaving the lobby itself.</summary>
         public float NobodyLeaving { get; private set; }
 
-        /// <summary>Lobby: join with A / Space, pick a side with left / right, hold B / Escape to leave.</summary>
+        /// <summary>
+        /// The bots on the players screen, for readied players to work on: on this PC they're slots, online they're
+        /// the host's (null when you can't change them).
+        /// </summary>
+        public interface IBotEditor
+        {
+            int Count { get; }
+            /// <summary>Bot <paramref name="i"/> to the other team.</summary>
+            void SwitchTeam(int i);
+            void NextSymbol(int i);
+            bool Add();
+            void Remove(int i);
+        }
+
+        public IBotEditor Bots;
+
+        /// <summary>The bots here are slots like the people (the default).</summary>
+        public sealed class SlotBots : IBotEditor
+        {
+            private readonly LocalPlayers _l;
+            public SlotBots(LocalPlayers l) { _l = l; }
+            private int Index(int i) { for (var k = 0; k < _l.Slots.Count; k++) if (_l.Slots[k].Demo && i-- == 0) return k; return -1; }
+            public int Count { get { return _l.BotCount; } }
+            public void SwitchTeam(int i) { var k = Index(i); if (k < 0) return; var s = _l.Slots[k]; s.Colour = s.Colour == 1 ? 0 : 1; _l.AssignTeams(); }
+            public void NextSymbol(int i) { var k = Index(i); if (k < 0) return; _l.Slots[k].Symbol = (_l.Slots[k].Symbol + 1) % Symbols.Count; }
+            public bool Add() { return _l.AddBot(); }
+            public void Remove(int i) { var k = Index(i); if (k < 0) return; _l.Slots.RemoveAt(k); _l.AssignTeams(); }
+        }
+
+        public LocalPlayers() { Bots = new SlotBots(this); }
+
+        /// <summary>Everyone here (not the bots) has readied up, and there's someone.</summary>
+        public bool AllReady { get { var any = false; foreach (var s in Slots) { if (s.Demo) continue; any = true; if (!s.Ready) return false; } return any; } }
+
+        public void UnreadyAll() { foreach (var s in Slots) s.Ready = false; }
+
+        /// <summary>
+        /// Lobby: join with A / Space; left / right switches team, Y / N types a name, X / M changes the symbol, A again
+        /// readies up. Readied, up / down picks a bot, left / right moves it to the other team, X / M changes its symbol,
+        /// LB / RB (- / =) removes or adds one, and B / Escape un-readies. B / Escape before that gives up the seat;
+        /// held by someone without a seat, it leaves.
+        /// </summary>
         public void LobbyUpdate()
         {
             var dt = Time.unscaledDeltaTime;
@@ -96,15 +143,31 @@ namespace UltraPuck.Game
             {
                 if (s.Demo || s.Typing || !Slots.Contains(s)) continue;
                 var nav = Nav(s);
-                if (nav.x != 0) { s.Colour = ((s.Colour + nav.x) % Palette.Choosable + Palette.Choosable) % Palette.Choosable; AssignTeams(); }
                 var pad = s.Device as Gamepad;
                 var keys = s.Device as Keyboard;
+                var confirm = s.JoinedFrame != Time.frameCount && (pad != null ? pad.buttonSouth.wasPressedThisFrame : keys != null && keys.spaceKey.wasPressedThisFrame);
                 var name = pad != null ? pad.buttonNorth.wasPressedThisFrame : keys != null && keys.nKey.wasPressedThisFrame;
                 var symbol = pad != null ? pad.buttonWest.wasPressedThisFrame : keys != null && keys.mKey.wasPressedThisFrame;
-                if (name) NameRequest = s;
-                if (symbol) s.Symbol = (s.Symbol + 1) % Symbols.Count;
-                if (pad != null) { if (pad.leftShoulder.wasPressedThisFrame) BotRequest = -1; if (pad.rightShoulder.wasPressedThisFrame) BotRequest = 1; }
-                if (keys != null) { if (keys.minusKey.wasPressedThisFrame) BotRequest = -1; if (keys.equalsKey.wasPressedThisFrame) BotRequest = 1; }
+                var less = pad != null ? pad.leftShoulder.wasPressedThisFrame : keys != null && keys.minusKey.wasPressedThisFrame;
+                var more = pad != null ? pad.rightShoulder.wasPressedThisFrame : keys != null && keys.equalsKey.wasPressedThisFrame;
+                if (!s.Ready)
+                {
+                    if (nav.x != 0) { s.Colour = ((s.Colour + nav.x) % Palette.Choosable + Palette.Choosable) % Palette.Choosable; AssignTeams(); }
+                    if (name) NameRequest = s;
+                    if (symbol) s.Symbol = (s.Symbol + 1) % Symbols.Count;
+                    if (confirm) { s.Ready = true; s.Cursor = 0; }
+                    continue;
+                }
+                // readied: working on the bots
+                var bots = Bots;
+                if (bots == null) continue;
+                if (more && bots.Add()) s.Cursor = bots.Count - 1;
+                if (bots.Count == 0) { s.Cursor = 0; continue; }
+                s.Cursor = Mathf.Clamp(s.Cursor, 0, bots.Count - 1);
+                if (nav.y != 0) s.Cursor = (s.Cursor - nav.y + bots.Count) % bots.Count;
+                if (nav.x != 0) bots.SwitchTeam(s.Cursor);
+                if (symbol) bots.NextSymbol(s.Cursor);
+                if (less) { bots.Remove(s.Cursor); s.Cursor = Mathf.Clamp(s.Cursor, 0, Mathf.Max(0, bots.Count - 1)); }
             }
         }
 
@@ -130,6 +193,7 @@ namespace UltraPuck.Game
             var kb = s.Device as Keyboard;
             var pressed = g != null ? g.buttonEast.wasPressedThisFrame : kb != null && kb.escapeKey.wasPressedThisFrame;
             if (!pressed) return;
+            if (s.Ready) { s.Ready = false; return; } // B un-readies first
             Slots.Remove(s);
             AssignTeams();
             _nobodyHeld[s.Device] = -1000f;
@@ -141,7 +205,7 @@ namespace UltraPuck.Game
         private bool Join(InputDevice d)
         {
             if (Slots.Count >= MaxPlayers) return false;
-            var s = new Slot { Device = d, Colour = ColourForNewcomer(), Symbol = FreeSymbol() };
+            var s = new Slot { Device = d, Colour = ColourForNewcomer(), Symbol = FreeSymbol(), JoinedFrame = Time.frameCount };
             var humans = 0;
             foreach (var o in Slots) if (!o.Demo) humans++;
             s.Name = humans == 0 ? Settings.PlayerName : "P" + (Slots.Count + 1);

@@ -454,6 +454,34 @@ namespace UltraPuck.Tests
         }
 
         [Test]
+        public void EveryonePressingShootSkipsTheReplayAndBotsAgree()
+        {
+            var tuning = new Tuning { Replays = true, CelebrateTime = Fix.FromInt(11) };
+            var sim = new Simulation(LoadRink(), tuning);
+            var s = sim.NewGame(new[] { 0, 1, 1 }, 0, new[] { false, false, true });
+            PlayNow(s);
+            var g = sim.Map.Goals.Find(x => x.Team == 1);
+            s.PuckPos = new FixVec2(g.Min.X + Fix.Half, Fix.Zero);
+            s.PuckVel = FixVec2.Zero;
+            var none = new[] { default(PlayerInput), default(PlayerInput), default(PlayerInput) };
+            sim.Step(s, none);
+            Assert.AreEqual(Phase.Scored, s.Phase);
+            // before the replay starts, presses don't count
+            sim.Step(s, new[] { Press(PlayerInput.ShootCheck), Press(PlayerInput.ShootCheck), default(PlayerInput) });
+            Assert.IsFalse(s.Players[0].SkipVote);
+            for (var t = 0; t < 120 * 2; t++) sim.Step(s, none);
+            // one person wants to skip: it keeps going
+            sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(Phase.Scored, s.Phase);
+            Assert.IsTrue(s.Players[0].SkipVote);
+            Assert.IsTrue(s.Players[2].SkipVote, "the bot agrees straight away");
+            // the other person too: it ends there and then
+            sim.Step(s, none);
+            sim.Step(s, new[] { default(PlayerInput), Press(PlayerInput.ShootCheck), default(PlayerInput) });
+            Assert.AreNotEqual(Phase.Scored, s.Phase);
+        }
+
+        [Test]
         public void ChargeBrakeWithoutThePuckBrakes()
         {
             var sim = new Simulation(LoadRink());

@@ -174,12 +174,12 @@ namespace UltraPuck.Game
 
         /// <summary>Draw a hint with button pictures in <paramref name="r"/> (aligned left, centre or right as the style says).</summary>
         /// <param name="device">Show this controller's (or the keyboard's) buttons instead of the last used device's.</param>
-        public static void Hint(Rect r, string text, int size, Color c, TextAnchor align = TextAnchor.MiddleCenter, InputDevice device = null)
+        public static void Hint(Rect r, string text, int size, Color c, TextAnchor align = TextAnchor.MiddleCenter, InputDevice device = null, bool bold = false, bool shadow = true)
         {
             if (string.IsNullOrEmpty(text)) return;
             InputMode.Update();
             _f = device != null ? InputMode.FamilyOf(device) : InputMode.Current;
-            var style = Ui.Font(size);
+            var style = Ui.Font(size, bold);
             var h = size * 1.45f;
             Split(text, style, h);
             var total = 0f;
@@ -190,7 +190,7 @@ namespace UltraPuck.Game
             var cy = r.center.y;
             foreach (var p in _parts)
             {
-                if (p.Action == null) Ui.Label(new Rect(x, cy - h / 2f, p.W + 4f, h), p.Text, style, c);
+                if (p.Action == null) Ui.Label(new Rect(x, cy - h / 2f, p.W + 4f, h), p.Text, style, c, shadow);
                 else DrawAction(new Rect(x, cy - h / 2f, p.W, h), p.Action, c.a, size);
                 x += p.W;
             }

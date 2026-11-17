@@ -166,7 +166,7 @@ namespace UltraPuck.Game
                     break;
                 case 3:
                     _rows.Add(Switch("Rounds mode", () => Settings.Rounds, v => Settings.Rounds = v, "After each goal, the team that conceded picks a card that powers them up for the rest of the match."));
-                    _rows.Add(Switch("Goal replays", () => Settings.Replays, v => Settings.Replays = v, "Every goal is shown again, up to 10 seconds back, in slow motion on the big moments. A / Start skips it (not online)."));
+                    _rows.Add(Switch("Goal replays", () => Settings.Replays, v => Settings.Replays = v, "Every goal is shown again, up to 10 seconds back, in slow motion on the big moments. Everyone pressing A skips it (bots always agree)."));
                     var vote = Choice("Picking", new[] { "Each player", "Team vote" }, () => Settings.TeamVote ? 1 : 0, v => Settings.TeamVote = v == 1,
                         "Each player: everyone gets their own card. Team vote: each team votes on one card the whole team gets (a tie is random).");
                     vote.Enabled = () => Settings.Rounds;

@@ -124,11 +124,11 @@ namespace UltraPuck.Core
         /// <paramref name="seed"/> drives everything random in the match (bots' variety for now); online, every PC
         /// must use the same one. 0 keeps the default.
         /// </summary>
-        public GameState NewGame(int[] teams, uint seed = 0)
+        public GameState NewGame(int[] teams, uint seed = 0, bool[] bots = null)
         {
             var s = new GameState { Players = new PlayerState[teams.Length] };
             if (seed != 0) s.Rng = seed;
-            for (var i = 0; i < teams.Length; i++) s.Players[i] = new PlayerState { Team = teams[i] & 1 };
+            for (var i = 0; i < teams.Length; i++) s.Players[i] = new PlayerState { Team = teams[i] & 1, Bot = bots != null && i < bots.Length && bots[i] };
             s.Clock = T.TimeLimit;
             FaceOff(s);
             return s;
@@ -233,6 +233,24 @@ namespace UltraPuck.Core
         }
 
         /// <summary>Someone joins mid-game (free play): a new player at their team's next spawn. Returns their index.</summary>
+        /// <summary>
+        /// Goal replays: once the replay is on, a press of shoot is a vote to skip it (bots vote straight away). When
+        /// every player has voted, the celebration ends this tick. It's part of the game, so it's the same online.
+        /// </summary>
+        private void SkipVotes(GameState s, PlayerInput[] inputs, Fix dt)
+        {
+            if (T.CelebrateTime - s.PhaseTime < T.ReplaySkipFrom) return;
+            var all = true;
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var p = s.Players[i];
+                if (p.Bot) p.SkipVote = true;
+                else if ((InputOf(inputs, i).Buttons & ~p.PrevButtons & PlayerInput.ShootCheck) != 0) p.SkipVote = true;
+                if (!p.SkipVote) all = false;
+            }
+            if (all) s.PhaseTime = Fix.Min(s.PhaseTime, dt);
+        }
+
         public int AddPlayer(GameState s, int team)
         {
             team &= 1;
@@ -279,6 +297,7 @@ namespace UltraPuck.Core
                 return;
             }
 
+            if (s.Phase == Phase.Scored && T.Replays) SkipVotes(s, inputs, dt);
             for (var i = 0; i < s.Players.Length; i++) Control(s, i, InputOf(inputs, i), dt);
 
             // the match clock (timed matches): runs while the puck is in play; level at zero: next goal wins
@@ -813,6 +832,7 @@ namespace UltraPuck.Core
                 if (s.Carrier >= 0) { s.PuckVel = s.Players[s.Carrier].Vel; s.Carrier = -1; }
                 s.Phase = Phase.Scored;
                 s.PhaseTime = T.CelebrateTime;
+                foreach (var p in s.Players) p.SkipVote = false;
                 return;
             }
         }
