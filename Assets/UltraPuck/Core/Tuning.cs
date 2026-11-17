@@ -101,10 +101,11 @@ namespace UltraPuck.Core
         public Fix ShockCooldown = Fix.FromInt(7), ShockSlow = Fix.Ratio(9, 20), ShockSlowPerCopy = Fix.Ratio(5, 100);
         public Fix ShockTime = Fix.FromInt(2), ShockTimePerCopy = Fix.Half, ShockRange = Fix.FromInt(3), ShockPush = Fix.Ratio(4, 5);
         /// <summary>
-        /// Ice Trail: the trail lasts this long behind the puck, then melts from the start to the end over
-        /// <see cref="IceMelt"/>; how much it slows per copy, how wide it is, and how far apart its points are.
+        /// Ice Trail: the puck lays ice for up to <see cref="IceTime"/>. The start of the trail melts
+        /// <see cref="IceDelay"/> after the shot, and the melting creeps along it <see cref="IceMeltPace"/> times
+        /// slower than it was laid. How much it slows per copy, how wide it is, and how far apart its points are.
         /// </summary>
-        public Fix IceTime = Fix.FromInt(3), IceMelt = Fix.One, IceSlow = Fix.Ratio(1, 10), IceRadius = Fix.Ratio(9, 20), IceSpacing = Fix.Ratio(2, 5);
+        public Fix IceTime = Fix.FromInt(3), IceDelay = Fix.One, IceMeltPace = Fix.Ratio(3, 2), IceSlow = Fix.Ratio(1, 10), IceRadius = Fix.Ratio(9, 20), IceSpacing = Fix.Ratio(2, 5);
         /// <summary>Friendly Fire: speed multiplier and how long it lasts.</summary>
         public Fix FriendlyBoost = Fix.Ratio(9, 5), FriendlyTime = Fix.FromInt(2);
         /// <summary>Team Play: how close an opponent may get to a passed puck before the pass no longer counts.</summary>

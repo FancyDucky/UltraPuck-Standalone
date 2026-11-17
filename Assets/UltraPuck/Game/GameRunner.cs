@@ -41,7 +41,6 @@ namespace UltraPuck.Game
         private PlayScreens _play;
         private Menus _menus;
         private CardScreen _cardScreen;
-        private CardEditor _cardEditor;
         private Effects _effects;
         private ShotViews _shots;
         private PylonViews _pylons;
@@ -63,7 +62,6 @@ namespace UltraPuck.Game
             _hud = gameObject.AddComponent<Hud>();
             _menus = gameObject.AddComponent<Menus>();
             _cardScreen = gameObject.AddComponent<CardScreen>();
-            _cardEditor = gameObject.AddComponent<CardEditor>();
             _mainMenu = gameObject.AddComponent<MainMenu>();
             _play = gameObject.AddComponent<PlayScreens>();
             _play.Runner = this;
@@ -92,8 +90,7 @@ namespace UltraPuck.Game
             SteamNet.OnFailed = why => _mainMenu.Message = why;
 
             _cardScreen.Local = _local;
-            _cardEditor.Local = _local;
-            _cardEditor.Art = _cardScreen.Art;
+            _cardScreen.PlayerOnScreen = i => i >= 0 && i < _players.Count && _players[i].Root != null ? _cam.WorldToScreenPoint(_players[i].Root.transform.position) : (Vector3?)null;
             LocalCardPicks();
             _menus.OnMainMenu = GoMainMenu;
             _menus.BotCount = () => _local.BotCount;
@@ -762,7 +759,7 @@ namespace UltraPuck.Game
             if (!_free || _state == null) return;
             var people = new List<int>();
             for (var i = 0; i < _local.Slots.Count && i < _state.Players.Length; i++) if (!_local.Slots[i].Demo) people.Add(i);
-            _cardEditor.Open(_sim, _state, people);
+            _cardScreen.OpenEditor(_sim, _state, people);
         }
 
         /// <summary>Free play: everyone here (not the bots) picks a card, to try the cards out.</summary>
@@ -778,10 +775,9 @@ namespace UltraPuck.Game
 
         private void MatchUpdate()
         {
-            if (_cardEditor.IsOpen)
+            if (_cardScreen.Editing)
             {
-                // free play's card editor: the match waits
-                _cardEditor.Tick();
+                // free play's card editor: the match waits (the card screen runs it)
                 Show(_state, _state, 0f);
                 return;
             }

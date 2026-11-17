@@ -30,7 +30,7 @@ namespace UltraPuck.Game
         private readonly Dictionary<int, byte> _ready = new Dictionary<int, byte>();
         private readonly Dictionary<string, Texture2D> _art = new Dictionary<string, Texture2D>();
 
-        private enum Stage { Idle, Choosing, Leaving }
+        private enum Stage { Idle, Choosing, Leaving, Editing }
         private Stage _stage = Stage.Idle;
         private int _slot = -1, _focus, _chosen = -1;
         private float _stageAt, _lastHover;
@@ -48,6 +48,9 @@ namespace UltraPuck.Game
 
         /// <summary>The card a local player is looking at right now (1-based), sent along so the other team can watch.</summary>
         public byte HoverFor(int player) { return _stage == Stage.Choosing && !_watching && _slot == player ? (byte)(_focus + 1) : (byte)0; }
+
+        /// <summary>Where match player <c>p</c> is on screen (pixels), for the taken card to fly into; null if not shown.</summary>
+        public System.Func<int, Vector3?> PlayerOnScreen;
 
         /// <summary>A player's name for the header (set by GameRunner).</summary>
         public System.Func<int, string> NameOf;
@@ -67,6 +70,9 @@ namespace UltraPuck.Game
         private int Slot { get { return SlotOf(_slot); } }
 
         public bool Showing { get { return _stage != Stage.Idle; } }
+
+        /// <summary>Free play's card editor is open (the match waits).</summary>
+        public bool Editing { get { return _stage == Stage.Editing; } }
 
         private void Awake()
         {
@@ -103,6 +109,7 @@ namespace UltraPuck.Game
                 _ready.Clear();
                 _watched.Clear();
                 if (_stage == Stage.Choosing) Leave(_watching ? WatchedPick(s) : -1);
+                if (_stage == Stage.Editing) EditInput();
             }
             else
             {
@@ -110,7 +117,7 @@ namespace UltraPuck.Game
                 var done = new List<int>();
                 foreach (var kv in _ready) if (kv.Key >= s.Players.Length || s.Players[kv.Key].Picked >= 0 || s.Players[kv.Key].Offer.Length == 0) done.Add(kv.Key);
                 foreach (var k in done) _ready.Remove(k);
-                if (_stage == Stage.Idle)
+                if (_stage == Stage.Idle && !_editing)
                 {
                     var next = NextPicker(s);
                     if (next >= 0) { _watching = false; Deal(next, s.Players[next].Offer); }
@@ -130,10 +137,11 @@ namespace UltraPuck.Game
             if (_stage == Stage.Choosing) Choose();
             Animate();
             Motes();
-            if (_stage == Stage.Leaving && Time.unscaledTime - _stageAt > 0.85f)
+            if (_stage == Stage.Leaving && Time.unscaledTime - _stageAt > (_editing ? 1.1f : _chosen >= 0 ? 1.25f : 0.85f))
             {
                 if (_chosen >= 0 && _slot >= 0 && !_watching) _ready[_slot] = (byte)(_chosen + 1);
                 _watching = false;
+                _editing = false;
                 foreach (var c in _cards) { Destroy(c.Root.gameObject); Destroy(c.Shadow.gameObject); }
                 foreach (var m in _motes) if (m.Go != null) Destroy(m.Go);
                 _motes.Clear();
@@ -268,6 +276,7 @@ namespace UltraPuck.Game
         private void Leave(int chosen)
         {
             _chosen = chosen;
+            _absorbed = false;
             _stage = Stage.Leaving;
             _stageAt = Time.unscaledTime;
             for (var k = 0; k < _cards.Count; k++)
@@ -291,44 +300,61 @@ namespace UltraPuck.Game
             var dt = Mathf.Min(Time.unscaledDeltaTime, 1f / 30f);
             var since = t - _stageAt;
             var tilt = PointerTilt();
+            var live = _stage == Stage.Choosing || _stage == Stage.Editing;
+            var size = _editing ? EditScale : 1f;
+            if (_stage == Stage.Editing) EditHomes();
             for (var k = 0; k < _cards.Count; k++)
             {
                 var c = _cards[k];
                 Vector3 tp; Vector3 tr; float ts;
-                if (_stage == Stage.Choosing && since < c.Delay)
+                if (live && since < c.Delay)
                 {
                     // still in the deck, waiting its turn
                     tp = c.Pos; tr = c.Rot; ts = c.Scale;
                 }
                 else if (_stage == Stage.Leaving && k == _chosen)
                 {
-                    // the pick: pops up front, holds a beat, then flies up and away
-                    var up = since > 0.38f;
-                    tp = up ? new Vector3(0f, 9f, -1f) : new Vector3(0f, 0.2f, -2.2f);
-                    tr = new Vector3(0f, 0f, 0f);
-                    ts = up ? 0.6f : 1.32f;
+                    // the pick: pops up front, comes at you, then dives down into the player who took it, who
+                    // soaks it up in a burst of its colour (no player on screen: it flies up and away instead)
+                    var into = AbsorbPoint();
+                    if (since < 0.32f) { tp = new Vector3(0f, 0.2f, -2.2f); tr = Vector3.zero; ts = 1.32f; }
+                    else if (since < 0.56f) { tp = new Vector3(0f, 0.5f, -5.5f); tr = new Vector3(-8f, 0f, 0f); ts = 1.4f; }
+                    else if (into == null) { tp = new Vector3(0f, 9f, -1f); tr = Vector3.zero; ts = 0.6f; }
+                    else
+                    {
+                        tp = into.Value;
+                        tr = new Vector3(35f, 0f, (k % 2 == 0 ? 1f : -1f) * 160f);
+                        ts = _absorbed ? 0.05f : 0.16f;
+                        if (!_absorbed && (c.Pos - into.Value).magnitude < 0.6f)
+                        {
+                            _absorbed = true;
+                            Burst(c);
+                        }
+                    }
                 }
                 else if (_stage == Stage.Leaving)
                 {
                     var go = since >= c.Delay;
                     tp = go ? c.Home + new Vector3(0f, -8.5f, 1.5f) : c.Home;
-                    tr = go ? new Vector3(-20f, 180f, (k - 1) * 20f) : c.Rot;
-                    ts = go ? 0.8f : 1f;
+                    tr = go ? new Vector3(-20f, 180f, (k % 4 - 1) * 20f) : c.Rot;
+                    ts = (go ? 0.8f : 1f) * size;
                 }
                 else
                 {
                     var focused = k == _focus;
                     var bob = Mathf.Sin(t * 1.7f + c.Phase) * 0.06f;
-                    tp = c.Home + new Vector3(0f, bob + (focused ? 0.25f : 0f), focused ? -0.9f : 0f);
+                    tp = c.Home + new Vector3(0f, bob * size + (focused ? 0.25f * size : 0f), focused ? (_editing ? -2.2f : -0.9f) : 0f);
                     tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.2f + c.Phase) * 1.8f);
                     if (focused) tr += new Vector3(-tilt.y * 16f, tilt.x * 18f, 0f);
                     else tr += new Vector3(Mathf.Sin(t * 0.9f + c.Phase) * 3f, Mathf.Cos(t * 0.8f + c.Phase) * 4f, 0f);
-                    ts = focused ? 1.12f : 0.95f;
+                    ts = (focused ? (_editing ? 1.3f : 1.12f) : 0.95f) * size;
+                    // in the editor, cards you don't have sit back a little
+                    if (_editing && !focused && _counts[_who][k] == 0) ts *= 0.92f;
                 }
-                if (_stage == Stage.Choosing)
+                if (live)
                 {
                     var focusedNow = k == _focus;
-                    c.GlowTarget = focusedNow ? 0.35f : 0f;
+                    c.GlowTarget = (focusedNow ? 0.35f : 0f) + (_editing && _counts[_who][k] > 0 ? 0.45f : 0f);
                     if (!c.Landed && since > c.Delay + 0.32f) { c.Landed = true; c.SweepAt = t; c.NextSweep = t + 2.6f + c.Phase * 0.3f; }
                     if (c.Landed && t > c.NextSweep && (focusedNow || c.Rare)) { c.SweepAt = t; c.NextSweep = t + (focusedNow ? 2.6f : 4.5f); }
                     // the rarest cards shed little sparks of light
@@ -339,11 +365,25 @@ namespace UltraPuck.Game
                     }
                 }
                 c.Step(tp, tr, ts, dt);
-                c.Apply(_stage == Stage.Leaving ? (k == _chosen ? 200 : k * 10) : k == _focus ? 100 : k * 10, _cam);
+                c.Apply(_stage == Stage.Leaving ? (k == _chosen ? 1000 : k * 10) : k == _focus ? 1000 : k * 10, _cam);
             }
         }
 
         /// <summary>Where the focused card should lean: towards the mouse when it's over the card, else the picker's right stick, else a slow drift.</summary>
+        private bool _absorbed;
+
+        /// <summary>Where the player who took the card is, in the cards' space (on the table, under the cards), or null.</summary>
+        private Vector3? AbsorbPoint()
+        {
+            if (PlayerOnScreen == null || _slot < 0) return null;
+            var at = PlayerOnScreen(_slot);
+            if (at == null || at.Value.z <= 0f) return null;
+            var ray = _cam.ScreenPointToRay(new Vector3(at.Value.x, at.Value.y, 0f));
+            if (Mathf.Abs(ray.direction.z) < 1e-4f) return null;
+            var t = (0.5f - ray.origin.z) / ray.direction.z;
+            return ray.origin + ray.direction * t;
+        }
+
         private Vector2 PointerTilt()
         {
             var t = Time.unscaledTime;
@@ -356,7 +396,7 @@ namespace UltraPuck.Game
                 var mp = mouse.position.ReadValue();
                 if (r.Contains(mp)) return new Vector2((mp.x - r.center.x) / (r.width / 2f), (mp.y - r.center.y) / (r.height / 2f));
             }
-            var stick = Local.AimOf(Slot);
+            var stick = Local.AimOf(_editing ? _slot : Slot);
             return stick.sqrMagnitude > 0.04f ? stick : drift;
         }
 
@@ -448,6 +488,7 @@ namespace UltraPuck.Game
             if (_stage == Stage.Idle || _state == null || _slot < 0 || _slot >= _state.Players.Length) return;
             GUI.depth = 5;
             Ui.Begin();
+            if (_editing) { EditGUI(); return; }
             var team = _state.Players[_slot].Team;
             var appear = Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.4f);
             var a = _stage == Stage.Leaving ? 1f - Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.3f) : appear;
@@ -471,6 +512,261 @@ namespace UltraPuck.Game
             var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
             var hint = device is UnityEngine.InputSystem.Keyboard ? "{look} Look      {join} Take it  (or click)" : "{side} Look      {aim} Tilt      {confirm} Take it";
             Glyphs.Hint(new Rect(0f, Ui.H - 46f, Ui.W, 30f), hint, 17, new Color(1f, 1f, 1f, 0.6f * a), TextAnchor.MiddleCenter, device);
+        }
+
+        // ------------------------------------------------------------------ free play's card editor
+
+        // every card, four to a row and three rows on screen (scrolling); A adds a copy, B takes one away,
+        // Start applies, holding B cancels. LB / RB: another person on this PC.
+        private const int EditCols = 4, EditRows = 3;
+        private const float EditScale = 0.54f, EditPitchX = 1.62f, EditPitchY = 2.06f, EditTopY = 1.32f;
+        private const float CancelWait = 0.35f, CancelFill = 0.6f;
+        private bool _editing;
+        private Simulation _editSim;
+        private readonly List<int> _people = new List<int>();
+        private int _who, _editTop;
+        private int[][] _counts;
+        private float _cancelHeld;
+
+        /// <summary>Open the card editor for everyone on this PC (not the bots) in free play.</summary>
+        public void OpenEditor(Simulation sim, GameState s, IList<int> people)
+        {
+            if (_stage != Stage.Idle || sim.Cards == null || sim.Cards.Cards.Count == 0 || people.Count == 0) return;
+            Sim = sim;
+            _editSim = sim;
+            _state = s;
+            _people.Clear();
+            _people.AddRange(people);
+            _counts = new int[_people.Count][];
+            for (var k = 0; k < _people.Count; k++)
+            {
+                _counts[k] = new int[sim.Cards.Cards.Count];
+                foreach (var c in s.Players[_people[k]].Cards) if (c >= 0 && c < _counts[k].Length) _counts[k][c]++;
+            }
+            _who = 0;
+            _slot = _people[0];
+            _editing = true;
+            _watching = false;
+            _chosen = -1;
+            _focus = 0;
+            _editTop = 0;
+            _cancelHeld = 0f;
+            _stage = Stage.Editing;
+            _stageAt = Time.unscaledTime;
+            // dealt from below, face down, the rows on screen one after another (the rest wait off screen)
+            for (var k = 0; k < sim.Cards.Cards.Count; k++)
+            {
+                var v = Build(sim.Cards.Cards[k], k);
+                v.Home = EditHome(k);
+                v.Pos = new Vector3(v.Home.x * 0.3f, -7.5f, 1f);
+                v.Rot = new Vector3(0f, 180f, Random.Range(-28f, 28f));
+                v.Scale = 0.75f * EditScale;
+                var row = k / EditCols;
+                v.Delay = row < EditRows ? 0.1f + row * 0.12f + (k % EditCols) * 0.05f : 0.5f;
+                _cards.Add(v);
+            }
+        }
+
+        private int EditCount { get { return _cards.Count; } }
+        private int EditRowCount { get { return (EditCount + EditCols - 1) / EditCols; } }
+
+        /// <summary>Where a card sits in the grid, scrolled to the rows on screen (others wait above or below).</summary>
+        private Vector3 EditHome(int k)
+        {
+            var row = k / EditCols - _editTop;
+            var x = (k % EditCols - (EditCols - 1) / 2f) * EditPitchX;
+            var y = EditTopY - row * EditPitchY;
+            if (row < 0) y += 4f;
+            if (row >= EditRows) y -= 4f;
+            return new Vector3(x, y, 0f);
+        }
+
+        private void EditHomes()
+        {
+            var row = _focus / EditCols;
+            if (row < _editTop) _editTop = row;
+            if (row >= _editTop + EditRows) _editTop = row - EditRows + 1;
+            _editTop = Mathf.Clamp(_editTop, 0, Mathf.Max(0, EditRowCount - EditRows));
+            for (var k = 0; k < _cards.Count; k++) _cards[k].Home = EditHome(k);
+        }
+
+        private int EditMax(int card)
+        {
+            var m = _editSim.Cards.Cards[card].MaxPerPlayer;
+            return m > 0 ? m : 9;
+        }
+
+        private void EditInput()
+        {
+            if (_state == null || _people.Exists(i => i >= _state.Players.Length)) { EditClose(false); return; }
+            var m = Local.MenuJoined();
+            var ready = Time.unscaledTime - _stageAt > 0.4f; // a moment for the deal, so a held button doesn't add one
+            if (m.Tab != 0 && _people.Count > 1) { _who = (_who + m.Tab + _people.Count) % _people.Count; _slot = _people[_who]; foreach (var c in _cards) c.ScaleVel += 1.5f; }
+            if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, EditCount - 1));
+            if (m.Y != 0)
+            {
+                var to = _focus - m.Y * EditCols;
+                if (to >= 0 && to < EditCount) SetFocus(to);
+                else if (m.Y < 0 && _focus / EditCols < EditRowCount - 1) SetFocus(EditCount - 1); // down onto a short last row
+            }
+
+            // mouse: hover to focus, left click adds, right click takes away, the wheel scrolls
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse != null)
+            {
+                var mp = mouse.position.ReadValue();
+                if (mouse.delta.ReadValue().sqrMagnitude > 0.5f && !ScreenRect(_cards[_focus]).Contains(mp) && Time.unscaledTime - _lastHover > 0.12f)
+                    for (var k = 0; k < _cards.Count; k++)
+                    {
+                        var row = k / EditCols - _editTop;
+                        if (row < 0 || row >= EditRows || !ScreenRect(_cards[k]).Contains(mp)) continue;
+                        SetFocus(k); _lastHover = Time.unscaledTime; break;
+                    }
+                var over = ScreenRect(_cards[_focus]).Contains(mp);
+                if (ready && over && mouse.leftButton.wasPressedThisFrame) EditAdd(_focus, 1);
+                if (ready && over && mouse.rightButton.wasPressedThisFrame) EditAdd(_focus, -1);
+                var wheel = mouse.scroll.ReadValue().y;
+                if (wheel != 0f)
+                {
+                    var r = Mathf.Clamp(_focus / EditCols + (wheel < 0f ? 1 : -1), 0, EditRowCount - 1);
+                    SetFocus(Mathf.Min(EditCount - 1, r * EditCols + _focus % EditCols));
+                }
+            }
+            if (ready && m.Confirm) EditAdd(_focus, 1);
+            if (ready && m.Back) EditAdd(_focus, -1);
+
+            // hold B (or Escape) to cancel: the bar only starts after a moment, so taking cards away doesn't trip it
+            var held = false;
+            foreach (var s in Local.Slots)
+            {
+                if (s.Demo) continue;
+                var g = s.Device as UnityEngine.InputSystem.Gamepad;
+                if (g != null && g.buttonEast.isPressed) held = true;
+                var kb = s.Device as UnityEngine.InputSystem.Keyboard;
+                if (kb != null && (kb.escapeKey.isPressed || kb.backspaceKey.isPressed)) held = true;
+            }
+            _cancelHeld = held ? _cancelHeld + Time.unscaledDeltaTime : 0f;
+            if (CancelProgress >= 1f) { EditClose(false); return; }
+            if (ready && Local.StartPressed()) EditClose(true);
+        }
+
+        private float CancelProgress { get { return Mathf.Clamp01((_cancelHeld - CancelWait) / CancelFill); } }
+
+        private void EditAdd(int card, int d)
+        {
+            var counts = _counts[_who];
+            var c = _cards[card];
+            var was = counts[card];
+            counts[card] = Mathf.Clamp(was + d, 0, EditMax(card));
+            if (counts[card] == was)
+            {
+                // can't: a little shake
+                c.RotVel.z += (Random.value < 0.5f ? -1f : 1f) * 220f;
+                return;
+            }
+            if (d > 0)
+            {
+                // a pop and a puff of sparks in its colour
+                c.ScaleVel += 4.5f;
+                c.SweepAt = Time.unscaledTime;
+                if (Settings.CardEffects)
+                    for (var k = 0; k < 14; k++)
+                    {
+                        var a = Random.value * Mathf.PI * 2f;
+                        var speed = Random.Range(2f, 5f);
+                        NewMote(_root, c.Root.localPosition + new Vector3(0f, 0f, -0.6f), new Vector3(Mathf.Cos(a) * speed, Mathf.Sin(a) * speed, 0f), Random.Range(0.35f, 0.7f), Random.Range(0.06f, 0.14f), Color.Lerp(c.Accent, Color.white, Random.value * 0.6f), 4f);
+                    }
+            }
+            else
+            {
+                // a dip and a twist
+                c.ScaleVel -= 3.5f;
+                c.RotVel.z += (card % 2 == 0 ? 1f : -1f) * 120f;
+            }
+        }
+
+        private void EditClose(bool apply)
+        {
+            foreach (var s in Local.Slots) s.Latched = 0; // the buttons pressed here don't carry into play
+            if (apply && _state != null)
+            {
+                for (var k = 0; k < _people.Count; k++)
+                {
+                    if (_people[k] >= _state.Players.Length) continue;
+                    var p = _state.Players[_people[k]];
+                    // keep the cards they still have in the order they got them, then the new ones
+                    var left = (int[])_counts[k].Clone();
+                    var list = new List<int>();
+                    foreach (var c in p.Cards) if (c >= 0 && c < left.Length && left[c] > 0) { list.Add(c); left[c]--; }
+                    for (var c = 0; c < left.Length; c++) for (var n = 0; n < left[c]; n++) list.Add(c);
+                    p.Cards = list.ToArray();
+                }
+                _editSim.Cards.Recompute(_state);
+                _editSim.PlacePylons(_state); // Pylon Goalies show up (or go) straight away
+            }
+            // everything drops away: the rows on screen in a quick ripple, the rest at once
+            _chosen = -1;
+            _stage = Stage.Leaving;
+            _stageAt = Time.unscaledTime;
+            for (var k = 0; k < _cards.Count; k++)
+            {
+                var row = k / EditCols - _editTop;
+                _cards[k].Delay = row >= 0 && row < EditRows ? 0.03f * (row * EditCols + k % EditCols) : 0f;
+            }
+            _applied = apply;
+        }
+
+        private bool _applied;
+
+        private void EditGUI()
+        {
+            var leaving = _stage == Stage.Leaving;
+            var since = Time.unscaledTime - _stageAt;
+            var a = leaving ? 1f - Ui.EaseOut(since / 0.3f) : Ui.EaseOut(since / 0.4f);
+            if (a <= 0.01f) return;
+            float w = Ui.W, h = Ui.H;
+            var y = 18f + (1f - a) * -20f;
+            var who = _people[_who];
+            var name = NameOf != null ? NameOf(who) : "";
+            if (string.IsNullOrEmpty(name)) name = "P" + (who + 1);
+            var total = 0;
+            foreach (var n in _counts[_who]) total += n;
+            Ui.Label(new Rect(0f, y, w, 46f), leaving ? (_applied ? "Cards applied" : "No changes") : "Your cards", Ui.Font(36, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+            var sub = name + "  ·  " + (total == 1 ? "1 card" : total + " cards") + (_people.Count > 1 ? "  ·  LB / RB: another player" : "");
+            Ui.Label(new Rect(0f, y + 42f, w, 26f), sub, Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.7f * a));
+            if (leaving) return;
+
+            // how many of each you have, on the cards (the focused one last, since it sits in front)
+            var k2 = Screen.height / Ui.H;
+            for (var pass = 0; pass < 2; pass++)
+                for (var k = 0; k < _cards.Count; k++)
+                {
+                    if ((k == _focus) != (pass == 1)) continue;
+                    var n = _counts[_who][k];
+                    var row = k / EditCols - _editTop;
+                    if (n == 0 || row < 0 || row >= EditRows) continue;
+                    if (k != _focus && ScreenRect(_cards[_focus]).Overlaps(ScreenRect(_cards[k]))) continue;
+                    var r = ScreenRect(_cards[k]);
+                    var badge = new Rect(r.xMax / k2 - 34f, (Screen.height - r.yMax) / k2 - 10f, 46f, 30f);
+                    Ui.Box(badge, Color.white, 15f);
+                    Ui.Label(badge, "×" + n, Ui.Font(18, true, TextAnchor.MiddleCenter), new Color(0.08f, 0.08f, 0.09f), false);
+                }
+            // scroll position
+            if (EditRowCount > EditRows)
+            {
+                var track = new Rect(w - 30f, 130f, 6f, h - 200f);
+                Ui.Box(track, new Color(1f, 1f, 1f, 0.12f), 3f);
+                var thumbH = track.height * EditRows / EditRowCount;
+                var at = (float)_editTop / Mathf.Max(1, EditRowCount - EditRows);
+                Ui.Box(new Rect(track.x, track.y + (track.height - thumbH) * at, track.width, thumbH), new Color(1f, 1f, 1f, 0.6f), 3f);
+            }
+            // what the focused card is at, and the controls
+            var focusDef = _editSim.Cards.Cards[_focus];
+            var max = focusDef.MaxPerPlayer > 0 ? " of " + focusDef.MaxPerPlayer : "";
+            Ui.Label(new Rect(0f, h - 70f, w, 24f), focusDef.Name + ":  " + _counts[_who][_focus] + max, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.8f));
+            Glyphs.Hint(new Rect(0f, h - 44f, w, 30f), "{nav} Card      {confirm} Add      {back} Remove      {start} Apply      Hold {back} Cancel", 16, new Color(1f, 1f, 1f, 0.7f));
+            var cancel = CancelProgress;
+            if (cancel > 0f) Hud.LeavingBar(new Rect(w / 2f - 150f, h - 104f, 300f, 24f), cancel, "Cancel the changes");
         }
 
         // ------------------------------------------------------------------ building a card
@@ -517,7 +813,7 @@ namespace UltraPuck.Game
                 Rot += RotVel * dt;
                 ScaleVel += (ts - Scale) * (260f * dt);
                 ScaleVel *= Mathf.Exp(-17f * dt);
-                Scale = Mathf.Clamp(Scale + ScaleVel * dt, 0.3f, 1.6f);
+                Scale = Mathf.Clamp(Scale + ScaleVel * dt, 0.04f, 1.6f);
                 RotVel = Vector3.ClampMagnitude(RotVel, 900f);
             }
 

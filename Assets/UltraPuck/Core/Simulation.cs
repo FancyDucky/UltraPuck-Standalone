@@ -228,7 +228,7 @@ namespace UltraPuck.Core
             s.Carrier = -1;
             s.PuckTeam = -1;
             s.PassFrom = -1;
-            StopLaying(s);
+            StopLaying(s, false);
             foreach (var p in s.Players) { p.Charge = Fix.Zero; p.NoPickup = Fix.Zero; }
         }
 
@@ -455,10 +455,11 @@ namespace UltraPuck.Core
 
         private void StartIce(GameState s, PlayerState shooter)
         {
-            StopLaying(s); // a new trail: the last one starts melting
+            StopLaying(s, false); // a new trail: the last one carries on melting as it was
             s.IceTrails++;
             s.IceLaying = T.IceTime;
-            AddIce(s, new IcePoint { Pos = s.PuckPos, Trail = s.IceTrails, Team = shooter.Team, Slow = T.IceSlow * Math.Min(3, shooter.Stats.IceTrail), Laying = true });
+            s.IceAge = Fix.Zero;
+            AddIce(s, new IcePoint { Pos = s.PuckPos, Trail = s.IceTrails, Team = shooter.Team, Slow = T.IceSlow * Math.Min(3, shooter.Stats.IceTrail), Laying = true, Melt = T.IceDelay });
         }
 
         private static void AddIce(GameState s, IcePoint p)
@@ -470,38 +471,42 @@ namespace UltraPuck.Core
             s.Ice = a;
         }
 
-        /// <summary>The trail being laid is finished: it melts from where it started to where it ends.</summary>
-        private void StopLaying(GameState s)
+        /// <summary>
+        /// The trail being laid is finished. <paramref name="pickedUp"/>: someone took the puck, so if the melting
+        /// hasn't started yet it starts now (from the start of the trail, at the same slow pace).
+        /// </summary>
+        private void StopLaying(GameState s, bool pickedUp)
         {
+            var early = pickedUp && s.IceLaying > Fix.Zero && s.IceAge < T.IceDelay ? T.IceDelay - s.IceAge : Fix.Zero;
             s.IceLaying = Fix.Zero;
-            var n = 0;
-            foreach (var p in s.Ice) if (p.Laying) n++;
-            var k = 0;
             for (var i = 0; i < s.Ice.Length; i++)
             {
                 if (!s.Ice[i].Laying) continue;
                 s.Ice[i].Laying = false;
-                s.Ice[i].Melt = T.IceMelt * k / Math.Max(1, n - 1) + Fix.Ratio(1, 120);
-                k++;
+                s.Ice[i].Melt = Fix.Max(Fix.Ratio(1, 120), s.Ice[i].Melt - early);
             }
         }
 
         private void Ice(GameState s, Fix dt)
         {
-            // laying: a point every so often behind the loose puck, until the time's up or someone picks it up
+            // laying: a point every so often behind the loose puck, until the time's up or someone picks it up.
+            // Each point melts a while after the shot, the melting creeping along the trail slower than it was laid.
             if (s.IceLaying > Fix.Zero)
             {
                 s.IceLaying -= dt;
-                if (s.IceLaying <= Fix.Zero || s.Carrier >= 0) StopLaying(s);
+                s.IceAge += dt;
+                if (s.Carrier >= 0) StopLaying(s, true);
+                else if (s.IceLaying <= Fix.Zero) StopLaying(s, false);
                 else
                 {
                     var last = s.Ice.Length - 1;
                     while (last >= 0 && !s.Ice[last].Laying) last--;
-                    if (last < 0) StopLaying(s);
+                    if (last < 0) StopLaying(s, false);
                     else if ((s.PuckPos - s.Ice[last].Pos).SqrLength >= T.IceSpacing * T.IceSpacing)
                     {
                         var p = s.Ice[last];
                         p.Pos = s.PuckPos;
+                        p.Melt = T.IceDelay + s.IceAge * (T.IceMeltPace - Fix.One);
                         AddIce(s, p);
                     }
                 }
@@ -510,7 +515,6 @@ namespace UltraPuck.Core
             var melted = 0;
             for (var i = 0; i < s.Ice.Length; i++)
             {
-                if (s.Ice[i].Laying) continue;
                 s.Ice[i].Melt -= dt;
                 if (s.Ice[i].Melt <= Fix.Zero) melted++;
             }
@@ -518,7 +522,7 @@ namespace UltraPuck.Core
             {
                 var keep = new IcePoint[s.Ice.Length - melted];
                 var j = 0;
-                foreach (var p in s.Ice) if (p.Laying || p.Melt > Fix.Zero) keep[j++] = p;
+                foreach (var p in s.Ice) if (p.Melt > Fix.Zero) keep[j++] = p;
                 s.Ice = keep;
             }
             // opponents on the ice are slowed while they're on it

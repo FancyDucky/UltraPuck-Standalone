@@ -189,7 +189,7 @@ namespace UltraPuck.Core
 
     /// <summary>
     /// A bit of an Ice Trail. Points of one trail are next to each other in <see cref="GameState.Ice"/>, oldest
-    /// first. <see cref="Melt"/> is the time left before it melts, once the trail is finished (<see cref="Laying"/> off).
+    /// first. <see cref="Melt"/> is the time left before it melts.
     /// </summary>
     [Serializable]
     public struct IcePoint
@@ -259,6 +259,8 @@ namespace UltraPuck.Core
         public IcePoint[] Ice = new IcePoint[0];
         /// <summary>Ice Trail: time left laying the trail behind the puck (0 = not laying one).</summary>
         public Fix IceLaying;
+        /// <summary>Ice Trail: how long ago the trail being laid was shot.</summary>
+        public Fix IceAge;
         /// <summary>Ice Trail: number of the newest trail.</summary>
         public int IceTrails;
         /// <summary>Team Play: who last let go of the puck, while it hasn't been touched by an opponent since (-1 = no pass going).</summary>
@@ -294,7 +296,7 @@ namespace UltraPuck.Core
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); }
-            Mix(ref h, IceLaying); Mix(ref h, IceTrails);
+            Mix(ref h, IceLaying); Mix(ref h, IceAge); Mix(ref h, IceTrails);
             foreach (var ice in Ice) { Mix(ref h, ice.Pos); Mix(ref h, ice.Trail); Mix(ref h, ice.Team); Mix(ref h, ice.Slow); Mix(ref h, ice.Melt); Mix(ref h, ice.Laying ? 1 : 0); }
             foreach (var sc in Score) Mix(ref h, sc);
             foreach (var p in Players)

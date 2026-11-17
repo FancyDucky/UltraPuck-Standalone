@@ -130,7 +130,7 @@
       "tier": "B",
       "max": 3,
       "color": "#8FD3F5",
-      "text": "Fully charged shots leave [good]a trail of ice[/] that slows opponents on it by [good]10%[/]. It lasts 3 s, then melts from where you shot it.
+      "text": "Fully charged shots leave [good]a trail of ice[/] that slows opponents on it by [good]10%[/]. It starts melting after 1 s, slowly, from where you shot it.
 [note]Picking up the puck ends the trail there.[/]",
       "stats": { "IceTrail": "+1" }
     },

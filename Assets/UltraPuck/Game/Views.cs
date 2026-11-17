@@ -796,15 +796,22 @@ namespace UltraPuck.Game
     }
 
     /// <summary>Pylon goalies: dark dummies with a ring in their team's colour.</summary>
-    /// <summary>Ice Trail: each trail as a pale icy stripe on the floor, under the players.</summary>
+    /// <summary>
+    /// Ice Trail: each trail as a strip of ice on the floor, under the players: a deeper blue edge, a pale body, a
+    /// white shine along one side and frosty specks, all in one mesh per trail.
+    /// </summary>
     internal sealed class IceViews
     {
-        private static readonly Color IceColour = Color.Lerp(Palette.Floor, new Color(0.62f, 0.86f, 1f), 0.42f);
+        private static readonly Color Edge = Color.Lerp(Palette.Floor, new Color(0.42f, 0.7f, 0.9f), 0.62f);
+        private static readonly Color Body = Color.Lerp(Palette.Floor, new Color(0.78f, 0.92f, 1f), 0.6f);
+        private static readonly Color Shine = Color.Lerp(Palette.Floor, Color.white, 0.82f);
+        private static readonly Color Frost = Color.Lerp(Palette.Floor, Color.white, 0.92f);
         private readonly Transform _parent;
         private readonly Dictionary<int, MeshFilter> _trails = new Dictionary<int, MeshFilter>();
         private readonly Dictionary<int, long> _drawn = new Dictionary<int, long>();
         private readonly List<int> _gone = new List<int>();
         private readonly List<Vector2> _pts = new List<Vector2>();
+        private readonly List<int> _ids = new List<int>();
 
         public IceViews(Transform parent) { _parent = parent; }
 
@@ -816,8 +823,13 @@ namespace UltraPuck.Game
             {
                 var id = s.Ice[i].Trail;
                 _pts.Clear();
+                _ids.Clear();
                 var j = i;
-                for (; j < s.Ice.Length && s.Ice[j].Trail == id; j++) _pts.Add(new Vector2(s.Ice[j].Pos.X.ToFloat(), s.Ice[j].Pos.Y.ToFloat()));
+                for (; j < s.Ice.Length && s.Ice[j].Trail == id; j++)
+                {
+                    _pts.Add(new Vector2(s.Ice[j].Pos.X.ToFloat(), s.Ice[j].Pos.Y.ToFloat()));
+                    _ids.Add((int)(s.Ice[j].Pos.X.Raw ^ (s.Ice[j].Pos.Y.Raw * 31)));
+                }
                 seen.Add(id);
                 // build it again only when it grew or melted
                 long key = ((long)_pts.Count << 32) ^ s.Ice[i].Pos.X.Raw ^ (s.Ice[j - 1].Pos.Y.Raw << 7);
@@ -826,10 +838,9 @@ namespace UltraPuck.Game
                 {
                     MeshFilter mf;
                     if (_trails.TryGetValue(id, out mf)) Object.Destroy(mf.sharedMesh);
-                    var mesh = _pts.Count >= 2 ? Draw.Line(_pts, false, radius * 2f, IceColour) : Draw.Disc(radius, IceColour);
+                    var mesh = Build(radius);
                     if (mf == null) { mf = Draw.Make("Ice" + id, _parent, mesh, 3); _trails[id] = mf; }
                     else mf.sharedMesh = mesh;
-                    mf.transform.localPosition = _pts.Count >= 2 ? Vector3.zero : (Vector3)_pts[0];
                     _drawn[id] = key;
                 }
                 i = j;
@@ -843,6 +854,45 @@ namespace UltraPuck.Game
                 _trails.Remove(id);
                 _drawn.Remove(id);
             }
+        }
+
+        private Mesh Build(float r)
+        {
+            var parts = new List<CombineInstance>();
+            var temp = new List<Mesh>();
+            System.Action<Mesh, Vector2> add = (m, at) => { temp.Add(m); parts.Add(new CombineInstance { mesh = m, transform = Matrix4x4.Translate(at) }); };
+            if (_pts.Count < 2)
+            {
+                add(Draw.Disc(r, Edge), _pts[0]);
+                add(Draw.Disc(r * 0.8f, Body), _pts[0]);
+            }
+            else
+            {
+                add(Draw.Line(_pts, false, r * 2f, Edge), Vector2.zero);
+                add(Draw.Line(_pts, false, r * 1.55f, Body), Vector2.zero);
+                // the shine: a thin bright line a little to one side
+                var shine = new List<Vector2>();
+                for (var k = 0; k < _pts.Count; k++)
+                {
+                    var d = _pts[Mathf.Min(k + 1, _pts.Count - 1)] - _pts[Mathf.Max(k - 1, 0)];
+                    var n = d.sqrMagnitude > 1e-6f ? new Vector2(-d.y, d.x).normalized : Vector2.up;
+                    shine.Add(_pts[k] + n * r * 0.38f);
+                }
+                add(Draw.Line(shine, false, r * 0.2f, Shine), Vector2.zero);
+            }
+            // frost: little white specks scattered over it (the same every time, from where the points are)
+            for (var k = 0; k < _pts.Count; k++)
+            {
+                var h = (uint)_ids[k] * 2654435761u;
+                if ((h >> 28) > 6) continue;
+                var off = new Vector2(((h >> 4) & 255) / 255f - 0.5f, ((h >> 12) & 255) / 255f - 0.5f) * (r * 1.3f);
+                add(Draw.Disc(r * (0.07f + ((h >> 20) & 7) * 0.012f), Frost, 8), _pts[k] + off);
+            }
+            var mesh = new Mesh();
+            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            mesh.CombineMeshes(parts.ToArray(), true, true);
+            foreach (var m in temp) Object.Destroy(m);
+            return mesh;
         }
     }
 
