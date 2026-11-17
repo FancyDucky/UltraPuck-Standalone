@@ -82,6 +82,15 @@ namespace UltraPuck.Game
             _attractPrev = _attract.Clone();
 
             SteamNet.Init();
+            LogDevices("at start");
+            UnityEngine.InputSystem.InputSystem.onDeviceChange += (d, change) =>
+            {
+                Debug.Log("Ultra Puck: input device " + change + ": " + d.displayName + " (" + d.layout + ")");
+                // Steam Input grabs controllers a moment after Steam starts (while we run as Steam's test app): say what to do
+                if (d is UnityEngine.InputSystem.Gamepad && change == UnityEngine.InputSystem.InputDeviceChange.Removed && SteamNet.Ready && Time.realtimeSinceStartup - SteamNet.StartedAt < 10f)
+                    _mainMenu.Message = "Steam took over your " + d.displayName + ". In Steam: Settings > Controller, turn off Steam Input for this kind of controller, then restart Ultra Puck. (Needed until the game has its own Steam page.)";
+            };
+            Invoke("LogDevicesLater", 3f);
             SteamNet.OnJoined = host => StartOnline(NetSession.Join(SteamTransport.Join(host), MakeOnlineSim, _fingerprint));
             SteamNet.OnFailed = why => _mainMenu.Message = why;
 
@@ -119,6 +128,16 @@ namespace UltraPuck.Game
                 StartMatch(true);
                 PickACard();
             }
+        }
+
+        private void LogDevicesLater() { LogDevices("after 3 s"); }
+
+        /// <summary>The controllers the game can see, in the log (for working out controller problems).</summary>
+        private static void LogDevices(string when)
+        {
+            var names = new List<string>();
+            foreach (var g in UnityEngine.InputSystem.Gamepad.all) names.Add(g.displayName + " (" + g.layout + ")");
+            Debug.Log("Ultra Puck: controllers " + when + ": " + (names.Count == 0 ? "none" : string.Join(", ", names.ToArray())));
         }
 
         /// <summary>Every card file in StreamingAssets/Cards, in name order (so every PC numbers the cards the same).</summary>

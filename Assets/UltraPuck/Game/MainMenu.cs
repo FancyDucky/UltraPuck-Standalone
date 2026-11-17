@@ -12,7 +12,7 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class MainMenu : MonoBehaviour
     {
-        public enum Page { None, Main, Online, JoinIp, Browse, OnlineLobby }
+        public enum Page { None, Main, Online, JoinIp, Browse, OnlineLobby, Friends }
 
         public Page Current { get; private set; }
         public GameRunner Runner;
@@ -93,14 +93,34 @@ namespace UltraPuck.Game
                     {
                         _rows.Add(new Row { Label = "Start match", Press = () => Runner.StartOnlineMatch(), Enabled = () => Session != null && Session.Seats.Count >= 2 });
                         _rows.Add(new Row { Label = "Bots", Detail = null, Step = d => s.Bots = Mathf.Clamp(s.Bots + d, 0, NetSession.MaxPlayers), Press = () => s.Bots = s.Bots >= NetSession.MaxPlayers - 1 ? 0 : s.Bots + 1 });
-                        if (SteamNet.InLobby) _rows.Add(new Row { Label = "Invite Steam friends", Press = SteamNet.Invite });
+                        if (SteamNet.InLobby) _rows.Add(new Row { Label = "Invite Steam friends", Press = () => { _friends = SteamNet.OnlineFriends(); _friendsAt = Time.unscaledTime; Show(Page.Friends); } });
                     }
                     _rows.Add(new Row { Label = "Leave", Press = () => Runner.LeaveOnline(null) });
+                    break;
+                case Page.Friends:
+                    if (Time.unscaledTime - _friendsAt > 3f) { _friends = SteamNet.OnlineFriends(); _friendsAt = Time.unscaledTime; }
+                    foreach (var f in _friends)
+                    {
+                        var friend = f;
+                        var sent = _invited.Contains(friend.Id.m_SteamID);
+                        _rows.Add(new Row
+                        {
+                            Label = friend.Name,
+                            Detail = sent ? "Invited" : friend.Playing ? "In Ultra Puck" : "Online",
+                            Press = () => { if (SteamNet.InviteFriend(friend.Id)) _invited.Add(friend.Id.m_SteamID); },
+                        });
+                        if (_rows.Count >= 7) break; // the list fits the screen; the most likely friends come first
+                    }
+                    if (SteamNet.OverlayWorks) _rows.Add(new Row { Label = "Open the Steam overlay", Press = SteamNet.Invite });
+                    _rows.Add(new Row { Label = "Back", Press = () => Show(Page.OnlineLobby) });
                     break;
             }
         }
 
         private UnityEngine.InputSystem.InputDevice _lastDevice;
+        private List<SteamNet.Friend> _friends = new List<SteamNet.Friend>();
+        private float _friendsAt;
+        private readonly HashSet<ulong> _invited = new HashSet<ulong>();
 
         // ------------------------------------------------------------------ input
 
@@ -109,7 +129,7 @@ namespace UltraPuck.Game
             if (Current == Page.None) return;
             BuildRows();
             // in the online lobby only people who have joined drive the buttons (pressing A to join mustn't press one)
-            var m = Current == Page.OnlineLobby ? Local.MenuJoined() : Local.Menu();
+            var m = Current == Page.OnlineLobby || Current == Page.Friends ? Local.MenuJoined() : Local.Menu();
             if (m.Device != null) _lastDevice = m.Device;
             if (_typing)
             {
@@ -124,6 +144,7 @@ namespace UltraPuck.Game
             {
                 if (Current == Page.Online) Show(Page.Main);
                 else if (Current == Page.JoinIp || Current == Page.Browse) Show(Page.Online);
+                else if (Current == Page.Friends) Show(Page.OnlineLobby);
                 return;
             }
             if (_rows.Count == 0) return;
@@ -237,6 +258,7 @@ namespace UltraPuck.Game
                 case Page.Online: return "Online";
                 case Page.JoinIp: return "Join by IP";
                 case Page.Browse: return "Games on Steam";
+                case Page.Friends: return "Invite friends";
                 case Page.OnlineLobby: return Session == null ? "" : Session.Current == NetSession.Stage.Connecting ? "Connecting..." : Session.IsHost ? "Your online game" : "Online game";
                 default: return "";
             }
@@ -252,6 +274,8 @@ namespace UltraPuck.Game
                     return "The host's address, with :port if it isn't " + UdpTransport.DefaultPort + ". On the same PC use 127.0.0.1; on a home network, the host's 192.168... address; across the internet, a Tailscale or ZeroTier address (or forward UDP port " + UdpTransport.DefaultPort + ").";
                 case Page.Browse:
                     return SteamNet.Found.Count == 0 && !SteamNet.Searching ? "No open games found. Friends can also invite you from Steam." : "";
+                case Page.Friends:
+                    return _friends.Count == 0 ? "None of your Steam friends are online." : "The invite arrives in their Steam chat. If they have Ultra Puck open, accepting joins your game; they can also use Online > Find games on Steam.";
                 case Page.OnlineLobby:
                     if (Session == null) return "";
                     var s = Session.Describe();

@@ -48,6 +48,7 @@ namespace UltraPuck.Game
         {
             if (_tried) return;
             _tried = true;
+            if (Environment.GetEnvironmentVariable("ULTRAPUCK_NOSTEAM") == "1") { Problem = "Steam is turned off (ULTRAPUCK_NOSTEAM)."; return; }
             try
             {
                 if (!Packsize.Test() || !DllCheck.Test()) { Problem = "Steam files are missing from the game folder."; return; }
@@ -61,12 +62,13 @@ namespace UltraPuck.Game
                     return;
                 }
                 Ready = true;
+                StartedAt = UnityEngine.Time.realtimeSinceStartup;
                 SteamNetworkingUtils.InitRelayNetworkAccess(); // get the relay network warmed up early
                 _joinRequested = Callback<GameLobbyJoinRequested_t>.Create(r => Join(r.m_steamIDLobby));
                 _lobbyEntered = Callback<LobbyEnter_t>.Create(Entered);
                 _created = CallResult<LobbyCreated_t>.Create(Created);
                 _listed = CallResult<LobbyMatchList_t>.Create(Listed);
-                Debug.Log("Ultra Puck: Steam ready as " + SteamFriends.GetPersonaName());
+                Debug.Log("Ultra Puck: Steam ready as " + SteamFriends.GetPersonaName() + " (overlay " + (SteamUtils.IsOverlayEnabled() ? "on" : "off") + ")");
             }
             catch (Exception ex)
             {
@@ -132,6 +134,39 @@ namespace UltraPuck.Game
         {
             if (InLobby) SteamFriends.ActivateGameOverlayInviteDialog(Lobby);
         }
+
+        /// <summary>
+        /// The Steam overlay only works when Steam started the game (from the library), so for a game you start
+        /// yourself it's usually off. The game has its own friends list for invites either way.
+        /// </summary>
+        public static bool OverlayWorks { get { return Ready && SteamUtils.IsOverlayEnabled(); } }
+
+        public sealed class Friend { public CSteamID Id; public string Name; public bool Playing; }
+
+        /// <summary>Steam friends who are online, the ones in this game first.</summary>
+        public static List<Friend> OnlineFriends()
+        {
+            var list = new List<Friend>();
+            if (!Ready) return list;
+            var app = SteamUtils.GetAppID();
+            var n = SteamFriends.GetFriendCount(EFriendFlags.k_EFriendFlagImmediate);
+            for (var k = 0; k < n; k++)
+            {
+                var id = SteamFriends.GetFriendByIndex(k, EFriendFlags.k_EFriendFlagImmediate);
+                if (SteamFriends.GetFriendPersonaState(id) == EPersonaState.k_EPersonaStateOffline) continue;
+                FriendGameInfo_t game;
+                var playing = SteamFriends.GetFriendGamePlayed(id, out game) && game.m_gameID.AppID() == app;
+                list.Add(new Friend { Id = id, Name = SteamFriends.GetFriendPersonaName(id), Playing = playing });
+            }
+            list.Sort((a, b) => a.Playing != b.Playing ? (a.Playing ? -1 : 1) : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            return list;
+        }
+
+        /// <summary>Sends a friend an invite to our lobby (it shows up in their Steam chat; with the game open, accepting joins).</summary>
+        public static bool InviteFriend(CSteamID friend) { return InLobby && SteamMatchmaking.InviteUserToLobby(Lobby, friend); }
+
+        /// <summary>When Steam started up (to spot Steam Input taking a controller straight afterwards).</summary>
+        public static float StartedAt { get; private set; }
 
         public static void Join(CSteamID lobby)
         {
