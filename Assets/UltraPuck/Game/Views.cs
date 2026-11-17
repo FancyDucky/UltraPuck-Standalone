@@ -624,9 +624,72 @@ namespace UltraPuck.Game
             Step(b);
         }
 
+        // water ripples: a quad that bends the picture behind it (shader UltraPuck/Ripple)
+        private sealed class Wave { public GameObject Go; public MeshRenderer Renderer; public float Age, Life; public Color Colour; }
+        private readonly List<Wave> _waves = new List<Wave>(), _spareWaves = new List<Wave>();
+        private static Material _rippleMat;
+        private static Mesh _quad;
+        private readonly MaterialPropertyBlock _block = new MaterialPropertyBlock();
+
+        /// <summary>A water ripple <paramref name="size"/> units across (radius) that spreads and settles over <paramref name="life"/> seconds.</summary>
+        public void Ripple(Vector2 at, Color colour, float size, float life)
+        {
+            if (_rippleMat == null)
+            {
+                var shader = Resources.Load<Shader>("UltraPuck/Ripple");
+                if (shader == null || !shader.isSupported) return;
+                _rippleMat = new Material(shader);
+            }
+            if (_quad == null)
+            {
+                _quad = new Mesh { name = "Ripple" };
+                _quad.vertices = new[] { new Vector3(-1f, -1f, 0f), new Vector3(1f, -1f, 0f), new Vector3(1f, 1f, 0f), new Vector3(-1f, 1f, 0f) };
+                _quad.uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+                _quad.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+                _quad.RecalculateBounds();
+            }
+            Wave w;
+            if (_spareWaves.Count > 0) { w = _spareWaves[_spareWaves.Count - 1]; _spareWaves.RemoveAt(_spareWaves.Count - 1); }
+            else
+            {
+                w = new Wave { Go = new GameObject("Ripple") };
+                w.Go.transform.SetParent(_parent, false);
+                w.Go.AddComponent<MeshFilter>().sharedMesh = _quad;
+                w.Renderer = w.Go.AddComponent<MeshRenderer>();
+                w.Renderer.sharedMaterial = _rippleMat;
+                w.Renderer.sortingOrder = 26;
+                w.Renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                w.Renderer.receiveShadows = false;
+            }
+            w.Go.SetActive(true);
+            w.Go.transform.localPosition = new Vector3(at.x, at.y, 0f);
+            w.Go.transform.localScale = new Vector3(size, size, 1f);
+            w.Age = 0f;
+            w.Life = life;
+            w.Colour = colour;
+            _waves.Add(w);
+            StepWave(w);
+        }
+
+        private void StepWave(Wave w)
+        {
+            _block.Clear();
+            _block.SetFloat("_Age", Mathf.Clamp01(w.Age / w.Life));
+            _block.SetFloat("_Strength", 0.022f);
+            _block.SetColor("_Tint", w.Colour);
+            w.Renderer.SetPropertyBlock(_block);
+        }
+
         public void Update()
         {
             var dt = Time.unscaledDeltaTime;
+            for (var i = _waves.Count - 1; i >= 0; i--)
+            {
+                var w = _waves[i];
+                w.Age += dt;
+                if (w.Age >= w.Life) { w.Go.SetActive(false); _waves.RemoveAt(i); _spareWaves.Add(w); continue; }
+                StepWave(w);
+            }
             for (var i = _live.Count - 1; i >= 0; i--)
             {
                 var b = _live[i];

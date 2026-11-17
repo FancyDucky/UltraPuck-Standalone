@@ -99,12 +99,9 @@ namespace UltraPuck.Game
             {
                 if (i < 0 || i >= _players.Count || _players[i].Root == null) return;
                 Vector2 at = _players[i].Root.transform.position;
-                // a few rings, one after another, each wider and slower, like a drop landing in water
-                for (var k = 0; k < 4; k++)
-                {
-                    var c = k % 2 == 0 ? colour : Color.Lerp(colour, Color.white, 0.6f);
-                    _ripples.Add(new Ripple { At = at, Colour = c, When = Time.unscaledTime + k * 0.16f, Size = 1.4f + k * 0.75f, Life = 0.7f + k * 0.15f });
-                }
+                // like a drop landing in water: a big ripple that bends the rink as it spreads, and a smaller echo
+                _ripples.Add(new Ripple { At = at, Colour = colour, When = Time.unscaledTime, Size = 5.5f, Life = 1.5f });
+                _ripples.Add(new Ripple { At = at, Colour = colour, When = Time.unscaledTime + 0.22f, Size = 3.2f, Life = 1.1f });
             };
             LocalCardPicks();
             _menus.OnMainMenu = GoMainMenu;
@@ -293,7 +290,7 @@ namespace UltraPuck.Game
             {
                 if (Time.unscaledTime < _ripples[k].When) continue;
                 var r = _ripples[k];
-                _effects.Ring(r.At, 0.6f, r.Colour, r.Size, r.Life);
+                _effects.Ripple(r.At, r.Colour, r.Size, r.Life);
                 _ripples.RemoveAt(k);
             }
             _effects.Update();
@@ -559,14 +556,19 @@ namespace UltraPuck.Game
             {
                 // the online lobby: people on this PC join and pick sides here; bots play behind the menu
                 if (_menus.IsOpen) _menus.Close();
-                _mainMenu.Show(MainMenu.Page.OnlineLobby);
+                if (_mainMenu.Current != MainMenu.Page.Friends) _mainMenu.Show(MainMenu.Page.OnlineLobby);
                 _mainMenu.Message = s.Problem;
                 if (_play.Typing) { _play.Tick(); AttractUpdate(); return; } // typing a name: the keyboard has the controls
                 _mainMenu.Tick(); // before joining: pressing A to join mustn't also press the highlighted button
                 if (_mode != Mode.Online || _session == null) return;
-                _local.LobbyUpdate();
-                if (_local.NameRequest != null) { _play.OpenKeyboard(_local.NameRequest); _local.NameRequest = null; }
-                if (_local.LeaveLobbyHeld()) { LeaveOnline(null); return; }
+                var busy = _mainMenu.LobbyBusy; // the options panel or the invite page is on top
+                if (!busy)
+                {
+                    _local.LobbyUpdate();
+                    if (_local.NameRequest != null) { _play.OpenKeyboard(_local.NameRequest); _local.NameRequest = null; }
+                    if (_local.LeaveLobbyHeld()) { LeaveOnline(null); return; }
+                    if (s.IsHost && _local.BotRequest != 0) s.Bots = Mathf.Clamp(s.Bots + _local.BotRequest, 0, NetSession.MaxPlayers);
+                }
                 var mine = new List<KeyValuePair<string, int>>();
                 for (var k = 0; k < _local.Slots.Count; k++)
                 {
@@ -575,7 +577,7 @@ namespace UltraPuck.Game
                     mine.Add(new KeyValuePair<string, int>(nm, NetSession.Look(sl.Colour, sl.Symbol)));
                 }
                 s.SetLocalPlayers(mine);
-                if (s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2 && !s.TooManyTeams) StartOnlineMatch();
+                if (!busy && s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2 && !s.TooManyTeams) StartOnlineMatch();
                 AttractUpdate();
                 return;
             }

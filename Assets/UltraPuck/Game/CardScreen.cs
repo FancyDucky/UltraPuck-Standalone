@@ -142,7 +142,7 @@ namespace UltraPuck.Game
             if (_stage == Stage.Choosing) Choose();
             Animate();
             Motes();
-            if (_stage == Stage.Leaving && Time.unscaledTime - _stageAt > (_editing ? 1.1f : _chosen >= 0 ? 1.25f : 0.85f))
+            if (_stage == Stage.Leaving && (Time.unscaledTime - _stageAt > (_editing ? 1.1f : _chosen >= 0 ? 1.25f : 0.85f) || (_absorbed && Time.unscaledTime - _absorbedAt > 0.1f)))
             {
                 if (_chosen >= 0 && _slot >= 0 && !_watching) _ready[_slot] = (byte)(_chosen + 1);
                 _watching = false;
@@ -330,9 +330,13 @@ namespace UltraPuck.Game
                         tp = into.Value;
                         tr = new Vector3(35f, 0f, (k % 2 == 0 ? 1f : -1f) * 160f);
                         ts = _absorbed ? 0.05f : 0.16f;
-                        if (!_absorbed && (c.Pos - into.Value).magnitude < 0.6f)
+                        if (!_absorbed && ((c.Pos - into.Value).magnitude < 1.1f || since > 1.05f))
                         {
+                            // gone the moment it reaches them
                             _absorbed = true;
+                            _absorbedAt = t;
+                            c.Root.gameObject.SetActive(false);
+                            c.Shadow.gameObject.SetActive(false);
                             // the player soaks it up: ripples spread out across the rink from them, like water
                             if (OnAbsorbed != null) OnAbsorbed(_slot, c.Accent);
                         }
@@ -377,6 +381,7 @@ namespace UltraPuck.Game
 
         /// <summary>Where the focused card should lean: towards the mouse when it's over the card, else the picker's right stick, else a slow drift.</summary>
         private bool _absorbed;
+        private float _absorbedAt;
 
         /// <summary>Where the player who took the card is, in the cards' space (on the table, under the cards), or null.</summary>
         private Vector3? AbsorbPoint()
