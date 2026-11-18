@@ -438,6 +438,23 @@ namespace UltraPuck.Tests
             Assert.AreEqual(-1, s.Carrier, "letting go fires the charged shot");
         }
 
+        /// <summary>Quick off the mark (faster than plain push-and-drag would be), but the same top speed.</summary>
+        [Test]
+        public void PlayersGetGoingQuicklyButKeepTheirTopSpeed()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = sim.NewGame(new[] { 0 });
+            PlayNow(s);
+            var p = s.Players[0];
+            p.Pos = new FixVec2(Fix.FromInt(-15), Fix.Zero); p.Vel = FixVec2.Zero;
+            var right = new PlayerInput { MoveX = 127 };
+            for (var t = 0; t < 30; t++) sim.Step(s, new[] { right }); // a quarter of a second
+            var top = sim.T.MoveForce / sim.T.Drag;
+            Assert.Greater(p.Vel.X.ToDouble(), top.ToDouble() * 0.6, "most of the way to top speed in a quarter of a second");
+            for (var t = 0; t < 120; t++) { p.Pos = new FixVec2(Fix.FromInt(-15), Fix.Zero); sim.Step(s, new[] { right }); }
+            Assert.AreEqual(top.ToDouble(), p.Vel.X.ToDouble(), 0.25, "top speed as before");
+        }
+
         /// <summary>A defender may carry the puck into their own net; letting it go in there is a goal for the other team.</summary>
         [Test]
         public void CarryingIntoYourOwnNetIsSafeUntilYouLetGo()

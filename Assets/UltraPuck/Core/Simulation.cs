@@ -403,7 +403,17 @@ namespace UltraPuck.Core
             var speed = p.Stats.MoveSpeed * (carrying ? p.Stats.MoveSpeedWithPuck : Fix.One);
             if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave
             if (p.BoostTime > Fix.Zero) speed *= T.FriendlyBoost;           // Friendly Fire
-            p.Vel += move * (T.MoveForce * speed * control * dt);
+            var push = T.MoveForce * speed * control;
+            p.Vel += move * (push * dt);
+            // getting going: an extra push, the further below top speed (along the stick) the stronger
+            var stick = move.Length;
+            if (stick > Fix.Ratio(1, 20) && T.Acceleration > Fix.Zero && push > Fix.Zero)
+            {
+                var top = push * stick / T.Drag;
+                var along = FixVec2.Dot(p.Vel, move) / stick;
+                var short_ = Fix.Clamp01(Fix.One - along / top);
+                p.Vel += move * (push * T.Acceleration * short_ * dt);
+            }
             var braking = !carrying && input.Has(PlayerInput.ChargeBrake);
             var drag = braking ? T.BrakeDrag : T.Drag;
             p.Vel -= p.Vel * Fix.Min(Fix.One, drag * dt);

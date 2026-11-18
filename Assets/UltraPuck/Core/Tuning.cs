@@ -26,6 +26,11 @@ namespace UltraPuck.Core
         public Fix MoveForce = Fix.FromInt(24);
         public Fix Drag = Fix.FromInt(3);
         public Fix BrakeDrag = Fix.FromInt(9);
+        /// <summary>
+        /// Extra push when getting going: this share of <see cref="MoveForce"/> on top, full from a standstill and
+        /// fading to nothing at top speed (along the stick). Quicker off the mark, same top speed, same glide.
+        /// </summary>
+        public Fix Acceleration = Fix.One;
         /// <summary>How fast you turn to face the move stick (share of the way per second, roughly).</summary>
         public Fix TurnRate = Fix.FromInt(14);
         /// <summary>How fast you turn to face the aim stick, when it's pushed (snappier, like a twin-stick shooter).</summary>
