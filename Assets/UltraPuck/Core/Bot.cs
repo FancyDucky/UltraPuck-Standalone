@@ -37,10 +37,31 @@ namespace UltraPuck.Core
                 var aimed = FixVec2.Dot(me.Facing, aim) > Fix.Ratio(97, 100);
                 var range = Fix.FromInt(12) + wobble * Fix.Two;
                 // a net out on the ice: from beside or behind it, skate round to the front first (and don't shoot into its side)
-                var round = dir > Fix.Zero ? pos.X > attack.X - Fix.FromInt(2) : pos.X < attack.X + Fix.FromInt(2);
-                if (round)
+                var net = AttackGoal(sim.Map, me.Team);
+                if (net != null && net.HasFacing)
+                {
+                    // the map says which way the net opens: go round to that side
+                    var f = net.Facing;
+                    var off = pos - attack;
+                    if (FixVec2.Dot(off, f) < Fix.Two)
+                    {
+                        var across = new FixVec2(-f.Y, f.X);
+                        var side = FixVec2.Dot(off, across) >= Fix.Zero ? Fix.One : -Fix.One;
+                        target = attack + f * Fix.FromInt(5) + across * (side * Fix.FromInt(4));
+                        aim = FixVec2.Zero;
+                        aimed = false;
+                    }
+                }
+                else if (dir > Fix.Zero ? pos.X > attack.X - Fix.FromInt(2) : pos.X < attack.X + Fix.FromInt(2))
                 {
                     target = new FixVec2(attack.X - dir * Fix.FromInt(5), pos.Y >= Fix.Zero ? Fix.FromInt(5) : Fix.FromInt(-5));
+                    aim = FixVec2.Zero;
+                    aimed = false;
+                }
+                // a wall between us and the goal (round a bend): follow the ice, don't shoot yet
+                if (sim.Map.Route.Count > 1 && sim.Map.Blocked(pos, target))
+                {
+                    target = AlongRoute(sim.Map, pos, target);
                     aim = FixVec2.Zero;
                     aimed = false;
                 }
@@ -50,9 +71,10 @@ namespace UltraPuck.Core
             }
             else if (s.Carrier >= 0 && s.Players[s.Carrier].Team == me.Team)
             {
-                // a teammate has it: get open up the rink, one high and one low
+                // a teammate has it: get open up the rink, one high and one low (on a bent rink: further along the ice)
                 var y = Fix.FromInt(TeamRank(s, i) % 2 == 0 ? 5 : -5);
                 target = new FixVec2(dir * Fix.FromInt(7), y);
+                if (sim.Map.Route.Count > 1) target = RoutePart(sim.Map, s.Players[s.Carrier].Pos, me.Team == 0 ? sim.Map.Route.Count - 1 : 0, Fix.Ratio(1, 2) + wobble * Fix.Ratio(1, 10));
             }
             else if (NearestToPuck(s, i))
             {
@@ -62,8 +84,9 @@ namespace UltraPuck.Core
             }
             else
             {
-                // hang back between the puck and our goal
+                // hang back between the puck and our goal (on a bent rink: along the ice, not through the walls)
                 target = defend + (s.PuckPos - defend) * (Fix.Ratio(2, 5) + wobble * Fix.Ratio(1, 10));
+                if (sim.Map.Route.Count > 1) target = RoutePart(sim.Map, s.PuckPos, me.Team == 0 ? 0 : sim.Map.Route.Count - 1, Fix.Ratio(3, 5) + wobble * Fix.Ratio(1, 10));
                 if (s.Carrier >= 0 && s.Players[s.Carrier].Team != me.Team
                     && (s.Players[s.Carrier].Pos - pos).SqrLength < Fix.FromInt(4) && me.DashCharge >= Fix.One)
                     b |= PlayerInput.ShootCheck;
@@ -81,6 +104,9 @@ namespace UltraPuck.Core
                 }
             }
 
+            // on a bent rink, anywhere we can't see straight to: go by the ice
+            if (s.Carrier != i && sim.Map.Route.Count > 1 && sim.Map.Blocked(pos, target)) target = AlongRoute(sim.Map, pos, target);
+
             var m = target - pos;
             if (m.SqrLength > Fix.One) m = m.Normalized;
             return new PlayerInput { MoveX = Axis(m.X), MoveY = Axis(m.Y), AimX = Axis(aim.X), AimY = Axis(aim.Y), Buttons = b };
@@ -94,6 +120,36 @@ namespace UltraPuck.Core
             for (var k = 1; k < me.Offer.Length; k++)
                 if (sim.Cards.Cards[me.Offer[k]].Tier < sim.Cards.Cards[me.Offer[best]].Tier) best = k;
             return (byte)(best + 1);
+        }
+
+        /// <summary>The goal a player on <paramref name="team"/> shoots at.</summary>
+        private static GoalDef AttackGoal(MapDef map, int team)
+        {
+            foreach (var g in map.Goals) if (g.Team == 1 - team) return g;
+            return null;
+        }
+
+        /// <summary>The next stop on the route from <paramref name="pos"/> towards <paramref name="target"/>: a few points along.</summary>
+        private static FixVec2 AlongRoute(MapDef map, FixVec2 pos, FixVec2 target)
+        {
+            var from = map.NearestOnRoute(pos);
+            var to = map.NearestOnRoute(target);
+            if (from == to) return target;
+            var step = to > from ? 1 : -1;
+            var next = from;
+            for (var k = 0; k < 3 && next != to; k++) next += step;
+            // off the route (in a corner): get back onto it first
+            return map.Blocked(pos, map.Route[next]) ? map.Route[from] : map.Route[next];
+        }
+
+        /// <summary>The route point <paramref name="share"/> of the way from the one nearest <paramref name="from"/> to route index <paramref name="end"/>.</summary>
+        private static FixVec2 RoutePart(MapDef map, FixVec2 from, int end, Fix share)
+        {
+            var a = map.NearestOnRoute(from);
+            var k = a + (share * (end - a)).FloorToInt();
+            if (k < 0) k = 0;
+            if (k >= map.Route.Count) k = map.Route.Count - 1;
+            return map.Route[k];
         }
 
         /// <summary>The middle of the goal that <paramref name="team"/> defends.</summary>

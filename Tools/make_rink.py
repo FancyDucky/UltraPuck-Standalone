@@ -2,7 +2,9 @@
 import json, math, sys
 
 W, H, R = 24.0, 13.5, 6.0      # half width, half height, corner radius
-MOUTH, DEPTH = 3.0, 2.0        # goal mouth half height, net depth
+# the nets are the Hockey Rink's size: mouth half height (wall middle) 1.56, 1.2 deep
+MOUTH, DEPTH = 1.56, 1.2
+WALL = 0.68                    # wall thickness (Tuning.WallThickness): the goal box stops at the walls' inner edge
 ARC = 10                       # segments per corner
 
 def r3(v): return round(v + 0.0, 3)
@@ -24,7 +26,7 @@ for p in pts:
     if not clean or clean[-1] != p: clean.append(p)
 if clean[0] == clean[-1]: clean.pop()
 
-line = 0.25  # how far into the net the puck has to be to count
+line = 0.2   # how far into the net the puck has to be to count (as on the Hockey Rink)
 spawns = []
 for team, sx in ((0, -1), (1, 1)):
     for x, y in ((9, 0), (12.5, 5), (12.5, -5), (17, 0)):
@@ -35,8 +37,8 @@ m = {
     "author": "Ultra Puck",
     "walls": [{"closed": True, "points": clean}],
     "goals": [
-        {"team": 0, "min": [-W - DEPTH, -MOUTH], "max": [-W - line, MOUTH]},
-        {"team": 1, "min": [W + line, -MOUTH], "max": [W + DEPTH, MOUTH]},
+        {"team": 0, "min": [r3(-W - DEPTH + WALL / 2), r3(-MOUTH + WALL / 2)], "max": [r3(-W - line), r3(MOUTH - WALL / 2)]},
+        {"team": 1, "min": [r3(W + line), r3(-MOUTH + WALL / 2)], "max": [r3(W + DEPTH - WALL / 2), r3(MOUTH - WALL / 2)]},
     ],
     "spawns": spawns,
     "puck": [0, 0],

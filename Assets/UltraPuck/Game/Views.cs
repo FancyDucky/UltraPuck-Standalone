@@ -26,14 +26,14 @@ namespace UltraPuck.Game
             var size = max - min;
             var cx = (min.x + max.x) / 2f;
 
-            // markings: centre line and circle, plus a line across each half
-            Draw.Make("CentreLine", Root.transform, Draw.Rect(new Vector2(cx - 0.07f, min.y), new Vector2(cx + 0.07f, max.y), Palette.FloorLines), 2);
+            // markings: the circle round the puck's spot; on a straight rink also a centre line and a line across each
+            // half (a bent rink, one with a route, has no "across", so no lines)
             Draw.Make("CentreCircle", Root.transform, Draw.Ring(2.4f, 2.54f, 1f, Palette.FloorLines), 2).transform.localPosition = V.Of(map.PuckSpot);
             Draw.Make("CentreDot", Root.transform, Draw.Disc(0.25f, Palette.FloorLines), 2).transform.localPosition = V.Of(map.PuckSpot);
-            foreach (var side in new[] { -1f, 1f })
+            if (map.Route.Count < 2)
             {
-                var x = cx + side * size.x * 0.19f;
-                Draw.Make("SideLine", Root.transform, Draw.Rect(new Vector2(x - 0.07f, min.y), new Vector2(x + 0.07f, max.y), Palette.FloorLinesSide), 2);
+                AcrossLine(map, cx, min.y, max.y, Palette.FloorLines, "CentreLine");
+                foreach (var side in new[] { -1f, 1f }) AcrossLine(map, cx + side * size.x * 0.19f, min.y, max.y, Palette.FloorLinesSide, "SideLine");
             }
 
             // goals in a dark shade of the colour of the team that defends them
@@ -45,6 +45,23 @@ namespace UltraPuck.Game
                 var pts = new List<Vector2>();
                 foreach (var p in map.WallLines[w]) pts.Add(V.Of(p));
                 Draw.Make("Wall" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], wallThickness, Palette.Wall, !map.WallClosed[w]), 4);
+            }
+        }
+
+        /// <summary>A line across the rink at <paramref name="x"/>, only where there's floor (not through gaps in the shape).</summary>
+        private void AcrossLine(MapDef map, float x, float y0, float y1, Color colour, string name)
+        {
+            const float step = 0.25f;
+            float? from = null;
+            for (var y = y0; y <= y1 + step; y += step)
+            {
+                var inside = y <= y1 && map.Inside(new FixVec2(Fix.FromDecimal((decimal)x), Fix.FromDecimal((decimal)y)));
+                if (inside && from == null) from = y;
+                if (!inside && from != null)
+                {
+                    Draw.Make(name, Root.transform, Draw.Rect(new Vector2(x - 0.07f, from.Value), new Vector2(x + 0.07f, y - step), colour), 2);
+                    from = null;
+                }
             }
         }
     }
@@ -865,22 +882,33 @@ namespace UltraPuck.Game
     }
 
     /// <summary>
-    /// Ice Trail: each trail as a strip of light blue ice on the floor, under the players, with a soft sheen along
-    /// one side, in one mesh per trail.
+    /// Ice Trail: each trail as a strip of light blue ice on the floor, under the players, in one mesh per trail. The
+    /// sheen on it comes from its shader (UltraPuck/Ice), which slides it along the streaks as the camera moves.
     /// </summary>
     internal sealed class IceViews
     {
         private static readonly Color Body = Color.Lerp(Palette.Floor, new Color(0.66f, 0.87f, 1f), 0.72f);
-        private static readonly Color Sheen = Color.Lerp(Body, Color.white, 0.2f);
-        private static readonly Color Shine = Color.Lerp(Body, Color.white, 0.5f);
+        private static Material _mat;
         private readonly Transform _parent;
         private readonly Dictionary<int, MeshFilter> _trails = new Dictionary<int, MeshFilter>();
         private readonly Dictionary<int, long> _drawn = new Dictionary<int, long>();
         private readonly List<int> _gone = new List<int>();
         private readonly List<Vector2> _pts = new List<Vector2>();
-        private readonly List<int> _ids = new List<int>();
 
         public IceViews(Transform parent) { _parent = parent; }
+
+        private static Material Mat
+        {
+            get
+            {
+                if (_mat == null)
+                {
+                    var shader = Resources.Load<Shader>("UltraPuck/Ice");
+                    _mat = shader != null && shader.isSupported ? new Material(shader) : Draw.Flat;
+                }
+                return _mat;
+            }
+        }
 
         public void Show(GameState s, float radius)
         {
@@ -890,13 +918,8 @@ namespace UltraPuck.Game
             {
                 var id = s.Ice[i].Trail;
                 _pts.Clear();
-                _ids.Clear();
                 var j = i;
-                for (; j < s.Ice.Length && s.Ice[j].Trail == id; j++)
-                {
-                    _pts.Add(new Vector2(s.Ice[j].Pos.X.ToFloat(), s.Ice[j].Pos.Y.ToFloat()));
-                    _ids.Add((int)(s.Ice[j].Pos.X.Raw ^ (s.Ice[j].Pos.Y.Raw * 31)));
-                }
+                for (; j < s.Ice.Length && s.Ice[j].Trail == id; j++) _pts.Add(new Vector2(s.Ice[j].Pos.X.ToFloat(), s.Ice[j].Pos.Y.ToFloat()));
                 seen.Add(id);
                 // build it again only when it grew or melted
                 long key = ((long)_pts.Count << 32) ^ s.Ice[i].Pos.X.Raw ^ (s.Ice[j - 1].Pos.Y.Raw << 7);
@@ -905,8 +928,14 @@ namespace UltraPuck.Game
                 {
                     MeshFilter mf;
                     if (_trails.TryGetValue(id, out mf)) Object.Destroy(mf.sharedMesh);
-                    var mesh = Build(radius);
-                    if (mf == null) { mf = Draw.Make("Ice" + id, _parent, mesh, 3); _trails[id] = mf; }
+                    var mesh = _pts.Count < 2 ? Draw.Disc(radius, Body) : Draw.Line(_pts, false, radius * 2f, Body);
+                    if (mesh != null && _pts.Count < 2) { var v = mesh.vertices; for (var k = 0; k < v.Length; k++) v[k] += (Vector3)_pts[0]; mesh.vertices = v; mesh.RecalculateBounds(); }
+                    if (mf == null)
+                    {
+                        mf = Draw.Make("Ice" + id, _parent, mesh, 3);
+                        mf.GetComponent<MeshRenderer>().sharedMaterial = Mat;
+                        _trails[id] = mf;
+                    }
                     else mf.sharedMesh = mesh;
                     _drawn[id] = key;
                 }
@@ -921,38 +950,6 @@ namespace UltraPuck.Game
                 _trails.Remove(id);
                 _drawn.Remove(id);
             }
-        }
-
-        private Mesh Build(float r)
-        {
-            var parts = new List<CombineInstance>();
-            var temp = new List<Mesh>();
-            System.Action<Mesh, Vector2> add = (m, at) => { temp.Add(m); parts.Add(new CombineInstance { mesh = m, transform = Matrix4x4.Translate(at) }); };
-            if (_pts.Count < 2)
-            {
-                add(Draw.Disc(r, Body), _pts[0]);
-                add(Draw.Disc(r * 0.45f, Sheen), _pts[0] + new Vector2(-r * 0.2f, r * 0.2f));
-            }
-            else
-            {
-                // plain light blue, with a soft sheen: a wide gentle band and a thin brighter line along one side
-                add(Draw.Line(_pts, false, r * 2f, Body), Vector2.zero);
-                List<Vector2> wide = new List<Vector2>(), thin = new List<Vector2>();
-                for (var k = 0; k < _pts.Count; k++)
-                {
-                    var d = _pts[Mathf.Min(k + 1, _pts.Count - 1)] - _pts[Mathf.Max(k - 1, 0)];
-                    var n = d.sqrMagnitude > 1e-6f ? new Vector2(-d.y, d.x).normalized : Vector2.up;
-                    wide.Add(_pts[k] + n * r * 0.22f);
-                    thin.Add(_pts[k] + n * r * 0.42f);
-                }
-                add(Draw.Line(wide, false, r * 0.9f, Sheen), Vector2.zero);
-                add(Draw.Line(thin, false, r * 0.22f, Shine), Vector2.zero);
-            }
-            var mesh = new Mesh();
-            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
-            mesh.CombineMeshes(parts.ToArray(), true, true);
-            foreach (var m in temp) Object.Destroy(m);
-            return mesh;
         }
     }
 

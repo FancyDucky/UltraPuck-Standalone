@@ -51,6 +51,9 @@ namespace UltraPuck.Core
     {
         public int Team;
         public FixVec2 Min, Max;
+        /// <summary>Which way the net's mouth opens (towards the ice), if the map says; bots skate round to that side to shoot.</summary>
+        public FixVec2 Facing;
+        public bool HasFacing;
         public bool Contains(FixVec2 p) { return p.X >= Min.X && p.X <= Max.X && p.Y >= Min.Y && p.Y <= Max.Y; }
 
         /// <summary>Whether a circle (the puck) at <paramref name="p"/> with radius <paramref name="r"/> touches the box.</summary>
@@ -84,6 +87,11 @@ namespace UltraPuck.Core
         public readonly List<GoalDef> Goals = new List<GoalDef>();
         public readonly List<SpawnDef> Spawns = new List<SpawnDef>();
         public FixVec2 PuckSpot = FixVec2.Zero;
+        /// <summary>
+        /// Points down the middle of the ice from team 0's goal to team 1's, for maps where the goals can't be seen
+        /// from everywhere (an S, a U): bots follow it when a wall is in the way. Empty on open rinks.
+        /// </summary>
+        public readonly List<FixVec2> Route = new List<FixVec2>();
         /// <summary>Area that holds the whole map (for the camera).</summary>
         public FixVec2 BoundsMin, BoundsMax;
         private bool _hasBounds;
@@ -115,12 +123,18 @@ namespace UltraPuck.Core
                 var go = Json.Obj(goals[g], what);
                 var a = Json.Vec(Json.Get(go, "min"), what + ".min");
                 var b = Json.Vec(Json.Get(go, "max"), what + ".max");
-                m.Goals.Add(new GoalDef
+                var goal = new GoalDef
                 {
                     Team = Json.Int(Json.Get(go, "team"), what + ".team"),
                     Min = new FixVec2(Fix.Min(a.X, b.X), Fix.Min(a.Y, b.Y)),
                     Max = new FixVec2(Fix.Max(a.X, b.X), Fix.Max(a.Y, b.Y)),
-                });
+                };
+                if (Json.Get(go, "facing") != null)
+                {
+                    goal.Facing = Json.Vec(Json.Get(go, "facing"), what + ".facing").Normalized;
+                    goal.HasFacing = goal.Facing.SqrLength.Raw > 0;
+                }
+                m.Goals.Add(goal);
             }
 
             var spawns = Json.Arr(Json.Get(root, "spawns"), "spawns");
@@ -138,6 +152,11 @@ namespace UltraPuck.Core
             }
 
             if (Json.Get(root, "puck") != null) m.PuckSpot = Json.Vec(Json.Get(root, "puck"), "puck");
+            if (Json.Get(root, "route") != null)
+            {
+                var route = Json.Arr(Json.Get(root, "route"), "route");
+                for (var k = 0; k < route.Count; k++) m.Route.Add(Json.Vec(route[k], "route[" + k + "]"));
+            }
             m.Validate();
             return m;
         }
@@ -185,6 +204,35 @@ namespace UltraPuck.Core
                 if (!Goals.Exists(g => g.Team == t)) throw new FormatException("map: no goal for team " + t);
                 if (!Spawns.Exists(s => s.Team == t)) throw new FormatException("map: no spawn for team " + t);
             }
+        }
+
+        /// <summary>Does the straight line from <paramref name="a"/> to <paramref name="b"/> cross a wall?</summary>
+        public bool Blocked(FixVec2 a, FixVec2 b)
+        {
+            var d = b - a;
+            foreach (var w in Segments)
+            {
+                var e = w.B - w.A;
+                var den = FixVec2.Cross(d, e);
+                if (den.Raw == 0) continue;
+                var t = FixVec2.Cross(w.A - a, e) / den;
+                var u = FixVec2.Cross(w.A - a, d) / den;
+                if (t >= Fix.Zero && t <= Fix.One && u >= Fix.Zero && u <= Fix.One) return true;
+            }
+            return false;
+        }
+
+        /// <summary>The route point nearest <paramref name="p"/> (its index), or -1 with no route.</summary>
+        public int NearestOnRoute(FixVec2 p)
+        {
+            var best = -1;
+            var bestD = Fix.Zero;
+            for (var k = 0; k < Route.Count; k++)
+            {
+                var dd = (Route[k] - p).SqrLength;
+                if (best < 0 || dd < bestD) { best = k; bestD = dd; }
+            }
+            return best;
         }
 
         /// <summary>Where the <paramref name="index"/>-th player of a team starts (extra players line up behind the last spawn).</summary>

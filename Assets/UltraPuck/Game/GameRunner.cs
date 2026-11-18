@@ -148,6 +148,10 @@ namespace UltraPuck.Game
 
         /// <summary>ULTRAPUCK_SHOTS=folder: set up each screen worth checking, save a picture of it there, then quit.</summary>
         private static readonly string ShotDir = System.Environment.GetEnvironmentVariable("ULTRAPUCK_SHOTS");
+        /// <summary>Screenshots: show the whole rink, not the players' part of it.</summary>
+        private bool _shotWholeRink;
+        /// <summary>Screenshots: move the camera by this much (to see what moving the view does).</summary>
+        private Vector2 _shotNudge;
 
         private System.Collections.IEnumerator Shots()
         {
@@ -228,6 +232,52 @@ namespace UltraPuck.Game
                 _state.Carrier = -1;
                 yield return new WaitForSecondsRealtime(3f);
                 yield return Shot("replay");
+                GoMainMenu();
+            }
+
+            if (want("maps"))
+            {
+                // every rink, whole, with bots playing on it for a few seconds
+                _shotWholeRink = true;
+                var startMap = _mapIndex; // choosing a rink saves it: put the player's own back afterwards
+                for (var m = 0; m < _maps.Count; m++)
+                {
+                    UseMap(m);
+                    _local.Slots.Clear();
+                    for (var b = 0; b < 4; b++) _local.Slots.Add(new LocalPlayers.Slot { Team = b & 1, Colour = b & 1, Demo = true, Name = "Bot" });
+                    _local.AssignTeams();
+                    _mainMenu.Show(MainMenu.Page.None);
+                    StartMatch(true);
+                    yield return new WaitForSecondsRealtime(4f);
+                    yield return Shot("map-" + Path.GetFileNameWithoutExtension(_mapFiles[m]));
+                    GoMainMenu();
+                }
+                _shotWholeRink = false;
+                UseMap(startMap);
+            }
+
+            if (want("ice"))
+            {
+                // a few ice trails, then the camera moved: the sheen should have slid along them
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(1f);
+                var ice = new List<IcePoint>();
+                for (var t = 0; t < 3; t++)
+                    for (var k = 0; k < 30; k++)
+                    {
+                        var a = new Vector2(-8f + t * 7f, -6f + t * 2f) + new Vector2(0.55f, 0.8f - t * 0.6f).normalized * (k * 0.4f);
+                        ice.Add(new IcePoint { Pos = new FixVec2(Fix.FromDecimal((decimal)a.x), Fix.FromDecimal((decimal)a.y)), Trail = 900 + t, Team = 1, Slow = Fix.Ratio(1, 10), Melt = Fix.FromInt(60) });
+                    }
+                _state.Ice = ice.ToArray();
+                _state.IceTrails = 903;
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("ice-1");
+                _shotNudge = new Vector2(3f, 1.5f);
+                yield return new WaitForSecondsRealtime(1.5f);
+                yield return Shot("ice-2");
+                _shotNudge = Vector2.zero;
                 GoMainMenu();
             }
 
@@ -348,6 +398,7 @@ namespace UltraPuck.Game
             c.x = halfW * 2f >= mapMax.x - mapMin.x ? (mapMin.x + mapMax.x) / 2f : Mathf.Clamp(c.x, mapMin.x + halfW, mapMax.x - halfW);
             c.y = halfH * 2f >= mapMax.y - mapMin.y ? (mapMin.y + mapMax.y) / 2f : Mathf.Clamp(c.y, mapMin.y + halfH, mapMax.y - halfH);
             var pos = new Vector2(c.x, c.y + size * ScoreBarShare); // shift up so the score bar sits over empty space
+            pos += _shotNudge;
 
             if (snap) { _camPos = pos; _camSize = size; _camVel = Vector2.zero; _camSizeVel = 0f; }
             else
@@ -364,6 +415,7 @@ namespace UltraPuck.Game
             var jolt = _shake > 0.001f && amount > 0.01f ? Random.insideUnitCircle * _shake * amount * (_camSize / 12f) : Vector2.zero;
             _cam.transform.position = new Vector3(_camPos.x + jolt.x, _camPos.y + jolt.y, -10f);
             _cam.orthographicSize = _camSize;
+            Shader.SetGlobalVector("_UltraPuckCam", new Vector4(_camPos.x, _camPos.y, 0f, 0f)); // the ice's sheen follows the view
         }
 
         private void Update()
@@ -389,7 +441,7 @@ namespace UltraPuck.Game
             else MatchUpdate();
             if (_mode == Mode.Menu && _menus.IsOpen) AttractUpdate();
             if (_menus.IsOpen && _mode == Mode.Match) Show(_state, _state, 0f); // paused: hold the picture still
-            UpdateCamera(playing && Settings.FollowCamera);
+            UpdateCamera(playing && Settings.FollowCamera && !_shotWholeRink);
             for (var k = _ripples.Count - 1; k >= 0; k--)
             {
                 if (Time.unscaledTime < _ripples[k].When) continue;

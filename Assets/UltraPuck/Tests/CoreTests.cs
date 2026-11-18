@@ -575,6 +575,27 @@ namespace UltraPuck.Tests
             Assert.Greater(goals[0], 0); Assert.Greater(goals[1], 0);
         }
 
+        /// <summary>The bent rinks: bots find their way round the bends (along the map's route) and score, both teams.</summary>
+        [TestCase("s-rink.json")]
+        [TestCase("u-rink.json")]
+        public void BotsScoreOnTheBentRinks(string file)
+        {
+            var map = LoadMap(file);
+            Assert.Greater(map.Route.Count, 10, "the map has a route for the bots");
+            foreach (var g in map.Goals) Assert.IsTrue(g.HasFacing, "the nets say which way they open");
+            foreach (var sp in map.Spawns) Assert.IsTrue(map.Inside(sp.Pos), "spawn on the ice: " + sp.Pos);
+            Assert.IsTrue(map.Inside(map.PuckSpot), "puck spot on the ice");
+            var sim = new Simulation(map);
+            int[] goals = new int[2];
+            for (var k = 0; k < 6; k++)
+            {
+                var score = BotMatch(sim, new[] { 0, 1, 0, 1 }, 0x51ED27u + (uint)k * 7919u, 240);
+                goals[0] += score[0]; goals[1] += score[1];
+            }
+            Assert.Greater(goals[0] + goals[1], 6, "goals: red " + goals[0] + " blue " + goals[1]);
+            Assert.Greater(goals[0], 0); Assert.Greater(goals[1], 0);
+        }
+
         /// <summary>The nets are solid from behind: a puck fired at the back of a net bounces off without scoring.</summary>
         [Test]
         public void TheHockeyNetsBlockShotsFromBehind()
