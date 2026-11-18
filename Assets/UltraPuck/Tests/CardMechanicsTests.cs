@@ -289,7 +289,9 @@ namespace UltraPuck.Tests
             var n = s.Ice.Length;
             Assert.Greater(n, 0);
             for (var t = 0; t < 120 * 2; t++) _sim.Step(s, new PlayerInput[2]);
-            Assert.AreEqual(0, s.Ice.Length, "melted within the melt time, not 3 s later");
+            Assert.Greater(s.Ice.Length, 0, "still there after 2 s: it lasts 3");
+            for (var t = 0; t < 120 * 3; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(0, s.Ice.Length, "melted soon after: the trail was short, so the slow melt didn't take long");
         }
 
         /// <summary>Player 0 passes along y = -5 to teammate 1; an opponent (2) waits somewhere.</summary>

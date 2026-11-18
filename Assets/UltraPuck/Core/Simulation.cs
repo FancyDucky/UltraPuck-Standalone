@@ -478,7 +478,7 @@ namespace UltraPuck.Core
             s.IceTrails++;
             s.IceLaying = T.IceTime;
             s.IceAge = Fix.Zero;
-            AddIce(s, new IcePoint { Pos = s.PuckPos, Trail = s.IceTrails, Team = shooter.Team, Slow = T.IceSlow * Math.Min(3, shooter.Stats.IceTrail), Laying = true, Melt = T.IceDelay });
+            AddIce(s, new IcePoint { Pos = s.PuckPos, Trail = s.IceTrails, Team = shooter.Team, Slow = T.IceSlow * Math.Min(3, shooter.Stats.IceTrail), Laying = true, Melt = T.IceLife });
         }
 
         private static void AddIce(GameState s, IcePoint p)
@@ -490,26 +490,17 @@ namespace UltraPuck.Core
             s.Ice = a;
         }
 
-        /// <summary>
-        /// The trail being laid is finished. <paramref name="pickedUp"/>: someone took the puck, so if the melting
-        /// hasn't started yet it starts now (from the start of the trail, at the same slow pace).
-        /// </summary>
+        /// <summary>The trail being laid is finished (time's up, or someone took the puck). What's there melts as it would.</summary>
         private void StopLaying(GameState s, bool pickedUp)
         {
-            var early = pickedUp && s.IceLaying > Fix.Zero && s.IceAge < T.IceDelay ? T.IceDelay - s.IceAge : Fix.Zero;
             s.IceLaying = Fix.Zero;
-            for (var i = 0; i < s.Ice.Length; i++)
-            {
-                if (!s.Ice[i].Laying) continue;
-                s.Ice[i].Laying = false;
-                s.Ice[i].Melt = Fix.Max(Fix.Ratio(1, 120), s.Ice[i].Melt - early);
-            }
+            for (var i = 0; i < s.Ice.Length; i++) s.Ice[i].Laying = false;
         }
 
         private void Ice(GameState s, Fix dt)
         {
             // laying: a point every so often behind the loose puck, until the time's up or someone picks it up.
-            // Each point melts a while after the shot, the melting creeping along the trail slower than it was laid.
+            // The first point lasts IceLife; the melting then creeps along the trail IceMeltPace times slower than it was laid.
             if (s.IceLaying > Fix.Zero)
             {
                 s.IceLaying -= dt;
@@ -525,7 +516,7 @@ namespace UltraPuck.Core
                     {
                         var p = s.Ice[last];
                         p.Pos = s.PuckPos;
-                        p.Melt = T.IceDelay + s.IceAge * (T.IceMeltPace - Fix.One);
+                        p.Melt = T.IceLife + s.IceAge * (T.IceMeltPace - Fix.One);
                         AddIce(s, p);
                     }
                 }
@@ -653,14 +644,21 @@ namespace UltraPuck.Core
                     var p = s.Players[i];
                     var r = RadiusOf(p) + T.PuckRadius;
                     var d2 = (s.PuckPos - p.Pos).SqrLength;
-                    if (d2 >= r * r || p.NoPickup > Fix.Zero) continue;
+                    if (p.NoPickup > Fix.Zero || (d2 >= r * r && !(T.WedgePickup && OnWedge(p, s.PuckPos)))) continue;
                     if (best < 0 || d2 < bestD) { best = i; bestD = d2; ties = 1; }
                     else if (d2 == bestD && s.NextRandom() % (uint)(++ties) == 0) best = i; // fair among equals
                 }
                 if (best >= 0)
                 {
                     var p = s.Players[best];
-                    if (s.PassFrom >= 0 && s.PassFrom != best && s.PassFrom < s.Players.Length && s.Players[s.PassFrom].Team == p.Team) Passed(s, s.PassFrom);
+                    if (s.PassFrom >= 0 && s.PassFrom != best && s.PassFrom < s.Players.Length && s.Players[s.PassFrom].Team == p.Team)
+                    {
+                        Passed(s, s.PassFrom);
+                        // a pass carries the teammate on: a push along the puck's way, more for a harder pass
+                        var boost = s.PuckVel * T.PassBoost;
+                        if (boost.SqrLength > T.PassBoostMax * T.PassBoostMax) boost = boost.Normalized * T.PassBoostMax;
+                        p.Vel += boost;
+                    }
                     s.PassFrom = -1;
                     s.Carrier = best;
                     s.PuckTeam = p.Team;
@@ -671,9 +669,24 @@ namespace UltraPuck.Core
                 }
             }
 
+            // players who can't pick it up push it out of their way. Several at once: the farthest first and the
+            // nearest last (so the nearest decides where it ends up); an exact tie is a coin toss. Never by player order:
+            // the last push wins, so a fixed order hands the puck to the same player again and again.
+            var n0 = 0;
             for (var i = 0; i < s.Players.Length; i++)
             {
-                var p = s.Players[i];
+                var r = RadiusOf(s.Players[i]) + T.PuckRadius;
+                var dd = (s.PuckPos - s.Players[i].Pos).SqrLength;
+                if (dd >= r * r) continue;
+                // insert by distance, farthest first
+                var at = n0;
+                while (at > 0 && (_pushD[at - 1] < dd || (_pushD[at - 1] == dd && (s.NextRandom() & 1) == 0))) { _pushOrder[at] = _pushOrder[at - 1]; _pushD[at] = _pushD[at - 1]; at--; }
+                _pushOrder[at] = i; _pushD[at] = dd;
+                n0++;
+            }
+            for (var k = 0; k < n0; k++)
+            {
+                var p = s.Players[_pushOrder[k]];
                 var r = RadiusOf(p) + T.PuckRadius;
                 var d = s.PuckPos - p.Pos;
                 if (d.SqrLength >= r * r) continue;
@@ -691,6 +704,40 @@ namespace UltraPuck.Core
                 CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
                 KeepPuckIn(s, pushedFrom);
             }
+        }
+
+        /// <summary>
+        /// Does a puck at <paramref name="puck"/> touch <paramref name="p"/>'s wedge (the arrowhead in front, as drawn)?
+        /// Worked out across the player's facing with the side folded over (|y|), so both sides, and mirrored
+        /// players, get exactly the same answer.
+        /// </summary>
+        private readonly int[] _pushOrder = new int[8];
+        private readonly Fix[] _pushD = new Fix[8];
+
+        private bool OnWedge(PlayerState p, FixVec2 puck)
+        {
+            var R = RadiusOf(p);
+            var pr = T.PuckRadius;
+            var d = puck - p.Pos;
+            var x = FixVec2.Dot(d, p.Facing);
+            var tipX = R * T.WedgeTip;
+            var backX = R * T.WedgeBack;
+            if (x < backX - pr || x > tipX + pr) return false;
+            var y = Fix.Abs(FixVec2.Cross(p.Facing, d));
+            var halfW = R * T.WedgeHalfWidth;
+            if (y > halfW + pr) return false;
+            // inside the triangle: behind the slanted edge and in front of the back edge
+            var span = tipX - backX;
+            if (x >= backX && y * span <= halfW * (tipX - x)) return true;
+            // near an edge: the slanted one (tip to back corner), or the back one
+            var q = new FixVec2(x, y);
+            var tip = new FixVec2(tipX, Fix.Zero);
+            var corner = new FixVec2(backX, halfW);
+            var e = corner - tip;
+            var t = Fix.Clamp(FixVec2.Dot(q - tip, e) / e.SqrLength, Fix.Zero, Fix.One);
+            if ((q - (tip + e * t)).SqrLength <= pr * pr) return true;
+            var onBack = new FixVec2(backX, Fix.Min(y, halfW));
+            return (q - onBack).SqrLength <= pr * pr;
         }
 
         /// <summary>

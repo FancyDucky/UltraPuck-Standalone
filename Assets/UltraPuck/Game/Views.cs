@@ -882,8 +882,9 @@ namespace UltraPuck.Game
     }
 
     /// <summary>
-    /// Ice Trail: each trail as a strip of light blue ice on the floor, under the players, in one mesh per trail. The
-    /// sheen on it comes from its shader (UltraPuck/Ice), which slides it along the streaks as the camera moves.
+    /// Ice Trail: each trail as a strip of light blue ice on the floor, under the players, in one mesh per trail. Its
+    /// shader (UltraPuck/Ice) shows the arena's hidden frozen surface through it, fixed to the rink, with a reflection
+    /// that moves with the camera.
     /// </summary>
     internal sealed class IceViews
     {

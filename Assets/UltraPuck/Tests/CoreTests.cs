@@ -438,6 +438,58 @@ namespace UltraPuck.Tests
             Assert.AreEqual(-1, s.Carrier, "letting go fires the charged shot");
         }
 
+        /// <summary>A loose puck touching the wedge (not the body) is picked up; one beside it isn't.</summary>
+        [Test]
+        public void TheWedgePicksUpThePuck()
+        {
+            var sim = new Simulation(LoadRink());
+            foreach (var y in new[] { 0.0, 0.25, -0.25 })
+            {
+                var s = sim.NewGame(new[] { 0, 1 });
+                PlayNow(s);
+                s.Players[0].Pos = new FixVec2(Fix.Zero, Fix.FromInt(-5)); s.Players[0].Facing = FixVec2.Right; s.Players[0].Vel = FixVec2.Zero;
+                s.Players[1].Pos = new FixVec2(Fix.FromInt(10), Fix.FromInt(8));
+                // past the body's reach (0.84) but on the wedge, whose tip is 0.9 ahead
+                s.PuckPos = new FixVec2(Fix.FromDecimal(1.05m), Fix.FromInt(-5) + Fix.FromDecimal((decimal)y));
+                s.PuckVel = FixVec2.Zero;
+                sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+                Assert.AreEqual(0, s.Carrier, "picked up off the wedge at y " + y);
+            }
+            var far = sim.NewGame(new[] { 0, 1 });
+            PlayNow(far);
+            far.Players[0].Pos = new FixVec2(Fix.Zero, Fix.FromInt(-5)); far.Players[0].Facing = FixVec2.Right; far.Players[0].Vel = FixVec2.Zero;
+            far.Players[1].Pos = new FixVec2(Fix.FromInt(10), Fix.FromInt(8));
+            far.PuckPos = new FixVec2(Fix.FromDecimal(1.05m), Fix.FromInt(-5) + Fix.One);
+            far.PuckVel = FixVec2.Zero;
+            sim.Step(far, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(-1, far.Carrier, "beside the wedge: not picked up");
+        }
+
+        /// <summary>A pass caught by a teammate gives them a push along the puck's way, bigger for a harder pass.</summary>
+        [Test]
+        public void APassCarriesTheTeammateOn()
+        {
+            var sim = new Simulation(LoadRink());
+            Fix Caught(int speed)
+            {
+                var s = sim.NewGame(new[] { 0, 0 });
+                PlayNow(s);
+                s.Players[0].Pos = new FixVec2(Fix.FromInt(-10), Fix.FromInt(8));
+                s.Players[1].Pos = new FixVec2(Fix.FromInt(5), Fix.FromInt(-5)); s.Players[1].Facing = new FixVec2(-Fix.One, Fix.Zero); s.Players[1].Vel = FixVec2.Zero;
+                s.PuckPos = new FixVec2(Fix.Zero, Fix.FromInt(-5));
+                s.PuckVel = new FixVec2(Fix.FromInt(speed), Fix.Zero);
+                s.PassFrom = 0;
+                for (var t = 0; t < 120 && s.Carrier != 1; t++) sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+                Assert.AreEqual(1, s.Carrier, "caught the pass");
+                return s.Players[1].Vel.X;
+            }
+            var soft = Caught(12);
+            var hard = Caught(40);
+            Assert.Greater(soft.ToDouble(), 1.0, "a soft pass gives a little push");
+            Assert.Greater(hard.ToDouble(), soft.ToDouble() + 1.0, "a hard pass gives more");
+            Assert.LessOrEqual(hard.ToDouble(), 6.1, "but not more than the most");
+        }
+
         [Test]
         public void TheGoalCountsWhenThePuckTouchesTheGoalBox()
         {

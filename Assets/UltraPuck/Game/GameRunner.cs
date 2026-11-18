@@ -416,7 +416,7 @@ namespace UltraPuck.Game
             var jolt = _shake > 0.001f && amount > 0.01f ? Random.insideUnitCircle * _shake * amount * (_camSize / 12f) : Vector2.zero;
             _cam.transform.position = new Vector3(_camPos.x + jolt.x, _camPos.y + jolt.y, -10f);
             _cam.orthographicSize = _camSize;
-            Shader.SetGlobalVector("_UltraPuckCam", new Vector4(_camPos.x, _camPos.y, 0f, 0f)); // the ice's sheen follows the view
+            Shader.SetGlobalVector("_UltraPuckCam", new Vector4(_camPos.x, _camPos.y, 0f, 0f)); // the ice's reflection moves with the view
         }
 
         private void Update()

@@ -21,6 +21,36 @@ namespace UltraPuck.Tests
             return MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));
         }
 
+        /// <summary>
+        /// 1-on-1 bot matches, both ways round, 60 each: the goals should split evenly by side and by player slot. (A
+        /// rule that settles things in player order, rather than fairly, shows up here as one slot winning far more.)
+        /// </summary>
+        [TestCase("test-rink.json")]
+        [TestCase("hockey-rink.json")]
+        public void OneOnOneSlotsAreFair(string file)
+        {
+            var sim = new Simulation(Map(file));
+            var slot = new int[2];
+            foreach (var lineup in new[] { new[] { 0, 1 }, new[] { 1, 0 } })
+            {
+                for (var k = 0; k < 60; k++)
+                {
+                    var s = sim.NewGame(lineup);
+                    s.Rng = 0x9E3779B9u + (uint)k * 104729u;
+                    var inputs = new PlayerInput[2];
+                    for (var t = 0; t < 150 * 120 && s.Phase != Phase.GameOver; t++)
+                    {
+                        for (var i = 0; i < 2; i++) inputs[i] = Bot.Think(sim, s, i);
+                        sim.Step(s, inputs);
+                    }
+                    slot[0] += s.Score[lineup[0]]; slot[1] += s.Score[lineup[1]];
+                }
+            }
+            Debug.Log("PERF 1v1 " + file + ": slot 0 scored " + slot[0] + ", slot 1 " + slot[1]);
+            var share = slot[0] / (double)(slot[0] + slot[1]);
+            Assert.That(share, Is.InRange(0.42, 0.58), "slot 0's share of the goals");
+        }
+
         [TestCase("hockey-rink.json", 6)]
         [TestCase("hockey-rink.json", 8)]
         [TestCase("s-rink.json", 6)]

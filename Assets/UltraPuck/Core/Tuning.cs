@@ -101,11 +101,20 @@ namespace UltraPuck.Core
         public Fix ShockCooldown = Fix.FromInt(7), ShockSlow = Fix.Ratio(9, 20), ShockSlowPerCopy = Fix.Ratio(5, 100);
         public Fix ShockTime = Fix.FromInt(2), ShockTimePerCopy = Fix.Half, ShockRange = Fix.FromInt(3), ShockPush = Fix.Ratio(4, 5);
         /// <summary>
-        /// Ice Trail: the puck lays ice for up to <see cref="IceTime"/>. The start of the trail melts
-        /// <see cref="IceDelay"/> after the shot, and the melting creeps along it <see cref="IceMeltPace"/> times
-        /// slower than it was laid. How much it slows per copy, how wide it is, and how far apart its points are.
+        /// Ice Trail: the puck lays ice for up to <see cref="IceTime"/>. The start of the trail lasts
+        /// <see cref="IceLife"/>, then the melting creeps along it <see cref="IceMeltPace"/> times slower than it was
+        /// laid (so each later bit lasts a little longer). How much it slows per copy, how wide it is, and how far
+        /// apart its points are.
         /// </summary>
-        public Fix IceTime = Fix.FromInt(3), IceDelay = Fix.One, IceMeltPace = Fix.FromInt(3), IceSlow = Fix.Ratio(1, 10), IceRadius = Fix.Ratio(9, 20), IceSpacing = Fix.Ratio(2, 5);
+        public Fix IceTime = Fix.FromInt(3), IceLife = Fix.FromInt(3), IceMeltPace = Fix.Two, IceSlow = Fix.Ratio(1, 10), IceRadius = Fix.Ratio(9, 20), IceSpacing = Fix.Ratio(2, 5);
+        /// <summary>A pass caught by a teammate carries them on: this share of the puck's speed, up to the most.</summary>
+        public Fix PassBoost = Fix.Ratio(3, 20), PassBoostMax = Fix.FromInt(6);
+        /// <summary>
+        /// The wedge at the front of a player (as drawn): its tip this many radii ahead, its back edge this far ahead
+        /// and this wide either side. A loose puck touching it is picked up, like touching the body.
+        /// </summary>
+        public Fix WedgeTip = Fix.Ratio(9, 5), WedgeBack = Fix.Ratio(3, 5), WedgeHalfWidth = Fix.Ratio(7, 10);
+        public bool WedgePickup = true;
         /// <summary>Friendly Fire: speed multiplier and how long it lasts.</summary>
         public Fix FriendlyBoost = Fix.Ratio(9, 5), FriendlyTime = Fix.FromInt(2);
         /// <summary>Team Play: how close an opponent may get to a passed puck before the pass no longer counts.</summary>
