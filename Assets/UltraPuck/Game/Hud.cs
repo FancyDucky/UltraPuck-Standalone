@@ -80,6 +80,13 @@ namespace UltraPuck.Game
             }
 
             var big = Ui.Font(46, true, TextAnchor.MiddleCenter);
+            if (_state.Paused)
+            {
+                // online: the host has paused (they see their own menu; everyone else sees this)
+                Ui.Box(new Rect(0, 0, w, h), new Color(0f, 0f, 0f, 0.35f), 0f);
+                Ui.Label(new Rect(0, h * 0.4f - 40f, w, 70), "Paused", big, Color.white);
+                Ui.Label(new Rect(0, h * 0.4f + 26f, w, 30), "The host paused the game", Ui.Font(20, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.7f));
+            }
             switch (_state.Phase)
             {
                 case Phase.Countdown:

@@ -111,6 +111,17 @@ namespace UltraPuck.Game
             _menus.MaxBots = () => LocalPlayers.MaxPlayers - _local.HumanCount;
             _menus.SetBots = SetBots;
             _menus.OnGetCard = EditCards;
+            // the pause menu's match settings: the host online, anyone in a match here
+            _menus.CanEditMatch = () => _mode == Mode.Online ? _session != null && _session.IsHost : _mode == Mode.Match && !_free;
+            _menus.MapCount = () => _maps.Count;
+            _menus.MapName = MapName;
+            _menus.CurrentMap = () => _mapIndex;
+            _menus.OnRestart = map =>
+            {
+                if (map != _mapIndex) UseMap(map);
+                if (_mode == Mode.Online) StartOnlineMatch();
+                else StartMatch(false);
+            };
             _menus.Cards = _cards;
             _hud.PlayerName = NameOf;
 
@@ -288,6 +299,44 @@ namespace UltraPuck.Game
                 yield return Shot("goal-1");
                 yield return new WaitForSecondsRealtime(0.25f);
                 yield return Shot("goal-2");
+                GoMainMenu();
+            }
+
+            if (want("cards"))
+            {
+                // a card pick with 4 and with 5 offered: they should fan out in an arc
+                foreach (var count in new[] { 4, 5 })
+                {
+                    _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                    _mainMenu.Show(MainMenu.Page.None);
+                    StartMatch(true);
+                    _sim.T.CardsOffered = count;
+                    yield return new WaitForSecondsRealtime(0.8f);
+                    PickACard();
+                    yield return new WaitForSecondsRealtime(2.2f);
+                    yield return Shot("cards-" + count);
+                    GoMainMenu();
+                    yield return new WaitForSecondsRealtime(0.5f);
+                }
+            }
+
+            if (want("pausemenu"))
+            {
+                // a local match's pause menu and its match settings page
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(0.5f);
+                _menus.FreePlay = false;
+                _menus.OpenPause("Shot");
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("pause");
+                _menus.ShowMatchSettings();
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("match-settings");
+                _menus.Close();
                 GoMainMenu();
             }
 
@@ -834,9 +883,9 @@ namespace UltraPuck.Game
             }
             else if (_local.MenuPressed() && !_cardScreen.Showing)
             {
-                // online the game doesn't stop for a menu: you just stand still while it's open
+                // online: the host's pause stops the game for everyone; anyone else just stands still while theirs is open
                 _menus.FreePlay = false;
-                _menus.OpenPause("Online  ·  the match keeps going");
+                _menus.OpenPause(s.IsHost ? "Online  ·  paused for everyone" : "Online  ·  the match keeps going");
             }
 
             _local.LatchPresses();
@@ -850,6 +899,7 @@ namespace UltraPuck.Game
             while (_onlineAcc >= dt && steps < 12)
             {
                 var inputs = _menus.IsOpen ? new PlayerInput[_local.Slots.Count] : _local.Sample(_sim, _state);
+                if (s.IsHost && _menus.IsOpen && inputs.Length > 0) inputs[0].Buttons |= PlayerInput.Pause; // the host's menu pauses everyone
                 if (!s.Step(inputs))
                 {
                     // waiting for the others: keep the time owed (up to a quarter of a second) so we catch up when their

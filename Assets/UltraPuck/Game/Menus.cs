@@ -12,7 +12,7 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class Menus : MonoBehaviour
     {
-        public enum Page { None, Pause, Settings, Cards }
+        public enum Page { None, Pause, Settings, Cards, Match }
 
         /// <summary>The card list for the Toggle Cards page (set by GameRunner).</summary>
         public UltraPuck.Core.CardLibrary Cards;
@@ -25,6 +25,13 @@ namespace UltraPuck.Game
         public Func<int> BotCount, MaxBots;
         public Action<int> SetBots;
         public bool FreePlay;
+        /// <summary>The pause menu offers the match settings (the host online, anyone in a match on this PC).</summary>
+        public Func<bool> CanEditMatch;
+        public Func<int> MapCount, CurrentMap;
+        public Func<int, string> MapName;
+        /// <summary>Restart the match with the match settings as they are now, on this rink.</summary>
+        public Action<int> OnRestart;
+        private int _pendingMap;
 
         private bool _settingsFromLobby;
         private int _focus, _tab;
@@ -102,8 +109,26 @@ namespace UltraPuck.Game
                     });
                     _rows.Add(Button("Cards", () => { Close(); if (OnGetCard != null) OnGetCard(); }));
                 }
+                if (!FreePlay && CanEditMatch != null && CanEditMatch()) _rows.Add(Button("Match settings", OpenMatch));
                 _rows.Add(Button("Settings", () => OpenSettings(false)));
                 _rows.Add(Button("Main menu", () => { Close(); if (OnMainMenu != null) OnMainMenu(); }));
+                return;
+            }
+            if (Current == Page.Match)
+            {
+                _rows.Add(new Row { Label = "Restart match with these settings", Press = () => { var map = _pendingMap; Close(); if (OnRestart != null) OnRestart(map); },
+                    Hint = "Starts the match again from 0 : 0 with the settings below. Online, for everyone." });
+                if (MapCount != null && MapCount() > 0)
+                    _rows.Add(new Row
+                    {
+                        Label = "Rink", Value = () => MapName(_pendingMap),
+                        Step = d => _pendingMap = (_pendingMap + d + MapCount()) % MapCount(),
+                        Press = () => _pendingMap = (_pendingMap + 1) % MapCount(),
+                        Hint = "Changes when the match restarts.",
+                    });
+                _rows.Add(new Row { Label = "Match", Value = () => Settings.MatchText, Step = Settings.StepMatch, Press = () => Settings.StepMatch(1), Hint = "First to so many goals, or a time limit." });
+                MatchRows();
+                _rows.Add(Button("Back", () => { Current = Page.Pause; _focus = 0; _first = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }));
                 return;
             }
             if (Current == Page.Cards)
@@ -114,7 +139,7 @@ namespace UltraPuck.Game
                         var id = c.Id;
                         _rows.Add(Switch(c.Name + "  (" + c.Tier + ")", () => Settings.CardOn(id), v => Settings.SetCardOn(id, v), CleanText(c.Text)));
                     }
-                _rows.Add(Button("Back", () => { Current = Page.Settings; _focus = 5; _first = 0; _focusY = -1f; }));
+                _rows.Add(Button("Back", () => { Current = _cardsFrom; _focus = 0; _first = 0; _focusY = -1f; }));
                 return;
             }
             if (Current != Page.Settings) return;
@@ -171,25 +196,47 @@ namespace UltraPuck.Game
                     _rows.Add(cz);
                     break;
                 case 3:
-                    _rows.Add(Switch("Rounds mode", () => Settings.Rounds, v => Settings.Rounds = v, "After each goal, the team that conceded picks a card that powers them up for the rest of the match."));
-                    _rows.Add(Switch("Goal replays", () => Settings.Replays, v => Settings.Replays = v, "Every goal is shown again, up to 10 seconds back, in slow motion on the big moments. Everyone pressing A skips it (bots always agree)."));
-                    var vote = Choice("Picking", new[] { "Each player", "Team vote" }, () => Settings.TeamVote ? 1 : 0, v => Settings.TeamVote = v == 1,
-                        "Each player: everyone gets their own card. Team vote: each team votes on one card the whole team gets (a tie is random).");
-                    vote.Enabled = () => Settings.Rounds;
-                    _rows.Add(vote);
-                    var offered = new string[Settings.OfferCounts.Length];
-                    for (var k = 0; k < offered.Length; k++) offered[k] = Settings.OfferCounts[k].ToString();
-                    _rows.Add(Choice("Cards offered", offered, () => Mathf.Max(0, Array.IndexOf(Settings.OfferCounts, Settings.CardsOffered)), v => Settings.CardsOffered = Settings.OfferCounts[v]));
-                    var times = new string[Settings.PickTimes.Length];
-                    for (var k = 0; k < times.Length; k++) times[k] = Settings.PickTimes[k] == 0 ? "No limit" : Settings.PickTimes[k] + " s";
-                    _rows.Add(Choice("Pick time", times, () => Mathf.Max(0, Array.IndexOf(Settings.PickTimes, Settings.PickTime)), v => Settings.PickTime = Settings.PickTimes[v],
-                        "How long players have to pick. Anyone who hasn't picked in time gets a random card."));
-                    _rows.Add(new Row { Label = "Toggle cards", Value = CardsOnText, Press = () => { Current = Page.Cards; _focus = 0; _first = 0; _focusY = -1f; },
-                        Hint = "Choose which cards can be offered. Online, the host's choices apply." });
+                    MatchRows();
                     break;
             }
             _rows.Add(Button("Back", Back));
         }
+
+        /// <summary>The match's rules (the Match tab, and the pause menu's match settings).</summary>
+        private void MatchRows()
+        {
+            _rows.Add(Switch("Rounds mode", () => Settings.Rounds, v => Settings.Rounds = v, "After each goal, the team that conceded picks a card that powers them up for the rest of the match."));
+            _rows.Add(Switch("Goal replays", () => Settings.Replays, v => Settings.Replays = v, "Every goal is shown again, up to 10 seconds back, in slow motion on the big moments. Everyone pressing A skips it (bots always agree)."));
+            var vote = Choice("Picking", new[] { "Each player", "Team vote" }, () => Settings.TeamVote ? 1 : 0, v => Settings.TeamVote = v == 1,
+                "Each player: everyone gets their own card. Team vote: each team votes on one card the whole team gets (a tie is random).");
+            vote.Enabled = () => Settings.Rounds;
+            _rows.Add(vote);
+            var offered = new string[Settings.OfferCounts.Length];
+            for (var k = 0; k < offered.Length; k++) offered[k] = Settings.OfferCounts[k].ToString();
+            _rows.Add(Choice("Cards offered", offered, () => Mathf.Max(0, Array.IndexOf(Settings.OfferCounts, Settings.CardsOffered)), v => Settings.CardsOffered = Settings.OfferCounts[v]));
+            var times = new string[Settings.PickTimes.Length];
+            for (var k = 0; k < times.Length; k++) times[k] = Settings.PickTimes[k] == 0 ? "No limit" : Settings.PickTimes[k] + " s";
+            _rows.Add(Choice("Pick time", times, () => Mathf.Max(0, Array.IndexOf(Settings.PickTimes, Settings.PickTime)), v => Settings.PickTime = Settings.PickTimes[v],
+                "How long players have to pick. Anyone who hasn't picked in time gets a random card."));
+            _rows.Add(new Row { Label = "Toggle cards", Value = CardsOnText, Press = () => { _cardsFrom = Current; Current = Page.Cards; _focus = 0; _first = 0; _focusY = -1f; },
+                Hint = "Choose which cards can be offered. Online, the host's choices apply." });
+        }
+
+        private Page _cardsFrom = Page.Settings;
+
+        /// <summary>Open the match settings page (for the screenshots).</summary>
+        public void ShowMatchSettings() { OpenMatch(); }
+
+        private void OpenMatch()
+        {
+            Current = Page.Match;
+            _pendingMap = CurrentMap != null ? CurrentMap() : 0;
+            _focus = 0; _first = 0; _focusY = -1f;
+            _openedAt = Time.unscaledTime;
+        }
+
+        /// <summary>Settings tabs: from a match, the Match tab is left out (it's the pause menu's Match settings there).</summary>
+        private int TabCount { get { return _settingsFromLobby ? Tabs.Length : Tabs.Length - 1; } }
 
         private int _settingsRows;
 
@@ -199,6 +246,7 @@ namespace UltraPuck.Game
             if (_settingsRows > 0) return Mathf.Max(_settingsRows, _rows.Count);
             var keep = _tab;
             for (_tab = 0; _tab < Tabs.Length; _tab++) { BuildRows(); _settingsRows = Mathf.Max(_settingsRows, _rows.Count); }
+            _tab = Mathf.Min(keep, TabCount - 1);
             _tab = keep;
             BuildRows();
             return _settingsRows;
@@ -291,6 +339,7 @@ namespace UltraPuck.Game
         public void OpenSettings(bool fromLobby)
         {
             _settingsFromLobby = fromLobby;
+            _tab = Mathf.Min(_tab, TabCount - 1);
             Current = Page.Settings;
             _focus = 0;
             _openedAt = Time.unscaledTime;
@@ -322,8 +371,14 @@ namespace UltraPuck.Game
             if (_typing) { TypingTick(); return; }
             BuildRows();
             if (_rows.Count == 0) return;
-            if (m.Back) { if (Current == Page.Cards) { Current = Page.Settings; _focus = 5; _first = 0; _focusY = -1f; } else Back(); return; }
-            if (Current == Page.Settings && m.Tab != 0) { _tab = (_tab + m.Tab + Tabs.Length) % Tabs.Length; _focus = 0; _first = 0; return; }
+            if (m.Back)
+            {
+                if (Current == Page.Cards) { Current = _cardsFrom; _focus = 0; _first = 0; _focusY = -1f; }
+                else if (Current == Page.Match) { Current = Page.Pause; _focus = 0; _first = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }
+                else Back();
+                return;
+            }
+            if (Current == Page.Settings && m.Tab != 0) { _tab = (_tab + m.Tab + TabCount) % TabCount; _focus = 0; _first = 0; return; }
             if (m.Y != 0)
             {
                 // skip greyed-out rows
@@ -359,7 +414,8 @@ namespace UltraPuck.Game
             var panelW = pause ? 440f : 780f;
             var top = pause ? 110f : 150f;
             // the settings panel is as tall as its longest tab, so it doesn't jump about between tabs
-            var panelH = top + (pause ? _rows.Count : Mathf.Min(MaxVisible, SettingsRows())) * (rowH + 8f) + (pause ? 30f : 92f);
+            var matchPage = Current == Page.Match;
+            var panelH = top + (pause ? _rows.Count : matchPage ? Mathf.Min(MaxVisible, _rows.Count) : Mathf.Min(MaxVisible, SettingsRows())) * (rowH + 8f) + (pause ? 30f : 92f);
             // long pages (the card list) scroll: keep the focused row in view
             var visible = pause ? _rows.Count : Mathf.Min(MaxVisible, _rows.Count);
             _first = Mathf.Clamp(_first, Mathf.Max(0, _focus - visible + 1), Mathf.Min(_focus, Mathf.Max(0, _rows.Count - visible)));
@@ -375,9 +431,10 @@ namespace UltraPuck.Game
             Ui.Box(new Rect(x, y, panelW, panelH), Ui.Panel, 21f);
 
             var cardsPage = Current == Page.Cards;
-            Ui.Label(new Rect(x, y + 22f, panelW, 50f), pause ? "Paused" : cardsPage ? "Toggle cards" : "Settings", Ui.Font(38, true, TextAnchor.MiddleCenter), Ui.Text);
+            Ui.Label(new Rect(x, y + 22f, panelW, 50f), pause ? "Paused" : cardsPage ? "Toggle cards" : matchPage ? "Match settings" : "Settings", Ui.Font(38, true, TextAnchor.MiddleCenter), Ui.Text);
             if (pause && _subtitle.Length > 0) Ui.Label(new Rect(x, y + 66f, panelW, 26f), _subtitle, Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
             if (cardsPage) Ui.Label(new Rect(x, y + 82f, panelW, 40f), "Which cards can be offered" + (_rows.Count > visible ? "   (" + (_first + 1) + "-" + (_first + visible) + " of " + (_rows.Count - 1) + ")" : ""), Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
+            else if (matchPage) Ui.Label(new Rect(x, y + 82f, panelW, 40f), "Restart the match to use new settings", Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
             else if (!pause) Tabs_(x, y + 82f, panelW);
 
             var mouse = Ui.Mouse;
@@ -413,7 +470,7 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(x, y + panelH - 70f, panelW, 24f), hint, Ui.Font(16, false, TextAnchor.MiddleCenter), Ui.TextDim);
                 Glyphs.Hint(new Rect(x, y + panelH - 40f, panelW, 24f),
                     _typing ? (InputMode.Pad ? "Type on the keyboard    {confirm} Done    {back} Cancel" : "Type your name    {confirm} Done    {back} Cancel")
-                            : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : "{tabs} Tabs      {back} Back      Changes save straight away",
+                            : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : matchPage ? "{nav} Choose      {side} Change      {back} Back" : "{tabs} Tabs      {back} Back      Changes save straight away",
                     14, new Color(1f, 1f, 1f, 0.45f));
             }
             GUI.matrix = oldMatrix;
@@ -422,13 +479,13 @@ namespace UltraPuck.Game
         private void Tabs_(float x, float y, float panelW)
         {
             const float tabW = 150f, tabH = 40f, gap = 10f;
-            var total = Tabs.Length * tabW + (Tabs.Length - 1) * gap;
+            var total = TabCount * tabW + (TabCount - 1) * gap;
             var x0 = x + panelW / 2f - total / 2f;
             var target = x0 + _tab * (tabW + gap);
             _tabX = _tabX < 0f ? target : Mathf.Lerp(_tabX, target, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 20f));
             Ui.Box(new Rect(x0 - 6f, y - 6f, total + 12f, tabH + 12f), new Color(1f, 1f, 1f, 0.05f), 14f);
             Ui.Box(new Rect(_tabX, y, tabW, tabH), new Color(1f, 1f, 1f, 0.92f), 10f);
-            for (var i = 0; i < Tabs.Length; i++)
+            for (var i = 0; i < TabCount; i++)
             {
                 var r = new Rect(x0 + i * (tabW + gap), y, tabW, tabH);
                 if (r.Contains(Ui.Mouse) && Ui.Clicked && Event.current.type == EventType.Repaint) { _tab = i; _focus = 0; }

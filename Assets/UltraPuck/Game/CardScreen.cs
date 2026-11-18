@@ -216,12 +216,26 @@ namespace UltraPuck.Game
             _testStep = 0;
             _stage = Stage.Choosing;
             _stageAt = Time.unscaledTime;
+            // three in a row; more fan out in an arc (like a rainbow), a little smaller, so they all fit on screen
+            var n = offer.Length;
+            _dealScale = n <= 3 ? 1f : n == 4 ? 0.9f : 0.82f;
             for (var k = 0; k < offer.Length; k++)
             {
                 var def = Sim.Cards.Cards[offer[k]];
                 var v = Build(def, k);
-                var x = (k - (offer.Length - 1) / 2f) * 3.05f;
-                v.Home = new Vector3(x, -0.3f, 0f);
+                float x, y = -0.3f;
+                v.Fan = 0f;
+                if (n <= 3) x = (k - (n - 1) / 2f) * 3.05f;
+                else
+                {
+                    const float radius = 10f;
+                    var spread = n == 4 ? 34f : 44f;                                   // degrees, edge to edge
+                    var a = (k / (float)(n - 1) - 0.5f) * spread * Mathf.Deg2Rad;
+                    x = Mathf.Sin(a) * radius;
+                    y = -0.1f - (1f - Mathf.Cos(a)) * radius;
+                    v.Fan = -a * Mathf.Rad2Deg;                                         // tilted along the arc
+                }
+                v.Home = new Vector3(x, y, 0f);
                 v.Pos = new Vector3(x * 0.25f, -7.5f, 1f);
                 v.Rot = new Vector3(0f, 180f, Random.Range(-28f, 28f));
                 v.Scale = 0.75f;
@@ -306,7 +320,7 @@ namespace UltraPuck.Game
             var since = t - _stageAt;
             var tilt = PointerTilt();
             var live = _stage == Stage.Choosing || _stage == Stage.Editing;
-            var size = _editing ? EditScale : 1f;
+            var size = _editing ? EditScale : _dealScale;
             if (_stage == Stage.Editing) EditHomes();
             for (var k = 0; k < _cards.Count; k++)
             {
@@ -354,7 +368,7 @@ namespace UltraPuck.Game
                     var focused = k == _focus;
                     var bob = Mathf.Sin(t * 1.7f + c.Phase) * 0.06f;
                     tp = c.Home + new Vector3(0f, bob * size + (focused ? 0.25f * size : 0f), focused ? (_editing ? -2.2f : -0.9f) : 0f);
-                    tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.2f + c.Phase) * 1.8f);
+                    tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.2f + c.Phase) * 1.8f + c.Fan * (focused ? 0.25f : 1f));
                     if (focused) tr += new Vector3(-tilt.y * 16f, tilt.x * 18f, 0f);
                     else tr += new Vector3(Mathf.Sin(t * 0.9f + c.Phase) * 3f, Mathf.Cos(t * 0.8f + c.Phase) * 4f, 0f);
                     ts = (focused ? (_editing ? 1.3f : 1.12f) : 0.95f) * size;
@@ -381,6 +395,8 @@ namespace UltraPuck.Game
 
         /// <summary>Where the focused card should lean: towards the mouse when it's over the card, else the picker's right stick, else a slow drift.</summary>
         private bool _absorbed;
+        /// <summary>How big the dealt cards are (smaller when more than three are offered).</summary>
+        private float _dealScale = 1f;
         private float _absorbedAt;
 
         /// <summary>Where the player who took the card is, in the cards' space (on the table, under the cards), or null.</summary>
@@ -795,6 +811,8 @@ namespace UltraPuck.Game
         {
             public Transform Root, Tilt;
             public Vector3 Home, Pos, PosVel, Rot, RotVel;
+            /// <summary>Tilt along the fan when more than three are offered (degrees).</summary>
+            public float Fan;
             public float Scale = 1f, ScaleVel, Delay, Phase;
             public readonly List<Renderer> Front = new List<Renderer>(), Back = new List<Renderer>(), Texts = new List<Renderer>(), BackTexts = new List<Renderer>();
             /// <summary>Each front part's place in the stack (body under picture).</summary>

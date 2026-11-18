@@ -285,6 +285,15 @@ namespace UltraPuck.Core
             var dt = T.Dt;
             s.Tick++;
 
+            // the host's pause: everything stands still (presses made meanwhile don't count afterwards)
+            s.Paused = false;
+            for (var i = 0; i < s.Players.Length; i++) if (InputOf(inputs, i).Has(PlayerInput.Pause)) s.Paused = true;
+            if (s.Paused)
+            {
+                for (var i = 0; i < s.Players.Length; i++) s.Players[i].PrevButtons = InputOf(inputs, i).Buttons;
+                return;
+            }
+
             if (s.Phase == Phase.Picking) { StepPicking(s, inputs, dt); return; }
             if (s.Phase == Phase.Countdown || s.Phase == Phase.GameOver)
             {

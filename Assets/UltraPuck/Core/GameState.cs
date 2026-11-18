@@ -17,6 +17,8 @@ namespace UltraPuck.Core
         public const byte Utility = 4;
         /// <summary>Free play only: bring the puck back to its spot.</summary>
         public const byte ResetPuck = 8;
+        /// <summary>Held by the online host while their pause menu is open: the whole game stands still for everyone.</summary>
+        public const byte Pause = 16;
 
         public sbyte MoveX, MoveY;   // -127..127, the left stick
         /// <summary>The right stick: when pushed, you face where it points (twin-stick aiming).</summary>
@@ -253,6 +255,8 @@ namespace UltraPuck.Core
         public Fix Clock;
         /// <summary>A timed match ended level: the next goal wins.</summary>
         public bool Overtime;
+        /// <summary>The host has paused the game (online): nothing moves and no clock runs until they resume.</summary>
+        public bool Paused;
         public uint Rng = 0x9E3779B9u;
 
         /// <summary>Puck Gun shots in flight.</summary>
@@ -295,7 +299,7 @@ namespace UltraPuck.Core
         public ulong Checksum()
         {
             ulong h = 14695981039346656037UL;
-            Mix(ref h, Clock); Mix(ref h, Overtime ? 1 : 0);
+            Mix(ref h, Clock); Mix(ref h, Overtime ? 1 : 0); Mix(ref h, Paused ? 1 : 0);
             Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, (long)Rng);
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }

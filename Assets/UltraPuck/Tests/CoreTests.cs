@@ -438,6 +438,27 @@ namespace UltraPuck.Tests
             Assert.AreEqual(-1, s.Carrier, "letting go fires the charged shot");
         }
 
+        /// <summary>The host's pause: while anyone's controls hold Pause, nothing moves and no clock runs; then it carries on.</summary>
+        [Test]
+        public void ThePauseStopsEverything()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = sim.NewGame(new[] { 0, 1 });
+            PlayNow(s);
+            s.PuckVel = new FixVec2(Fix.FromInt(10), Fix.Zero);
+            s.Players[0].Vel = new FixVec2(Fix.FromInt(3), Fix.Zero);
+            var puck = s.PuckPos;
+            var me = s.Players[0].Pos;
+            var pause = new[] { new PlayerInput { Buttons = PlayerInput.Pause }, default(PlayerInput) };
+            for (var t = 0; t < 120; t++) sim.Step(s, pause);
+            Assert.IsTrue(s.Paused);
+            Assert.AreEqual(puck, s.PuckPos, "the puck stood still");
+            Assert.AreEqual(me, s.Players[0].Pos, "and so did the player");
+            sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.IsFalse(s.Paused);
+            Assert.AreNotEqual(puck, s.PuckPos, "it carries on where it was");
+        }
+
         /// <summary>Quick off the mark (faster than plain push-and-drag would be), but the same top speed.</summary>
         [Test]
         public void PlayersGetGoingQuicklyButKeepTheirTopSpeed()
