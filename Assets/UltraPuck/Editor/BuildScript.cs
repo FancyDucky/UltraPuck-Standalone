@@ -40,6 +40,32 @@ namespace UltraPuck.Editor
             if (Application.isBatchMode) EditorApplication.Exit(ok ? 0 : 1);
         }
 
+        private const string LinuxOutput = "Builds/Linux/UltraPuck.x86_64";
+
+        /// <summary>
+        /// Ultra Puck > Build Linux (for the Steam Deck), or -executeMethod UltraPuck.Editor.BuildScript.BuildLinux.
+        /// Puts the game in Builds/Linux/UltraPuck.x86_64.
+        /// </summary>
+        [MenuItem("Ultra Puck/Build Linux")]
+        public static void BuildLinux()
+        {
+            Prepare();
+            if (File.Exists("version.txt")) PlayerSettings.bundleVersion = File.ReadAllText("version.txt").Trim();
+            PlayerSettings.SplashScreen.show = false;
+            // Mono like Windows (needs Unity's "Linux Build Support (Mono)" module)
+            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            {
+                scenes = new[] { ScenePath },
+                locationPathName = LinuxOutput,
+                target = BuildTarget.StandaloneLinux64,
+                options = BuildOptions.None,
+            });
+            var ok = report.summary.result == BuildResult.Succeeded;
+            if (ok && File.Exists("steam_appid.txt")) File.Copy("steam_appid.txt", Path.Combine(Path.GetDirectoryName(LinuxOutput), "steam_appid.txt"), true);
+            Debug.Log("Ultra Puck Linux build: " + report.summary.result + " (" + report.summary.totalErrors + " errors) -> " + Path.GetFullPath(LinuxOutput));
+            if (Application.isBatchMode) EditorApplication.Exit(ok ? 0 : 1);
+        }
+
         /// <summary>Makes sure the scene, the flat material and the player settings exist (safe to run any time).</summary>
         [MenuItem("Ultra Puck/Set Up Project")]
         public static void Prepare()

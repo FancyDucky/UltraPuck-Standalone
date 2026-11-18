@@ -257,8 +257,8 @@ namespace UltraPuck.Game
             if (Chip(new Rect(w / 2f - 250f, fy, 240f, 46f), ready ? "{start} Continue" : Local.HumanCount == 0 ? "Press {join} to join" : "Press {join} when ready", ready, true, true) && ready) Continue();
             if (Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Settings", true, false, true)) Runner.OpenSettings();
 
-            Hud.LeavingBar(new Rect(w / 2 - 150, h - 74, 300, 22), Local.NobodyLeaving, "Back to the main menu");
-            Glyphs.Hint(new Rect(0, h - 44, w, 28), LobbyHint(Local, true), 15, new Color(1f, 1f, 1f, 0.6f));
+            Hud.LeavingBar(new Rect(w / 2 - 150, h - 100, 300, 22), Local.NobodyLeaving, "Back to the main menu");
+            HintLines(w, h, LobbyHint(Local, true));
         }
 
         // ------------------------------------------------------------------ the teams (this PC's join screen and the online lobby)
@@ -309,20 +309,28 @@ namespace UltraPuck.Game
             var ready = canEditBots && local.Bots != null
                 ? "{nav} Pick a bot      {side} Its team      {shape} Its symbol      {bots} Remove / add bot      {leave} Not ready"
                 : "{leave} Not ready";
-            return anyReady && !anyNot ? ready : anyNot && !anyReady ? notReady : notReady + "      ·      Ready: " + ready;
+            return anyReady && !anyNot ? ready : anyNot && !anyReady ? notReady : notReady + "\n" + "Ready:   " + ready;
+        }
+
+        /// <summary>The hint along the bottom: one line, or two (a line break in it) stacked.</summary>
+        public static void HintLines(float w, float h, string hint)
+        {
+            var lines = hint.Split('\n');
+            for (var k = 0; k < lines.Length; k++)
+                Glyphs.Hint(new Rect(0, h - 44 - (lines.Length - 1 - k) * 26f, w, 26), lines[k], 15, new Color(1f, 1f, 1f, 0.6f));
         }
 
         /// <summary>The two teams side by side, between <paramref name="top"/> and <paramref name="bottom"/>.</summary>
         public static void TeamsView(float w, float top, float bottom, List<Tile> tiles, bool canJoin, float appear)
         {
-            const float gap = 36f;
+            const float gap = 64f;
             var pw = Mathf.Min(500f, (w - 80f - gap) / 2f);
             var red = new List<Tile>();
             var blue = new List<Tile>();
             foreach (var t in tiles) (t.Team == 1 ? blue : red).Add(t);
             TeamPanel(new Rect(w / 2f - gap / 2f - pw, top, pw, bottom - top), 0, red, canJoin);
             TeamPanel(new Rect(w / 2f + gap / 2f, top, pw, bottom - top), 1, blue, canJoin);
-            Ui.Label(new Rect(w / 2f - 40f, top + 6f, 80f, 40f), "VS", Ui.Font(22, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f * appear));
+            Ui.Label(new Rect(w / 2f - gap / 2f, top + 7f, gap, 40f), "VS", Ui.Font(20, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f * appear));
         }
 
         private static void TeamPanel(Rect r, int team, List<Tile> tiles, bool canJoin)

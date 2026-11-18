@@ -1,5 +1,5 @@
-# Builds Ultra Puck, packs it as dist/UltraPuck-Windows.zip (an "UltraPuck" folder with the game and a read-me),
-# and publishes a GitHub release. Every copy of the game checks for the newest release when it starts and updates
+# Builds Ultra Puck, packs it as dist/UltraPuck-Windows.zip (an "UltraPuck" folder with the game and a read-me)
+# and dist/UltraPuck-Linux.tar.gz (the Linux / Steam Deck version), and publishes a GitHub release. Every copy of the game checks for the newest release when it starts and updates
 # itself, so publishing is all it takes to update everyone.
 #
 #   powershell -File Tools/release.ps1 -Bump -Notes "What changed"   (0.1.0 -> 0.1.1, build, publish)
@@ -25,6 +25,9 @@ Write-Host "Ultra Puck $version"
 $log = Join-Path $root 'build.log'
 $p = Start-Process -FilePath $unity -ArgumentList @('-batchmode', '-quit', '-projectPath', "`"$root`"", '-executeMethod', 'UltraPuck.Editor.BuildScript.BuildWindows', '-logFile', "`"$log`"") -Wait -PassThru
 if ($p.ExitCode -ne 0) { throw "The build failed (exit $($p.ExitCode)); see build.log" }
+$linuxLog = Join-Path $root 'build-linux.log'
+$p = Start-Process -FilePath $unity -ArgumentList @('-batchmode', '-quit', '-projectPath', "`"$root`"", '-executeMethod', 'UltraPuck.Editor.BuildScript.BuildLinux', '-logFile', "`"$linuxLog`"") -Wait -PassThru
+if ($p.ExitCode -ne 0) { throw "The Linux build failed (exit $($p.ExitCode)); see build-linux.log" }
 
 # pack: an UltraPuck folder with the game and a read-me
 $dist = Join-Path $root 'dist'
@@ -56,9 +59,12 @@ $zip = Join-Path $dist 'UltraPuck-Windows.zip'
 Compress-Archive -Path $folder -DestinationPath $zip -CompressionLevel Optimal
 [IO.File]::WriteAllText((Join-Path $dist 'version.txt'), $version)
 Write-Host "Made $zip ($([math]::Round((Get-Item $zip).Length / 1MB, 1)) MB)"
+python -I (Join-Path $PSScriptRoot 'pack-linux.py')
+if ($LASTEXITCODE -ne 0) { throw "Packing the Linux build failed" }
+$tar = Join-Path $dist 'UltraPuck-Linux.tar.gz'
 
 if ($NoPublish) { return }
 if ($Notes -eq '') { $Notes = "Ultra Puck $version" }
-gh release create "v$version" $zip (Join-Path $dist 'version.txt') --repo $repo --title "Ultra Puck $version" --notes $Notes
+gh release create "v$version" $zip $tar (Join-Path $dist 'version.txt') --repo $repo --title "Ultra Puck $version" --notes $Notes
 if ($LASTEXITCODE -ne 0) { throw "Publishing the release failed" }
 Write-Host "Published https://github.com/$repo/releases/tag/v$version"

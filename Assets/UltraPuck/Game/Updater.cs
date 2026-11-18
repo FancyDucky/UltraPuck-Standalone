@@ -40,6 +40,8 @@ namespace UltraPuck.Game
         {
             Debug.Log("Ultra Puck version " + Current);
             if (Application.isEditor || Environment.GetEnvironmentVariable("ULTRAPUCK_NOUPDATE") == "1") return;
+            // the download is the Windows game: on Linux (the Steam Deck) a new version is installed by hand for now
+            if (Application.platform != RuntimePlatform.WindowsPlayer) { Debug.Log("Ultra Puck: auto-update is Windows only"); return; }
             if (!Settings.AutoUpdate) { Debug.Log("Ultra Puck: auto-update is off (Settings > Gameplay)"); return; }
             foreach (var a in Environment.GetCommandLineArgs()) if (a == "-justupdated") return; // don't loop
             StartCoroutine(Check());

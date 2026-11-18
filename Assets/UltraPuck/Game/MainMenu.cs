@@ -66,6 +66,9 @@ namespace UltraPuck.Game
             _focus = 0; _focusY = -1f; _optionsAt = Time.unscaledTime;
         }
 
+        /// <summary>Open or close the online lobby's options (for the screenshots).</summary>
+        public void ShowOptions(bool open) { OpenOptions(open); }
+
         private void InviteFriends()
         {
             if (SteamNet.OverlayWorks) { SteamNet.Invite(); return; }
@@ -253,7 +256,7 @@ namespace UltraPuck.Game
             var appear = Ui.EaseOut(t / 0.3f);
             PlayScreens.Title(w, "PLAYERS", Subtitle(), appear);
             var info = Status();
-            if (!string.IsNullOrEmpty(info)) Ui.Label(new Rect(40f, 92f, w - 80f, 24f), info, Ui.Font(15, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.45f * appear));
+            if (!string.IsNullOrEmpty(info)) Ui.Label(new Rect(40f, 110f, w - 80f, 24f), info, Ui.Font(15, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.45f * appear));
 
             var tiles = new List<PlayScreens.Tile>();
             if (s != null)
@@ -273,7 +276,7 @@ namespace UltraPuck.Game
                 if (s.IsHost) PlayScreens.MarkCursors(tiles, Local);
             }
             var canJoin = s != null && s.Current != NetSession.Stage.Connecting && Local.Slots.Count < LocalPlayers.MaxPlayers;
-            PlayScreens.TeamsView(w, 124f + (1f - appear) * 30f, h - 150f, tiles, canJoin, appear);
+            PlayScreens.TeamsView(w, 142f + (1f - appear) * 30f, h - 150f, tiles, canJoin, appear);
 
             // what happens next: start (host), or waiting; and the options
             var fy = h - 128f;
@@ -296,8 +299,8 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(w / 2f - 286f, fy - 82f, 572f, 66f), Message, WrapStyle(), Color.white);
             }
 
-            Hud.LeavingBar(new Rect(w / 2 - 150f, h - 74f, 300f, 22f), Local.NobodyLeaving, "Leaving the game");
-            Glyphs.Hint(new Rect(0f, h - 44f, w, 28f), PlayScreens.LobbyHint(Local, s != null && s.IsHost), 15, new Color(1f, 1f, 1f, 0.6f));
+            Hud.LeavingBar(new Rect(w / 2 - 150f, h - 100f, 300f, 22f), Local.NobodyLeaving, "Leaving the game");
+            PlayScreens.HintLines(w, h, PlayScreens.LobbyHint(Local, s != null && s.IsHost));
 
             if (OptionsOpen) OptionsPanel(w, h);
         }

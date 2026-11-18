@@ -121,7 +121,8 @@ namespace UltraPuck.Game
             _ice = new IceViews(_entities);
             SetUpCamera();
             _mainMenu.Show(MainMenu.Page.Main);
-            if (_local.AddDemoPlayers() > 0) StartMatch(System.Environment.GetEnvironmentVariable("ULTRAPUCK_FREEPLAY") == "1");
+            if (ShotDir != null) StartCoroutine(Shots());
+            else if (_local.AddDemoPlayers() > 0) StartMatch(System.Environment.GetEnvironmentVariable("ULTRAPUCK_FREEPLAY") == "1");
             else if (System.Environment.GetEnvironmentVariable("ULTRAPUCK_MENUTEST") != null)
             {
                 // ULTRAPUCK_MENUTEST=pause or camera: open that screen over free play, for recording it
@@ -142,6 +143,105 @@ namespace UltraPuck.Game
         }
 
         private void LogDevicesLater() { LogDevices("after 3 s"); }
+
+        // ------------------------------------------------------------------ screenshots (for checking screens without playing)
+
+        /// <summary>ULTRAPUCK_SHOTS=folder: set up each screen worth checking, save a picture of it there, then quit.</summary>
+        private static readonly string ShotDir = System.Environment.GetEnvironmentVariable("ULTRAPUCK_SHOTS");
+
+        private System.Collections.IEnumerator Shots()
+        {
+            Directory.CreateDirectory(ShotDir);
+            var only = System.Environment.GetEnvironmentVariable("ULTRAPUCK_SHOTS_ONLY");
+            System.Func<string, bool> want = n => string.IsNullOrEmpty(only) || only.Contains(n);
+            yield return new WaitForSecondsRealtime(1f);
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+
+            if (want("players"))
+            {
+                // this PC's players screen: you (ready, working on a bot), a second person not ready yet, two bots
+                GoLocalLobby();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Colour = 0, Symbol = 0, Name = "FancyDuck" });
+                _local.Slots.Add(new LocalPlayers.Slot { Colour = 1, Symbol = 1, Name = "P2" });
+                _local.AddBot(); _local.AddBot();
+                _local.Slots[0].Ready = true; _local.Slots[0].Cursor = 1;
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("players");
+                _local.Slots[1].Ready = true;
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield return Shot("players-all-ready");
+                _local.UnreadyAll();
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield return Shot("players-not-ready");
+                GoMainMenu();
+            }
+
+            if (want("online"))
+            {
+                // hosting (on this PC's network, no Steam): you ready, two bots; then the options panel
+                HostIp();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Colour = 0, Symbol = 2, Name = "FancyDuck", Ready = true, Cursor = 0 });
+                yield return new WaitForSecondsRealtime(0.3f);
+                if (_session != null) _session.Bots = 2;
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("online");
+                _mainMenu.ShowOptions(true);
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("online-options");
+                _mainMenu.ShowOptions(false);
+                LeaveOnline(null);
+                GoMainMenu();
+            }
+
+            if (want("ripple"))
+            {
+                // the card soaking into a player: the ripple a few moments in
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Demo = true });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(1.5f);
+                _cardScreen.OnAbsorbed(0, new Color(0.56f, 0.83f, 0.96f));
+                yield return new WaitForSecondsRealtime(0.15f);
+                yield return Shot("ripple-1");
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield return Shot("ripple-2");
+                yield return new WaitForSecondsRealtime(0.3f);
+                yield return Shot("ripple-3");
+                GoMainMenu();
+            }
+
+            if (want("replay"))
+            {
+                // a goal in a match with replays on, during the replay (the skip votes in the corner)
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                _sim.T.Replays = true;
+                _sim.T.CelebrateTime = Fix.FromInt(11);
+                yield return new WaitForSecondsRealtime(4f);
+                var g = _map.Goals.Find(x => x.Team == 1);
+                _state.PuckPos = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
+                _state.PuckVel = FixVec2.Zero;
+                _state.Carrier = -1;
+                yield return new WaitForSecondsRealtime(3f);
+                yield return Shot("replay");
+                GoMainMenu();
+            }
+
+            Debug.Log("Ultra Puck: screenshots done in " + ShotDir);
+            Application.Quit();
+        }
+
+        private System.Collections.IEnumerator Shot(string name)
+        {
+            yield return new WaitForEndOfFrame();
+            ScreenCapture.CaptureScreenshot(Path.Combine(ShotDir, name + ".png"));
+            yield return null;
+            yield return null;
+        }
 
         /// <summary>The controllers the game can see, in the log (for working out controller problems).</summary>
         private static void LogDevices(string when)

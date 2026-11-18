@@ -62,9 +62,15 @@ Shader "UltraPuck/Ripple"
                 fixed4 col = tex2D(_RippleGrab, uv);
                 col.r = tex2D(_RippleGrab, uv + split).r;
                 col.b = tex2D(_RippleGrab, uv - split).b;
-                // light catches the crests, a hint of the card's colour in it
-                col.rgb += lerp(float3(1, 1, 1), _Tint.rgb, 0.45) * max(0, slope) * 0.22;
-                col.rgb -= max(0, -slope) * 0.06;
+                // light catches the crests and the troughs go dark, so the rings show even on a plain floor (bending
+                // a flat colour shows nothing); a touch of the card's colour in the light, split at the edges like
+                // the bending
+                float3 light = lerp(float3(1, 1, 1), _Tint.rgb, 0.5);
+                float lit = max(0, slope);
+                col.rgb += light * pow(lit, 1.5) * 0.42;
+                col.r += pow(max(0, cos(phase + 0.5) * env), 1.5) * 0.08 * _Aberration;
+                col.b += pow(max(0, cos(phase - 0.5) * env), 1.5) * 0.08 * _Aberration;
+                col.rgb *= 1 - max(0, -slope) * 0.28;
                 col.a = 1;
                 return col;
             }
