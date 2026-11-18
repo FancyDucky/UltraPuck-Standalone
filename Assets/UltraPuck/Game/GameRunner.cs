@@ -94,6 +94,7 @@ namespace UltraPuck.Game
             SteamNet.OnFailed = why => _mainMenu.Message = why;
 
             _cardScreen.Local = _local;
+            StartCoroutine(_cardScreen.PreloadArt(_cards)); // every card picture loaded before the first pick
             _cardScreen.PlayerOnScreen = i => i >= 0 && i < _players.Count && _players[i].Root != null ? _cam.WorldToScreenPoint(_players[i].Root.transform.position) : (Vector3?)null;
             _cardScreen.OnAbsorbed = (i, colour) =>
             {
@@ -780,17 +781,51 @@ namespace UltraPuck.Game
             var ahead = s.Advantage;
             if (ahead > 1.5f) _onlineAcc -= Time.unscaledDeltaTime * Mathf.Min(0.25f, (ahead - 1.5f) * 0.04f);
             var steps = 0;
+            var simClock = System.Diagnostics.Stopwatch.StartNew();
             while (_onlineAcc >= dt && steps < 12)
             {
                 var inputs = _menus.IsOpen ? new PlayerInput[_local.Slots.Count] : _local.Sample(_sim, _state);
-                if (!s.Step(inputs)) { _onlineAcc = Mathf.Min(_onlineAcc, dt); break; } // waiting for the others
+                if (!s.Step(inputs))
+                {
+                    // waiting for the others: keep the time owed (up to a quarter of a second) so we catch up when their
+                    // controls arrive, instead of staying behind for good (which slows everyone else down to match)
+                    _onlineAcc = Mathf.Min(_onlineAcc, 0.25f);
+                    _netStalls++;
+                    break;
+                }
                 _onlineAcc -= dt;
                 steps++;
             }
+            NetStats((float)simClock.Elapsed.TotalMilliseconds);
             _state = match.State;
             Recorder.Record(_state);
             if (ReplayFrame(false)) return;
             Show(match.Previous, match.State, Mathf.Clamp01(_onlineAcc / dt));
+        }
+
+        // network stats, written to the log every 10 s during an online match (for working out lag)
+        private int _netStalls, _netFrames, _netRewinds;
+        private float _netStatsAt, _netSimMs, _netWorstFrame;
+
+        private void NetStats(float simMs)
+        {
+            _netFrames++;
+            _netSimMs += simMs;
+            _netWorstFrame = Mathf.Max(_netWorstFrame, Time.unscaledDeltaTime);
+            if (Time.unscaledTime - _netStatsAt < 10f) return;
+            var s = _session;
+            var m = s != null ? s.Match : null;
+            if (m != null && _netStatsAt > 0f)
+            {
+                var secs = Time.unscaledTime - _netStatsAt;
+                Debug.Log("Ultra Puck net: " + s.Seats.Count + " players, ping " + Mathf.RoundToInt(s.Ping * 1000f) + " ms, ahead " + s.Advantage.ToString("0.0") +
+                    " ticks, waited " + _netStalls + " times, rewinds " + (m.Rewinds - _netRewinds) + " (longest " + m.LongestRewind + " ticks), " +
+                    Mathf.RoundToInt(_netFrames / secs) + " fps (worst frame " + Mathf.RoundToInt(_netWorstFrame * 1000f) + " ms), game " +
+                    (_netSimMs / Mathf.Max(1, _netFrames)).ToString("0.00") + " ms a frame, confirmed " + (m.Tick - m.Confirmed) + " ticks back");
+            }
+            _netStatsAt = Time.unscaledTime;
+            _netStalls = 0; _netFrames = 0; _netSimMs = 0f; _netWorstFrame = 0f;
+            if (m != null) { _netRewinds = m.Rewinds; m.LongestRewind = 0; }
         }
 
         private string OnlineBanner()

@@ -1006,6 +1006,20 @@ namespace UltraPuck.Game
             return m;
         }
 
+        /// <summary>
+        /// Load every card's picture ahead of time, one a frame, so a card pick never stops to read and decode one
+        /// (a big picture takes a moment, and online that moment makes everyone else wait).
+        /// </summary>
+        public System.Collections.IEnumerator PreloadArt(CardLibrary cards)
+        {
+            if (cards == null) yield break;
+            foreach (var c in cards.Cards)
+            {
+                if (c.Art != null && !_art.ContainsKey(c.Art)) Art(c.Art);
+                yield return null;
+            }
+        }
+
         public Texture2D Art(string id)
         {
             Texture2D tex;
@@ -1016,8 +1030,10 @@ namespace UltraPuck.Game
             {
                 var path = Path.Combine(dir, (id ?? "") + ext);
                 if (!File.Exists(path)) continue;
+                var clock = System.Diagnostics.Stopwatch.StartNew();
                 tex = new Texture2D(2, 2, TextureFormat.RGBA32, true) { anisoLevel = 4, filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Clamp };
                 tex.LoadImage(File.ReadAllBytes(path));
+                Debug.Log("Ultra Puck: card art " + id + " (" + tex.width + "x" + tex.height + ") loaded in " + clock.ElapsedMilliseconds + " ms");
                 break;
             }
             if (tex == null) tex = Texture2D.grayTexture;

@@ -85,6 +85,8 @@ namespace UltraPuck.Tests
             }
             Assert.GreaterOrEqual(host.Match.Confirmed, settle);
             Assert.GreaterOrEqual(client.Match.Confirmed, settle);
+            // corrections are gathered for a few ticks before the replay runs: play those so it has
+            for (var k = 0; k <= Rollback.RewindEvery; k++) { tickNet(); host.Step(new[] { default(PlayerInput) }); client.Step(new[] { default(PlayerInput) }); }
             var a = host.Match.SavedAt(settle);
             var b = client.Match.SavedAt(settle);
             Assert.IsNotNull(a); Assert.IsNotNull(b);
@@ -134,6 +136,8 @@ namespace UltraPuck.Tests
                 tickNet();
                 foreach (var s in all) s.Step(new[] { default(PlayerInput), default(PlayerInput) });
             }
+            // corrections are gathered for a few ticks before the replay runs: play those so it has
+            for (var k = 0; k <= Rollback.RewindEvery; k++) { tickNet(); foreach (var s in all) s.Step(new[] { default(PlayerInput), default(PlayerInput) }); }
             var h = host.Match.SavedAt(settle).Checksum();
             Assert.AreEqual(h, c1.Match.SavedAt(settle).Checksum(), "client 1 matches the host");
             Assert.AreEqual(h, c2.Match.SavedAt(settle).Checksum(), "client 2 (whose controls go through the host) matches too");

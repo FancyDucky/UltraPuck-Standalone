@@ -582,7 +582,7 @@ namespace UltraPuck.Core
             if (FirstWallHit(from, at) < Fix.One) return false;
             var r = T.PuckRadius + WallHalf;
             var r2 = r * r;
-            foreach (var seg in Map.Segments) if ((at - Closest(seg, at)).SqrLength < r2) return false;
+            foreach (var seg in Map.Segments) if (!seg.FarFrom(at, r) && (at - Closest(seg, at)).SqrLength < r2) return false;
             return true;
         }
 
@@ -983,7 +983,7 @@ namespace UltraPuck.Core
                 sh.Pos += sh.Vel * sub;
                 var gone = FirstWallHit(from, sh.Pos) < Fix.One || !Map.Inside(sh.Pos);
                 var sr = T.ShotRadius + WallHalf;
-                foreach (var w in Map.Segments) if (!gone && (sh.Pos - Closest(w, sh.Pos)).SqrLength < sr * sr) gone = true;
+                foreach (var w in Map.Segments) if (!gone && !w.FarFrom(sh.Pos, sr) && (sh.Pos - Closest(w, sh.Pos)).SqrLength < sr * sr) gone = true;
                 foreach (var py in s.Pylons)
                 {
                     var r = T.PylonRadius + T.ShotRadius;
@@ -1165,6 +1165,7 @@ namespace UltraPuck.Core
             for (var pass = 0; pass < 2; pass++)
                 for (var k = 0; k < segs.Count; k++)
                 {
+                    if (segs[k].FarFrom(pos, r)) continue; // nowhere near: the exact check below would skip it too
                     var c = Closest(segs[k], pos);
                     var d = pos - c;
                     if (d.SqrLength >= r * r) continue;
@@ -1201,8 +1202,11 @@ namespace UltraPuck.Core
         {
             var best = Fix.One;
             var r = q - p;
+            var lo = new FixVec2(Fix.Min(p.X, q.X), Fix.Min(p.Y, q.Y));
+            var hi = new FixVec2(Fix.Max(p.X, q.X), Fix.Max(p.Y, q.Y));
             foreach (var seg in Map.Segments)
             {
+                if (seg.Max.X < lo.X || seg.Min.X > hi.X || seg.Max.Y < lo.Y || seg.Min.Y > hi.Y) continue; // boxes apart: can't cross
                 var sv = seg.B - seg.A;
                 var denom = FixVec2.Cross(r, sv);
                 if (denom.Raw == 0) continue;

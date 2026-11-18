@@ -16,8 +16,15 @@ namespace UltraPuck.Core.Net
     {
         /// <summary>Ticks of history kept (about 2 s at 120 a second); more than the furthest we ever rewind.</summary>
         public const int Ring = 256;
-        /// <summary>How far ahead of the slowest player's confirmed controls we may run before waiting (0.3 s).</summary>
-        public const int MaxPrediction = 36;
+        /// <summary>How far ahead of the slowest player's confirmed controls we may run before waiting (0.4 s).</summary>
+        public const int MaxPrediction = 48;
+        /// <summary>
+        /// Rewind at most this often (ticks). With several players, late controls arrive nearly every tick; replaying
+        /// for each one costs the game many times over (too much for a Steam Deck), so corrections are gathered and
+        /// done together a few ticks later. It changes nothing about the game, only when this PC shows the fix.
+        /// </summary>
+        public const int RewindEvery = 4;
+        private int _lastRewind = int.MinValue / 2;
 
         public readonly Simulation Sim;
         public readonly int Players;
@@ -117,15 +124,17 @@ namespace UltraPuck.Core.Net
         /// <summary>Simulate one tick (first replaying anything a late input showed we got wrong).</summary>
         public void Advance()
         {
-            if (_rewindTo < _tick)
+            // gather corrections: rewind now only if it's been a few ticks, or the mistake is getting old
+            if (_rewindTo < _tick && (_tick - _lastRewind >= RewindEvery || _tick - _rewindTo >= Ring / 2))
             {
+                _lastRewind = _tick;
                 var from = Math.Max(_rewindTo, _tick - Ring + 1);
                 Rewinds++;
                 LongestRewind = Math.Max(LongestRewind, _tick - from);
                 _state = _saved[from & (Ring - 1)].Clone();
                 for (var t = from; t < _tick; t++) Simulate(t);
+                _rewindTo = int.MaxValue;
             }
-            _rewindTo = int.MaxValue;
             _prev = _state.Clone();
             Simulate(_tick);
             _tick++;

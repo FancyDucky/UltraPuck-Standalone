@@ -12,12 +12,27 @@ namespace UltraPuck.Core
     public struct WallSegment
     {
         public FixVec2 A, B, Side;
+        /// <summary>The box round the wall's line, for skipping walls that are nowhere near (much faster on big maps).</summary>
+        public FixVec2 Min, Max;
 
         public WallSegment(FixVec2 a, FixVec2 b)
         {
             var ab = b - a;
             Side = new FixVec2(-ab.Y, ab.X).Normalized;
             if (Before(b, a)) { A = b; B = a; } else { A = a; B = b; }
+            Min = new FixVec2(Fix.Min(a.X, b.X), Fix.Min(a.Y, b.Y));
+            Max = new FixVec2(Fix.Max(a.X, b.X), Fix.Max(a.Y, b.Y));
+        }
+
+        /// <summary>
+        /// Is <paramref name="p"/> further than <paramref name="r"/> from the wall's box along x or y? Then it's
+        /// certainly further than r from the wall itself, and the exact (slower) check would say so too.
+        /// </summary>
+        public bool FarFrom(FixVec2 p, Fix r)
+        {
+            // a hair of slack: the nearest point is worked out from the wall's middle and can round a step outside the box
+            r += Fix.FromRaw(8);
+            return p.X < Min.X - r || p.X > Max.X + r || p.Y < Min.Y - r || p.Y > Max.Y + r;
         }
 
         /// <summary>Order by distance from the middle line, then height, then side: the same for a point and its mirror.</summary>
@@ -210,8 +225,11 @@ namespace UltraPuck.Core
         public bool Blocked(FixVec2 a, FixVec2 b)
         {
             var d = b - a;
+            var lo = new FixVec2(Fix.Min(a.X, b.X), Fix.Min(a.Y, b.Y));
+            var hi = new FixVec2(Fix.Max(a.X, b.X), Fix.Max(a.Y, b.Y));
             foreach (var w in Segments)
             {
+                if (w.Max.X < lo.X || w.Min.X > hi.X || w.Max.Y < lo.Y || w.Min.Y > hi.Y) continue; // boxes apart: can't cross
                 var e = w.B - w.A;
                 var den = FixVec2.Cross(d, e);
                 if (den.Raw == 0) continue;
