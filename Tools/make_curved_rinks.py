@@ -76,7 +76,7 @@ def thin(route, step=1.5):
 # ------------------------------------------------------------------ S Rink
 
 def s_rink():
-    r, h = 8.0, 5.5            # centre line radius of each half of the S, half the corridor width
+    r, h = 13.5, 11.0          # centre line radius of each half of the S, half the corridor width (22 wide)
     steps = 54                 # 5 degrees a step
     centre = []                # (point, direction) down the middle, from one tip to the other
     for k in range(steps + 1):  # top half: centre (0, r), from 0 round anticlockwise to 270 degrees
@@ -117,7 +117,7 @@ def s_rink():
 # ------------------------------------------------------------------ U Rink
 
 def u_rink():
-    w, gap = 12.0, 6.0         # corridor width, the gap between the arms
+    w, gap = 24.0, 6.0         # corridor width, the gap between the arms
     inner, outer = gap / 2, gap / 2 + w
     cx, end = -6.0, 21.0       # the bend's centre, the end walls of the arms
     arm = inner + w / 2        # the middle of each arm, above and below the centre line

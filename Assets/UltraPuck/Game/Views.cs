@@ -599,12 +599,16 @@ namespace UltraPuck.Game
             _bolts.Add(b);
         }
 
-        /// <summary>The puck going in: a flash, a ring, and a shower of sparks in the scoring team's colour.</summary>
+        /// <summary>
+        /// The puck going in: a shockwave that bends the whole rink around the goal (the card ripple's water, much
+        /// stronger, tinted the scoring team's colour), a quicker one inside it, sparks and lightning.
+        /// </summary>
         public void Explosion(Vector2 at, Color colour)
         {
-            Ring(at, 1f, Color.white, 3.2f, 0.45f);
-            Ring(at, 1f, colour, 5.5f, 0.7f);
-            Sparks(at, 1f, colour, 40);
+            Ripple(at, colour, 11f, 1.3f, 0.06f);
+            Ripple(at, Color.white, 5f, 0.6f, 0.045f);
+            Sparks(at, 1f, colour, 50);
+            Sparks(at, 0.6f, Color.white, 16);
             Lightning(at, 1f, colour);
         }
 
@@ -642,14 +646,14 @@ namespace UltraPuck.Game
         }
 
         // water ripples: a quad that bends the picture behind it (shader UltraPuck/Ripple)
-        private sealed class Wave { public GameObject Go; public MeshRenderer Renderer; public float Age, Life; public Color Colour; }
+        private sealed class Wave { public GameObject Go; public MeshRenderer Renderer; public float Age, Life, Strength; public Color Colour; }
         private readonly List<Wave> _waves = new List<Wave>(), _spareWaves = new List<Wave>();
         private static Material _rippleMat;
         private static Mesh _quad;
         private readonly MaterialPropertyBlock _block = new MaterialPropertyBlock();
 
         /// <summary>A water ripple <paramref name="size"/> units across (radius) that spreads and settles over <paramref name="life"/> seconds.</summary>
-        public void Ripple(Vector2 at, Color colour, float size, float life)
+        public void Ripple(Vector2 at, Color colour, float size, float life, float strength = 0.022f)
         {
             if (_rippleMat == null)
             {
@@ -684,6 +688,7 @@ namespace UltraPuck.Game
             w.Age = 0f;
             w.Life = life;
             w.Colour = colour;
+            w.Strength = strength;
             _waves.Add(w);
             StepWave(w);
         }
@@ -692,7 +697,7 @@ namespace UltraPuck.Game
         {
             _block.Clear();
             _block.SetFloat("_Age", Mathf.Clamp01(w.Age / w.Life));
-            _block.SetFloat("_Strength", 0.022f);
+            _block.SetFloat("_Strength", w.Strength);
             _block.SetColor("_Tint", w.Colour);
             w.Renderer.SetPropertyBlock(_block);
         }

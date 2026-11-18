@@ -95,6 +95,7 @@ namespace UltraPuck.Game
 
             _cardScreen.Local = _local;
             StartCoroutine(_cardScreen.PreloadArt(_cards)); // every card picture loaded before the first pick
+            StartCoroutine(WarmPreviews()); // and every rink's picture for the rink screen
             _cardScreen.PlayerOnScreen = i => i >= 0 && i < _players.Count && _players[i].Root != null ? _cam.WorldToScreenPoint(_players[i].Root.transform.position) : (Vector3?)null;
             _cardScreen.OnAbsorbed = (i, colour) =>
             {
@@ -267,6 +268,26 @@ namespace UltraPuck.Game
                 yield return Shot("countdown-3");
                 yield return new WaitForSecondsRealtime(1.7f);
                 yield return Shot("countdown-1");
+                GoMainMenu();
+            }
+
+            if (want("goal"))
+            {
+                // the puck put in the blue net: the explosion a moment in, and a little later
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(3.5f);
+                var g = _map.Goals.Find(x => x.Team == 1);
+                _state.Carrier = -1;
+                _state.PuckPos = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
+                _state.PuckVel = FixVec2.Zero;
+                yield return new WaitForSecondsRealtime(0.18f);
+                yield return Shot("goal-1");
+                yield return new WaitForSecondsRealtime(0.25f);
+                yield return Shot("goal-2");
                 GoMainMenu();
             }
 
@@ -941,31 +962,71 @@ namespace UltraPuck.Game
             var off = new Vector2((W - (max.x - min.x) * scale) / 2f, (H - (max.y - min.y) * scale) / 2f);
             var outline = new List<Vector2>();
             foreach (var p in map.WallLines[0]) outline.Add(V.Of(p));
-            var segs = new List<Vector2[]>();
-            foreach (var sg in map.Segments) segs.Add(new[] { V.Of(sg.A), V.Of(sg.B) });
             var half = _matchSim.T.WallThickness.ToFloat() / 2f;
             var px = new Color32[W * H];
+            Color32 floor = Palette.Floor, wall = new Color(0.62f, 0.62f, 0.64f);
+            System.Func<float, int> toX = wx => Mathf.RoundToInt((wx - min.x) * scale + off.x);
+            System.Func<float, int> toY = wy => Mathf.RoundToInt((wy - min.y) * scale + off.y);
+
+            // the floor, a row at a time: where the row crosses the outline, fill between pairs of crossings
+            var xs = new List<float>();
             for (var y = 0; y < H; y++)
-                for (var x = 0; x < W; x++)
+            {
+                var wy = (y + 0.5f - off.y) / scale + min.y;
+                xs.Clear();
+                for (int e = 0, f = outline.Count - 1; e < outline.Count; f = e++)
                 {
-                    var p = new Vector2((x + 0.5f - off.x) / scale + min.x, (y + 0.5f - off.y) / scale + min.y);
-                    Color c = Color.clear;
-                    if (InsidePoly(outline, p)) c = Palette.Floor;
-                    foreach (var g in map.Goals)
-                        if (p.x >= g.Min.X.ToFloat() && p.x <= g.Max.X.ToFloat() && p.y >= g.Min.Y.ToFloat() && p.y <= g.Max.Y.ToFloat()) c = Palette.Goal(g.Team);
-                    foreach (var sg in segs)
-                    {
-                        var ab = sg[1] - sg[0];
-                        var t = Mathf.Clamp01(Vector2.Dot(p - sg[0], ab) / Mathf.Max(1e-6f, ab.sqrMagnitude));
-                        if ((p - (sg[0] + ab * t)).sqrMagnitude <= half * half) { c = new Color(0.62f, 0.62f, 0.64f); break; }
-                    }
-                    px[y * W + x] = c;
+                    Vector2 a = outline[e], b = outline[f];
+                    if ((a.y > wy) == (b.y > wy)) continue;
+                    xs.Add(a.x + (wy - a.y) * (b.x - a.x) / (b.y - a.y));
                 }
+                xs.Sort();
+                for (var k = 0; k + 1 < xs.Count; k += 2)
+                {
+                    int x0 = Mathf.Max(0, Mathf.CeilToInt((xs[k] - min.x) * scale + off.x - 0.5f)), x1 = Mathf.Min(W - 1, Mathf.FloorToInt((xs[k + 1] - min.x) * scale + off.x - 0.5f));
+                    for (var x = x0; x <= x1; x++) px[y * W + x] = floor;
+                }
+            }
+            // the goals: their boxes
+            foreach (var g in map.Goals)
+            {
+                Color32 gc = Palette.Goal(g.Team);
+                int x0 = Mathf.Max(0, toX(g.Min.X.ToFloat())), x1 = Mathf.Min(W - 1, toX(g.Max.X.ToFloat()));
+                int y0 = Mathf.Max(0, toY(g.Min.Y.ToFloat())), y1 = Mathf.Min(H - 1, toY(g.Max.Y.ToFloat()));
+                for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) px[y * W + x] = gc;
+            }
+            // the walls: each piece paints only the pixels round it
+            foreach (var sg in map.Segments)
+            {
+                Vector2 a = V.Of(sg.A), b = V.Of(sg.B), ab = b - a;
+                var len2 = Mathf.Max(1e-6f, ab.sqrMagnitude);
+                int x0 = Mathf.Max(0, toX(Mathf.Min(a.x, b.x) - half) - 1), x1 = Mathf.Min(W - 1, toX(Mathf.Max(a.x, b.x) + half) + 1);
+                int y0 = Mathf.Max(0, toY(Mathf.Min(a.y, b.y) - half) - 1), y1 = Mathf.Min(H - 1, toY(Mathf.Max(a.y, b.y) + half) + 1);
+                for (var y = y0; y <= y1; y++)
+                    for (var x = x0; x <= x1; x++)
+                    {
+                        var p = new Vector2((x + 0.5f - off.x) / scale + min.x, (y + 0.5f - off.y) / scale + min.y);
+                        var t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / len2);
+                        if ((p - (a + ab * t)).sqrMagnitude <= half * half) px[y * W + x] = wall;
+                    }
+            }
             tex = new Texture2D(W, H, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
             tex.SetPixels32(px);
             tex.Apply();
             _previews[i] = tex;
             return tex;
+        }
+
+        /// <summary>Draws every rink's preview in the background at start, one a frame, so the rink screen opens at once.</summary>
+        private System.Collections.IEnumerator WarmPreviews()
+        {
+            for (var i = 0; i < _maps.Count; i++)
+            {
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                MapPreview(i);
+                Debug.Log("Ultra Puck: rink picture " + _mapFiles[i] + " in " + clock.ElapsedMilliseconds + " ms");
+                yield return null;
+            }
         }
 
         private static bool InsidePoly(List<Vector2> poly, Vector2 p)

@@ -425,8 +425,10 @@ namespace UltraPuck.Core
                 p.Charge = Fix.Zero;
                 // Puck Gun: brake fires it (when you don't have the puck)
                 if ((pressed & PlayerInput.ChargeBrake) != 0 && p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero) FireGun(s, i);
-                // check: a dash that knocks people back. Not while carrying the puck, and not while dazed.
-                if ((pressed & PlayerInput.ShootCheck) != 0 && p.DashCharge >= Fix.One && p.Stun <= Fix.Zero)
+                // check: a dash that knocks people back. Not while carrying the puck, and not while dazed. Holding the
+                // button keeps dashing: the next one as soon as there's a dash ready and the last one has finished.
+                var dashWanted = (pressed & PlayerInput.ShootCheck) != 0 || (input.Has(PlayerInput.ShootCheck) && p.DashTime <= Fix.Zero);
+                if (dashWanted && p.DashCharge >= Fix.One && p.Stun <= Fix.Zero)
                 {
                     p.Vel += p.Facing * (T.DashSpeed * p.Stats.DashPower);
                     p.DashCharge -= Fix.One;
