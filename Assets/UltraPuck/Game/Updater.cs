@@ -16,12 +16,16 @@ namespace UltraPuck.Game
     /// just starts as normal.
     ///
     /// Releases: https://github.com/FancyDucky/UltraPuck-Standalone/releases. Each has version.txt (just the
-    /// version, like 0.1.1) and UltraPuck-Windows.zip (the game in an "UltraPuck" folder). Tools/release.ps1 makes them.
+    /// version, like 0.1.1), UltraPuck-Windows.zip and UltraPuck-Linux.tar.gz (the game in an "UltraPuck" folder).
+    /// Tools/release.ps1 makes them. Windows hands over to a PowerShell script, Linux (the Steam Deck) to a shell one.
     /// </summary>
     internal sealed class Updater : MonoBehaviour
     {
         private const string Repo = "https://github.com/FancyDucky/UltraPuck-Standalone";
-        private const string ZipName = "UltraPuck-Windows.zip";
+
+        private static bool Linux { get { return Application.platform == RuntimePlatform.LinuxPlayer; } }
+        /// <summary>The download for this kind of PC.</summary>
+        private static string ZipName { get { return Linux ? "UltraPuck-Linux.tar.gz" : "UltraPuck-Windows.zip"; } }
 
         /// <summary>True while an update is under way: the rest of the game ignores input.</summary>
         public static bool Busy { get; private set; }
@@ -40,8 +44,7 @@ namespace UltraPuck.Game
         {
             Debug.Log("Ultra Puck version " + Current);
             if (Application.isEditor || Environment.GetEnvironmentVariable("ULTRAPUCK_NOUPDATE") == "1") return;
-            // the download is the Windows game: on Linux (the Steam Deck) a new version is installed by hand for now
-            if (Application.platform != RuntimePlatform.WindowsPlayer) { Debug.Log("Ultra Puck: auto-update is Windows only"); return; }
+            if (Application.platform != RuntimePlatform.WindowsPlayer && !Linux) { Debug.Log("Ultra Puck: no auto-update on " + Application.platform); return; }
             if (!Settings.AutoUpdate) { Debug.Log("Ultra Puck: auto-update is off (Settings > Gameplay)"); return; }
             foreach (var a in Environment.GetCommandLineArgs()) if (a == "-justupdated") return; // don't loop
             StartCoroutine(Check());
@@ -93,7 +96,8 @@ namespace UltraPuck.Game
             try
             {
                 var unpacked = Path.Combine(work, "files");
-                ZipFile.ExtractToDirectory(zip, unpacked);
+                if (Linux) Untar(zip, unpacked);
+                else ZipFile.ExtractToDirectory(zip, unpacked);
                 source = FindGame(unpacked);
                 if (source == null) throw new IOException("the download doesn't contain the game");
             }
@@ -101,7 +105,7 @@ namespace UltraPuck.Game
 
             _detail = "Restarting...";
             yield return null;
-            try { Handover(work, source, install); }
+            try { if (Linux) HandoverLinux(work, source, install); else Handover(work, source, install); }
             catch (Exception ex) { Fail("Couldn't start the update: " + ex.Message); yield break; }
             Application.Quit();
         }
@@ -137,10 +141,59 @@ namespace UltraPuck.Game
             Process.Start(info);
         }
 
+        /// <summary>Unpacks the Linux download with the system's tar, which keeps the game file runnable.</summary>
+        private static void Untar(string archive, string into)
+        {
+            Directory.CreateDirectory(into);
+            var info = new ProcessStartInfo("tar", "-xzf \"" + archive + "\" -C \"" + into + "\"") { UseShellExecute = false, CreateNoWindow = true };
+            using (var p = Process.Start(info))
+            {
+                if (!p.WaitForExit(120000)) { p.Kill(); throw new IOException("unpacking took too long"); }
+                if (p.ExitCode != 0) throw new IOException("tar failed (" + p.ExitCode + ")");
+            }
+        }
+
+        /// <summary>
+        /// Linux: waits for the game to close, copies the new version over it, makes the game file runnable and starts
+        /// it again in its place (exec, so it stays the same process Steam started: the overlay keeps working).
+        /// Arguments: game pid, new files, game folder, game file name, a file with the command line (one per line).
+        /// </summary>
+        public const string LinuxScript =
+            "#!/bin/sh\n" +
+            "# Ultra Puck updater: waits for the game to close, copies the new version over it, starts it again.\n" +
+            "pid=\"$1\"; src=\"$2\"; dest=\"$3\"; exe=\"$4\"; argsfile=\"$5\"\n" +
+            "i=0\n" +
+            "while kill -0 \"$pid\" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.2; i=$((i+1)); done\n" +
+            "sleep 0.5\n" +
+            "cp -R \"$src/.\" \"$dest/\" || exit 1\n" +
+            "chmod +x \"$dest/$exe\"\n" +
+            "cd \"$dest\" || exit 1\n" +
+            "set --\n" +
+            "while IFS= read -r a; do [ -n \"$a\" ] && set -- \"$@\" \"$a\"; done < \"$argsfile\"\n" +
+            "exec \"./$exe\" \"$@\" -justupdated\n";
+
+        private static void HandoverLinux(string work, string source, string install)
+        {
+            string exe;
+            try { exe = Path.GetFileName(Process.GetCurrentProcess().MainModule.FileName); } catch { exe = null; }
+            if (string.IsNullOrEmpty(exe) || !File.Exists(Path.Combine(install, exe))) exe = "UltraPuck.x86_64";
+            var args = Environment.GetCommandLineArgs();
+            var lines = new System.Text.StringBuilder();
+            for (var k = 1; k < args.Length; k++) if (args[k] != "-justupdated") lines.Append(args[k].Replace("\n", " ")).Append('\n');
+            var argsFile = Path.Combine(work, "args.txt");
+            File.WriteAllText(argsFile, lines.ToString());
+            var script = Path.Combine(work, "apply.sh");
+            File.WriteAllText(script, LinuxScript);
+            var info = new ProcessStartInfo("/bin/sh",
+                "\"" + script + "\" " + Process.GetCurrentProcess().Id + " \"" + source + "\" \"" + install + "\" \"" + exe + "\" \"" + argsFile + "\"")
+            { UseShellExecute = false, CreateNoWindow = true };
+            Process.Start(info);
+        }
+
         /// <summary>The folder inside the download that holds the game (the zip has an "UltraPuck" folder).</summary>
         private static string FindGame(string root)
         {
-            if (File.Exists(Path.Combine(root, "UltraPuck.exe"))) return root;
+            if (File.Exists(Path.Combine(root, Linux ? "UltraPuck.x86_64" : "UltraPuck.exe"))) return root;
             foreach (var d in Directory.GetDirectories(root))
             {
                 var found = FindGame(d);

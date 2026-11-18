@@ -22,8 +22,8 @@ Steam Deck:
 
 Any Linux PC: run ./UltraPuck.x86_64 from this folder.
 
-The game doesn't update itself on Linux yet: download the new Linux archive when there's a new version.
-Online play needs everyone on the same version.
+The game updates itself: when a new version is out it says so, downloads it and restarts. Keep the UltraPuck
+folder somewhere you can write to (like ~/Games). Online play needs everyone on the same version.
 """
 
 executables = {'UltraPuck.x86_64'}
