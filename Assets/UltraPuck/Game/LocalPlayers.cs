@@ -27,6 +27,13 @@ namespace UltraPuck.Game
         public sealed class Slot
         {
             public InputDevice Device;
+            /// <summary>
+            /// A second device playing the same player: with shared controls, the keyboard and the first controller
+            /// are both player 1 (see <see cref="Settings.SharedControls"/>). Null otherwise.
+            /// </summary>
+            public InputDevice Extra;
+            /// <summary>The device that asked to type a name (so the keyboard types for real, a controller gets the on-screen keys).</summary>
+            public InputDevice TypingDevice;
             /// <summary>Team 0 or 1, worked out from the colours picked (see <see cref="AssignTeams"/>).</summary>
             public int Team;
             /// <summary>The team colour picked (index into <see cref="Palette.Colours"/>) and the player's symbol.</summary>
@@ -48,7 +55,9 @@ namespace UltraPuck.Game
             public int Cursor;
             /// <summary>The frame they joined on (the press that joined them mustn't also ready them).</summary>
             public int JoinedFrame;
-            public string Label { get { return Demo ? "Bot" : Device is Keyboard ? "Keyboard" : Device != null ? Device.displayName : "Disconnected"; } }
+            public string Label { get { return Demo ? "Bot" : Extra != null ? Name1(Device) + " + " + Name1(Extra) : Device != null ? Name1(Device) : "Disconnected"; } }
+            private static string Name1(InputDevice d) { return d is Keyboard ? "Keyboard" : d.displayName; }
+            public bool Has(InputDevice d) { return d != null && (Device == d || Extra == d); }
         }
 
         public readonly List<Slot> Slots = new List<Slot>();
@@ -60,7 +69,68 @@ namespace UltraPuck.Game
             return t;
         }
 
-        private Slot Find(InputDevice d) { return Slots.Find(s => s.Device == d); }
+        private Slot Find(InputDevice d) { return Slots.Find(s => s.Has(d)); }
+
+        // ------------------------------------------------------------------ shared keyboard and controller
+
+        /// <summary>
+        /// Shared controls: the keyboard and the first free controller play the first person here (player 1). A
+        /// controller plugged in later joins them; one unplugged is let go. Separate controls: nobody shares. Call
+        /// every frame (cheap).
+        /// </summary>
+        public void PairDevices()
+        {
+            foreach (var s in Slots) if (s.Extra != null && (!Settings.SharedControls || !s.Extra.added)) s.Extra = null;
+            if (!Settings.SharedControls) return;
+            var first = Slots.Find(s => !s.Demo);
+            if (first == null || first.Extra != null || first.Device == null) return;
+            var kb = Keyboard.current;
+            if (first.Device is Keyboard)
+            {
+                foreach (var g in Gamepad.all) if (Find(g) == null) { first.Extra = g; Debug.Log("Ultra Puck: " + g.displayName + " plays player 1 with the keyboard"); break; }
+            }
+            else if (first.Device is Gamepad && kb != null && Find(kb) == null)
+            {
+                first.Extra = kb;
+                Debug.Log("Ultra Puck: the keyboard plays player 1 with " + first.Device.displayName);
+            }
+        }
+
+        /// <summary>Both of a player's devices (the second may be null).</summary>
+        private static bool Any(Slot s, System.Func<Gamepad, bool> pad, System.Func<Keyboard, bool> keys)
+        {
+            return One(s.Device, pad, keys) || One(s.Extra, pad, keys);
+        }
+
+        private static bool One(InputDevice d, System.Func<Gamepad, bool> pad, System.Func<Keyboard, bool> keys)
+        {
+            var g = d as Gamepad;
+            if (g != null) return pad(g);
+            var k = d as Keyboard;
+            return k != null && keys(k);
+        }
+
+        /// <summary>Is a button held on any of this player's devices (a controller button, or a key)?</summary>
+        public bool AnyHeld(Slot s, System.Func<Gamepad, bool> pad, System.Func<Keyboard, bool> keys) { return !Blocked && Any(s, pad, keys); }
+
+        /// <summary>The device a player last pressed something on (for button pictures and typing), or their first.</summary>
+        private static InputDevice Pressed(Slot s, System.Func<Gamepad, bool> pad, System.Func<Keyboard, bool> keys)
+        {
+            if (One(s.Device, pad, keys)) return s.Device;
+            if (One(s.Extra, pad, keys)) return s.Extra;
+            return null;
+        }
+
+        private static Vector2 StickOf(Slot s) { return Vector2.ClampMagnitude(Stick(s.Device) + Stick(s.Extra), 1f); }
+
+        private static Vector2 AimOfSlot(Slot s)
+        {
+            var a = Aim(s.Device);
+            var b = Aim(s.Extra);
+            return b.sqrMagnitude > a.sqrMagnitude ? b : a;
+        }
+
+        private static bool Plugged(InputDevice d) { return d != null && d.added; }
 
         // ------------------------------------------------------------------ lobby
 
@@ -120,11 +190,13 @@ namespace UltraPuck.Game
             var dt = Time.unscaledDeltaTime;
             var nobody = 0f;
             if (Blocked) { NobodyLeaving = 0f; return; }
+            PairDevices();
+            ReorderOnJoin = true;
             foreach (var g in Gamepad.all)
             {
                 var s = Find(g);
                 if (s == null && g.buttonSouth.wasPressedThisFrame) Join(g);
-                else if (s != null) { if (!s.Typing) Hold(s, g.buttonEast.isPressed, dt); }
+                else if (s != null) { if (!s.Typing && s.Device == g) Hold(s, g.buttonEast.isPressed, dt); }
                 else if (g.buttonEast.isPressed) nobody = Mathf.Max(nobody, Held(g, dt));
                 else _nobodyHeld.Remove(g);
             }
@@ -133,23 +205,26 @@ namespace UltraPuck.Game
             {
                 var s = Find(kb);
                 if (s == null && kb.spaceKey.wasPressedThisFrame) Join(kb);
-                else if (s != null) { if (!s.Typing) Hold(s, kb.escapeKey.isPressed, dt); }
+                else if (s != null) { if (!s.Typing && s.Device == kb) Hold(s, kb.escapeKey.isPressed, dt); }
                 else if (kb.escapeKey.isPressed) nobody = Mathf.Max(nobody, Held(kb, dt));
                 else _nobodyHeld.Remove(kb);
             }
+            ReorderOnJoin = false;
             NobodyLeaving = Mathf.Clamp01(nobody / HoldToLeave);
+            PairDevices();
             BotRequest = 0;
             foreach (var s in Slots.ToArray())
             {
                 if (s.Demo || s.Typing || !Slots.Contains(s)) continue;
                 var nav = Nav(s);
-                var pad = s.Device as Gamepad;
-                var keys = s.Device as Keyboard;
-                var confirm = s.JoinedFrame != Time.frameCount && (pad != null ? pad.buttonSouth.wasPressedThisFrame : keys != null && keys.spaceKey.wasPressedThisFrame);
-                var name = pad != null ? pad.buttonNorth.wasPressedThisFrame : keys != null && keys.nKey.wasPressedThisFrame;
-                var symbol = pad != null ? pad.buttonWest.wasPressedThisFrame : keys != null && keys.mKey.wasPressedThisFrame;
-                var less = pad != null ? pad.leftShoulder.wasPressedThisFrame : keys != null && keys.minusKey.wasPressedThisFrame;
-                var more = pad != null ? pad.rightShoulder.wasPressedThisFrame : keys != null && keys.equalsKey.wasPressedThisFrame;
+                // either of the player's devices (the keyboard and a controller, when they share)
+                var confirm = s.JoinedFrame != Time.frameCount && Any(s, g => g.buttonSouth.wasPressedThisFrame, k => k.spaceKey.wasPressedThisFrame);
+                var namer = Pressed(s, g => g.buttonNorth.wasPressedThisFrame, k => k.nKey.wasPressedThisFrame);
+                var name = namer != null;
+                var symbol = Any(s, g => g.buttonWest.wasPressedThisFrame, k => k.mKey.wasPressedThisFrame);
+                var less = Any(s, g => g.leftShoulder.wasPressedThisFrame, k => k.minusKey.wasPressedThisFrame);
+                var more = Any(s, g => g.rightShoulder.wasPressedThisFrame, k => k.equalsKey.wasPressedThisFrame);
+                if (name) s.TypingDevice = namer;
                 if (!s.Ready)
                 {
                     if (nav.x != 0) { s.Colour = ((s.Colour + nav.x) % Palette.Choosable + Palette.Choosable) % Palette.Choosable; AssignTeams(); }
@@ -189,18 +264,20 @@ namespace UltraPuck.Game
         private void Hold(Slot s, bool down, float dt)
         {
             s.BackHeld = 0f;
-            var g = s.Device as Gamepad;
-            var kb = s.Device as Keyboard;
-            var pressed = g != null ? g.buttonEast.wasPressedThisFrame : kb != null && kb.escapeKey.wasPressedThisFrame;
+            var pressed = Any(s, g => g.buttonEast.wasPressedThisFrame, k => k.escapeKey.wasPressedThisFrame);
             if (!pressed) return;
             if (s.Ready) { s.Ready = false; return; } // B un-readies first
             Slots.Remove(s);
             AssignTeams();
             _nobodyHeld[s.Device] = -1000f;
+            if (s.Extra != null) _nobodyHeld[s.Extra] = -1000f;
         }
 
         /// <summary>Someone who hasn't joined held B / Escape long enough: leave the lobby.</summary>
         public bool LeaveLobbyHeld() { return NobodyLeaving >= 1f; }
+
+        /// <summary>Joining may put a newcomer ahead of others (on the players screen only: mid-game, slots are fixed to players).</summary>
+        private bool ReorderOnJoin;
 
         private bool Join(InputDevice d)
         {
@@ -210,6 +287,18 @@ namespace UltraPuck.Game
             foreach (var o in Slots) if (!o.Demo) humans++;
             s.Name = humans == 0 ? Settings.PlayerName : "P" + (Slots.Count + 1);
             Slots.Add(s);
+            // separate keyboard and controller players: the one chosen in the settings is player 1 when both join
+            var firstHuman = Slots.Find(o => !o.Demo);
+            if (ReorderOnJoin && !Settings.SharedControls && firstHuman != s && firstHuman != null)
+            {
+                var wantPad = Settings.ControllerIsPlayer1;
+                if ((d is Gamepad) == wantPad && (firstHuman.Device is Gamepad) != wantPad && firstHuman.Device != null)
+                {
+                    Slots.Remove(s);
+                    Slots.Insert(Slots.IndexOf(firstHuman), s);
+                    var n = s.Name; s.Name = firstHuman.Name; firstHuman.Name = n;
+                }
+            }
             AssignTeams();
             Debug.Log("Ultra Puck: P" + Slots.Count + " joined with " + d.displayName + " (" + d.layout + ")");
             return true;
@@ -269,12 +358,7 @@ namespace UltraPuck.Game
         {
             if (Blocked) return false;
             foreach (var s in Slots)
-            {
-                var g = s.Device as Gamepad;
-                if (g != null && g.startButton.wasPressedThisFrame) return true;
-                var kb = s.Device as Keyboard;
-                if (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)) return true;
-            }
+                if (Any(s, g => g.startButton.wasPressedThisFrame, k => k.enterKey.wasPressedThisFrame || k.numpadEnterKey.wasPressedThisFrame)) return true;
             return false;
         }
 
@@ -283,12 +367,7 @@ namespace UltraPuck.Game
         {
             if (Blocked) return false;
             foreach (var s in Slots)
-            {
-                var g = s.Device as Gamepad;
-                if (g != null && g.buttonEast.wasPressedThisFrame) return true;
-                var kb = s.Device as Keyboard;
-                if (kb != null && kb.escapeKey.wasPressedThisFrame) return true;
-            }
+                if (Any(s, g => g.buttonEast.wasPressedThisFrame, k => k.escapeKey.wasPressedThisFrame)) return true;
             return false;
         }
 
@@ -314,6 +393,7 @@ namespace UltraPuck.Game
                 if (Find(g) == null && g.buttonSouth.wasPressedThisFrame && Join(g)) joined++;
             var kb = Keyboard.current;
             if (kb != null && Find(kb) == null && kb.spaceKey.wasPressedThisFrame && Join(kb)) joined++;
+            PairDevices();
             return joined;
         }
 
@@ -322,12 +402,7 @@ namespace UltraPuck.Game
         {
             if (Blocked) return false;
             foreach (var s in Slots)
-            {
-                var g = s.Device as Gamepad;
-                if (g != null && g.startButton.wasPressedThisFrame) return true;
-                var kb = s.Device as Keyboard;
-                if (kb != null && kb.escapeKey.wasPressedThisFrame) return true;
-            }
+                if (Any(s, g => g.startButton.wasPressedThisFrame, k => k.escapeKey.wasPressedThisFrame)) return true;
             return false;
         }
 
@@ -358,7 +433,7 @@ namespace UltraPuck.Game
         public Vector2 AimOf(int slot)
         {
             if (Blocked) return Vector2.zero;
-            return slot >= 0 && slot < Slots.Count && Slots[slot].Device != null ? Aim(Slots[slot].Device) : Vector2.zero;
+            return slot >= 0 && slot < Slots.Count ? AimOfSlot(Slots[slot]) : Vector2.zero;
         }
 
         /// <summary>While picking cards: the pick a local player has confirmed on the card screen (1-based), or 0.</summary>
@@ -409,7 +484,12 @@ namespace UltraPuck.Game
         public MenuInput MenuJoined()
         {
             var m = new MenuInput();
-            foreach (var s in Slots) if (!s.Demo && s.Device != null) Merge(ref m, MenuFrom(s.Device));
+            foreach (var s in Slots)
+            {
+                if (s.Demo) continue;
+                if (s.Device != null) Merge(ref m, MenuFrom(s.Device));
+                if (s.Extra != null) Merge(ref m, MenuFrom(s.Extra));
+            }
             return m;
         }
 
@@ -427,8 +507,11 @@ namespace UltraPuck.Game
         /// <summary>Menu input from one player's own controller or keyboard only (the card screen: nobody picks for someone else).</summary>
         public MenuInput MenuFor(int slot)
         {
-            if (slot < 0 || slot >= Slots.Count || Slots[slot].Device == null) return new MenuInput();
-            return MenuFrom(Slots[slot].Device);
+            if (slot < 0 || slot >= Slots.Count) return new MenuInput();
+            var m = new MenuInput();
+            if (Slots[slot].Device != null) Merge(ref m, MenuFrom(Slots[slot].Device));
+            if (Slots[slot].Extra != null) Merge(ref m, MenuFrom(Slots[slot].Extra));
+            return m;
         }
 
         private static void Merge(ref MenuInput m, MenuInput d)
@@ -483,9 +566,9 @@ namespace UltraPuck.Game
         /// <summary>Stick / d-pad / WASD / arrows turned into single steps (one per push), for menus.</summary>
         private static Vector2Int Nav(Slot s)
         {
-            var v = Stick(s.Device);
-            var kb = s.Device as Keyboard;
-            if (kb != null) v += Aim(kb);
+            var v = StickOf(s);
+            if (s.Device is Keyboard) v += Aim(s.Device);
+            if (s.Extra is Keyboard) v += Aim(s.Extra);
             bool left = v.x < -0.6f, right = v.x > 0.6f, up = v.y > 0.6f, down = v.y < -0.6f;
             var r = new Vector2Int((left && !s.PrevLeft) ? -1 : (right && !s.PrevRight) ? 1 : 0, (up && !s.PrevUp) ? 1 : (down && !s.PrevDown) ? -1 : 0);
             s.PrevLeft = left; s.PrevRight = right; s.PrevUp = up; s.PrevDown = down;
@@ -498,7 +581,8 @@ namespace UltraPuck.Game
         public void LatchPresses()
         {
             if (Blocked) return;
-            foreach (var s in Slots) s.Latched |= Buttons(s.Device, true);
+            PairDevices();
+            foreach (var s in Slots) s.Latched |= (byte)(Buttons(s.Device, true) | Buttons(s.Extra, true));
         }
 
         /// <summary>Once per tick: everyone's controls, in slot order. <paramref name="state"/> is only read by computer players.</summary>
@@ -509,16 +593,16 @@ namespace UltraPuck.Game
             {
                 var s = Slots[i];
                 if (s.Demo) { inputs[i] = Bot.Think(sim, state, i); continue; }
-                if (s.Device == null || !s.Device.added || Blocked) continue; // unplugged, or the Steam overlay is open: stands still
-                var m = Stick(s.Device);
-                var a = Aim(s.Device);
+                if (!(Plugged(s.Device) || Plugged(s.Extra)) || Blocked) continue; // unplugged, or the Steam overlay is open: stands still
+                var m = StickOf(s);
+                var a = AimOfSlot(s);
                 inputs[i] = new PlayerInput
                 {
                     MoveX = PlayerInput.Axis(m.x),
                     MoveY = PlayerInput.Axis(m.y),
                     AimX = PlayerInput.Axis(a.x),
                     AimY = PlayerInput.Axis(a.y),
-                    Buttons = (byte)(Buttons(s.Device, false) | s.Latched),
+                    Buttons = (byte)(Buttons(s.Device, false) | Buttons(s.Extra, false) | s.Latched),
                     Pick = state != null && state.Phase == Phase.Picking && PickFor != null ? PickFor(i) : (byte)0,
                     Hover = state != null && state.Phase == Phase.Picking && HoverFor != null ? HoverFor(i) : (byte)0,
                 };

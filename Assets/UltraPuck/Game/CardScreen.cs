@@ -654,10 +654,7 @@ namespace UltraPuck.Game
             foreach (var s in Local.Slots)
             {
                 if (s.Demo) continue;
-                var g = s.Device as UnityEngine.InputSystem.Gamepad;
-                if (g != null && g.buttonEast.isPressed) held = true;
-                var kb = s.Device as UnityEngine.InputSystem.Keyboard;
-                if (kb != null && (kb.escapeKey.isPressed || kb.backspaceKey.isPressed)) held = true;
+                if (Local.AnyHeld(s, g => g.buttonEast.isPressed, k => k.escapeKey.isPressed || k.backspaceKey.isPressed)) held = true;
             }
             _cancelHeld = held ? _cancelHeld + Time.unscaledDeltaTime : 0f;
             if (CancelProgress >= 1f) EditClose(false);

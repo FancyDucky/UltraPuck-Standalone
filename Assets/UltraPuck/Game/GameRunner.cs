@@ -236,6 +236,35 @@ namespace UltraPuck.Game
                 GoMainMenu();
             }
 
+            if (want("pairing"))
+            {
+                // a virtual controller next to the keyboard: with shared controls they're both player 1; a second
+                // controller is player 2. Logged and pictured on the players screen.
+                var pad1 = UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Gamepad>("Test Controller 1");
+                var pad2 = UnityEngine.InputSystem.InputSystem.AddDevice<UnityEngine.InputSystem.Gamepad>("Test Controller 2");
+                GoLocalLobby();
+                _local.JoinDevice(kb);
+                _local.PairDevices();
+                _local.JoinDevice(pad2); // pad1 went to player 1, so this one is a new player
+                _local.PairDevices();
+                for (var k = 0; k < _local.Slots.Count; k++) Debug.Log("Ultra Puck pairing: P" + (k + 1) + " = " + _local.Slots[k].Label);
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("pairing");
+                GoMainMenu();
+                UnityEngine.InputSystem.InputSystem.RemoveDevice(pad1);
+                UnityEngine.InputSystem.InputSystem.RemoveDevice(pad2);
+            }
+
+            if (want("settings"))
+            {
+                // the Gameplay settings (the keyboard and controller options are at the top)
+                _menus.OpenSettings(false);
+                _menus.Tab = 1;
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("settings-gameplay");
+                _menus.Close();
+            }
+
             if (want("maps"))
             {
                 // every rink, whole, with bots playing on it for a few seconds

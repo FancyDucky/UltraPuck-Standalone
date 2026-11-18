@@ -116,6 +116,9 @@ namespace UltraPuck.Game
         /// <summary>Someone's typing a name on the on-screen keyboard.</summary>
         public bool Typing { get { return _typist != null; } }
 
+        /// <summary>The device a player types their name with: the one that asked (the keyboard types for real).</summary>
+        private static InputDevice Typer(LocalPlayers.Slot s) { return s.TypingDevice != null && s.Has(s.TypingDevice) ? s.TypingDevice : s.Device; }
+
         /// <summary>The name keyboard for a player (also used in the online lobby).</summary>
         public void OpenKeyboard(LocalPlayers.Slot s)
         {
@@ -126,7 +129,7 @@ namespace UltraPuck.Game
             _buffer = s.Name ?? "";
             _kx = 0; _ky = 1;
             _lower = true;
-            var kb = s.Device as Keyboard;
+            var kb = Typer(s) as Keyboard;
             if (kb != null) kb.onTextInput += OnText;
         }
 
@@ -136,7 +139,7 @@ namespace UltraPuck.Game
             var s = _typist;
             _typist = null;
             s.Typing = false;
-            var kb = s.Device as Keyboard;
+            var kb = Typer(s) as Keyboard;
             if (kb != null) kb.onTextInput -= OnText;
             if (!keep) return;
             var name = Settings.Clean(_buffer);
@@ -157,7 +160,7 @@ namespace UltraPuck.Game
         private void KeyboardTick()
         {
             if (!Local.Slots.Contains(_typist)) { CloseKeyboard(false); return; }
-            var kb = _typist.Device as Keyboard;
+            var kb = Typer(_typist) as Keyboard;
             if (kb != null)
             {
                 // a real keyboard: just type
@@ -168,7 +171,7 @@ namespace UltraPuck.Game
             }
             var slot = Local.Slots.IndexOf(_typist);
             var m = Local.MenuFor(slot);
-            var g = _typist.Device as Gamepad;
+            var g = Typer(_typist) as Gamepad;
             if (m.X != 0) _kx = (_kx + m.X + 10) % 10;
             if (m.Y != 0) _ky = (_ky - m.Y + SpecialRow + 1) % (SpecialRow + 1);
             if (g != null && g.startButton.wasPressedThisFrame) { CloseKeyboard(true); return; }
@@ -541,11 +544,11 @@ namespace UltraPuck.Game
             var caret = (Time.unscaledTime * 2f) % 2f < 1.2f ? "|" : " ";
             Ui.Label(field, _buffer + caret, Ui.Font(30, true, TextAnchor.MiddleCenter), Color.white);
 
-            var real = _typist.Device is Keyboard;
+            var real = Typer(_typist) is Keyboard;
             if (real)
             {
                 Ui.Label(new Rect(p.x, p.y + 150, pw, 40), "Type your name", Ui.Font(22, false, TextAnchor.MiddleCenter), Ui.TextDim);
-                Glyphs.Hint(new Rect(p.x, p.yMax - 50, pw, 30), "{confirm} Done      {back} Cancel", 17, new Color(1f, 1f, 1f, 0.8f), TextAnchor.MiddleCenter, _typist.Device);
+                Glyphs.Hint(new Rect(p.x, p.yMax - 50, pw, 30), "{confirm} Done      {back} Cancel", 17, new Color(1f, 1f, 1f, 0.8f), TextAnchor.MiddleCenter, Typer(_typist));
                 return;
             }
             const float kw = 58f, kh = 48f, gap = 6f;
@@ -573,7 +576,7 @@ namespace UltraPuck.Game
                 Ui.Box(r, on ? Color.white : (k == 3 ? new Color(colour.r, colour.g, colour.b, 0.5f) : new Color(1f, 1f, 1f, 0.08f)), 8f);
                 Ui.Label(r, names[k], Ui.Font(19, true, TextAnchor.MiddleCenter), on ? new Color(0.08f, 0.08f, 0.09f) : Color.white, !on);
             }
-            Glyphs.Hint(new Rect(p.x, p.yMax - 40, pw, 30), "{confirm} Type      {back} Delete      {profile} abc / ABC      {start} Done", 15, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter, _typist.Device);
+            Glyphs.Hint(new Rect(p.x, p.yMax - 40, pw, 30), "{confirm} Type      {back} Delete      {profile} abc / ABC      {start} Done", 15, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleCenter, Typer(_typist));
         }
     }
 }

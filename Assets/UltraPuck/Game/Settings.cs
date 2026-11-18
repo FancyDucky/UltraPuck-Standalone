@@ -82,6 +82,22 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("hit_fx", value ? 1 : 0); }
         }
 
+        /// <summary>
+        /// The keyboard and the first controller both play player 1 (true, the default), or are separate players.
+        /// </summary>
+        public static bool SharedControls
+        {
+            get { return PlayerPrefs.GetInt("shared_controls", 1) != 0; }
+            set { PlayerPrefs.SetInt("shared_controls", value ? 1 : 0); }
+        }
+
+        /// <summary>With separate keyboard and controller players: player 1 is the controller (true) or the keyboard.</summary>
+        public static bool ControllerIsPlayer1
+        {
+            get { return PlayerPrefs.GetInt("controller_p1", 1) != 0; }
+            set { PlayerPrefs.SetInt("controller_p1", value ? 1 : 0); }
+        }
+
         /// <summary>Check bars: shown only while recharging (false) or always (true).</summary>
         public static bool DashBarAlways
         {

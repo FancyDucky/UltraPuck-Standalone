@@ -140,6 +140,12 @@ namespace UltraPuck.Game
                         Press = () => StartTyping(Settings.PlayerName, v => Settings.PlayerName = v),
                         Hint = "Shown over your player and in online games. Leave it empty to use your Steam name.",
                     });
+                    _rows.Add(Choice("Keyboard and controller", new[] { "Both play player 1", "Separate players" }, () => Settings.SharedControls ? 0 : 1, v => Settings.SharedControls = v == 0,
+                        "Both play player 1: the keyboard and your controller move the same player, whichever you pick up (other controllers are players 2, 3...). Separate: each joins as its own player."));
+                    var p1 = Choice("Player 1", new[] { "Controller", "Keyboard" }, () => Settings.ControllerIsPlayer1 ? 0 : 1, v => Settings.ControllerIsPlayer1 = v == 0,
+                        "With separate players: which one is player 1 when both join.");
+                    p1.Enabled = () => !Settings.SharedControls;
+                    _rows.Add(p1);
                     _rows.Add(Switch("Name tags", () => Settings.NameTags, v => Settings.NameTags = v, "Names floating over the players."));
                     _rows.Add(Slider("Screen shake", () => Settings.ShakeAmount, v => Settings.ShakeAmount = v, v => v < 0.01f ? "Off" : Mathf.RoundToInt(v * 100f) + "%"));
                     _rows.Add(Switch("Hit effects", () => Settings.HitEffects, v => Settings.HitEffects = v, "Squash, flash and impact rings when players collide."));
