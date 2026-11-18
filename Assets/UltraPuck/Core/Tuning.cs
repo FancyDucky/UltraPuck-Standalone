@@ -134,7 +134,8 @@ namespace UltraPuck.Core
         public int CardsOffered = 3;
         /// <summary>Seconds to choose before a card is picked at random.</summary>
         public Fix PickTime = Fix.FromInt(30);
-        public Fix CountdownTime = Fix.Ratio(3, 2);
+        /// <summary>The count before a face-off: 3, 2, 1, go.</summary>
+        public Fix CountdownTime = Fix.FromInt(3);
         public Fix CelebrateTime = Fix.FromInt(2);
         /// <summary>A timed match: seconds on the clock (0 = play to <see cref="GoalsToWin"/> instead). Level at the end: next goal wins.</summary>
         public Fix TimeLimit = Fix.Zero;

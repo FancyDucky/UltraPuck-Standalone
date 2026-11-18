@@ -83,7 +83,17 @@ namespace UltraPuck.Game
             switch (_state.Phase)
             {
                 case Phase.Countdown:
-                    if (!_free) Ui.Label(new Rect(0, h * 0.28f, w, 70), _state.Score[0] + _state.Score[1] == 0 ? "Ready..." : "Face-off", big, Color.white);
+                    if (!_free)
+                    {
+                        // 3, 2, 1: each number pops in big and shrinks back as its second runs out
+                        var left = _state.PhaseTime.ToFloat();
+                        var n = Mathf.Max(1, Mathf.CeilToInt(left - 0.001f));
+                        var part = Mathf.Clamp01(n - left); // 0 as the number appears, 1 as it ends
+                        var size = Mathf.RoundToInt(Mathf.Lerp(120f, 84f, Ui.EaseOut(part / 0.35f)));
+                        var a = 1f - Mathf.Clamp01((part - 0.8f) / 0.2f) * 0.6f;
+                        Ui.Label(new Rect(0, h * 0.28f - 40f, w, 140), n.ToString(), Ui.Font(size, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+                        Ui.Label(new Rect(0, h * 0.28f + 96f, w, 40), _state.Score[0] + _state.Score[1] == 0 ? "Get ready" : "Face-off", Ui.Font(24, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.75f));
+                    }
                     break;
                 case Phase.Scored:
                     if (Replay)

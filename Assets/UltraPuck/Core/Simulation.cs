@@ -873,6 +873,9 @@ namespace UltraPuck.Core
             foreach (var g in Map.Goals)
             {
                 if (!g.Touches(s.PuckPos, T.PuckRadius)) continue; // the moment the puck touches the goal box
+                // a defender may carry the puck into their own net (it's safe while they hold it); let it go in there
+                // and it's a goal for the other team
+                if (s.Carrier >= 0 && s.Players[s.Carrier].Team == g.Team) continue;
                 var scorer = 1 - g.Team;
                 s.Score[scorer]++;
                 s.LastScorer = scorer;

@@ -7,7 +7,7 @@ W, H, R = 24.0 * STRETCH, 13.5, 6.0      # half width, half height, corner radiu
 ARC = 10                       # segments per corner
 NET_X = 18.5 * STRETCH         # where the back of each net stands (from the middle); the nets themselves keep their size
 NET_SCALE = 0.6                # the nets are 40% smaller than they first were
-DEPTH, MOUTH = 2.0 * NET_SCALE, 2.6 * NET_SCALE   # net depth, mouth half height
+DEPTH, MOUTH = 1.9, 2.6 * NET_SCALE   # net depth (deeper than the first 1.2), mouth half height
 WALL = 0.68                    # wall thickness (the game's Tuning.WallThickness): the goal area stops at the walls' inner edge
 
 def r3(v): return round(v + 0.0, 3)

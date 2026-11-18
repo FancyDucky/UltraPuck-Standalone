@@ -3,7 +3,7 @@ import json, math, sys
 
 W, H, R = 24.0, 13.5, 6.0      # half width, half height, corner radius
 # the nets are the Hockey Rink's size: mouth half height (wall middle) 1.56, 1.2 deep
-MOUTH, DEPTH = 1.56, 1.2
+MOUTH, DEPTH = 1.56, 1.9
 WALL = 0.68                    # wall thickness (Tuning.WallThickness): the goal box stops at the walls' inner edge
 ARC = 10                       # segments per corner
 

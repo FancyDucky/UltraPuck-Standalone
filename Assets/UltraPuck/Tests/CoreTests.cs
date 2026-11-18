@@ -438,6 +438,33 @@ namespace UltraPuck.Tests
             Assert.AreEqual(-1, s.Carrier, "letting go fires the charged shot");
         }
 
+        /// <summary>A defender may carry the puck into their own net; letting it go in there is a goal for the other team.</summary>
+        [Test]
+        public void CarryingIntoYourOwnNetIsSafeUntilYouLetGo()
+        {
+            var sim = new Simulation(LoadMap("hockey-rink.json"));
+            var s = sim.NewGame(new[] { 0, 1 });
+            PlayNow(s);
+            var g = sim.Map.Goals.Find(x => x.Team == 0); // red's own net, on the left, open to the right
+            var p = s.Players[0];
+            p.Pos = new FixVec2(g.Max.X + Fix.Ratio(3, 10), Fix.Zero);
+            p.Facing = new FixVec2(-Fix.One, Fix.Zero); // facing into the net
+            p.Vel = FixVec2.Zero;
+            s.Players[1].Pos = new FixVec2(Fix.FromInt(10), Fix.FromInt(8));
+            s.Carrier = 0;
+            s.PuckPos = p.Pos - new FixVec2(RadiusAndPuck(sim), Fix.Zero);
+            for (var t = 0; t < 60; t++) sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.IsTrue(g.Touches(s.PuckPos, sim.T.PuckRadius), "the carried puck is in red's own net");
+            Assert.AreEqual(Phase.Play, s.Phase, "no goal while red holds it there");
+            Assert.AreEqual(0, s.Score[0] + s.Score[1]);
+            sim.Step(s, new[] { new PlayerInput { Buttons = PlayerInput.ShootCheck }, default(PlayerInput) });
+            sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(Phase.Scored, s.Phase, "let go in there: a goal");
+            Assert.AreEqual(1, s.Score[1], "for blue");
+        }
+
+        private static Fix RadiusAndPuck(Simulation sim) { return sim.T.PlayerRadius + sim.T.PuckRadius; }
+
         /// <summary>A loose puck touching the wedge (not the body) is picked up; one beside it isn't.</summary>
         [Test]
         public void TheWedgePicksUpThePuck()

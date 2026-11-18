@@ -8,7 +8,7 @@
 import json, math, os, sys
 
 WALL = 0.68                    # wall thickness (Tuning.WallThickness)
-MOUTH, DEPTH = 1.56, 1.2       # the Hockey Rink's nets: mouth half height (wall middle), depth
+MOUTH, DEPTH = 1.56, 1.9       # the Hockey Rink's nets: mouth half height (wall middle), depth
 LINE = 0.2                     # how far past the mouth the puck has to be to count
 
 

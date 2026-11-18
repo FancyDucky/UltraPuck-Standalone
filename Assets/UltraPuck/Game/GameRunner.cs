@@ -255,6 +255,21 @@ namespace UltraPuck.Game
                 UnityEngine.InputSystem.InputSystem.RemoveDevice(pad2);
             }
 
+            if (want("countdown"))
+            {
+                // a local match starting: 3, 2, 1
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(0.25f);
+                yield return Shot("countdown-3");
+                yield return new WaitForSecondsRealtime(1.7f);
+                yield return Shot("countdown-1");
+                GoMainMenu();
+            }
+
             if (want("settings"))
             {
                 // the Gameplay settings (the keyboard and controller options are at the top)
