@@ -74,15 +74,14 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.27, not released (Composer, 19 Nov 2026): **pad/KBM aim mode, no dash after quick shot, wall-carry
-  clip + outline**. (1) Mouse aim / mouse shoot / reticle only while InputMode is keyboard (last device used flips
-  pad ↔ KBM). (2) Quick shot sets `SuppressDash` until Shoot/check is let go, so holding the button doesn't check
-  the next tick. (3) Against a wall the carried puck pulls into the carrier (still never into the boards); a bright
-  outline draws on top when it sits inside them. Other players can still shove it off. **NetSession.Version 23.**
-  Files: `Core/Simulation.cs`, `Core/GameState.cs`, `Core/Net/NetSession.cs`; `Game/LocalPlayers.cs`, `Game/GameRunner.cs`,
-  `Game/Views.cs` (puck clip outline); tests; this file.
-  Checked: 98 tests (93 pass, 5 skipped), Windows + Linux builds.
-  **Not checked by a person:** pad/KBM switch, no-dash-after-shot feel, wall-carry clip outline.
+- 0.1.29 (Composer, 19 Nov 2026): **no clip outline** — carried puck against a wall still sits in the player, but
+  draws on top of them (higher sort order) instead of a bright outline. No rules change: **NetSession.Version 23.**
+  Files: `Game/Views.cs`; this file.
+- 0.1.28 (Composer, 19 Nov 2026): **controls rebind, mouse aim, swap fix, wall-carry, no dash after quick shot,
+  pad/KBM mode, slower title**. Mouse aim / reticle only in keyboard mode (last device flips pad ↔ KBM). Quick shot
+  sets `SuppressDash` until Shoot is let go. Against a wall the carried puck pulls into the carrier. **NetSession.Version 23.**
+  Files: `Game/Controls.cs`; Core + Game + tests; this file.
+  Checked: 98 tests (93 pass, 5 skipped), Windows + Linux builds, GitHub release v0.1.28.
 - After 0.1.27, not released (Composer, 19 Nov 2026): **swap fix, shorter aim line + slider, Controls rebind,
   mouse aim**. (1) Square / X (and the rebound Swap key, default F) now latches every frame like other buttons, so a
   short tap still swaps onto a bot teammate even between ticks; team comes from the live match state when available.

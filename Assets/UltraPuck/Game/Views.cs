@@ -790,7 +790,6 @@ namespace UltraPuck.Game
         private float _sinceSample;
         private readonly float _r;
         private readonly Mesh _glow;
-        private readonly GameObject _clipOutline;
         private Color _colour = Color.white, _target = Color.white;
         private int _team = -2;
 
@@ -799,19 +798,17 @@ namespace UltraPuck.Game
             _r = radius;
             Root = new GameObject("Puck");
             Root.transform.SetParent(parent, false);
+            // above players (and their bars / stun stars), so a carried puck clipped into you still reads clearly
             for (var i = 0; i < TrailLength; i++)
             {
                 _trailMesh[i] = Draw.Disc(radius * (0.92f - i * 0.1f), Color.clear);
-                _trail[i] = Draw.Make("Trail" + i, parent, _trailMesh[i], 18).transform;
+                _trail[i] = Draw.Make("Trail" + i, parent, _trailMesh[i], 30).transform;
                 _trail[i].gameObject.SetActive(false);
             }
             _glow = Draw.SoftDisc(radius * 1.6f, Color.white, Palette.Clear(Color.white));
-            Draw.Make("Glow", Root.transform, _glow, 19);
-            Draw.Make("Edge", Root.transform, Draw.Disc(radius, Palette.PuckEdge), 20);
-            Draw.Make("Fill", Root.transform, Draw.Disc(radius * 0.68f, Palette.Puck), 21);
-            // above players: a bright ring when the puck sits inside the carrier against a wall
-            _clipOutline = Draw.Make("ClipOutline", Root.transform, Draw.Ring(radius * 1.05f, radius * 1.45f, 1f, Color.white), 28).gameObject;
-            _clipOutline.SetActive(false);
+            Draw.Make("Glow", Root.transform, _glow, 31);
+            Draw.Make("Edge", Root.transform, Draw.Disc(radius, Palette.PuckEdge), 32);
+            Draw.Make("Fill", Root.transform, Draw.Disc(radius * 0.68f, Palette.Puck), 33);
         }
 
         /// <summary>The glow and trail colour: the team's light tint, or white for nobody (-1).</summary>
@@ -840,12 +837,10 @@ namespace UltraPuck.Game
             if (!on) { foreach (var t in _trail) t.gameObject.SetActive(false); _historyCount = 0; }
         }
 
-        /// <param name="clipped">Sitting inside the carrier (against a wall): show a bright outline on top.</param>
-        public void Show(Vector2 pos, int team, bool clipped = false)
+        public void Show(Vector2 pos, int team)
         {
             if (!Root.activeSelf) return;
             Tint(team);
-            if (_clipOutline.activeSelf != clipped) _clipOutline.SetActive(clipped);
             // a jump (face-off) starts the trail again instead of drawing a streak across the rink
             if (_historyCount > 0 && (pos - _history[0]).sqrMagnitude > 4f) _historyCount = 0;
             Root.transform.localPosition = new Vector3(pos.x, pos.y, 0f);

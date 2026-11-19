@@ -448,7 +448,7 @@ namespace UltraPuck.Game
 
             if (want("clip"))
             {
-                // carried puck pulled into the player against the boards: bright outline on top of the body
+                // carried puck pulled into the player against the boards (drawn on top of the body)
                 _shotWholeRink = true;
                 _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0, Name = "FancyDuck" });
                 _local.AssignTeams();
@@ -1648,7 +1648,7 @@ namespace UltraPuck.Game
                 _shake = Mathf.Max(_shake, 0.7f);
             }
             _puck.Visible(b.Phase != Phase.Scored);
-            _puck.Show((pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t), b.PuckTeam, _sim != null && _sim.PuckClippedInCarrier(b));
+            _puck.Show((pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t), b.PuckTeam);
             if (InMatch) MatchSounds(b); // the bots playing behind the menus are silent
         }
     }
