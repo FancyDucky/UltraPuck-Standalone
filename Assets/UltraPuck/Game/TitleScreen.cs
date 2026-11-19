@@ -21,8 +21,8 @@ namespace UltraPuck.Game
         /// <summary>Height of the name's line at size 1.</summary>
         private const float Line = 90f;
 
-        // when things happen, in seconds after the screen appears
-        private const float LettersAt = 0.2f, LetterGap = 0.055f, PuckAt = 0.8f, PuckSlide = 0.45f, LinesAt = 1.2f, PromptAt = 1.6f;
+        // when things happen, in seconds after the screen appears (kept a bit slow so you can follow each beat)
+        private const float LettersAt = 0.35f, LetterGap = 0.1f, PuckAt = 1.4f, PuckSlide = 0.75f, LinesAt = 2.1f, PromptAt = 2.9f;
 
         private static readonly string[] _letter = new string[Name.Length];
         private static float[] _smallAt, _bigAt;
@@ -79,8 +79,8 @@ namespace UltraPuck.Game
                 if (Name[i] == ' ') continue;
                 var t = since - LettersAt - i * LetterGap;
                 if (t <= 0f) continue;
-                var drop = (1f - Ui.EaseOutBack(t / 0.42f)) * -0.55f * h;
-                Ui.Label(new Rect(at[i], drop, 300f, h), _letter[i], style, new Color(1f, 1f, 1f, alpha * Ui.EaseOut(t / 0.2f)));
+                var drop = (1f - Ui.EaseOutBack(t / 0.7f)) * -0.55f * h;
+                Ui.Label(new Rect(at[i], drop, 300f, h), _letter[i], style, new Color(1f, 1f, 1f, alpha * Ui.EaseOut(t / 0.35f)));
             }
             GUI.matrix = old;
         }
@@ -118,7 +118,7 @@ namespace UltraPuck.Game
                 var trail = (1f - slide) * 420f;
                 if (trail > 1f) Ui.Box(new Rect(px - trail, ly - thick / 2f, trail, thick), new Color(1f, 1f, 1f, 0.3f * (1f - slide) * stay), thick / 2f);
 
-                var grow = Ui.EaseOut((t - LinesAt) / 0.5f);
+                var grow = Ui.EaseOut((t - LinesAt) / 0.85f);
                 var reach = (wide / 2f - puck / 2f - 12f) * grow;
                 if (reach > 1f)
                 {
@@ -129,7 +129,7 @@ namespace UltraPuck.Game
                 }
 
                 // a ring of light off the puck as it stops, and a small bounce
-                var hit = (t - LinesAt) / 0.5f;
+                var hit = (t - LinesAt) / 0.85f;
                 if (hit > 0f && hit < 1f)
                 {
                     var d = puck + 150f * Ui.EaseOut(hit);
@@ -143,7 +143,7 @@ namespace UltraPuck.Game
             }
 
             // the prompt, breathing slowly so it catches the eye
-            var show = Ui.EaseOut((t - PromptAt) / 0.5f) * stay;
+            var show = Ui.EaseOut((t - PromptAt) / 0.7f) * stay;
             if (show > 0f)
             {
                 var beat = 0.5f - 0.5f * Mathf.Cos((t - PromptAt) * Mathf.PI * 2f / 1.7f);

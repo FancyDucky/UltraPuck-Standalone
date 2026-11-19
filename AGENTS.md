@@ -24,7 +24,7 @@ so whoever works next knows what changed.
 5. **Look at visual changes** with the built-in screenshot mode instead of guessing: run
    `Builds/Windows/UltraPuck.exe -screen-width 1280 -screen-height 720 -screen-fullscreen 0 -logFile <somewhere else>`
    with env vars `ULTRAPUCK_SHOTS=<folder>`, `ULTRAPUCK_NOSTEAM=1`, `ULTRAPUCK_NOUPDATE=1`, optional
-   `ULTRAPUCK_SHOTS_ONLY=title,music,players,online,ripple,replay,maps,ice,pairing,countdown,goal,cards,pausemenu,settings`
+   `ULTRAPUCK_SHOTS_ONLY=title,music,players,online,ripple,replay,maps,ice,clip,pairing,countdown,goal,cards,pausemenu,settings`
    (`music` takes no pictures: it skips match songs to their end and the log shows the next one starting).
    Scenes are in `GameRunner.Shots()`; add one for new screens. Always pass `-logFile` (don't overwrite the owner's
    Player.log) and never change saved settings (PlayerPrefs) from a scene.
@@ -49,6 +49,7 @@ so whoever works next knows what changed.
 - `Game/GameRunner.cs` the Unity side: modes (Menu/Lobby/Match/Online), camera, effects, replays, rink pictures,
   screenshot scenes. `Game/Views.cs` drawing (players, puck, ice, effects incl. `Ripple` distortion).
 - `Game/LocalPlayers.cs` devices: keyboard + first controller share player 1 by default (`Slot.Extra`).
+  `Game/Controls.cs` rebindable keys/buttons (Settings > Controls). Mouse aims for keyboard players in a match.
 - `Game/TitleScreen.cs` the "press any button" screen the game starts on (drawing, and the game's name wherever the
   menus show it); it is `MainMenu.Page.Title`, left through `MainMenu.LeaveTitle()` (`LocalPlayers.AnyButton()`).
 - `Game/PlayScreens.cs` local players screen (shared team view also used online), `Game/MainMenu.cs` menus + online
@@ -73,6 +74,38 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.27, not released (Composer, 19 Nov 2026): **pad/KBM aim mode, no dash after quick shot, wall-carry
+  clip + outline**. (1) Mouse aim / mouse shoot / reticle only while InputMode is keyboard (last device used flips
+  pad ↔ KBM). (2) Quick shot sets `SuppressDash` until Shoot/check is let go, so holding the button doesn't check
+  the next tick. (3) Against a wall the carried puck pulls into the carrier (still never into the boards); a bright
+  outline draws on top when it sits inside them. Other players can still shove it off. **NetSession.Version 23.**
+  Files: `Core/Simulation.cs`, `Core/GameState.cs`, `Core/Net/NetSession.cs`; `Game/LocalPlayers.cs`, `Game/GameRunner.cs`,
+  `Game/Views.cs` (puck clip outline); tests; this file.
+  Checked: 98 tests (93 pass, 5 skipped), Windows + Linux builds.
+  **Not checked by a person:** pad/KBM switch, no-dash-after-shot feel, wall-carry clip outline.
+- After 0.1.27, not released (Composer, 19 Nov 2026): **swap fix, shorter aim line + slider, Controls rebind,
+  mouse aim**. (1) Square / X (and the rebound Swap key, default F) now latches every frame like other buttons, so a
+  short tap still swaps onto a bot teammate even between ticks; team comes from the live match state when available.
+  (2) Shot aim line default length is 60% of the old one (`Settings.AimLine`, Camera tab slider). (3) New Settings >
+  Controls tab: rebind shoot / charge / utility / swap / puck-back / move / aim (keys and pad; move/aim keys are
+  keyboard-only). (4) Keyboard players aim with the mouse (right stick still wins if pushed); system cursor hides in
+  a match and a crosshair reticle is drawn; mouse left/right also shoot / charge while playing. No rules change:
+  **NetSession.Version still 22.**
+  Files: new `Game/Controls.cs`; `Game/LocalPlayers.cs`, `Game/Settings.cs`, `Game/Views.cs`, `Game/Menus.cs`,
+  `Game/Hud.cs`, `Game/GameRunner.cs` (mouse aim wiring, `settings-camera` + `settings-controls` shots); this file.
+  Checked: 97 tests (92 pass, 5 skipped), Windows + Linux builds, screenshots (Controls tab, Camera aim-line
+  slider at 60%, no left/right arrows on bind rows).
+  **Not checked:** swap / rebind / mouse aim / reticle by a real person with a pad and keyboard.
+- After 0.1.27, not released (Composer, 19 Nov 2026): **title screen entrance slower**. Letter drop, puck slide,
+  colour lines and the "press any button" prompt all take longer (about half as fast again), so each beat is
+  easier to see. Screenshot waits for `title` updated. Also fixed a compile error in unfinished `Game/Controls.cs`
+  (pad-bind compare). No rules change: **NetSession.Version still 22.**
+  Files: `Game/TitleScreen.cs`, `Game/MainMenu.cs` (ignore presses for 0.5 s), `Game/GameRunner.cs` (title shots),
+  `Game/Controls.cs`, this file.
+  Checked: Windows build, title screenshots (title-1 mid-entrance, title-2 settled with prompt).
+  **Still open from earlier asks (not done this pass):** Square/X swap latch fix, aim line shorter + slider,
+  controls rebind page, mouse aim with a reticle for keyboard.
+
 - 0.1.27 (Composer, 19 Nov 2026): **equal card odds, bigger nets, S/U rinks, shot aim line, music pause rules,
   bot passes, Square/X swap, team-vote cursors**. (1) `CardLibrary.DrawOffer` picks uniformly (tier is label only).
   (2) Nets 30% bigger on every map (opening and depth inside the walls); S Rink nets stand on the ice with room

@@ -257,7 +257,7 @@ namespace UltraPuck.Tests
         }
 
         [Test]
-        public void TheCarriedPuckSlidesAlongTheBoardsInsteadOfIntoYou()
+        public void CarryingIntoTheBoardsKeepsThePuckEvenInsideYou()
         {
             var sim = new Simulation(LoadRink());
             var s = sim.NewGame(new[] { 0 });
@@ -266,18 +266,42 @@ namespace UltraPuck.Tests
             s.Players[0].Pos = new FixVec2(Fix.Zero, top - Fix.FromInt(3));
             s.Players[0].Facing = new FixVec2(Fix.Zero, Fix.One);
             s.Carrier = 0;
-            var r = (sim.RadiusOf(s.Players[0]) + sim.T.PuckRadius).ToDouble();
-            var sideways = 0.0;
-            for (var t = 0; t < 360 && s.Carrier == 0; t++)
+            var puckR = sim.T.PuckRadius.ToDouble();
+            var clipped = false;
+            for (var t = 0; t < 360; t++)
             {
                 sim.Step(s, new[] { new PlayerInput { MoveY = 127 } });
-                if (s.Carrier != 0) break;
-                var d = s.PuckPos - s.Players[0].Pos;
-                Assert.GreaterOrEqual(d.Length.ToDouble(), r - 0.03, "the puck never gets pushed into the player (tick " + t + ")");
-                sideways = System.Math.Max(sideways, System.Math.Abs(d.X.ToDouble()));
+                Assert.AreEqual(0, s.Carrier, "you keep the puck against the boards (tick " + t + ")");
+                foreach (var w in sim.Map.Segments)
+                {
+                    var ab = w.B - w.A;
+                    var tt = Fix.Clamp01(FixVec2.Dot(s.PuckPos - w.A, ab) / ab.SqrLength);
+                    var d = (s.PuckPos - (w.A + ab * tt)).Length.ToDouble();
+                    Assert.GreaterOrEqual(d, puckR - 0.01, "puck in the wall at tick " + t);
+                }
+                if (sim.PuckClippedInCarrier(s)) clipped = true;
             }
-            Assert.AreEqual(-1, s.Carrier, "pressing into the boards, you lose it in the end");
-            Assert.Greater(sideways, 0.3, "it slid off to the side first");
+            Assert.IsTrue(clipped, "pressed into the boards, the puck sat inside the player at some point");
+        }
+
+        [Test]
+        public void HoldingShootAfterAQuickShotDoesNotDash()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = Carrying(sim);
+            // press and keep holding Shoot/check: shoots, then must not check on later ticks
+            for (var t = 0; t < 30; t++)
+            {
+                sim.Step(s, new[] { Press(PlayerInput.ShootCheck) });
+                Assert.AreEqual(Fix.One, s.Players[0].DashCharge, "no check after the shot while still holding (tick " + t + ")");
+                Assert.AreEqual(Fix.Zero, s.Players[0].DashTime);
+            }
+            Assert.AreEqual(-1, s.Carrier, "it shot");
+            // let go, then press again: that is a check
+            sim.Step(s, new[] { default(PlayerInput) });
+            sim.Step(s, new[] { Press(PlayerInput.ShootCheck) });
+            Assert.AreEqual(Fix.Zero, s.Players[0].DashCharge, "a fresh press after letting go checks");
+            Assert.Greater(s.Players[0].DashTime.ToDouble(), 0.0);
         }
 
         [Test]
@@ -308,9 +332,16 @@ namespace UltraPuck.Tests
             PlayNow(s);
             s.Players[0].Pos = new FixVec2(Fix.FromInt(-1), Fix.Zero); s.Players[0].Facing = FixVec2.Right;
             s.Players[1].Pos = new FixVec2(Fix.FromInt(1), Fix.Zero);
-            sim.Step(s, new[] { new PlayerInput { Buttons = PlayerInput.ShootCheck }, default(PlayerInput) });
-            for (var t = 0; t < 60 && s.Players[1].HitLag <= Fix.Zero; t++) sim.Step(s, new PlayerInput[2]);
-            Assert.Greater(s.Players[1].HitLag.ToDouble(), 0.05, "the one checked is frozen");
+            // dash and keep skating in: so the check window still covers the hit
+            sim.Step(s, new[] { new PlayerInput { Buttons = PlayerInput.ShootCheck, MoveX = 127 }, default(PlayerInput) });
+            var peak = 0.0;
+            for (var t = 0; t < 60; t++)
+            {
+                sim.Step(s, new[] { new PlayerInput { MoveX = 127 }, default(PlayerInput) });
+                peak = System.Math.Max(peak, s.Players[1].HitLag.ToDouble());
+                if (peak > 0.05) break;
+            }
+            Assert.Greater(peak, 0.05, "the one checked is frozen");
             Assert.Greater(s.Players[0].HitLag.ToDouble(), 0.05, "and so is the checker");
             var frozenAt = s.Players[1].Pos;
             sim.Step(s, new PlayerInput[2]);

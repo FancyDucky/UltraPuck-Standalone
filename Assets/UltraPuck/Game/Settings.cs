@@ -108,6 +108,15 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetFloat("shake_amount", Mathf.Clamp01(value)); }
         }
 
+        /// <summary>
+        /// How long the shot aim line is, 0 (off) .. 1 (full). Full is the original length; default is 60% (40% shorter).
+        /// </summary>
+        public static float AimLine
+        {
+            get { return Mathf.Clamp01(PlayerPrefs.GetFloat("aim_line", 0.6f)); }
+            set { PlayerPrefs.SetFloat("aim_line", Mathf.Clamp01(value)); }
+        }
+
         /// <summary>Squash, flash and impact rings on hits (off: only the bump itself).</summary>
         public static bool HitEffects
         {

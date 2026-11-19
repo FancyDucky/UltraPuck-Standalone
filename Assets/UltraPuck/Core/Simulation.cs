@@ -453,11 +453,14 @@ namespace UltraPuck.Core
             if (!carrying)
             {
                 p.Charge = Fix.Zero;
+                // after a quick shot: wait until Shoot/check is let go before a hold can check
+                if (!input.Has(PlayerInput.ShootCheck)) p.SuppressDash = false;
                 // Puck Gun: brake fires it (when you don't have the puck)
                 if ((pressed & PlayerInput.ChargeBrake) != 0 && p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero) FireGun(s, i);
                 // check: a dash that knocks people back. Not while carrying the puck, and not while dazed. Holding the
                 // button keeps dashing: the next one as soon as there's a dash ready and the last one has finished.
-                var dashWanted = (pressed & PlayerInput.ShootCheck) != 0 || (input.Has(PlayerInput.ShootCheck) && p.DashTime <= Fix.Zero);
+                var dashWanted = !p.SuppressDash
+                    && ((pressed & PlayerInput.ShootCheck) != 0 || (input.Has(PlayerInput.ShootCheck) && p.DashTime <= Fix.Zero));
                 if (dashWanted && p.DashCharge >= Fix.One && p.Stun <= Fix.Zero)
                 {
                     p.Vel += p.Facing * (T.DashSpeed * p.Stats.DashPower);
@@ -468,7 +471,7 @@ namespace UltraPuck.Core
             }
 
             // with the puck: shoot/check fires now (with whatever charge there is); charge/brake charges until let go
-            if ((pressed & PlayerInput.ShootCheck) != 0) { Shoot(s, i, false); return; }
+            if ((pressed & PlayerInput.ShootCheck) != 0) { Shoot(s, i, false); p.SuppressDash = true; return; }
             var step = dt * Fix.Clamp(p.Stats.ChargeSpeed, Fix.Ratio(1, 10), Fix.FromInt(10)) / T.ChargeTime;
             var full = Fix.One + Fix.Clamp(p.Stats.OverCharge, Fix.Zero, Fix.FromInt(5));
             // holding charge/brake as you pick the puck up starts charging straight away
@@ -586,7 +589,7 @@ namespace UltraPuck.Core
         /// <summary>
         /// Where a carried puck sits: just in front of the player, or as far out as it can go without touching a wall
         /// (at any angle), so it never sits in the boards and a shot from there can't start outside the rink.
-        /// Pressed right up against a wall, that's the player's own centre.
+        /// Pressed right up against a wall, it may sit inside the player's body (the drawing side puts an outline on it).
         /// </summary>
         private FixVec2 CarrySpot(PlayerState p)
         {
@@ -600,6 +603,15 @@ namespace UltraPuck.Core
                 if (PuckFits(p.Pos, p.Pos + p.Facing * mid)) lo = mid; else hi = mid;
             }
             return p.Pos + p.Facing * lo;
+        }
+
+        /// <summary>True when the carried puck overlaps the carrier's body (for the outline on screen).</summary>
+        public bool PuckClippedInCarrier(GameState s)
+        {
+            if (s == null || s.Carrier < 0 || s.Carrier >= s.Players.Length) return false;
+            var c = s.Players[s.Carrier];
+            var min = RadiusOf(c); // centre of puck inside the player disc → under the body
+            return (s.PuckPos - c.Pos).SqrLength < min * min;
         }
 
         /// <summary>A puck at <paramref name="at"/> touches no wall, and no wall lies between it and <paramref name="from"/>.</summary>
@@ -776,9 +788,9 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// Where the carried puck goes this substep. Out in the open it sits at the front of the wedge. When something
-        /// is in the way (the boards, a pylon, another player's body) it gets pushed about: into the boards it slides
-        /// off to the side rather than into you, and once it's pushed far enough round (or away) you lose it.
+        /// Where the carried puck goes this substep. Out in the open it sits at the front of the wedge. Against a wall
+        /// (or pylon) it pulls in along the facing — even into the carrier's body — so you keep it; another player's
+        /// body can still shove it off the wedge and make you lose it.
         /// Returns false if the carrier lost control.
         /// </summary>
         private bool Carry(GameState s, Fix sub)
@@ -791,53 +803,51 @@ namespace UltraPuck.Core
             if (!CarryBlocked(s, ci, spot)) pos = spot;
             else
             {
-                // blocked: carry on from where it was, drifting back towards the front, kept at the wedge's edge
-                pos = s.PuckPos + (spot - s.PuckPos) * T.CarryFollow;
-                var off = pos - c.Pos;
-                pos = off.SqrLength.Raw > 0 ? c.Pos + off.Normalized * reach : spot;
-                var side = Fix.Zero;
-                for (var iter = 0; iter < 3; iter++)
+                // boards / pylons: sit as far forward as fits (may clip into the carrier). Other bodies can still shove.
+                pos = CarrySpot(c);
+                var shoved = false;
+                for (var j = 0; j < s.Players.Length; j++)
                 {
-                    var before = pos;
-                    // other players' bodies push it
-                    for (var j = 0; j < s.Players.Length; j++)
-                    {
-                        if (j == ci) continue;
-                        var q = s.Players[j];
-                        var min = RadiusOf(q) + T.PuckRadius;
-                        var d = pos - q.Pos;
-                        if (d.SqrLength >= min * min) continue;
-                        var dist = d.Length;
-                        pos = q.Pos + (dist.Raw > 0 ? d / dist : c.Facing) * min;
-                    }
+                    if (j == ci) continue;
+                    var q = s.Players[j];
+                    var min = RadiusOf(q) + T.PuckRadius;
+                    var d = pos - q.Pos;
+                    if (d.SqrLength >= min * min) continue;
+                    var dist = d.Length;
+                    pos = q.Pos + (dist.Raw > 0 ? d / dist : c.Facing) * min;
+                    shoved = true;
+                }
+                if (shoved)
+                {
+                    // after a shove: keep out of the boards, then slide round the wedge if squeezed into the carrier
                     var v = FixVec2.Zero;
                     CollideWalls(ref pos, ref v, T.PuckRadius, Fix.Zero);
                     CollidePylons(s, ref pos, ref v, T.PuckRadius, Fix.Zero);
-                    // squeezed back into the carrier: slide it round the wedge, to whichever side it's already on
                     var o = pos - c.Pos;
                     var od = o.Length;
                     if (od < reach - Fix.Ratio(1, 100))
                     {
                         var dir = od.Raw > 0 ? o / od : c.Facing;
-                        if (side == Fix.Zero)
-                        {
-                            var cross = FixVec2.Cross(c.Facing, dir);
-                            side = cross > Fix.Zero ? Fix.One : cross < Fix.Zero ? -Fix.One : ((s.NextRandom() & 1) == 0 ? Fix.One : -Fix.One);
-                        }
+                        var cross = FixVec2.Cross(c.Facing, dir);
+                        var side = cross > Fix.Zero ? Fix.One : cross < Fix.Zero ? -Fix.One : ((s.NextRandom() & 1) == 0 ? Fix.One : -Fix.One);
                         var tangent = new FixVec2(-dir.Y, dir.X) * side;
                         var slid = dir * reach + tangent * (reach - od + Fix.Ratio(1, 50));
                         pos = c.Pos + slid.Normalized * reach;
+                        v = FixVec2.Zero;
+                        CollideWalls(ref pos, ref v, T.PuckRadius, Fix.Zero);
+                        CollidePylons(s, ref pos, ref v, T.PuckRadius, Fix.Zero);
                     }
-                    if (pos == before) break;
                 }
             }
 
-            if (FirstWallHit(c.Pos, pos) < Fix.One) pos = CarrySpot(c);
+            if (FirstWallHit(c.Pos, pos) < Fix.One || !PuckFits(c.Pos, pos)) pos = CarrySpot(c);
 
-            // still in control? Not if it's been pushed too far round the wedge or away from it
+            // still in control? Walls alone never take it (clipping into you is fine). Another body shoving it off the
+            // wedge still does.
             var away = pos - c.Pos;
             var len = away.Length;
-            var lost = len > reach + T.CarrySlack || (len.Raw > 0 && FixVec2.Dot(away / len, c.Facing) < T.CarryHoldCos);
+            var inCarrier = len <= RadiusOf(c);
+            var lost = !inCarrier && (len > reach + T.CarrySlack || (len.Raw > 0 && FixVec2.Dot(away / len, c.Facing) < T.CarryHoldCos));
             s.PuckPos = pos;
             s.PuckVel = c.Vel;
             if (!lost) return true;

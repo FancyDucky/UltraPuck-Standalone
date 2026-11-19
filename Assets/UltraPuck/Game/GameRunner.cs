@@ -198,9 +198,9 @@ namespace UltraPuck.Game
                 // the screen the game starts on: partway through its entrance, settled, then handing over to the main menu
                 _mainMenu.TitleStays = true;
                 _mainMenu.Show(MainMenu.Page.Title);
-                yield return new WaitForSecondsRealtime(1.05f);
+                yield return new WaitForSecondsRealtime(1.8f);
                 yield return Shot("title-1");
-                yield return new WaitForSecondsRealtime(2.4f);
+                yield return new WaitForSecondsRealtime(3.0f);
                 yield return Shot("title-2");
                 _mainMenu.LeaveTitle();
                 yield return new WaitForSecondsRealtime(0.2f);
@@ -404,12 +404,20 @@ namespace UltraPuck.Game
                 _menus.Tab = 1;
                 yield return new WaitForSecondsRealtime(0.6f);
                 yield return Shot("settings-gameplay");
+                // Camera: aim line length is here
+                _menus.Tab = 2;
+                yield return new WaitForSecondsRealtime(0.4f);
+                yield return Shot("settings-camera");
                 // the Sound settings: volume, music, sound effects
                 _menus.Tab = 3;
                 yield return new WaitForSecondsRealtime(0.4f);
                 yield return Shot("settings-sound");
+                // Controls: rebind keys and buttons
+                _menus.Tab = 4;
+                yield return new WaitForSecondsRealtime(0.4f);
+                yield return Shot("settings-controls");
                 _menus.Close();
-                // the same from the players screen, where there are five tabs across (Match as well)
+                // the same from the players screen, where there are six tabs across (Match as well)
                 _menus.OpenSettings(true);
                 _menus.Tab = 3;
                 yield return new WaitForSecondsRealtime(0.4f);
@@ -436,6 +444,34 @@ namespace UltraPuck.Game
                 }
                 _shotWholeRink = false;
                 UseMap(startMap);
+            }
+
+            if (want("clip"))
+            {
+                // carried puck pulled into the player against the boards: bright outline on top of the body
+                _shotWholeRink = true;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0, Name = "FancyDuck" });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(0.4f);
+                var top = _sim.Map.BoundsMax.Y;
+                _state.Players[0].Pos = new FixVec2(Fix.Zero, top - Fix.FromInt(2));
+                _state.Players[0].Facing = new FixVec2(Fix.Zero, Fix.One);
+                _state.Players[0].Vel = FixVec2.Zero;
+                _state.Carrier = 0;
+                _state.PuckPos = _state.Players[0].Pos;
+                for (var t = 0; t < 120; t++)
+                {
+                    _sim.Step(_state, new[] { new PlayerInput { MoveY = 127 } });
+                    if (_sim.PuckClippedInCarrier(_state)) break;
+                }
+                Debug.Log("Ultra Puck clip shot: clipped=" + _sim.PuckClippedInCarrier(_state) + " carrier=" + _state.Carrier
+                    + " puck=" + _state.PuckPos + " player=" + _state.Players[0].Pos);
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield return Shot("puck-clip");
+                _shotWholeRink = false;
+                GoMainMenu();
             }
 
             if (want("ice"))
@@ -612,6 +648,7 @@ namespace UltraPuck.Game
             InputMode.Update();
             if (Updater.Busy) { AttractUpdate(); UpdateCamera(false); return; } // updating: the bots play on behind, nothing else
             var playing = _mode == Mode.Match || (_mode == Mode.Online && OnlinePlaying);
+            WireMouseAim(playing);
             if (_mode == Mode.Online) OnlineUpdate();
             else if (_menus.IsOpen) _menus.Tick(_local.Menu());
             else if (_mode == Mode.Menu)
@@ -642,6 +679,31 @@ namespace UltraPuck.Game
             Sound.HearingMusic = _menus.HearingMusic; // unless you're on the Music slider
             _hud.Show(false, _free, _local, _state, _sim, _error, _menus.IsOpen || _cardScreen.Showing || !playing);
             _hud.Banner = _mode == Mode.Online && _session != null && OnlinePlaying ? OnlineBanner() : null;
+        }
+
+        /// <summary>Mouse aiming for keyboard players, and a reticle instead of the system cursor in a match.</summary>
+        private void WireMouseAim(bool playing)
+        {
+            var open = _menus.IsOpen || _cardScreen.Showing;
+            _local.AllowMouseButtons = playing && !open && !LocalPlayers.Blocked;
+            _local.MouseWorld = () =>
+            {
+                if (_cam == null) return null;
+                var m = UnityEngine.InputSystem.Mouse.current;
+                if (m == null) return null;
+                var sp = m.position.ReadValue();
+                var w = _cam.ScreenToWorldPoint(new Vector3(sp.x, sp.y, -_cam.transform.position.z));
+                return new Vector2(w.x, w.y);
+            };
+            _local.PlayerWorld = i =>
+            {
+                if (_state == null || i < 0 || i >= _state.Players.Length) return Vector2.zero;
+                return V.Of(_state.Players[i].Pos);
+            };
+            // reticle only in keyboard/mouse mode (controller mode hides the system cursor via InputMode)
+            var reticle = playing && !open && !InputMode.Pad && _local.AnyKeyboardHuman();
+            _hud.Reticle = reticle;
+            if (reticle) Cursor.visible = false;
         }
 
         private void OnApplicationQuit()
@@ -1586,7 +1648,7 @@ namespace UltraPuck.Game
                 _shake = Mathf.Max(_shake, 0.7f);
             }
             _puck.Visible(b.Phase != Phase.Scored);
-            _puck.Show((pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t), b.PuckTeam);
+            _puck.Show((pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t), b.PuckTeam, _sim != null && _sim.PuckClippedInCarrier(b));
             if (InMatch) MatchSounds(b); // the bots playing behind the menus are silent
         }
     }

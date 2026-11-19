@@ -28,6 +28,8 @@ namespace UltraPuck.Game
         public bool Replay, ReplaySkippable, ReplaySlow;
         /// <summary>A player's name (for the corner card list).</summary>
         public System.Func<int, string> PlayerName;
+        /// <summary>Draw a mouse reticle (keyboard players aiming with the mouse).</summary>
+        public bool Reticle;
 
         /// <param name="covered">A menu or the card screen is up: keep the score and messages out of the way.</param>
         public void Show(bool lobby, bool free, LocalPlayers local, GameState state, Simulation sim, string error, bool covered)
@@ -45,6 +47,7 @@ namespace UltraPuck.Game
             float w = Ui.W, h = Ui.H;
             if (!string.IsNullOrEmpty(_error)) { Ui.Label(new Rect(0, h / 2 - 40, w, 80), _error, Ui.Font(24, true, TextAnchor.MiddleCenter), Color.white); return; }
             if (_lobby) { if (!_covered) Lobby(w, h); return; }
+            if (Reticle) DrawReticle();
             if (_state == null || _covered) return;
             NameTags();
             CornerCards(h);
@@ -203,6 +206,31 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(34f, y, 900f, 20f), "<b>" + who + "</b>   " + names, style, new Color(1f, 1f, 1f, 0.75f));
                 y += 20f;
             }
+        }
+
+        /// <summary>A target under the mouse for keyboard aiming (system cursor is hidden).</summary>
+        private static void DrawReticle()
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            var m = Mouse.current;
+            if (m == null) return;
+            var sp = m.position.ReadValue();
+            var k = Screen.height / 720f * Settings.UiScale;
+            var p = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
+            const float r = 14f, gap = 5f, arm = 10f, thick = 2f;
+            var c = new Color(1f, 1f, 1f, 0.9f);
+            var dim = new Color(0f, 0f, 0f, 0.35f);
+            // soft shadow ring
+            Ui.Box(new Rect(p.x - r - 1f, p.y - r - 1f, (r + 1f) * 2f, (r + 1f) * 2f), dim, r + 1f);
+            // ring
+            Ui.Box(new Rect(p.x - r, p.y - r, r * 2f, r * 2f), new Color(1f, 1f, 1f, 0.15f), r);
+            // crosshair arms (gap in the middle so the aim point stays clear)
+            Ui.Box(new Rect(p.x - arm - gap, p.y - thick * 0.5f, arm, thick), c, 1f);
+            Ui.Box(new Rect(p.x + gap, p.y - thick * 0.5f, arm, thick), c, 1f);
+            Ui.Box(new Rect(p.x - thick * 0.5f, p.y - arm - gap, thick, arm), c, 1f);
+            Ui.Box(new Rect(p.x - thick * 0.5f, p.y + gap, thick, arm), c, 1f);
+            // centre dot
+            Ui.Box(new Rect(p.x - 1.5f, p.y - 1.5f, 3f, 3f), c, 1.5f);
         }
 
         /// <summary>Names over the players, so it's easy to tell who is who.</summary>

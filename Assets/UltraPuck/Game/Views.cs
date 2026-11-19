@@ -105,9 +105,9 @@ namespace UltraPuck.Game
 
         // card effects: slowed / boosted rings, a faint outline while invisible (to teammates), small cooldown bars
         private readonly GameObject _boostRing, _ghost, _ghostWedge, _shadow;
-        // with the puck: a short line out of the wedge showing which way a shot would go
-        private readonly GameObject _aimLine;
-        private readonly Mesh _aimMesh;
+        // with the puck: a short line out of the wedge showing which way a shot would go (length from Settings.AimLine)
+        private readonly Transform _aimRoot;
+        private readonly float _aimFull;
 
         // slowed: a few blue down arrows drifting down over the player, on a loop
         private readonly Transform _slowRoot;
@@ -234,12 +234,15 @@ namespace UltraPuck.Game
             var ghostTint = Palette.TeamTint(team); ghostTint.a = 0.7f;
             _ghostWedge = Draw.Make("GhostWedge", _chargeRoot, Draw.Line(wedge, true, radius * 0.12f, ghostTint), 10).gameObject;
             _ghostWedge.SetActive(false);
-            // shot aim: a short line from the tip of the wedge outwards (shown while carrying the puck)
+            // shot aim: from the tip of the wedge outwards; scale.x follows Settings.AimLine (1 = full original length)
+            _aimFull = radius * 2.8f;
             var tip = radius * 1.8f;
             var aimTint = Palette.TeamTint(team); aimTint.a = 0.85f;
-            _aimMesh = Draw.Line(new List<Vector2> { new Vector2(tip, 0f), new Vector2(tip + radius * 2.8f, 0f) }, false, radius * 0.12f, aimTint);
-            _aimLine = Draw.Make("Aim", _chargeRoot, _aimMesh, 15).gameObject;
-            _aimLine.SetActive(false);
+            _aimRoot = new GameObject("Aim").transform;
+            _aimRoot.SetParent(_chargeRoot, false);
+            _aimRoot.localPosition = new Vector3(tip, 0f, 0f);
+            Draw.Make("Line", _aimRoot, Draw.Line(new List<Vector2> { Vector2.zero, new Vector2(_aimFull, 0f) }, false, radius * 0.12f, aimTint), 15);
+            _aimRoot.gameObject.SetActive(false);
 
             _trailColour = Palette.TeamTint(team);
             for (var i = 0; i < TrailLength; i++)
@@ -371,8 +374,10 @@ namespace UltraPuck.Game
             if (_shadow.activeSelf == faint) _shadow.SetActive(!faint);
             if (_ghost.activeSelf != faint) _ghost.SetActive(faint);
             if (_ghostWedge.activeSelf != faint) _ghostWedge.SetActive(faint);
-            var showAim = aiming && !faint;
-            if (_aimLine.activeSelf != showAim) _aimLine.SetActive(showAim);
+            var len = Settings.AimLine;
+            var showAim = aiming && !faint && len > 0.01f;
+            if (_aimRoot.gameObject.activeSelf != showAim) _aimRoot.gameObject.SetActive(showAim);
+            if (showAim) _aimRoot.localScale = new Vector3(len, 1f, 1f);
             if (_boostRing.activeSelf != boosted) _boostRing.SetActive(boosted);
             var dt = Time.unscaledDeltaTime;
             var t = Time.unscaledTime;
@@ -785,6 +790,7 @@ namespace UltraPuck.Game
         private float _sinceSample;
         private readonly float _r;
         private readonly Mesh _glow;
+        private readonly GameObject _clipOutline;
         private Color _colour = Color.white, _target = Color.white;
         private int _team = -2;
 
@@ -803,6 +809,9 @@ namespace UltraPuck.Game
             Draw.Make("Glow", Root.transform, _glow, 19);
             Draw.Make("Edge", Root.transform, Draw.Disc(radius, Palette.PuckEdge), 20);
             Draw.Make("Fill", Root.transform, Draw.Disc(radius * 0.68f, Palette.Puck), 21);
+            // above players: a bright ring when the puck sits inside the carrier against a wall
+            _clipOutline = Draw.Make("ClipOutline", Root.transform, Draw.Ring(radius * 1.05f, radius * 1.45f, 1f, Color.white), 28).gameObject;
+            _clipOutline.SetActive(false);
         }
 
         /// <summary>The glow and trail colour: the team's light tint, or white for nobody (-1).</summary>
@@ -831,10 +840,12 @@ namespace UltraPuck.Game
             if (!on) { foreach (var t in _trail) t.gameObject.SetActive(false); _historyCount = 0; }
         }
 
-        public void Show(Vector2 pos, int team)
+        /// <param name="clipped">Sitting inside the carrier (against a wall): show a bright outline on top.</param>
+        public void Show(Vector2 pos, int team, bool clipped = false)
         {
             if (!Root.activeSelf) return;
             Tint(team);
+            if (_clipOutline.activeSelf != clipped) _clipOutline.SetActive(clipped);
             // a jump (face-off) starts the trail again instead of drawing a streak across the rink
             if (_historyCount > 0 && (pos - _history[0]).sqrMagnitude > 4f) _historyCount = 0;
             Root.transform.localPosition = new Vector3(pos.x, pos.y, 0f);

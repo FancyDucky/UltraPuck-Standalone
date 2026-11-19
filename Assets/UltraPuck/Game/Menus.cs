@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace UltraPuck.Game
 {
     /// <summary>
     /// The pause menu (Resume, Settings, Main menu, plus free play's extras) and the settings screen with its
-    /// Graphics / Gameplay / Camera tabs. Works with a controller (stick or d-pad, A, B, LB / RB for tabs), the
+    /// Graphics / Gameplay / Camera / Sound / Controls tabs. Works with a controller (stick or d-pad, A, B, LB / RB for tabs), the
     /// keyboard (arrows or WASD, Enter or Space, Esc, Q / E for tabs) and the mouse (hover, click, drag sliders).
     /// <see cref="GameRunner"/> opens it and fills in what the buttons do.
     /// </summary>
@@ -33,6 +34,10 @@ namespace UltraPuck.Game
             }
         }
 
+        /// <summary>Waiting for a key or button to rebind (Controls tab).</summary>
+        public bool Listening { get { return _listen.HasValue; } }
+        private Controls.Act? _listen;
+
         // filled in by GameRunner
         public Action OnResume, OnMainMenu, OnGetCard;
         public Func<int> BotCount, MaxBots;
@@ -51,7 +56,7 @@ namespace UltraPuck.Game
         private float _openedAt, _focusY = -1f, _tabX = -1f;
         private string _subtitle = "";
 
-        private static readonly string[] Tabs = { "Graphics", "Gameplay", "Camera", "Sound", "Match" };
+        private static readonly string[] Tabs = { "Graphics", "Gameplay", "Camera", "Sound", "Controls", "Match" };
         /// <summary>Rows shown at once; longer pages scroll with the focus.</summary>
         private const int MaxVisible = 8;
         private int _first;
@@ -207,6 +212,9 @@ namespace UltraPuck.Game
                         "How far charge zoom may pull back from the normal view.");
                     cz.Enabled = () => Settings.ChargeZoom && Settings.FollowCamera;
                     _rows.Add(cz);
+                    _rows.Add(Slider("Aim line", () => Settings.AimLine, v => Settings.AimLine = v,
+                        v => v < 0.01f ? "Off" : Mathf.RoundToInt(v * 100f) + "%",
+                        "How long the shot aim line is while you have the puck. 100% is the original length."));
                     break;
                 case 3:
                     _rows.Add(Slider("Volume", () => Settings.Volume, v => Settings.Volume = v, Percent, "How loud the whole game is."));
@@ -216,10 +224,34 @@ namespace UltraPuck.Game
                         "When the game window isn't focused: pause the music. Leave this off and the next song still starts if one ends while you're looking elsewhere."));
                     break;
                 case 4:
+                    ControlsRows();
+                    break;
+                case 5:
                     MatchRows();
                     break;
             }
             _rows.Add(Button("Back", Back));
+        }
+
+        private void ControlsRows()
+        {
+            foreach (Controls.Act a in Enum.GetValues(typeof(Controls.Act)))
+            {
+                var act = a;
+                _rows.Add(new Row
+                {
+                    Label = Controls.Label(act),
+                    Value = () => _listen == act ? "Press a key or button…" : Controls.BindingText(act),
+                    Press = () => { _listen = act; },
+                    Hint = Controls.Hint(act) + "  Press this row, then the new key or button. Esc cancels.",
+                });
+            }
+            _rows.Add(new Row
+            {
+                Label = "Reset to defaults",
+                Press = () => { Controls.ResetDefaults(); _listen = null; },
+                Hint = "Put every binding back the way it ships.",
+            });
         }
 
         /// <summary>The match's rules (the Match tab, and the pause menu's match settings).</summary>
@@ -358,8 +390,8 @@ namespace UltraPuck.Game
             _focusY = -1f;
         }
 
-        /// <summary>Which settings tab is showing (0 Graphics, 1 Gameplay, 2 Camera, 3 Sound).</summary>
-        public int Tab { get { return _tab; } set { _tab = Mathf.Clamp(value, 0, Tabs.Length - 1); _focus = 0; } }
+        /// <summary>Which settings tab is showing (0 Graphics … 4 Controls, 5 Match).</summary>
+        public int Tab { get { return _tab; } set { _tab = Mathf.Clamp(value, 0, Tabs.Length - 1); _focus = 0; _listen = null; } }
 
         public void OpenSettings(bool fromLobby)
         {
@@ -367,6 +399,7 @@ namespace UltraPuck.Game
             _tab = Mathf.Min(_tab, TabCount - 1);
             Current = Page.Settings;
             _focus = 0;
+            _listen = null;
             _openedAt = Time.unscaledTime;
             _focusY = -1f;
         }
@@ -374,6 +407,7 @@ namespace UltraPuck.Game
         public void Close()
         {
             StopTyping(false);
+            _listen = null;
             Current = Page.None;
             PlayerPrefs.Save();
             if (OnResume != null) OnResume();
@@ -382,6 +416,7 @@ namespace UltraPuck.Game
         private void Back()
         {
             StopTyping(false);
+            _listen = null;
             PlayerPrefs.Save();
             if (Current == Page.Settings && !_settingsFromLobby) { Current = Page.Pause; _focus = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }
             else Close();
@@ -392,8 +427,9 @@ namespace UltraPuck.Game
         /// <summary>Controller / keyboard input for this frame (from <see cref="LocalPlayers.Menu"/>).</summary>
         public void Tick(LocalPlayers.MenuInput m)
         {
-            if (!IsOpen) { StopTyping(false); return; }
+            if (!IsOpen) { StopTyping(false); _listen = null; return; }
             if (_typing) { TypingTick(); return; }
+            if (_listen.HasValue) { ListenTick(m); return; }
             BuildRows();
             if (_rows.Count == 0) return;
             if (m.Back)
@@ -421,6 +457,37 @@ namespace UltraPuck.Game
             if (!row.Enabled()) return;
             if (m.X != 0 && row.Step != null) { row.Step(m.X); Sound.Step(m.X); } // after the change: a volume slider ticks at its new volume
             else if (m.Confirm && row.Press != null) { PressSound(row); row.Press(); }
+        }
+
+        private void ListenTick(LocalPlayers.MenuInput m)
+        {
+            if (!_listen.HasValue) return;
+            var act = _listen.Value;
+            if (m.Back)
+            {
+                Sound.Back();
+                _listen = null;
+                return;
+            }
+            var kb = Keyboard.current;
+            var key = Controls.ReadKeyPress(kb);
+            if (key != Key.None && key != Key.Escape)
+            {
+                Controls.SetKey(act, key);
+                Sound.Select();
+                _listen = null;
+                return;
+            }
+            if (Controls.KeyboardOnly(act)) return; // pad sticks cover move/aim; don't bind pad face buttons to them
+            foreach (var g in Gamepad.all)
+            {
+                var p = Controls.ReadPadPress(g);
+                if (!p.HasValue) continue;
+                Controls.SetPad(act, p.Value);
+                Sound.Select();
+                _listen = null;
+                return;
+            }
         }
 
         // ------------------------------------------------------------------ drawing
@@ -510,7 +577,7 @@ namespace UltraPuck.Game
         private void Tabs_(float x, float y, float panelW)
         {
             const float tabH = 40f, gap = 10f;
-            var tabW = TabCount > 4 ? 132f : 150f; // five tabs have to fit across the panel
+            var tabW = TabCount > 5 ? 112f : TabCount > 4 ? 132f : 150f; // six tabs (with Controls + Match) have to fit
             var total = TabCount * tabW + (TabCount - 1) * gap;
             var x0 = x + panelW / 2f - total / 2f;
             var target = x0 + _tab * (tabW + gap);
@@ -520,7 +587,7 @@ namespace UltraPuck.Game
             for (var i = 0; i < TabCount; i++)
             {
                 var r = new Rect(x0 + i * (tabW + gap), y, tabW, tabH);
-                if (r.Contains(Ui.Mouse) && Ui.Clicked && Event.current.type == EventType.Repaint) { if (_tab != i) Sound.Move(); _tab = i; _focus = 0; }
+                if (r.Contains(Ui.Mouse) && Ui.Clicked && Event.current.type == EventType.Repaint) { if (_tab != i) Sound.Move(); _tab = i; _focus = 0; _listen = null; }
                 var on = i == _tab;
                 Ui.Label(r, Tabs[i], Ui.Font(18, on, TextAnchor.MiddleCenter), on ? new Color(0.08f, 0.08f, 0.09f) : Ui.TextDim, !on);
             }
@@ -583,13 +650,19 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(box.x + 14f, box.y, box.width - 28f, box.height), row.Value() + caret, Ui.Font(18, focused), textCol);
                 if (clicked) { Sound.Select(); row.Press(); }
             }
-            else if (row.Value != null)
+            else if (row.Value != null && row.Step != null)
             {
                 var col = textCol;
                 Ui.Label(new Rect(right.x, r.y, right.width, r.height), "‹", Ui.Font(26, false, TextAnchor.MiddleLeft), new Color(col.r, col.g, col.b, col.a * 0.6f));
                 Ui.Label(new Rect(right.x, r.y, right.width, r.height), row.Value(), Ui.Font(18, focused, TextAnchor.MiddleCenter), col);
                 Ui.Label(new Rect(right.x, r.y, right.width, r.height), "›", Ui.Font(26, false, TextAnchor.MiddleRight), new Color(col.r, col.g, col.b, col.a * 0.6f));
                 if (clicked) { var d = mouse.x < right.center.x ? -1 : 1; row.Step(d); Sound.Step(d); }
+            }
+            else if (row.Value != null)
+            {
+                // value + press (Controls rebinds): show the binding, click to rebind — no left/right arrows
+                Ui.Label(right, row.Value(), Ui.Font(17, focused, TextAnchor.MiddleRight), textCol);
+                if (clicked && row.Press != null) { PressSound(row); row.Press(); }
             }
             else if (clicked && row.Press != null) { PressSound(row); row.Press(); }
         }

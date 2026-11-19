@@ -153,6 +153,11 @@ namespace UltraPuck.Core
         public Fix NoPickup;
         /// <summary>Last tick's buttons, so presses (not holds) can be told apart.</summary>
         public byte PrevButtons;
+        /// <summary>
+        /// After a quick shot: ignore Shoot/check for dashing until that button is let go, so a short tap doesn't
+        /// also check the moment the puck leaves.
+        /// </summary>
+        public bool SuppressDash;
         /// <summary>A computer player (it votes to skip goal replays straight away).</summary>
         public bool Bot;
         /// <summary>During a goal replay: this player pressed shoot to skip it. When everyone has, it ends.</summary>
@@ -316,7 +321,7 @@ namespace UltraPuck.Core
             foreach (var p in Players)
             {
                 Mix(ref h, p.Team); Mix(ref h, p.Pos); Mix(ref h, p.Vel); Mix(ref h, p.Facing);
-                Mix(ref h, p.DashCharge); Mix(ref h, p.DashTime); Mix(ref h, p.Charge); Mix(ref h, p.NoPickup); Mix(ref h, p.PrevButtons); Mix(ref h, p.Bot ? 1 : 0); Mix(ref h, p.SkipVote ? 1 : 0);
+                Mix(ref h, p.DashCharge); Mix(ref h, p.DashTime); Mix(ref h, p.Charge); Mix(ref h, p.NoPickup); Mix(ref h, p.PrevButtons); Mix(ref h, p.SuppressDash ? 1 : 0); Mix(ref h, p.Bot ? 1 : 0); Mix(ref h, p.SkipVote ? 1 : 0);
                 Mix(ref h, p.Stun); Mix(ref h, p.HitLag); Mix(ref h, p.Hits); Mix(ref h, p.HitPower); Mix(ref h, p.HitDir);
                 Mix(ref h, p.ShotsFired); Mix(ref h, p.ShotStrength);
                 p.Stats.Hash(ref h);

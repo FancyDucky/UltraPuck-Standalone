@@ -189,7 +189,7 @@ namespace UltraPuck.Game
             {
                 // anything at all: a key, a mouse button, any button on any controller
                 var pressed = LocalPlayers.AnyButton();
-                if (pressed != null && Time.unscaledTime - _titleAt > 0.3f)
+                if (pressed != null && Time.unscaledTime - _titleAt > 0.5f)
                 {
                     Debug.Log("Ultra Puck: title screen: a button on " + pressed.displayName + (TitleStays ? " (ignored: taking screenshots)" : ""));
                     if (TitleStays) return;

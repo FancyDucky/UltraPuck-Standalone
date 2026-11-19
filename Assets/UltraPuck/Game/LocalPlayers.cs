@@ -16,14 +16,22 @@ namespace UltraPuck.Game
     /// <item>Shoot / check: A / Cross, or RB / R1. With the puck it shoots; without it, it checks.</item>
     /// <item>Charge / brake: B / Circle, or LB / L1. With the puck hold to charge, let go to fire; without it, brake.</item>
     /// <item>Utility: Y / Triangle (for power-up cards later).</item>
-    /// <item>Swap to a bot teammate: X / Square.</item>
+    /// <item>Swap to a bot teammate: X / Square (or the key in Settings &gt; Controls).</item>
     /// <item>Puck back (free play): View / Select. Menu: Start / Options.</item>
-    /// <item>Keyboard: WASD move, arrow keys aim, Space or J shoot/check, Left Shift or K charge/brake, E or L utility, R puck back, Esc menu.</item>
+    /// <item>Keyboard: WASD move, mouse (or arrows) aim, Space shoot/check, Left Shift charge/brake, E utility, F swap, R puck back, Esc menu. Mouse left/right also shoot / charge.</item>
+    /// <item>Bindings are editable in Settings &gt; Controls.</item>
     /// </list>
     /// </summary>
     internal sealed class LocalPlayers
     {
         public const int MaxPlayers = 8;
+
+        /// <summary>World point under the mouse cursor, or null. Set by <see cref="GameRunner"/> for mouse aiming.</summary>
+        public System.Func<Vector2?> MouseWorld;
+        /// <summary>World position of player slot <c>i</c>. Set by <see cref="GameRunner"/> for mouse aiming.</summary>
+        public System.Func<int, Vector2> PlayerWorld;
+        /// <summary>Mouse left/right count as shoot/charge (only while a match is playable — not in menus).</summary>
+        public bool AllowMouseButtons;
 
         public sealed class Slot
         {
@@ -45,6 +53,8 @@ namespace UltraPuck.Game
             public bool Typing;
             /// <summary>Buttons pressed since the last tick, so a tap shorter than a tick still counts.</summary>
             public byte Latched;
+            /// <summary>Swap-to-bot pressed since the last tick (latched like buttons so a short tap still counts).</summary>
+            public bool WantSwap;
             public bool PrevLeft, PrevRight, PrevUp, PrevDown;
             /// <summary>A computer player (free play bots, or the ULTRAPUCK_DEMO players).</summary>
             public bool Demo;
@@ -124,10 +134,38 @@ namespace UltraPuck.Game
 
         private static Vector2 StickOf(Slot s) { return Vector2.ClampMagnitude(Stick(s.Device) + Stick(s.Extra), 1f); }
 
-        private static Vector2 AimOfSlot(Slot s)
+        private static bool HasKeyboard(Slot s)
         {
-            var a = Aim(s.Device);
-            var b = Aim(s.Extra);
+            return s.Device is Keyboard || s.Extra is Keyboard;
+        }
+
+        /// <summary>True if any human here is on the keyboard (for the mouse reticle).</summary>
+        public bool AnyKeyboardHuman()
+        {
+            foreach (var s in Slots) if (!s.Demo && HasKeyboard(s)) return true;
+            return false;
+        }
+
+        private Vector2 AimOfSlot(Slot s, int i)
+        {
+            // right stick wins when pushed; mouse only in keyboard/mouse mode (last device used); else aim keys
+            var pad = AimPad(s.Device);
+            var pad2 = AimPad(s.Extra);
+            var stick = pad2.sqrMagnitude > pad.sqrMagnitude ? pad2 : pad;
+            if (stick.sqrMagnitude > 0.04f) return stick;
+
+            if (!InputMode.Pad && HasKeyboard(s) && MouseWorld != null && PlayerWorld != null)
+            {
+                var w = MouseWorld();
+                if (w.HasValue)
+                {
+                    var d = w.Value - PlayerWorld(i);
+                    if (d.sqrMagnitude > 0.0001f) return d.normalized;
+                }
+            }
+
+            var a = AimKeys(s.Device);
+            var b = AimKeys(s.Extra);
             return b.sqrMagnitude > a.sqrMagnitude ? b : a;
         }
 
@@ -459,7 +497,7 @@ namespace UltraPuck.Game
         public Vector2 AimOf(int slot)
         {
             if (Blocked) return Vector2.zero;
-            return slot >= 0 && slot < Slots.Count ? AimOfSlot(Slots[slot]) : Vector2.zero;
+            return slot >= 0 && slot < Slots.Count ? AimOfSlot(Slots[slot], slot) : Vector2.zero;
         }
 
         /// <summary>While picking cards: the pick a local player has confirmed on the card screen (1-based), or 0.</summary>
@@ -608,26 +646,49 @@ namespace UltraPuck.Game
         {
             if (Blocked) return;
             PairDevices();
-            foreach (var s in Slots) s.Latched |= (byte)(Buttons(s.Device, true) | Buttons(s.Extra, true));
+            foreach (var s in Slots)
+            {
+                s.Latched |= (byte)(Buttons(s.Device, true) | Buttons(s.Extra, true));
+                if (HasKeyboard(s)) s.Latched |= MouseButtons(true);
+                if (SwapPressed(s, true)) s.WantSwap = true;
+            }
         }
 
         /// <summary>
-        /// Square (PlayStation) / X (Xbox): take over the next bot teammate. Cycles round the bots on your team.
-        /// Returns true if a swap happened.
+        /// Square (PlayStation) / X (Xbox), or the rebound Swap control: take over the next bot teammate.
+        /// Cycles round the bots on your team. Returns true if a swap happened.
         /// </summary>
-        public bool SwapToBotTeammate(int human)
+        public bool SwapToBotTeammate(int human, GameState state = null)
         {
             if (human < 0 || human >= Slots.Count || Slots[human].Demo) return false;
-            var team = Slots[human].Team & 1;
+            var team = TeamOf(human, state);
             var bots = new List<int>();
-            for (var i = 0; i < Slots.Count; i++)
-                if (Slots[i].Demo && (Slots[i].Team & 1) == team) bots.Add(i);
-            if (bots.Count == 0) return false;
+            for (var i = 0; i < SlotCount(state); i++)
+                if (IsBot(i, state) && TeamOf(i, state) == team) bots.Add(i);
+            if (bots.Count == 0)
+            {
+                Debug.Log("Ultra Puck: swap: no bot teammates on " + Palette.TeamName(team));
+                return false;
+            }
             // next bot after this human's index, wrapping
             var pick = bots[0];
             foreach (var b in bots) if (b > human) { pick = b; break; }
             SwapControl(human, pick);
             return true;
+        }
+
+        private int SlotCount(GameState state) { return state != null ? state.Players.Length : Slots.Count; }
+
+        private int TeamOf(int i, GameState state)
+        {
+            if (state != null && i >= 0 && i < state.Players.Length) return state.Players[i].Team & 1;
+            return i >= 0 && i < Slots.Count ? Slots[i].Team & 1 : 0;
+        }
+
+        private bool IsBot(int i, GameState state)
+        {
+            if (i < 0 || i >= Slots.Count) return false;
+            return Slots[i].Demo;
         }
 
         /// <summary>
@@ -641,8 +702,8 @@ namespace UltraPuck.Game
             var h = Slots[human];
             var b = Slots[bot];
             var device = h.Device; var extra = h.Extra; var name = h.Name; var latched = h.Latched;
-            h.Device = null; h.Extra = null; h.Demo = true; h.Name = "Bot"; h.Latched = 0;
-            b.Device = device; b.Extra = extra; b.Demo = false; b.Name = name; b.Latched = latched;
+            h.Device = null; h.Extra = null; h.Demo = true; h.Name = "Bot"; h.Latched = 0; h.WantSwap = false;
+            b.Device = device; b.Extra = extra; b.Demo = false; b.Name = name; b.Latched = latched; b.WantSwap = false;
             Debug.Log("Ultra Puck: " + (string.IsNullOrEmpty(name) ? "a player" : name) + " now steers player " + (bot + 1));
         }
 
@@ -662,20 +723,31 @@ namespace UltraPuck.Game
             return true;
         }
 
-        /// <summary>Square / X was pressed this frame on this slot's device (not used as a game button).</summary>
-        private static bool SwapPressed(Slot s)
+        /// <summary>Swap binding pressed (this frame, or latched) on this slot's devices.</summary>
+        private static bool SwapPressed(Slot s, bool pressedThisFrame)
         {
-            return One(s.Device, g => g.buttonWest.wasPressedThisFrame, k => false)
-                || One(s.Extra, g => g.buttonWest.wasPressedThisFrame, k => false);
+            return One(s.Device,
+                       g => pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Swap) : Controls.PadHeld(g, Controls.Act.Swap),
+                       k => pressedThisFrame ? Controls.KeyPressed(k, Controls.Act.Swap) : Controls.KeyHeld(k, Controls.Act.Swap))
+                || One(s.Extra,
+                       g => pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Swap) : Controls.PadHeld(g, Controls.Act.Swap),
+                       k => pressedThisFrame ? Controls.KeyPressed(k, Controls.Act.Swap) : Controls.KeyHeld(k, Controls.Act.Swap));
         }
 
         /// <summary>Once per tick: everyone's controls, in slot order. <paramref name="state"/> is only read by computer players.</summary>
         public PlayerInput[] Sample(Simulation sim, GameState state)
         {
-            // Square / X: swap onto a bot teammate before reading sticks (so this press doesn't do anything else)
+            // swap onto a bot teammate before reading sticks (WantSwap is latched every frame so a short tap counts;
+            // only the latch is used here, so the same press can't swap twice after the device moves)
             if (!Blocked)
+            {
                 for (var i = 0; i < Slots.Count; i++)
-                    if (!Slots[i].Demo && SwapPressed(Slots[i])) SwapToBotTeammate(i);
+                {
+                    var s = Slots[i];
+                    if (!s.Demo && s.WantSwap) SwapToBotTeammate(i, state);
+                    s.WantSwap = false;
+                }
+            }
 
             var inputs = new PlayerInput[Slots.Count];
             for (var i = 0; i < Slots.Count; i++)
@@ -684,14 +756,14 @@ namespace UltraPuck.Game
                 if (s.Demo) { inputs[i] = Bot.Think(sim, state, i); continue; }
                 if (!(Plugged(s.Device) || Plugged(s.Extra)) || Blocked) continue; // unplugged, or the Steam overlay is open: stands still
                 var m = StickOf(s);
-                var a = AimOfSlot(s);
+                var a = AimOfSlot(s, i);
                 inputs[i] = new PlayerInput
                 {
                     MoveX = PlayerInput.Axis(m.x),
                     MoveY = PlayerInput.Axis(m.y),
                     AimX = PlayerInput.Axis(a.x),
                     AimY = PlayerInput.Axis(a.y),
-                    Buttons = (byte)(Buttons(s.Device, false) | Buttons(s.Extra, false) | s.Latched),
+                    Buttons = (byte)(Buttons(s.Device, false) | Buttons(s.Extra, false) | (HasKeyboard(s) ? MouseButtons(false) : 0) | s.Latched),
                     Pick = state != null && state.Phase == Phase.Picking && PickFor != null ? PickFor(i) : (byte)0,
                     Hover = state != null && state.Phase == Phase.Picking && HoverFor != null ? HoverFor(i) : (byte)0,
                 };
@@ -713,7 +785,7 @@ namespace UltraPuck.Game
 
         // ------------------------------------------------------------------ devices
 
-        /// <summary>The move stick: left stick (or d-pad) on a controller, WASD on the keyboard.</summary>
+        /// <summary>The move stick: left stick (or d-pad) on a controller, move keys on the keyboard.</summary>
         private static Vector2 Stick(InputDevice d)
         {
             var g = d as Gamepad;
@@ -725,21 +797,34 @@ namespace UltraPuck.Game
             }
             var kb = d as Keyboard;
             if (kb == null) return Vector2.zero;
-            var x = (kb.dKey.isPressed ? 1f : 0f) - (kb.aKey.isPressed ? 1f : 0f);
-            var y = (kb.wKey.isPressed ? 1f : 0f) - (kb.sKey.isPressed ? 1f : 0f);
+            var x = (Controls.KeyHeld(kb, Controls.Act.MoveRight) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.MoveLeft) ? 1f : 0f);
+            var y = (Controls.KeyHeld(kb, Controls.Act.MoveUp) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.MoveDown) ? 1f : 0f);
             return Vector2.ClampMagnitude(new Vector2(x, y), 1f);
         }
 
-        /// <summary>The aim stick: right stick on a controller, arrow keys on the keyboard. Zero when not pushed.</summary>
-        private static Vector2 Aim(InputDevice d)
+        /// <summary>Right stick on a controller only (keyboard aim is keys or mouse).</summary>
+        private static Vector2 AimPad(InputDevice d)
         {
             var g = d as Gamepad;
-            if (g != null) return Vector2.ClampMagnitude(g.rightStick.ReadValue(), 1f);
+            return g != null ? Vector2.ClampMagnitude(g.rightStick.ReadValue(), 1f) : Vector2.zero;
+        }
+
+        /// <summary>Aim keys on the keyboard. Zero when not pushed.</summary>
+        private static Vector2 AimKeys(InputDevice d)
+        {
             var kb = d as Keyboard;
             if (kb == null) return Vector2.zero;
-            var x = (kb.rightArrowKey.isPressed ? 1f : 0f) - (kb.leftArrowKey.isPressed ? 1f : 0f);
-            var y = (kb.upArrowKey.isPressed ? 1f : 0f) - (kb.downArrowKey.isPressed ? 1f : 0f);
+            var x = (Controls.KeyHeld(kb, Controls.Act.AimRight) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.AimLeft) ? 1f : 0f);
+            var y = (Controls.KeyHeld(kb, Controls.Act.AimUp) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.AimDown) ? 1f : 0f);
             return Vector2.ClampMagnitude(new Vector2(x, y), 1f);
+        }
+
+        /// <summary>Aim for menu nav: pad stick or keyboard aim keys (same as the old Aim helper).</summary>
+        private static Vector2 Aim(InputDevice d)
+        {
+            var pad = AimPad(d);
+            if (pad.sqrMagnitude > 0.01f) return pad;
+            return AimKeys(d);
         }
 
         private static byte Buttons(InputDevice d, bool pressedThisFrame)
@@ -748,24 +833,31 @@ namespace UltraPuck.Game
             var g = d as Gamepad;
             if (g != null)
             {
-                if (Btn(g.buttonSouth, pressedThisFrame) || Btn(g.rightShoulder, pressedThisFrame)) b |= PlayerInput.ShootCheck;
-                if (Btn(g.buttonEast, pressedThisFrame) || Btn(g.leftShoulder, pressedThisFrame)) b |= PlayerInput.ChargeBrake;
-                if (Btn(g.buttonNorth, pressedThisFrame)) b |= PlayerInput.Utility;
-                if (Btn(g.selectButton, pressedThisFrame)) b |= PlayerInput.ResetPuck;
+                if (pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Shoot) : Controls.PadHeld(g, Controls.Act.Shoot)) b |= PlayerInput.ShootCheck;
+                if (pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Charge) : Controls.PadHeld(g, Controls.Act.Charge)) b |= PlayerInput.ChargeBrake;
+                if (pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Utility) : Controls.PadHeld(g, Controls.Act.Utility)) b |= PlayerInput.Utility;
+                if (pressedThisFrame ? Controls.PadPressed(g, Controls.Act.ResetPuck) : Controls.PadHeld(g, Controls.Act.ResetPuck)) b |= PlayerInput.ResetPuck;
                 return b;
             }
             var kb = d as Keyboard;
             if (kb == null) return 0;
-            if (Btn(kb.spaceKey, pressedThisFrame) || Btn(kb.jKey, pressedThisFrame)) b |= PlayerInput.ShootCheck;
-            if (Btn(kb.leftShiftKey, pressedThisFrame) || Btn(kb.kKey, pressedThisFrame)) b |= PlayerInput.ChargeBrake;
-            if (Btn(kb.eKey, pressedThisFrame) || Btn(kb.lKey, pressedThisFrame)) b |= PlayerInput.Utility;
-            if (Btn(kb.rKey, pressedThisFrame)) b |= PlayerInput.ResetPuck;
+            if (pressedThisFrame ? Controls.KeyPressed(kb, Controls.Act.Shoot) : Controls.KeyHeld(kb, Controls.Act.Shoot)) b |= PlayerInput.ShootCheck;
+            if (pressedThisFrame ? Controls.KeyPressed(kb, Controls.Act.Charge) : Controls.KeyHeld(kb, Controls.Act.Charge)) b |= PlayerInput.ChargeBrake;
+            if (pressedThisFrame ? Controls.KeyPressed(kb, Controls.Act.Utility) : Controls.KeyHeld(kb, Controls.Act.Utility)) b |= PlayerInput.Utility;
+            if (pressedThisFrame ? Controls.KeyPressed(kb, Controls.Act.ResetPuck) : Controls.KeyHeld(kb, Controls.Act.ResetPuck)) b |= PlayerInput.ResetPuck;
             return b;
         }
 
-        private static bool Btn(UnityEngine.InputSystem.Controls.ButtonControl c, bool pressedThisFrame)
+        /// <summary>Mouse left = shoot/check, right = charge/brake (keyboard/mouse mode only).</summary>
+        private byte MouseButtons(bool pressedThisFrame)
         {
-            return c != null && (pressedThisFrame ? c.wasPressedThisFrame : c.isPressed);
+            if (!AllowMouseButtons || InputMode.Pad) return 0;
+            var m = Mouse.current;
+            if (m == null) return 0;
+            byte b = 0;
+            if (pressedThisFrame ? m.leftButton.wasPressedThisFrame : m.leftButton.isPressed) b |= PlayerInput.ShootCheck;
+            if (pressedThisFrame ? m.rightButton.wasPressedThisFrame : m.rightButton.isPressed) b |= PlayerInput.ChargeBrake;
+            return b;
         }
     }
 }
