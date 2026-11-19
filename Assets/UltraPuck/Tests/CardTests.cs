@@ -148,6 +148,35 @@ namespace UltraPuck.Tests
                 CollectionAssert.DoesNotContain(lib.DrawOffer(s, 1, 3), rc);
         }
 
+        /// <summary>Every card a player could be offered turns up as often as any other, whatever its tier.</summary>
+        [Test]
+        public void EveryCardIsOfferedAsOftenAsAnyOther()
+        {
+            var lib = Library();
+            var sim = new Simulation(Rink(), null, lib);
+            var s = sim.NewGame(new[] { 0, 1, 0, 1 }, 21u);
+            var seen = new int[lib.Cards.Count];
+            const int offers = 30000;
+            for (var k = 0; k < offers; k++)
+                foreach (var c in lib.DrawOffer(s, 1, 3)) seen[c]++;
+            int least = int.MaxValue, most = 0, kinds = 0;
+            var tiers = new System.Collections.Generic.HashSet<CardTier>();
+            for (var c = 0; c < seen.Length; c++)
+            {
+                if (seen[c] == 0) continue; // not on offer to this player (it needs another card first)
+                kinds++;
+                tiers.Add(lib.Cards[c].Tier);
+                least = System.Math.Min(least, seen[c]);
+                most = System.Math.Max(most, seen[c]);
+            }
+            TestContext.WriteLine(kinds + " cards on offer, seen between " + least + " and " + most + " times each");
+            Assert.GreaterOrEqual(kinds, lib.Cards.Count - 2, "nearly every card can be offered to a player with a teammate");
+            Assert.Greater(tiers.Count, 2, "cards of several tiers");
+            var each = offers * 3.0 / kinds;
+            Assert.Greater(least, each * 0.93, "the least seen card is close to an even share (" + each + ")");
+            Assert.Less(most, each * 1.07, "and so is the most seen");
+        }
+
         [Test]
         public void BotsPickTheirCards()
         {

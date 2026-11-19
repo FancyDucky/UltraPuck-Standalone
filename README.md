@@ -42,7 +42,7 @@ How it works:
 After every goal in a match, each player on the team that conceded picks one of three cards (ROUNDS style). Cards last the whole match.
 - Cards are JSON in `Assets/StreamingAssets/Cards/*.json`, with art in `Cards/Art/<id>.jpg` or `.png`. Every file there is read in name order, so mods can add cards by dropping in a file. The format is described at the top of `ultrapuck.json`.
 - Ported from the mod so far: the cards that only change numbers (Double Dash, Speed Up, Power Shot, Quick Recharge, Heavyweight, Featherweight, Over Charge, Slow Poke). Cards that need new mechanics come next.
-- The pick screen: left / right (or the mouse) to look, the right stick (or mouse) tilts the card, A / Space / click takes it. Rarer cards have holo foil, sparkle and etched frames (Settings > Graphics > Card effects turns them off).
+- The pick screen: left / right (or the mouse) to look, the right stick (or mouse) tilts the card, A / Space / click takes it. Higher-tier cards have holo foil, sparkle and etched frames (Settings > Graphics > Card effects turns them off).
 
 ### Menus and settings
 - **Pause (Start / Esc):** Resume, Settings, Main menu; in free play also Bots and Pick a card.

@@ -105,6 +105,9 @@ namespace UltraPuck.Game
 
         // card effects: slowed / boosted rings, a faint outline while invisible (to teammates), small cooldown bars
         private readonly GameObject _boostRing, _ghost, _ghostWedge, _shadow;
+        // with the puck: a short line out of the wedge showing which way a shot would go
+        private readonly GameObject _aimLine;
+        private readonly Mesh _aimMesh;
 
         // slowed: a few blue down arrows drifting down over the player, on a loop
         private readonly Transform _slowRoot;
@@ -231,6 +234,12 @@ namespace UltraPuck.Game
             var ghostTint = Palette.TeamTint(team); ghostTint.a = 0.7f;
             _ghostWedge = Draw.Make("GhostWedge", _chargeRoot, Draw.Line(wedge, true, radius * 0.12f, ghostTint), 10).gameObject;
             _ghostWedge.SetActive(false);
+            // shot aim: a short line from the tip of the wedge outwards (shown while carrying the puck)
+            var tip = radius * 1.8f;
+            var aimTint = Palette.TeamTint(team); aimTint.a = 0.85f;
+            _aimMesh = Draw.Line(new List<Vector2> { new Vector2(tip, 0f), new Vector2(tip + radius * 2.8f, 0f) }, false, radius * 0.12f, aimTint);
+            _aimLine = Draw.Make("Aim", _chargeRoot, _aimMesh, 15).gameObject;
+            _aimLine.SetActive(false);
 
             _trailColour = Palette.TeamTint(team);
             for (var i = 0; i < TrailLength; i++)
@@ -353,7 +362,8 @@ namespace UltraPuck.Game
         /// <param name="stunned">Dazed (a check or a Puck Gun hit): stars circle them.</param>
         /// <param name="dash">How much of a dash is left (0..1, 0 = not dashing): streaks behind and a bright rim.</param>
         /// <param name="lagged">Frozen by hit lag: the body shakes.</param>
-        public void Status(bool hidden, bool faint, bool slowed, bool boosted, float[] cooldowns, bool stunned = false, float dash = 0f, bool lagged = false)
+        /// <param name="aiming">Carrying the puck: show the short aim line out of the wedge.</param>
+        public void Status(bool hidden, bool faint, bool slowed, bool boosted, float[] cooldowns, bool stunned = false, float dash = 0f, bool lagged = false, bool aiming = false)
         {
             if (Root.activeSelf == hidden) Root.SetActive(!hidden);
             if (hidden) return;
@@ -361,6 +371,8 @@ namespace UltraPuck.Game
             if (_shadow.activeSelf == faint) _shadow.SetActive(!faint);
             if (_ghost.activeSelf != faint) _ghost.SetActive(faint);
             if (_ghostWedge.activeSelf != faint) _ghostWedge.SetActive(faint);
+            var showAim = aiming && !faint;
+            if (_aimLine.activeSelf != showAim) _aimLine.SetActive(showAim);
             if (_boostRing.activeSelf != boosted) _boostRing.SetActive(boosted);
             var dt = Time.unscaledDeltaTime;
             var t = Time.unscaledTime;

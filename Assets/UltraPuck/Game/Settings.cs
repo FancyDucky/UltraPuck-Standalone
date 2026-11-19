@@ -89,6 +89,16 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetFloat("sound_volume", Mathf.Clamp01(value)); }
         }
 
+        /// <summary>
+        /// When the game window isn't focused: pause the music (and don't start the next song). Off by default, so a
+        /// song that ends while you're looking at something else still queues the next one.
+        /// </summary>
+        public static bool PauseMusicWhenUnfocused
+        {
+            get { return PlayerPrefs.GetInt("pause_music_unfocused", 0) != 0; }
+            set { PlayerPrefs.SetInt("pause_music_unfocused", value ? 1 : 0); }
+        }
+
         // ------------------------------------------------------------------ gameplay
 
         /// <summary>Screen shake on hits, 0 (off) .. 1 (full).</summary>

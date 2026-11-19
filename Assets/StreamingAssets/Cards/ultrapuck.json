@@ -1,6 +1,6 @@
 // Ultra Puck's own cards. Mods can add more files next to this one (every *.json here is read, in name order).
 //   id     unique, never change it once released
-//   tier   S (rarest) A B C D F (most common)
+//   tier   S (strongest) A B C D F (weakest): the frame's colour and sparkle; every card is offered as often as any other
 //   max    most copies one player can hold (0 = no limit)
 //   art    picture in Cards/Art/<art>.jpg or .png (defaults to the id)
 //   color  accent colour for the card frame

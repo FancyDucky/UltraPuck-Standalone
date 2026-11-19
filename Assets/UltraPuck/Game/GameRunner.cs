@@ -31,6 +31,8 @@ namespace UltraPuck.Game
         private GameState _state, _prev;
         private float _acc;
         private string _error;
+        /// <summary>Who had the puck last tick (for auto-swapping onto a bot teammate that just picked it up).</summary>
+        private int _seenCarrier = -1;
 
         private readonly LocalPlayers _local = new LocalPlayers();
         private Transform _entities;
@@ -636,6 +638,8 @@ namespace UltraPuck.Game
             _cardScreen.Frame(playing ? _state : null);
             // the theme plays through the menus and lobbies; a match plays its own songs, one after another (see Sound)
             Sound.Music(InMatch);
+            Sound.QuietMusic = _menus.IsOpen; // pause menu (and settings from it): music at half volume
+            Sound.HearingMusic = _menus.HearingMusic; // unless you're on the Music slider
             _hud.Show(false, _free, _local, _state, _sim, _error, _menus.IsOpen || _cardScreen.Showing || !playing);
             _hud.Banner = _mode == Mode.Online && _session != null && OnlinePlaying ? OnlineBanner() : null;
         }
@@ -1170,6 +1174,7 @@ namespace UltraPuck.Game
             _state = _sim.NewGame(_local.Teams(), (uint)System.Environment.TickCount * 2654435761u | 1u, bots);
             _prev = _state.Clone();
             _acc = 0f;
+            _seenCarrier = -1;
             Recorder.Clear();
             _replay = null;
             _mode = Mode.Match;
@@ -1262,6 +1267,11 @@ namespace UltraPuck.Game
             {
                 _prev = _state.Clone();
                 _sim.Step(_state, _local.Sample(_sim, _state));
+                // a bot teammate just got the puck: hand a random human on that team over to them
+                if (_mode == Mode.Match && _state.Carrier >= 0 && _state.Carrier != _seenCarrier
+                    && _state.Carrier < _local.Slots.Count && _local.Slots[_state.Carrier].Demo)
+                    _local.AutoSwapToCarrier(_state.Carrier, _state.Players[_state.Carrier].Team);
+                _seenCarrier = _state.Carrier;
                 Recorder.Record(_state);
                 _acc -= dt;
             }
@@ -1460,7 +1470,8 @@ namespace UltraPuck.Game
             _cooldowns[1] = p.Stats.Invisibility > 0 ? (invisible ? 0f : 1f - p.InvisCooldown.ToFloat() / _sim.T.InvisCooldown.ToFloat()) : -1f;
             _cooldowns[2] = p.Stats.Shockwave > 0 ? 1f - p.ShockCooldown.ToFloat() / _sim.T.ShockCooldown.ToFloat() : -1f;
             _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.BoostTime > Fix.Zero, _cooldowns,
-                p.Stun > Fix.Zero, p.DashTime.ToFloat() / Mathf.Max(0.01f, _sim.T.DashHitTime.ToFloat()), p.HitLag > Fix.Zero);
+                p.Stun > Fix.Zero, p.DashTime.ToFloat() / Mathf.Max(0.01f, _sim.T.DashHitTime.ToFloat()), p.HitLag > Fix.Zero,
+                _state != null && _state.Carrier == i);
 
             while (_seenShocks.Count <= i) { _seenShocks.Add(-1); _seenRefreshes.Add(-1); }
             if (_seenShocks[i] >= 0 && p.Shocks > _seenShocks[i] && Settings.HitEffects)

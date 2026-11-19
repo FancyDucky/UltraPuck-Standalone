@@ -704,6 +704,44 @@ namespace UltraPuck.Tests
         [Test]
         public void MirroredMatchesStayMirroredOnTheHockeyRink() { Mirrored(LoadMap("hockey-rink.json")); }
 
+        /// <summary>The upright U Rink is the same either side of its middle too, bend, nets, spawns, route and all.</summary>
+        [Test]
+        public void MirroredMatchesStayMirroredOnTheURink() { Mirrored(LoadMap("u-rink.json")); }
+
+        /// <summary>A bot with the puck and an open teammate ahead will pass rather than always shoot.</summary>
+        [Test]
+        public void BotsPassToOpenTeammates()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = sim.NewGame(new[] { 0, 0, 1, 1 }, 99u);
+            PlayNow(s);
+            // orange carrier on the left, teammate further right and clear; blue out of the way
+            s.Players[0].Pos = new FixVec2(Fix.FromInt(-8), Fix.Zero);
+            s.Players[0].Facing = FixVec2.Right;
+            s.Players[0].Vel = FixVec2.Zero;
+            s.Players[1].Pos = new FixVec2(Fix.FromInt(6), Fix.FromInt(3));
+            s.Players[1].Vel = FixVec2.Zero;
+            s.Players[2].Pos = new FixVec2(Fix.FromInt(10), Fix.FromInt(-8));
+            s.Players[3].Pos = new FixVec2(Fix.FromInt(12), Fix.FromInt(8));
+            s.Carrier = 0;
+            s.PuckPos = s.Players[0].Pos + new FixVec2(Fix.One, Fix.Zero);
+            var passed = false;
+            for (var t = 0; t < 180 && !passed; t++)
+            {
+                var inputs = new PlayerInput[4];
+                for (var i = 0; i < 4; i++) inputs[i] = Bot.Think(sim, s, i);
+                var before = s.Carrier;
+                sim.Step(s, inputs);
+                // a pass: carrier was 0, now 1 (or the puck is loose heading toward 1)
+                if (before == 0 && (s.Carrier == 1 || (s.Carrier < 0 && s.PassFrom == 0))) passed = true;
+            }
+            Assert.IsTrue(passed, "the bot passed to its teammate");
+        }
+
+        /// <summary>The S Rink is the same turned half way round: a match and the same match turned round stay in step.</summary>
+        [Test]
+        public void TurnedMatchesStayTurnedOnTheSRink() { Mirrored(LoadMap("s-rink.json"), true); }
+
         private static MapDef LoadMap(string file)
         {
             return MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));
@@ -742,8 +780,73 @@ namespace UltraPuck.Tests
                 var score = BotMatch(sim, new[] { 0, 1, 0, 1 }, 0x51ED27u + (uint)k * 7919u, 240);
                 goals[0] += score[0]; goals[1] += score[1];
             }
+            TestContext.WriteLine(file + ": goals red " + goals[0] + ", blue " + goals[1]);
             Assert.Greater(goals[0] + goals[1], 6, "goals: red " + goals[0] + " blue " + goals[1]);
             Assert.Greater(goals[0], 0); Assert.Greater(goals[1], 0);
+        }
+
+        /// <summary>
+        /// Every rink's nets are the same size: 30% bigger than the first ones, which were 2.44 across and 1.56 deep
+        /// inside their walls. (The scoring box starts 0.2 inside the mouth, so it's that much shallower.)
+        /// </summary>
+        [TestCase("test-rink.json")]
+        [TestCase("hockey-rink.json")]
+        [TestCase("s-rink.json")]
+        [TestCase("u-rink.json")]
+        public void TheNetsAreThirtyPercentBiggerOnEveryRink(string file)
+        {
+            var map = LoadMap(file);
+            Assert.AreEqual(2, map.Goals.Count);
+            foreach (var g in map.Goals)
+            {
+                double w = (g.Max.X - g.Min.X).ToDouble(), h = (g.Max.Y - g.Min.Y).ToDouble();
+                Assert.AreEqual(2.44 * 1.3, System.Math.Max(w, h), 0.002, "across the mouth");
+                Assert.AreEqual(1.56 * 1.3 - 0.2, System.Math.Min(w, h), 0.002, "mouth to back");
+            }
+        }
+
+        /// <summary>
+        /// The S Rink's nets stand on the ice (not set into the walls) and the U Rink is upright: open at the top,
+        /// a net up each arm, both open downwards, the puck dropped at the bottom of the bend.
+        /// </summary>
+        [Test]
+        public void TheBentRinksNetsStandOnTheIce()
+        {
+            foreach (var file in new[] { "s-rink.json", "u-rink.json" })
+            {
+                var map = LoadMap(file);
+                foreach (var g in map.Goals)
+                {
+                    var mid = new FixVec2((g.Min.X + g.Max.X) / 2, (g.Min.Y + g.Max.Y) / 2);
+                    foreach (var c in new[] { g.Min, g.Max, new FixVec2(g.Min.X, g.Max.Y), new FixVec2(g.Max.X, g.Min.Y) })
+                        Assert.IsTrue(map.Inside(c), file + ": the net is inside the rink");
+                    // ice all round it: out in front, well behind it, and to both sides
+                    var across = new FixVec2(-g.Facing.Y, g.Facing.X);
+                    Assert.IsTrue(map.Inside(mid + g.Facing * Fix.FromInt(5)), file + ": ice in front of the net");
+                    Assert.IsTrue(map.Inside(mid - g.Facing * Fix.FromInt(5)), file + ": ice behind the net");
+                    Assert.IsTrue(map.Inside(mid + across * Fix.FromInt(5)), file + ": ice beside the net");
+                    Assert.IsTrue(map.Inside(mid - across * Fix.FromInt(5)), file + ": ice on its other side");
+                    Assert.IsFalse(map.Blocked(mid, mid + g.Facing * Fix.FromInt(5)), file + ": the mouth is open");
+                    Assert.IsTrue(map.Blocked(mid, mid - g.Facing * Fix.FromInt(5)), file + ": the back is closed");
+                    Assert.IsTrue(map.Blocked(mid, mid + across * Fix.FromInt(5)), file + ": and so are the sides");
+                    Assert.IsTrue(map.Blocked(mid, mid - across * Fix.FromInt(5)), file + ": both of them");
+                }
+            }
+
+            var u = LoadMap("u-rink.json");
+            FixVec2 lo = u.BoundsMin, hi = u.BoundsMax;
+            var midX = (lo.X + hi.X) / 2;
+            Assert.AreEqual(0.0, midX.ToDouble(), 1e-3, "the U is the same either side of the middle");
+            Assert.IsFalse(u.Inside(new FixVec2(midX, hi.Y - Fix.One)), "open at the top: no ice between the arms up there");
+            Assert.IsTrue(u.Inside(new FixVec2(midX, lo.Y + Fix.One)), "closed at the bottom: the bend's ice");
+            Assert.Less(u.PuckSpot.Y.ToDouble(), ((lo.Y + hi.Y) / 2).ToDouble(), "the puck drops in the bend, at the bottom");
+            foreach (var g in u.Goals)
+            {
+                Assert.AreEqual(-1.0, g.Facing.Y.ToDouble(), 1e-3, "the nets open downwards");
+                Assert.AreEqual(0.0, g.Facing.X.ToDouble(), 1e-3);
+                Assert.Greater(g.Min.Y.ToDouble(), u.PuckSpot.Y.ToDouble() + 20, "and stand up the arms");
+                Assert.AreEqual(g.Team == 0, g.Max.X < midX, "team 0 defends the left arm");
+            }
         }
 
         /// <summary>The nets are solid from behind: a puck fired at the back of a net bounces off without scoring.</summary>
@@ -769,7 +872,11 @@ namespace UltraPuck.Tests
             Assert.AreEqual(1, s.Score[1], "a shot into the mouth scores for the team attacking that net");
         }
 
-        private static void Mirrored(MapDef map)
+        /// <summary>
+        /// <paramref name="turned"/>: for a rink that's the same turned half way round (the S Rink) rather than
+        /// mirrored left to right, so up and down swap as well.
+        /// </summary>
+        private static void Mirrored(MapDef map, bool turned = false)
         {
             var sim = new Simulation(map);
             var a = sim.NewGame(new[] { 0, 1, 0, 1 }, 4242u);
@@ -777,6 +884,7 @@ namespace UltraPuck.Tests
             // the same slots start on mirrored spawns, since each team's spawns mirror the other's
             var ia = new PlayerInput[4];
             var ib = new PlayerInput[4];
+            var up = turned ? -1 : 1;
             for (var t = 0; t < 20 * sim.T.TicksPerSecond; t++)
             {
                 for (var i = 0; i < 4; i++)
@@ -784,14 +892,14 @@ namespace UltraPuck.Tests
                     ia[i] = Bot.Think(sim, a, i);
                     var m = ia[i];
                     // the mirrored player pushes the mirrored stick
-                    ib[i] = new PlayerInput { MoveX = (sbyte)-m.MoveX, MoveY = m.MoveY, AimX = (sbyte)-m.AimX, AimY = m.AimY, Buttons = m.Buttons };
+                    ib[i] = new PlayerInput { MoveX = (sbyte)-m.MoveX, MoveY = (sbyte)(up * m.MoveY), AimX = (sbyte)-m.AimX, AimY = (sbyte)(up * m.AimY), Buttons = m.Buttons };
                 }
                 sim.Step(a, ia);
                 sim.Step(b, ib);
                 for (var i = 0; i < 4; i++)
                 {
                     Assert.AreEqual(-a.Players[i].Pos.X.Raw, b.Players[i].Pos.X.Raw, "player " + i + " x at tick " + t);
-                    Assert.AreEqual(a.Players[i].Pos.Y.Raw, b.Players[i].Pos.Y.Raw, "player " + i + " y at tick " + t);
+                    Assert.AreEqual(up * a.Players[i].Pos.Y.Raw, b.Players[i].Pos.Y.Raw, "player " + i + " y at tick " + t);
                 }
                 Assert.AreEqual(-a.PuckPos.X.Raw, b.PuckPos.X.Raw, "puck x at tick " + t);
                 Assert.AreEqual(a.Carrier, b.Carrier, "carrier at tick " + t);

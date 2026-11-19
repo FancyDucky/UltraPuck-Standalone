@@ -175,7 +175,7 @@ namespace UltraPuck.Core
             HeadStart(s);
         }
 
-        /// <summary>Pylon goalies in front of each net: one per Pylon Goalie card on that team, up to three.</summary>
+        /// <summary>Pylon goalies in a row in front of each net's mouth: one per Pylon Goalie card on that team, up to three.</summary>
         public void PlacePylons(GameState s)
         {
             var list = new System.Collections.Generic.List<Pylon>();
@@ -186,13 +186,24 @@ namespace UltraPuck.Core
                 n = Math.Min(3, n);
                 if (n == 0) continue;
                 var goal = Bot.GoalCentre(Map, team);
-                var inward = Map.PuckSpot.X > goal.X ? Fix.One : -Fix.One;
-                var x = goal.X + inward * T.PylonOut;
+                // in front of the net is the way its mouth faces, if the map says; otherwise towards the puck's spot.
+                // The row runs across the mouth, starting on the same side for both teams (the side away from the
+                // puck's spot), so a mirrored rink gets mirrored pylons.
+                GoalDef net = null;
+                foreach (var g in Map.Goals) if (g.Team == team && g.HasFacing) { net = g; break; }
+                var mid = new FixVec2(goal.X + (Map.PuckSpot.X > goal.X ? Fix.One : -Fix.One) * T.PylonOut, goal.Y);
+                var across = new FixVec2(Fix.Zero, Fix.One);
+                if (net != null)
+                {
+                    mid = goal + net.Facing * T.PylonOut;
+                    across = new FixVec2(-net.Facing.Y, net.Facing.X);
+                    if (FixVec2.Dot(across, Map.PuckSpot - goal) < Fix.Zero) across = -across;
+                }
                 for (var k = 0; k < n; k++)
                 {
                     // 1: middle; 2: either side; 3: middle and either side
                     Fix y = n == 1 ? Fix.Zero : n == 2 ? (k == 0 ? -T.PylonSpread : T.PylonSpread) : T.PylonSpread * Fix.Ratio(3, 2) * (k - 1);
-                    list.Add(new Pylon { Pos = new FixVec2(x, goal.Y + y), Team = team });
+                    list.Add(new Pylon { Pos = net != null ? mid + across * y : new FixVec2(mid.X, mid.Y + y), Team = team });
                 }
             }
             s.Pylons = list.ToArray();

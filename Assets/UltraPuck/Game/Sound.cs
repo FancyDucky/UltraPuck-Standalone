@@ -364,6 +364,15 @@ namespace UltraPuck.Game
 
         private static Sound _it;
 
+        /// <summary>
+        /// The pause menu (or any menu over a match) is open: play the music at half volume, unless
+        /// <see cref="HearingMusic"/> is set (the Music slider is focused, so you can hear the level you're picking).
+        /// </summary>
+        public static bool QuietMusic;
+
+        /// <summary>The Music slider has focus: don't quiet the music for the pause menu.</summary>
+        public static bool HearingMusic;
+
         /// <summary>Screenshot mode: the volume to use instead of the player's own setting (0 = silent), or -1 normally.</summary>
         private float _fixedVolume = -1f;
         private float Master { get { return _fixedVolume >= 0f ? _fixedVolume : Settings.Volume; } }
@@ -583,31 +592,36 @@ namespace UltraPuck.Game
         {
             var dt = Time.unscaledDeltaTime;
             AudioListener.volume = Master;
+            // pause music when the window isn't focused, if the player asked for that
+            var hold = Settings.PauseMusicWhenUnfocused && !Application.isFocused && _fixedVolume < 0f;
+            var quiet = QuietMusic && !HearingMusic ? 0.5f : 1f;
 
             foreach (var t in _tracks)
             {
                 var want = t == _wanted ? 1f : 0f;
                 t.Level = Mathf.MoveTowards(t.Level, want, dt / (want <= t.Level ? FadeOut : t.Song ? SongIn : FadeIn));
-                t.Source.volume = t.Level * MusicLevel * Settings.MusicVolume;
-                if (t.Level > 0f)
+                t.Source.volume = t.Level * MusicLevel * Settings.MusicVolume * quiet;
+                if (t.Level > 0f && !hold)
                 {
                     if (!t.Started) { t.Source.Play(); t.Started = true; }
                     else if (t.Paused) { t.Source.UnPause(); t.Paused = false; }
                 }
                 else if (t.Started)
                 {
-                    // faded right out. The theme waits where it is; a match song is finished with
-                    if (t.Song) { t.Source.Stop(); t.Started = false; }
+                    // faded right out, or holding while unfocused. The theme waits where it is; a match song that's
+                    // finished with is stopped (a hold just pauses it).
+                    if (hold) { if (!t.Paused) { t.Source.Pause(); t.Paused = true; } }
+                    else if (t.Song) { t.Source.Stop(); t.Started = false; }
                     else if (!t.Paused) { t.Source.Pause(); t.Paused = true; }
                 }
             }
 
-            // the match song has run out: on to the next. (A moment's grace, and only while the game has the screen:
-            // sound also stops when the window is in the background, and that isn't the song ending.)
-            if (_wanted != null && _wanted.Song && _wanted.Started)
+            // the match song has run out: on to the next. A moment's grace so a brief hiccup isn't a new song.
+            // With "pause music when unfocused" on, wait until the window is focused again (it isn't the song ending).
+            if (_wanted != null && _wanted.Song && _wanted.Started && !hold)
             {
                 if (_wanted.Source.isPlaying) _songOver = 0f;
-                else if (Application.isFocused || _fixedVolume >= 0f)
+                else
                 {
                     _songOver += dt;
                     if (_songOver > 0.3f) NextSong(true);

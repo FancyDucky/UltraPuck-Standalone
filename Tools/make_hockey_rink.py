@@ -5,10 +5,12 @@ import json, math, sys
 STRETCH = 1.35                 # 35% longer than the Test Rink, end to end
 W, H, R = 24.0 * STRETCH, 13.5, 6.0      # half width, half height, corner radius
 ARC = 10                       # segments per corner
-NET_X = 18.5 * STRETCH         # where the back of each net stands (from the middle); the nets themselves keep their size
-NET_SCALE = 0.6                # the nets are 40% smaller than they first were
-DEPTH, MOUTH = 1.9, 2.6 * NET_SCALE   # net depth (deeper than the first 1.2), mouth half height
+NET_X = 18.5 * STRETCH         # where the back of each net stands (from the middle)
+NET_SCALE = 0.6                # the nets were made 40% smaller than they first were...
+GROW = 1.3                     # ...and then 30% bigger again: the opening and the depth, measured inside the walls
 WALL = 0.68                    # wall thickness (the game's Tuning.WallThickness): the goal area stops at the walls' inner edge
+DEPTH = round((1.9 - WALL / 2) * GROW + WALL / 2, 3)                 # net depth: mouth to the back wall's middle
+MOUTH = round((2.6 * NET_SCALE - WALL / 2) * GROW + WALL / 2, 3)     # mouth half height (to the side walls' middle)
 
 def r3(v): return round(v + 0.0, 3)
 

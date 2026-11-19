@@ -3,7 +3,10 @@ using System.Collections.Generic;
 
 namespace UltraPuck.Core
 {
-    /// <summary>Rarity: S is the rarest and strongest, F the most common (and often a bit of a joke).</summary>
+    /// <summary>
+    /// How strong a card is: S the strongest, F the weakest (and often a bit of a joke). It sets the card's frame
+    /// colour and which card a bot takes; it doesn't change how often a card is offered (they're all as likely).
+    /// </summary>
     public enum CardTier { S, A, B, C, D, F }
 
     /// <summary>One number a card changes: "MoveSpeed x1.15", "ExtraDashes +1", or an opponent's stat ("OpponentMoveSpeed x0.9").</summary>
@@ -16,7 +19,7 @@ namespace UltraPuck.Core
         public bool Opponents;
     }
 
-    /// <summary>A card: what it's called, what it says, how rare it is, and the numbers it changes.</summary>
+    /// <summary>A card: what it's called, what it says, how strong it is, and the numbers it changes.</summary>
     public sealed class CardDef
     {
         /// <summary>Position in the library: what game states store. The same on every PC as long as the card files are.</summary>
@@ -182,13 +185,10 @@ namespace UltraPuck.Core
             return false;
         }
 
-        /// <summary>How often a tier turns up compared with the others.</summary>
-        public static int Weight(CardTier t)
-        {
-            switch (t) { case CardTier.S: return 1; case CardTier.A: return 3; case CardTier.B: return 5; case CardTier.F: return 4; default: return 6; }
-        }
-
-        /// <summary>Up to <paramref name="count"/> different cards player <paramref name="i"/> may still take, picked at random by rarity.</summary>
+        /// <summary>
+        /// Up to <paramref name="count"/> different cards player <paramref name="i"/> may still take, picked at random:
+        /// every card they could be offered is as likely as any other, whatever its tier.
+        /// </summary>
         public int[] DrawOffer(GameState s, int i, int count, int[] off = null)
         {
             var p = s.Players[i];
@@ -211,17 +211,9 @@ namespace UltraPuck.Core
             var offer = new List<int>();
             while (offer.Count < count && pool.Count > 0)
             {
-                var total = 0;
-                foreach (var ci in pool) total += Weight(Cards[ci].Tier);
-                var roll = (int)(s.NextRandom() % (uint)total);
-                for (var k = 0; k < pool.Count; k++)
-                {
-                    roll -= Weight(Cards[pool[k]].Tier);
-                    if (roll >= 0) continue;
-                    offer.Add(pool[k]);
-                    pool.RemoveAt(k);
-                    break;
-                }
+                var k = (int)(s.NextRandom() % (uint)pool.Count);
+                offer.Add(pool[k]);
+                pool.RemoveAt(k);
             }
             return offer.ToArray();
         }

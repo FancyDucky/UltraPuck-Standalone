@@ -16,6 +16,7 @@ namespace UltraPuck.Game
     /// <item>Shoot / check: A / Cross, or RB / R1. With the puck it shoots; without it, it checks.</item>
     /// <item>Charge / brake: B / Circle, or LB / L1. With the puck hold to charge, let go to fire; without it, brake.</item>
     /// <item>Utility: Y / Triangle (for power-up cards later).</item>
+    /// <item>Swap to a bot teammate: X / Square.</item>
     /// <item>Puck back (free play): View / Select. Menu: Start / Options.</item>
     /// <item>Keyboard: WASD move, arrow keys aim, Space or J shoot/check, Left Shift or K charge/brake, E or L utility, R puck back, Esc menu.</item>
     /// </list>
@@ -610,9 +611,72 @@ namespace UltraPuck.Game
             foreach (var s in Slots) s.Latched |= (byte)(Buttons(s.Device, true) | Buttons(s.Extra, true));
         }
 
+        /// <summary>
+        /// Square (PlayStation) / X (Xbox): take over the next bot teammate. Cycles round the bots on your team.
+        /// Returns true if a swap happened.
+        /// </summary>
+        public bool SwapToBotTeammate(int human)
+        {
+            if (human < 0 || human >= Slots.Count || Slots[human].Demo) return false;
+            var team = Slots[human].Team & 1;
+            var bots = new List<int>();
+            for (var i = 0; i < Slots.Count; i++)
+                if (Slots[i].Demo && (Slots[i].Team & 1) == team) bots.Add(i);
+            if (bots.Count == 0) return false;
+            // next bot after this human's index, wrapping
+            var pick = bots[0];
+            foreach (var b in bots) if (b > human) { pick = b; break; }
+            SwapControl(human, pick);
+            return true;
+        }
+
+        /// <summary>
+        /// Hand the human's device to a bot slot (and make the old slot a bot). The look (colour, symbol, team) stays
+        /// with each player on the ice; only who steers them changes.
+        /// </summary>
+        public void SwapControl(int human, int bot)
+        {
+            if (human < 0 || bot < 0 || human >= Slots.Count || bot >= Slots.Count) return;
+            if (Slots[human].Demo || !Slots[bot].Demo) return;
+            var h = Slots[human];
+            var b = Slots[bot];
+            var device = h.Device; var extra = h.Extra; var name = h.Name; var latched = h.Latched;
+            h.Device = null; h.Extra = null; h.Demo = true; h.Name = "Bot"; h.Latched = 0;
+            b.Device = device; b.Extra = extra; b.Demo = false; b.Name = name; b.Latched = latched;
+            Debug.Log("Ultra Puck: " + (string.IsNullOrEmpty(name) ? "a player" : name) + " now steers player " + (bot + 1));
+        }
+
+        /// <summary>
+        /// A bot on <paramref name="team"/> just got the puck: hand a random human on that team over to them (so you
+        /// always drive whoever has it when you're the only person, or one of you at random when there are several).
+        /// </summary>
+        public bool AutoSwapToCarrier(int carrier, int team)
+        {
+            if (carrier < 0 || carrier >= Slots.Count || !Slots[carrier].Demo) return false;
+            var humans = new List<int>();
+            for (var i = 0; i < Slots.Count; i++)
+                if (!Slots[i].Demo && (Slots[i].Team & 1) == (team & 1)) humans.Add(i);
+            if (humans.Count == 0) return false;
+            var who = humans[UnityEngine.Random.Range(0, humans.Count)];
+            SwapControl(who, carrier);
+            return true;
+        }
+
+        /// <summary>Square / X was pressed this frame on this slot's device (not used as a game button).</summary>
+        private static bool SwapPressed(Slot s)
+        {
+            return One(s.Device, g => g.buttonWest.wasPressedThisFrame, k => false)
+                || One(s.Extra, g => g.buttonWest.wasPressedThisFrame, k => false);
+        }
+
         /// <summary>Once per tick: everyone's controls, in slot order. <paramref name="state"/> is only read by computer players.</summary>
         public PlayerInput[] Sample(Simulation sim, GameState state)
         {
+            // Square / X: swap onto a bot teammate before reading sticks (so this press doesn't do anything else)
+            if (!Blocked)
+                for (var i = 0; i < Slots.Count; i++)
+                    if (!Slots[i].Demo && SwapPressed(Slots[i])) SwapToBotTeammate(i);
+
             var inputs = new PlayerInput[Slots.Count];
             for (var i = 0; i < Slots.Count; i++)
             {

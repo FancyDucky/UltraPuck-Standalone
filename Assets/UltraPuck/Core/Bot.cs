@@ -29,45 +29,66 @@ namespace UltraPuck.Core
             byte b = 0;
             if (s.Carrier == i)
             {
-                // aim somewhere in the goal mouth, not always dead centre
+                // aim somewhere in the goal mouth, not always dead centre (a net that says which way it opens: across its mouth)
+                var net = AttackGoal(sim.Map, me.Team);
                 var spot = attack + new FixVec2(Fix.Zero, wobble * Fix.Ratio(3, 2));
+                if (net != null && net.HasFacing) spot = attack + Across(sim.Map, net, attack) * (wobble * Fix.Ratio(3, 2));
                 target = spot;
                 var toGoal = spot - pos;
                 aim = toGoal.Normalized;
                 var aimed = FixVec2.Dot(me.Facing, aim) > Fix.Ratio(97, 100);
                 var range = Fix.FromInt(12) + wobble * Fix.Two;
+                var shooting = true;
+                // a wall between us and the goal, or a teammate who's open further ahead: pass instead of forcing a shot
+                var mate = PassTo(sim, s, i, attack, defend);
+                var blocked = sim.Map.Route.Count > 1 && sim.Map.Blocked(pos, spot);
+                var pressured = OpponentNear(s, i, Fix.FromInt(4));
+                if (mate >= 0 && (blocked || pressured || (roll % 5u) == 0u))
+                {
+                    var to = s.Players[mate].Pos - pos;
+                    aim = to.Normalized;
+                    aimed = FixVec2.Dot(me.Facing, aim) > Fix.Ratio(92, 100);
+                    // a quick pass (don't charge): lined up and not right on top of them
+                    if (aimed && to.SqrLength > Fix.FromInt(4) && to.SqrLength < Fix.FromInt(225) && (s.Tick & 1) == 0)
+                        b |= PlayerInput.ShootCheck;
+                    shooting = false;
+                    // skate a little towards them so the pass isn't from a standstill facing the wrong way
+                    target = s.Players[mate].Pos;
+                }
                 // a net out on the ice: from beside or behind it, skate round to the front first (and don't shoot into its side)
-                var net = AttackGoal(sim.Map, me.Team);
-                if (net != null && net.HasFacing)
+                if (shooting && net != null && net.HasFacing)
                 {
                     // the map says which way the net opens: go round to that side
                     var f = net.Facing;
                     var off = pos - attack;
                     if (FixVec2.Dot(off, f) < Fix.Two)
                     {
-                        var across = new FixVec2(-f.Y, f.X);
+                        var across = Across(sim.Map, net, attack);
                         var side = FixVec2.Dot(off, across) >= Fix.Zero ? Fix.One : -Fix.One;
                         target = attack + f * Fix.FromInt(5) + across * (side * Fix.FromInt(4));
                         aim = FixVec2.Zero;
                         aimed = false;
                     }
                 }
-                else if (dir > Fix.Zero ? pos.X > attack.X - Fix.FromInt(2) : pos.X < attack.X + Fix.FromInt(2))
+                else if (shooting && (dir > Fix.Zero ? pos.X > attack.X - Fix.FromInt(2) : pos.X < attack.X + Fix.FromInt(2)))
                 {
                     target = new FixVec2(attack.X - dir * Fix.FromInt(5), pos.Y >= Fix.Zero ? Fix.FromInt(5) : Fix.FromInt(-5));
                     aim = FixVec2.Zero;
                     aimed = false;
                 }
                 // a wall between us and the goal (round a bend): follow the ice, don't shoot yet
-                if (sim.Map.Route.Count > 1 && sim.Map.Blocked(pos, target))
+                if (shooting && blocked)
                 {
                     target = AlongRoute(sim.Map, pos, target);
                     aim = FixVec2.Zero;
                     aimed = false;
                 }
-                var ready = aimed && me.Charge > Fix.Ratio(3, 10) && (toGoal.Length < range || me.Charge >= Fix.One);
-                // charging starts on a press, so if it hasn't started, let go for a tick and press again
-                if (!ready && (me.Charge > Fix.Zero || (s.Tick & 1) == 0)) b |= PlayerInput.ChargeBrake;
+                if (shooting)
+                {
+                    var ready = aimed && me.Charge > Fix.Ratio(3, 10) && (toGoal.Length < range || me.Charge >= Fix.One);
+                    // charging starts on a press, so if it hasn't started, let go for a tick and press again
+                    if (!ready && (me.Charge > Fix.Zero || (s.Tick & 1) == 0)) b |= PlayerInput.ChargeBrake;
+                }
             }
             else if (s.Carrier >= 0 && s.Players[s.Carrier].Team == me.Team)
             {
@@ -112,7 +133,7 @@ namespace UltraPuck.Core
             return new PlayerInput { MoveX = Axis(m.X), MoveY = Axis(m.Y), AimX = Axis(aim.X), AimY = Axis(aim.Y), Buttons = b };
         }
 
-        /// <summary>A bot takes the rarest card it's offered (the first of them on a tie). Returns the 1-based pick, or 0.</summary>
+        /// <summary>A bot takes the strongest card it's offered, by tier (the first of them on a tie). Returns the 1-based pick, or 0.</summary>
         private static byte PickCard(Simulation sim, PlayerState me)
         {
             if (me.Offer.Length == 0 || me.Picked >= 0 || sim.Cards == null) return 0;
@@ -127,6 +148,68 @@ namespace UltraPuck.Core
         {
             foreach (var g in map.Goals) if (g.Team == 1 - team) return g;
             return null;
+        }
+
+        /// <summary>
+        /// Along the mouth of a net that says which way it opens (its middle at <paramref name="centre"/>): the way
+        /// that leans towards the puck's spot, so on a rink that's a mirror image of itself the two nets' "across"
+        /// mirror each other and neither team is favoured.
+        /// </summary>
+        private static FixVec2 Across(MapDef map, GoalDef net, FixVec2 centre)
+        {
+            var across = new FixVec2(-net.Facing.Y, net.Facing.X);
+            return FixVec2.Dot(across, map.PuckSpot - centre) < Fix.Zero ? -across : across;
+        }
+
+        /// <summary>
+        /// A teammate further towards the goal than us, with a clear line and no opponent sitting on them: pass to
+        /// them. -1 if nobody's open.
+        /// </summary>
+        private static int PassTo(Simulation sim, GameState s, int i, FixVec2 attack, FixVec2 defend)
+        {
+            var me = s.Players[i];
+            var myProg = FixVec2.Dot(me.Pos - defend, attack - defend);
+            var best = -1;
+            var bestProg = Fix.Zero;
+            for (var j = 0; j < s.Players.Length; j++)
+            {
+                if (j == i || s.Players[j].Team != me.Team) continue;
+                var them = s.Players[j];
+                var prog = FixVec2.Dot(them.Pos - defend, attack - defend);
+                if (prog <= myProg + Fix.FromInt(2)) continue; // not ahead of us
+                if (sim.Map.Blocked(me.Pos, them.Pos)) continue; // a wall in the way
+                if ((them.Pos - me.Pos).SqrLength < Fix.FromInt(4)) continue; // too close
+                if ((them.Pos - me.Pos).SqrLength > Fix.FromInt(225)) continue; // too far for a pass
+                // an opponent nearer them than we are: not open
+                if (OpponentNearerThan(s, them.Pos, me.Team, me.Pos)) continue;
+                if (best < 0 || prog > bestProg) { best = j; bestProg = prog; }
+            }
+            return best;
+        }
+
+        /// <summary>Is any opponent of <paramref name="i"/> within <paramref name="reach"/> of them?</summary>
+        private static bool OpponentNear(GameState s, int i, Fix reach)
+        {
+            var me = s.Players[i];
+            var r2 = reach * reach;
+            for (var j = 0; j < s.Players.Length; j++)
+            {
+                if (s.Players[j].Team == me.Team) continue;
+                if ((s.Players[j].Pos - me.Pos).SqrLength < r2) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Is an opponent of <paramref name="team"/> closer to <paramref name="at"/> than <paramref name="from"/> is?</summary>
+        private static bool OpponentNearerThan(GameState s, FixVec2 at, int team, FixVec2 from)
+        {
+            var mine = (from - at).SqrLength;
+            for (var j = 0; j < s.Players.Length; j++)
+            {
+                if (s.Players[j].Team == team) continue;
+                if ((s.Players[j].Pos - at).SqrLength < mine) return true;
+            }
+            return false;
         }
 
         /// <summary>The next stop on the route from <paramref name="pos"/> towards <paramref name="target"/>: a few points along.</summary>

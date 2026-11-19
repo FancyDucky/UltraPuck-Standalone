@@ -9,7 +9,8 @@ namespace UltraPuck.Game
     /// The card pick screen. When a local player is offered cards, they're dealt face down from below, flip over,
     /// and float in a row. The focused card lifts towards you and tilts after the mouse or the right stick, which
     /// moves the holo foil, glare and sparkle across it like a real trading card. Picking one pops it, the others
-    /// flip back over and drop away, and the pick goes to the game. Several local players pick one after another.
+    /// flip back over and drop away, and the pick goes to the game. Several local players pick one after another
+    /// (or, with Team Vote, vote together on the same cards with their names under their cursors).
     /// Cards are real 3D objects on their own camera, drawn over the game.
     /// </summary>
     internal sealed class CardScreen : MonoBehaviour
@@ -47,7 +48,12 @@ namespace UltraPuck.Game
         public byte PickFor(int player) { byte b; return _ready.TryGetValue(player, out b) ? b : (byte)0; }
 
         /// <summary>The card a local player is looking at right now (1-based), sent along so the other team can watch.</summary>
-        public byte HoverFor(int player) { return _stage == Stage.Choosing && !_watching && _slot == player ? (byte)(_focus + 1) : (byte)0; }
+        public byte HoverFor(int player)
+        {
+            int k;
+            if (_stage == Stage.Choosing && _cursors.TryGetValue(player, out k)) return (byte)(k + 1);
+            return _stage == Stage.Choosing && !_watching && !_teamVote && _slot == player ? (byte)(_focus + 1) : (byte)0;
+        }
 
         /// <summary>Where match player <c>p</c> is on screen (pixels), for the taken card to fly into; null if not shown.</summary>
         public System.Func<int, Vector3?> PlayerOnScreen;
@@ -62,6 +68,11 @@ namespace UltraPuck.Game
         private bool _watching;
         private int[] _watchOffer = new int[0];
         private readonly HashSet<int> _watched = new HashSet<int>();
+
+        // Team Vote: everyone on the team looks at the same cards; each local voter has their own cursor
+        private bool _teamVote;
+        private readonly Dictionary<int, int> _cursors = new Dictionary<int, int>(); // player -> card index
+        private readonly List<int> _voters = new List<int>(); // local humans still choosing on this draw
 
         /// <summary>
         /// Which local controller slot plays match player <c>p</c> (-1: not on this PC). The same number in a local
@@ -111,6 +122,9 @@ namespace UltraPuck.Game
             {
                 _ready.Clear();
                 _watched.Clear();
+                _cursors.Clear();
+                _voters.Clear();
+                _teamVote = false;
                 if (_stage == Stage.Choosing) Leave(_watching ? WatchedPick(s) : -1);
                 if (_stage == Stage.Editing) EditInput();
             }
@@ -119,15 +133,19 @@ namespace UltraPuck.Game
                 // forget confirmed picks once the game has taken them
                 var done = new List<int>();
                 foreach (var kv in _ready) if (kv.Key >= s.Players.Length || s.Players[kv.Key].Picked >= 0 || s.Players[kv.Key].Offer.Length == 0) done.Add(kv.Key);
-                foreach (var k in done) _ready.Remove(k);
+                foreach (var k in done) { _ready.Remove(k); _cursors.Remove(k); _voters.Remove(k); }
                 if (_stage == Stage.Idle && !_editing)
                 {
-                    var next = NextPicker(s);
-                    if (next >= 0) { _watching = false; Deal(next, s.Players[next].Offer); }
+                    if (Sim.T.TeamVote) BeginTeamVote(s);
                     else
                     {
-                        var w = NextWatched(s);
-                        if (w >= 0) { _watching = true; _watchOffer = (int[])s.Players[w].Offer.Clone(); _watched.Add(w); Deal(w, _watchOffer); }
+                        var next = NextPicker(s);
+                        if (next >= 0) { _watching = false; _teamVote = false; Deal(next, s.Players[next].Offer); }
+                        else
+                        {
+                            var w = NextWatched(s);
+                            if (w >= 0) { _watching = true; _teamVote = false; _watchOffer = (int[])s.Players[w].Offer.Clone(); _watched.Add(w); Deal(w, _watchOffer); }
+                        }
                     }
                 }
             }
@@ -139,13 +157,16 @@ namespace UltraPuck.Game
             _dimMat.SetFloat("_Alpha", _dim);
             _root.gameObject.SetActive(_dim > 0.001f || _cards.Count > 0);
 
-            if (_stage == Stage.Choosing) Choose();
+            if (_stage == Stage.Choosing) { if (_teamVote) ChooseTeamVote(); else Choose(); }
             Animate();
             Motes();
             if (_stage == Stage.Leaving && (Time.unscaledTime - _stageAt > (_editing ? 1.1f : _chosen >= 0 ? 1.25f : 0.85f) || (_absorbed && Time.unscaledTime - _absorbedAt > 0.1f)))
             {
-                if (_chosen >= 0 && _slot >= 0 && !_watching) _ready[_slot] = (byte)(_chosen + 1);
+                if (_chosen >= 0 && _slot >= 0 && !_watching && !_teamVote) _ready[_slot] = (byte)(_chosen + 1);
                 _watching = false;
+                _teamVote = false;
+                _cursors.Clear();
+                _voters.Clear();
                 _editing = false;
                 foreach (var c in _cards) { Destroy(c.Root.gameObject); Destroy(c.Shadow.gameObject); }
                 foreach (var m in _motes) if (m.Go != null) Destroy(m.Go);
@@ -204,6 +225,148 @@ namespace UltraPuck.Game
                 var pick = WatchedPick(_state);
                 if (pick >= 0) { SetFocus(pick); Leave(pick); }
             }
+        }
+
+        /// <summary>
+        /// Team Vote: deal one shared offer for the team that's picking, and let every local person on it vote at
+        /// once (their cursors and names show under the cards). If nobody here is picking, watch the other side.
+        /// </summary>
+        private void BeginTeamVote(GameState s)
+        {
+            // a local human still to vote?
+            var local = new List<int>();
+            int[] offer = null;
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var p = s.Players[i];
+                if (p.Offer.Length == 0 || p.Picked >= 0 || _ready.ContainsKey(i)) continue;
+                var slot = SlotOf(i);
+                if (slot < 0 || slot >= Local.Slots.Count || Local.Slots[slot].Demo) continue;
+                local.Add(i);
+                if (offer == null) offer = p.Offer;
+            }
+            if (local.Count > 0 && offer != null)
+            {
+                _watching = false;
+                _teamVote = true;
+                _voters.Clear();
+                _voters.AddRange(local);
+                _cursors.Clear();
+                var mid = offer.Length / 2;
+                foreach (var i in local) _cursors[i] = mid;
+                Deal(local[0], offer);
+                return;
+            }
+            // nobody here: watch someone else (same offer for the whole team, so one deal is enough)
+            var w = NextWatched(s);
+            if (w < 0) return;
+            _watching = true;
+            _teamVote = true;
+            _watchOffer = (int[])s.Players[w].Offer.Clone();
+            _watched.Add(w);
+            _cursors.Clear();
+            _voters.Clear();
+            // every remote voter on that team gets a cursor from their Hover
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var p = s.Players[i];
+                if (p.Team != s.Players[w].Team || p.Offer.Length == 0 || p.Picked >= 0) continue;
+                _watched.Add(i);
+                if (p.Hover >= 1 && p.Hover <= p.Offer.Length) _cursors[i] = p.Hover - 1;
+                else _cursors[i] = p.Offer.Length / 2;
+            }
+            Deal(w, _watchOffer);
+        }
+
+        /// <summary>Team Vote: each local voter moves their own cursor and confirms; when all have voted, the cards go.</summary>
+        private void ChooseTeamVote()
+        {
+            if (_cards.Count == 0) return;
+            if (_watching) { WatchTeamVote(); return; }
+            var since = Time.unscaledTime - _stageAt;
+            var readyGate = since > 0.55f;
+            for (var n = _voters.Count - 1; n >= 0; n--)
+            {
+                var player = _voters[n];
+                if (_ready.ContainsKey(player)) continue;
+                var slot = SlotOf(player);
+                if (slot < 0 || slot >= Local.Slots.Count) continue;
+                var m = Local.MenuFor(slot);
+                int focus;
+                if (!_cursors.TryGetValue(player, out focus)) focus = _cards.Count / 2;
+                if (m.X != 0)
+                {
+                    var to = Mathf.Clamp(focus + m.X, 0, _cards.Count - 1);
+                    if (to != focus) { _cursors[player] = to; Sound.Move(); }
+                }
+                // mouse: the first local voter still choosing steers with it (keyboard players especially)
+                if (n == 0)
+                {
+                    var mouse = UnityEngine.InputSystem.Mouse.current;
+                    if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 0.5f && Time.unscaledTime - _lastHover > 0.12f)
+                    {
+                        var mp = mouse.position.ReadValue();
+                        for (var k = 0; k < _cards.Count; k++)
+                            if (ScreenRect(_cards[k]).Contains(mp)) { if (k != focus) { _cursors[player] = k; focus = k; Sound.Move(); _lastHover = Time.unscaledTime; } break; }
+                    }
+                    if (mouse != null && mouse.leftButton.wasPressedThisFrame && ScreenRect(_cards[_cursors[player]]).Contains(mouse.position.ReadValue()))
+                        m.Confirm = true;
+                }
+                if (m.Confirm && readyGate)
+                {
+                    _ready[player] = (byte)(_cursors[player] + 1);
+                    Sound.Play(Sfx.CardPick, 0.55f);
+                }
+            }
+            // lift the cards that have any cursor on them a little (the primary focus is the first voter's)
+            if (_voters.Count > 0 && _cursors.ContainsKey(_voters[0])) _focus = _cursors[_voters[0]];
+            // everyone here has voted: put the cards away
+            var allIn = _voters.Count > 0;
+            foreach (var v in _voters) if (!_ready.ContainsKey(v)) allIn = false;
+            if (allIn) LeaveTeamVote();
+        }
+
+        /// <summary>Watching a team vote: follow everyone's Hover, and leave once they've all picked.</summary>
+        private void WatchTeamVote()
+        {
+            if (_state == null) return;
+            var since = Time.unscaledTime - _stageAt;
+            var anyLeft = false;
+            foreach (var i in new List<int>(_cursors.Keys))
+            {
+                if (i < 0 || i >= _state.Players.Length) continue;
+                var p = _state.Players[i];
+                if (p.Offer.Length == 0) continue;
+                if (p.Picked >= 0)
+                {
+                    var offer = _watchOffer.Length > 0 ? _watchOffer : p.Offer;
+                    var at = System.Array.IndexOf(offer, p.Picked);
+                    _cursors[i] = at >= 0 ? at : 0;
+                    continue;
+                }
+                anyLeft = true;
+                if (p.Hover >= 1 && p.Hover <= _cards.Count && since > 0.5f) _cursors[i] = p.Hover - 1;
+            }
+            if (_cursors.Count > 0) { var e = _cursors.Keys.GetEnumerator(); e.MoveNext(); _focus = _cursors[e.Current]; }
+            if (!anyLeft && since > 1.1f) LeaveTeamVote();
+        }
+
+        /// <summary>Team Vote: put the cards away without diving into one player (everyone already locked their vote).</summary>
+        private void LeaveTeamVote()
+        {
+            _chosen = -1;
+            _absorbed = false;
+            _stage = Stage.Leaving;
+            _stageAt = Time.unscaledTime;
+            for (var k = 0; k < _cards.Count; k++)
+                _cards[k].Delay = Time.unscaledTime - _stageAt + 0.05f * k;
+        }
+
+        /// <summary>Does any team-vote cursor sit on card <paramref name="k"/>?</summary>
+        private bool CursorOn(int k)
+        {
+            foreach (var kv in _cursors) if (kv.Value == k) return true;
+            return false;
         }
 
         // ------------------------------------------------------------------ dealing, choosing, leaving
@@ -375,7 +538,7 @@ namespace UltraPuck.Game
                 }
                 else
                 {
-                    var focused = k == _focus;
+                    var focused = k == _focus || (_teamVote && CursorOn(k));
                     var bob = Mathf.Sin(t * 1.7f + c.Phase) * 0.06f;
                     tp = c.Home + new Vector3(0f, bob * size + (focused ? 0.25f * size : 0f), focused ? (_editing ? -2.2f : -0.9f) : 0f);
                     tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.2f + c.Phase) * 1.8f + c.Fan * (focused ? 0.25f : 1f));
@@ -391,7 +554,7 @@ namespace UltraPuck.Game
                     c.GlowTarget = (focusedNow ? 0.35f : 0f) + (_editing && _counts[_who][k] > 0 ? 0.45f : 0f);
                     if (!c.Landed && since > c.Delay + 0.32f) { c.Landed = true; c.SweepAt = t; c.NextSweep = t + 2.6f + c.Phase * 0.3f; }
                     if (c.Landed && t > c.NextSweep && (focusedNow || c.Rare)) { c.SweepAt = t; c.NextSweep = t + (focusedNow ? 2.6f : 4.5f); }
-                    // the rarest cards shed little sparks of light
+                    // the top-tier cards shed little sparks of light
                     if (c.Rare && c.Landed && Settings.CardEffects)
                     {
                         c.MoteTimer -= dt;
@@ -530,13 +693,23 @@ namespace UltraPuck.Game
             var appear = Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.4f);
             var a = _stage == Stage.Leaving ? 1f - Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.3f) : appear;
             var y = 34f + (1f - appear) * -20f;
-            var name = NameOf != null ? NameOf(_slot) : "";
-            if (string.IsNullOrEmpty(name)) name = "P" + (_slot + 1);
-            var who = name + "  ·  " + Palette.TeamName(team);
-            Ui.Swatch(new Rect(Ui.W / 2f - 150f, y + 6f, 26f, 26f), team);
-            Ui.Label(new Rect(Ui.W / 2f - 115f, y, 400f, 40f), who, Ui.Font(22, true), new Color(1f, 1f, 1f, a));
-            Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? (_stage == Stage.Leaving && _chosen >= 0 ? name + " took a card" : name + " is choosing...") : "Choose a card",
-                Ui.Font(40, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+            if (_teamVote)
+            {
+                Ui.Swatch(new Rect(Ui.W / 2f - 150f, y + 6f, 26f, 26f), team);
+                Ui.Label(new Rect(Ui.W / 2f - 115f, y, 400f, 40f), Palette.TeamName(team) + "  ·  team vote", Ui.Font(22, true), new Color(1f, 1f, 1f, a));
+                Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? "Watching the vote..." : "Vote for a card",
+                    Ui.Font(40, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+            }
+            else
+            {
+                var name = NameOf != null ? NameOf(_slot) : "";
+                if (string.IsNullOrEmpty(name)) name = "P" + (_slot + 1);
+                var who = name + "  ·  " + Palette.TeamName(team);
+                Ui.Swatch(new Rect(Ui.W / 2f - 150f, y + 6f, 26f, 26f), team);
+                Ui.Label(new Rect(Ui.W / 2f - 115f, y, 400f, 40f), who, Ui.Font(22, true), new Color(1f, 1f, 1f, a));
+                Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? (_stage == Stage.Leaving && _chosen >= 0 ? name + " took a card" : name + " is choosing...") : "Choose a card",
+                    Ui.Font(40, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+            }
 
             // time left
             var noLimit = Sim.T.PickTime <= Fix.Zero;
@@ -545,10 +718,49 @@ namespace UltraPuck.Game
             Ui.Box(bar, new Color(1f, 1f, 1f, 0.12f * a), 3f);
             Ui.Box(new Rect(bar.x, bar.y, bar.width * left, bar.height), new Color(1f, 1f, 1f, (left < 0.2f ? 0.9f : 0.6f) * a), 3f);
 
-            if (_watching) { Ui.Label(new Rect(0f, Ui.H - 46f, Ui.W, 30f), "Watching the other team pick", Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a)); return; }
+            if (_teamVote && _stage == Stage.Choosing) DrawVoteCursors(a);
+
+            if (_watching) { Ui.Label(new Rect(0f, Ui.H - 46f, Ui.W, 30f), _teamVote ? "Watching the other team vote" : "Watching the other team pick", Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a)); return; }
             var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
             var hint = device is UnityEngine.InputSystem.Keyboard ? "{look} Look      {join} Take it  (or click)" : "{side} Look      {aim} Tilt      {confirm} Take it";
             Glyphs.Hint(new Rect(0f, Ui.H - 46f, Ui.W, 30f), hint, 17, new Color(1f, 1f, 1f, 0.6f * a), TextAnchor.MiddleCenter, device);
+        }
+
+        /// <summary>Team Vote: each voter's name under the card their cursor is on (stacked if several share one).</summary>
+        private void DrawVoteCursors(float a)
+        {
+            var under = new Dictionary<int, List<int>>();
+            foreach (var kv in _cursors)
+            {
+                var card = kv.Value;
+                if (card < 0 || card >= _cards.Count) continue;
+                List<int> list;
+                if (!under.TryGetValue(card, out list)) { list = new List<int>(); under[card] = list; }
+                list.Add(kv.Key);
+            }
+            foreach (var kv in under)
+            {
+                var r = ScreenRect(_cards[kv.Key]);
+                // ScreenRect is screen pixels (bottom-left); Ui is a 1280x720 canvas
+                var scale = Screen.height / 720f * Settings.UiScale;
+                var cx = r.center.x / scale;
+                var top = (Screen.height - r.yMin) / scale;
+                var row = 0;
+                foreach (var player in kv.Value)
+                {
+                    var locked = _ready.ContainsKey(player) || (_state != null && player < _state.Players.Length && _state.Players[player].Picked >= 0);
+                    var name = NameOf != null ? NameOf(player) : "";
+                    if (string.IsNullOrEmpty(name)) name = "P" + (player + 1);
+                    if (locked) name = "+ " + name;
+                    var pteam = _state != null && player < _state.Players.Length ? _state.Players[player].Team : 0;
+                    var tw = Mathf.Max(80f, name.Length * 9f + 28f);
+                    var yy = top + 8f + row * 26f;
+                    Ui.Box(new Rect(cx - tw / 2f, yy, tw, 22f), new Color(0f, 0f, 0f, 0.55f * a), 4f);
+                    Ui.Swatch(new Rect(cx - tw / 2f + 4f, yy + 3f, 16f, 16f), pteam);
+                    Ui.Label(new Rect(cx - tw / 2f + 24f, yy, tw - 28f, 22f), name, Ui.Font(15, true), new Color(1f, 1f, 1f, (locked ? 1f : 0.85f) * a));
+                    row++;
+                }
+            }
         }
 
         // ------------------------------------------------------------------ free play's card editor

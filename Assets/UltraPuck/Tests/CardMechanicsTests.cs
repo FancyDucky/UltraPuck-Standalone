@@ -73,6 +73,43 @@ namespace UltraPuck.Tests
             Assert.AreEqual(home, s.Pylons[0].Pos, "back on its spot for the face-off");
         }
 
+        /// <summary>
+        /// On every rink, whichever way its nets face, the pylon goalies stand on the ice in a row just in front of
+        /// their team's net: between the net and a shot coming straight at its mouth.
+        /// </summary>
+        [TestCase("test-rink.json")]
+        [TestCase("hockey-rink.json")]
+        [TestCase("s-rink.json")]
+        [TestCase("u-rink.json")]
+        public void PylonGoaliesStandInFrontOfTheirNetOnEveryRink(string file)
+        {
+            var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));
+            var sim = new Simulation(map, null, _lib);
+            var s = sim.NewGame(new[] { 0, 1 }, 1u);
+            var pg = _lib.ById("ultrapuck.pylongoalie").Index;
+            s.Players[0].Cards = new[] { pg, pg, pg };
+            s.Players[1].Cards = new[] { pg, pg, pg };
+            _lib.Recompute(s);
+            sim.PlacePylons(s);
+            Assert.AreEqual(6, s.Pylons.Length);
+            foreach (var py in s.Pylons)
+            {
+                var g = map.Goals.Find(x => x.Team == py.Team);
+                Assert.IsTrue(map.Inside(py.Pos), "on the ice: " + py.Pos);
+                Assert.IsFalse(g.Touches(py.Pos, sim.T.PylonRadius), "not in the net itself");
+                // which way the net opens: it says, or (a straight rink) towards the middle
+                var mid = new FixVec2((g.Min.X + g.Max.X) / 2, (g.Min.Y + g.Max.Y) / 2);
+                var front = g.HasFacing ? g.Facing : new FixVec2(map.PuckSpot.X > mid.X ? Fix.One : -Fix.One, Fix.Zero);
+                var off = py.Pos - mid;
+                var ahead = FixVec2.Dot(off, front).ToDouble();
+                var aside = System.Math.Abs(FixVec2.Dot(off, new FixVec2(-front.Y, front.X)).ToDouble());
+                Assert.AreEqual(sim.T.PylonOut.ToDouble(), ahead, 1e-3, "out in front of the mouth");
+                Assert.LessOrEqual(aside, sim.T.PylonSpread.ToDouble() * 1.5 + 1e-3, "and across it, not off to one side");
+                // nothing between it and the net's middle but the open mouth
+                Assert.IsFalse(map.Blocked(py.Pos, mid), "no wall between the pylon and the inside of its net");
+            }
+        }
+
         /// <summary>Switched-off cards are never offered.</summary>
         [Test]
         public void SwitchedOffCardsAreNeverOffered()

@@ -20,6 +20,19 @@ namespace UltraPuck.Game
         public Page Current { get; private set; }
         public bool IsOpen { get { return Current != Page.None; } }
 
+        /// <summary>
+        /// True while the Music slider is the focused row on the Sound tab: the music plays at full volume then, so you
+        /// can hear the level you're setting (elsewhere in the pause menu it plays quieter).
+        /// </summary>
+        public bool HearingMusic
+        {
+            get
+            {
+                if (Current != Page.Settings || _tab != 3 || _focus < 0 || _focus >= _rows.Count) return false;
+                return _rows[_focus].Label == "Music";
+            }
+        }
+
         // filled in by GameRunner
         public Action OnResume, OnMainMenu, OnGetCard;
         public Func<int> BotCount, MaxBots;
@@ -199,6 +212,8 @@ namespace UltraPuck.Game
                     _rows.Add(Slider("Volume", () => Settings.Volume, v => Settings.Volume = v, Percent, "How loud the whole game is."));
                     _rows.Add(Slider("Music", () => Settings.MusicVolume, v => Settings.MusicVolume = v, Percent, "How loud the music is next to everything else."));
                     _rows.Add(Slider("Sound effects", () => Settings.SoundVolume, v => Settings.SoundVolume = v, Percent, "Hits, shots, goals, cards and menu sounds."));
+                    _rows.Add(Switch("Pause music when unfocused", () => Settings.PauseMusicWhenUnfocused, v => Settings.PauseMusicWhenUnfocused = v,
+                        "When the game window isn't focused: pause the music. Leave this off and the next song still starts if one ends while you're looking elsewhere."));
                     break;
                 case 4:
                     MatchRows();
