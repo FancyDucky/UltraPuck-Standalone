@@ -227,22 +227,22 @@ namespace UltraPuck.Game
                 if (name) s.TypingDevice = namer;
                 if (!s.Ready)
                 {
-                    if (nav.x != 0) { s.Colour = ((s.Colour + nav.x) % Palette.Choosable + Palette.Choosable) % Palette.Choosable; AssignTeams(); }
-                    if (name) NameRequest = s;
-                    if (symbol) s.Symbol = (s.Symbol + 1) % Symbols.Count;
-                    if (confirm) { s.Ready = true; s.Cursor = 0; }
+                    if (nav.x != 0) { s.Colour = ((s.Colour + nav.x) % Palette.Choosable + Palette.Choosable) % Palette.Choosable; AssignTeams(); Sound.Step(nav.x); }
+                    if (name) { NameRequest = s; Sound.Select(); }
+                    if (symbol) { s.Symbol = (s.Symbol + 1) % Symbols.Count; Sound.Move(); }
+                    if (confirm) { s.Ready = true; s.Cursor = 0; Sound.Select(); }
                     continue;
                 }
                 // readied: working on the bots
                 var bots = Bots;
                 if (bots == null) continue;
-                if (more && bots.Add()) s.Cursor = bots.Count - 1;
+                if (more) { if (bots.Add()) { s.Cursor = bots.Count - 1; Sound.Select(); } else Sound.Deny(); }
                 if (bots.Count == 0) { s.Cursor = 0; continue; }
                 s.Cursor = Mathf.Clamp(s.Cursor, 0, bots.Count - 1);
-                if (nav.y != 0) s.Cursor = (s.Cursor - nav.y + bots.Count) % bots.Count;
-                if (nav.x != 0) bots.SwitchTeam(s.Cursor);
-                if (symbol) bots.NextSymbol(s.Cursor);
-                if (less) { bots.Remove(s.Cursor); s.Cursor = Mathf.Clamp(s.Cursor, 0, Mathf.Max(0, bots.Count - 1)); }
+                if (nav.y != 0) { s.Cursor = (s.Cursor - nav.y + bots.Count) % bots.Count; if (bots.Count > 1) Sound.Move(); }
+                if (nav.x != 0) { bots.SwitchTeam(s.Cursor); Sound.Step(nav.x); }
+                if (symbol) { bots.NextSymbol(s.Cursor); Sound.Move(); }
+                if (less) { bots.Remove(s.Cursor); s.Cursor = Mathf.Clamp(s.Cursor, 0, Mathf.Max(0, bots.Count - 1)); Sound.Back(); }
             }
         }
 
@@ -266,6 +266,7 @@ namespace UltraPuck.Game
             s.BackHeld = 0f;
             var pressed = Any(s, g => g.buttonEast.wasPressedThisFrame, k => k.escapeKey.wasPressedThisFrame);
             if (!pressed) return;
+            Sound.Back();
             if (s.Ready) { s.Ready = false; return; } // B un-readies first
             Slots.Remove(s);
             AssignTeams();
@@ -300,6 +301,7 @@ namespace UltraPuck.Game
                 }
             }
             AssignTeams();
+            Sound.Select();
             Debug.Log("Ultra Puck: P" + Slots.Count + " joined with " + d.displayName + " (" + d.layout + ")");
             return true;
         }
@@ -418,6 +420,29 @@ namespace UltraPuck.Game
             var kb = Keyboard.current;
             if (kb == null) return 0;
             return kb.qKey.wasPressedThisFrame ? -1 : kb.eKey.wasPressedThisFrame ? 1 : 0;
+        }
+
+        /// <summary>
+        /// "Press any button": the controller or keyboard something was just pressed on (any key, any controller
+        /// button, a mouse button, which counts as the keyboard), or null. Pushing a stick doesn't count: a worn
+        /// stick that drifts would press it by itself.
+        /// </summary>
+        public static InputDevice AnyButton()
+        {
+            if (Blocked) return null;
+            foreach (var g in Gamepad.all)
+            {
+                if (g.buttonSouth.wasPressedThisFrame || g.buttonEast.wasPressedThisFrame || g.buttonWest.wasPressedThisFrame || g.buttonNorth.wasPressedThisFrame
+                    || g.startButton.wasPressedThisFrame || g.selectButton.wasPressedThisFrame
+                    || g.leftShoulder.wasPressedThisFrame || g.rightShoulder.wasPressedThisFrame || g.leftTrigger.wasPressedThisFrame || g.rightTrigger.wasPressedThisFrame
+                    || g.leftStickButton.wasPressedThisFrame || g.rightStickButton.wasPressedThisFrame
+                    || g.dpad.up.wasPressedThisFrame || g.dpad.down.wasPressedThisFrame || g.dpad.left.wasPressedThisFrame || g.dpad.right.wasPressedThisFrame) return g;
+            }
+            var kb = Keyboard.current;
+            if (kb != null && kb.anyKey.wasPressedThisFrame) return kb;
+            var m = Mouse.current;
+            if (m != null && (m.leftButton.wasPressedThisFrame || m.rightButton.wasPressedThisFrame || m.middleButton.wasPressedThisFrame)) return kb ?? (InputDevice)m;
+            return null;
         }
 
         /// <summary>Lobby: View (Select) / Tab on any controller or the keyboard opens the settings.</summary>

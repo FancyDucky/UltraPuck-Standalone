@@ -485,6 +485,9 @@ namespace UltraPuck.Core
             s.PuckVel = p.Facing * speed + p.Vel * Fix.Half;
             s.PuckTeam = p.Team;
             s.PassFrom = i; // a pass, if a teammate gets it before an opponent touches it
+            // noted for the sound side: a shot, and how hard next to a fully charged one
+            p.ShotsFired++;
+            p.ShotStrength = Fix.Clamp01(speed / T.ChargedShotMax);
             // Ice Trail: a fully charged shot lays ice behind the puck
             if (released && p.Charge >= Fix.One && p.Stats.IceTrail > 0) StartIce(s, p);
             p.Charge = Fix.Zero;

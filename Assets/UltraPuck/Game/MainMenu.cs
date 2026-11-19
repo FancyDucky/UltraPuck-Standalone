@@ -12,7 +12,8 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class MainMenu : MonoBehaviour
     {
-        public enum Page { None, Main, Online, JoinIp, Browse, OnlineLobby, Friends }
+        /// <summary><see cref="Title"/> is the "press any button" screen the game starts on (see <see cref="TitleScreen"/>).</summary>
+        public enum Page { None, Main, Online, JoinIp, Browse, OnlineLobby, Friends, Title }
 
         public Page Current { get; private set; }
         public GameRunner Runner;
@@ -46,10 +47,29 @@ namespace UltraPuck.Game
 
         public void Show(Page page)
         {
-            if (page != Current) { _focus = 0; _focusY = -1f; _openedAt = Time.unscaledTime; }
+            if (page != Current) { _focus = 0; _focusY = -1f; _openedAt = Time.unscaledTime; _openedFrame = Time.frameCount; }
             if (page != Page.OnlineLobby && page != Page.Friends) OptionsOpen = false;
+            if (page == Page.Title && Current != Page.Title) _titleAt = Time.unscaledTime;
+            if (page != Page.Main) _leftTitleAt = -100f;
             Current = page;
             _typing = page == Page.JoinIp;
+        }
+
+        // the frame the page opened on: the click that opened it mustn't also press a button on it
+        private int _openedFrame = -1;
+        // when the title screen appeared, and when a button was pressed on it (the change to the main menu takes a moment)
+        private float _titleAt, _leftTitleAt = -100f;
+
+        /// <summary>Screenshots: buttons don't leave the title screen (someone using the PC mustn't spoil the picture).</summary>
+        public bool TitleStays;
+
+        /// <summary>A button was pressed on the title screen: on to the main menu.</summary>
+        public void LeaveTitle()
+        {
+            if (Current != Page.Title) return;
+            Sound.Select();
+            Show(Page.Main);
+            _leftTitleAt = Time.unscaledTime;
         }
 
         /// <summary>The online lobby's options panel is open (the host's settings, inviting, leaving).</summary>
@@ -165,13 +185,26 @@ namespace UltraPuck.Game
         public void Tick()
         {
             if (Current == Page.None) return;
+            if (Current == Page.Title)
+            {
+                // anything at all: a key, a mouse button, any button on any controller
+                var pressed = LocalPlayers.AnyButton();
+                if (pressed != null && Time.unscaledTime - _titleAt > 0.3f)
+                {
+                    Debug.Log("Ultra Puck: title screen: a button on " + pressed.displayName + (TitleStays ? " (ignored: taking screenshots)" : ""));
+                    if (TitleStays) return;
+                    if (!(pressed is UnityEngine.InputSystem.Mouse)) _lastDevice = pressed; // free play starts on the device last used
+                    LeaveTitle();
+                }
+                return;
+            }
             if (Current == Page.OnlineLobby && !OptionsOpen)
             {
                 // the lobby itself: joining and teams are the players' own controls; Select / Tab opens the options
-                if (Local.SettingsPressed()) OpenOptions(true);
+                if (Local.SettingsPressed()) { Sound.Select(); OpenOptions(true); }
                 return;
             }
-            if (Current == Page.OnlineLobby && Local.SettingsPressed()) { OpenOptions(false); return; }
+            if (Current == Page.OnlineLobby && Local.SettingsPressed()) { Sound.Back(); OpenOptions(false); return; }
             BuildRows();
             var m = Local.Menu();
             if (m.Device != null) _lastDevice = m.Device;
@@ -179,13 +212,14 @@ namespace UltraPuck.Game
             {
                 // typing an address: the keyboard is for text, so only Enter, Escape, Tab and the arrows do anything
                 var kb = UnityEngine.InputSystem.Keyboard.current;
-                if (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)) { _typing = false; _focus = 1; _rows[1].Press(); return; }
-                if (kb != null && (kb.escapeKey.wasPressedThisFrame)) { Show(Page.Online); return; }
-                if (kb != null && (kb.downArrowKey.wasPressedThisFrame || kb.tabKey.wasPressedThisFrame)) { _typing = false; _focus = 1; }
+                if (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)) { _typing = false; _focus = 1; Sound.Select(); _rows[1].Press(); return; }
+                if (kb != null && (kb.escapeKey.wasPressedThisFrame)) { Sound.Back(); Show(Page.Online); return; }
+                if (kb != null && (kb.downArrowKey.wasPressedThisFrame || kb.tabKey.wasPressedThisFrame)) { _typing = false; _focus = 1; Sound.Move(); }
                 return;
             }
             if (m.Back)
             {
+                if (Current != Page.Main) Sound.Back(); // the first page has nowhere to go back to
                 if (Current == Page.Online) Show(Page.Main);
                 else if (Current == Page.JoinIp || Current == Page.Browse) Show(Page.Online);
                 else if (Current == Page.Friends) Show(Page.OnlineLobby);
@@ -196,18 +230,25 @@ namespace UltraPuck.Game
             var wheel = UnityEngine.InputSystem.Mouse.current != null ? UnityEngine.InputSystem.Mouse.current.scroll.ReadValue().y : 0f;
             if (wheel != 0f && Current == Page.Friends) m.Y = wheel > 0f ? 1 : -1;
             if (m.Y != 0)
+            {
+                var was = _focus;
                 for (var k = 0; k < _rows.Count; k++)
                 {
                     _focus = (_focus - m.Y + _rows.Count) % _rows.Count;
                     if (_rows[_focus].Enabled()) break;
                 }
+                if (_focus != was) Sound.Move();
+            }
             _focus = Mathf.Clamp(_focus, 0, _rows.Count - 1);
             var row = _rows[_focus];
             if (!row.Enabled()) return;
-            if (row.TextField && m.Confirm) { _typing = true; return; }
-            if (m.X != 0 && row.Step != null) row.Step(m.X);
-            else if (m.Confirm && row.Press != null) row.Press();
+            if (row.TextField && m.Confirm) { Sound.Select(); _typing = true; return; }
+            if (m.X != 0 && row.Step != null) { row.Step(m.X); Sound.Step(m.X); }
+            else if (m.Confirm && row.Press != null) { PressSound(row); row.Press(); }
         }
+
+        /// <summary>The sound for pressing a row: going back or leaving sounds different from choosing.</summary>
+        private static void PressSound(Row row) { if (row.Label == "Back" || row.Label == "Leave the game") Sound.Back(); else Sound.Select(); }
 
         // ------------------------------------------------------------------ drawing
 
@@ -218,16 +259,21 @@ namespace UltraPuck.Game
             Ui.Begin();
             BuildRows();
             var t = Time.unscaledTime - _openedAt;
+            if (Current == Page.Title) { TitleScreen.Draw(Time.unscaledTime - _titleAt, 0f); return; }
 
             // the main page shows the live match behind; the other pages a plain backdrop (it's too busy there)
             if (Current != Page.Main) Ui.Box(new Rect(0f, 0f, Ui.W, Ui.H), Palette.Background, 0f);
             if (Current == Page.OnlineLobby) { Lobby(t); return; }
-            Ui.Box(new Rect(0f, 0f, 620f, Ui.H), new Color(0f, 0f, 0f, 0.62f), 0f);
-            Ui.Box(new Rect(620f, 0f, 120f, Ui.H), new Color(0f, 0f, 0f, 0.3f), 0f);
+            // straight from the title screen: the panel slides in from the left while the name flies up to its place
+            var leave = (Time.unscaledTime - _leftTitleAt) / TitleScreen.LeaveTime;
+            var arriving = Current == Page.Main && leave < 1f;
+            var slide = arriving ? (1f - Ui.EaseOut(leave)) * -740f : 0f;
+            Ui.Box(new Rect(slide, 0f, 620f, Ui.H), new Color(0f, 0f, 0f, 0.62f), 0f);
+            Ui.Box(new Rect(620f + slide, 0f, 120f, Ui.H), new Color(0f, 0f, 0f, 0.3f), 0f);
 
-            var x = 80f;
-            Ui.Label(new Rect(x, 70f, 600f, 90f), "ULTRA PUCK", Ui.Font(76, true), Color.white);
-            if (Current == Page.Main) Ui.Label(new Rect(x + 4f, 46f, 300f, 26f), "v" + Updater.Current, Ui.Font(16, true), new Color(1f, 1f, 1f, 0.5f));
+            var x = TitleScreen.MenuX;
+            if (!arriving) TitleScreen.Logo(x, TitleScreen.MenuY, 1f, 1f);
+            if (Current == Page.Main) Ui.Label(new Rect(x + 4f, 46f, 300f, 26f), "v" + Updater.Current, Ui.Font(16, true), new Color(1f, 1f, 1f, arriving ? 0.5f * Ui.EaseOut(leave) : 0.5f));
             Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim);
 
             Rows(x, 220f, 460f, 64f, 10f, 26, t, Current == Page.Friends ? Ui.H - 130f : float.MaxValue);
@@ -242,6 +288,8 @@ namespace UltraPuck.Game
 
             Glyphs.Hint(new Rect(x, Ui.H - 38f, 900f, 28f), Hint(), 15, new Color(1f, 1f, 1f, 0.55f), TextAnchor.MiddleLeft);
             Ui.Label(new Rect(Ui.W - 220f, Ui.H - 36f, 200f, 24f), "v" + Updater.Current, Ui.Font(14, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.35f));
+            // the title screen on its way out, over the top
+            if (arriving) TitleScreen.Draw(Time.unscaledTime - _titleAt, leave);
         }
 
         /// <summary>
@@ -284,13 +332,13 @@ namespace UltraPuck.Game
             {
                 var ready = s.Seats.Count >= 2 && !s.TooManyTeams && s.AllReady;
                 var text = ready ? "{start} Start match" : s.Seats.Count < 2 ? "Need 2 players to start" : !s.AllReady ? "Waiting for everyone to ready up" : "Only two teams";
-                if (PlayScreens.Chip(new Rect(w / 2f - 290f, fy, 280f, 46f), text, ready, true, !OptionsOpen) && ready) Runner.StartOnlineMatch();
-                if (PlayScreens.Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Options", true, false, !OptionsOpen)) OpenOptions(true);
+                if (PlayScreens.Chip(new Rect(w / 2f - 290f, fy, 280f, 46f), text, ready, true, !OptionsOpen) && ready) { Sound.Select(); Runner.StartOnlineMatch(); }
+                if (PlayScreens.Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Options", true, false, !OptionsOpen)) { Sound.Select(); OpenOptions(true); }
             }
             else
             {
                 Ui.Label(new Rect(w / 2f - 300f, fy, 290f, 46f), "Waiting for the host to start", Ui.Font(17, false, TextAnchor.MiddleRight), new Color(1f, 1f, 1f, 0.55f));
-                if (PlayScreens.Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Options", true, false, !OptionsOpen)) OpenOptions(true);
+                if (PlayScreens.Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Options", true, false, !OptionsOpen)) { Sound.Select(); OpenOptions(true); }
             }
 
             if (!string.IsNullOrEmpty(Message))
@@ -317,7 +365,7 @@ namespace UltraPuck.Game
             Ui.Label(new Rect(p.x + 30f, p.y + 18f, pw - 60f, 44f), "Options", Ui.Font(28, true), Color.white);
             Rows(p.x + 20f, p.y + 76f, pw - 40f, rowH, gap, 20, Time.unscaledTime - _optionsAt);
             Glyphs.Hint(new Rect(p.x, p.yMax - 40f, pw, 28f), "{confirm} Choose      {side} Change      {back} Close", 14, new Color(1f, 1f, 1f, 0.55f));
-            if (Ui.Clicked && !p.Contains(Ui.Mouse) && Event.current.type == EventType.Repaint) OpenOptions(false);
+            if (Ui.Clicked && !p.Contains(Ui.Mouse) && Event.current.type == EventType.Repaint) { Sound.Back(); OpenOptions(false); }
         }
 
         /// <summary>The page's buttons, in a column at (<paramref name="x"/>, <paramref name="top"/>).</summary>
@@ -349,7 +397,7 @@ namespace UltraPuck.Game
             {
                 if (_rows.Count > fit && (i < _scroll || i >= _scroll + fit)) continue;
                 var r = new Rect(x, top + i * (rowH + gap), w, rowH);
-                if (r.Contains(mouse) && Ui.MouseMoved && _rows[i].Enabled()) { _focus = i; if (!_rows[i].TextField) _typing = false; }
+                if (r.Contains(mouse) && Ui.MouseMoved && _rows[i].Enabled()) { if (_focus != i) Sound.Move(); _focus = i; if (!_rows[i].TextField) _typing = false; }
             }
             _focus = Mathf.Clamp(_focus, 0, Mathf.Max(0, _rows.Count - 1));
             var target = top + _focus * (rowH + gap);
@@ -376,10 +424,10 @@ namespace UltraPuck.Game
                 var pad = rowH >= 60f ? 26f : 16f;
                 Ui.Label(new Rect(r.x + pad, r.y + (detail ? 6f : 0f), r.width - pad - 10f, detail ? 36f : r.height), label, Ui.Font(font, i == _focus), col);
                 if (detail) Ui.Label(new Rect(r.x + pad + 1f, r.y + 36f, r.width - 40f, 22f), row.Detail, Ui.Font(14), new Color(1f, 1f, 1f, 0.5f * appear));
-                if (on && Ui.Clicked && r.Contains(mouse) && Event.current.type == EventType.Repaint)
+                if (on && Ui.Clicked && r.Contains(mouse) && Event.current.type == EventType.Repaint && Time.frameCount != _openedFrame)
                 {
-                    if (row.Step != null) row.Step(mouse.x < r.center.x ? -1 : 1);
-                    else if (row.Press != null) row.Press();
+                    if (row.Step != null) { var d = mouse.x < r.center.x ? -1 : 1; row.Step(d); Sound.Step(d); }
+                    else if (row.Press != null) { PressSound(row); row.Press(); }
                 }
             }
         }
@@ -453,6 +501,7 @@ namespace UltraPuck.Game
                 case Page.OnlineLobby: return "{join} Join      {side} Switch team      {profile} Name      {shape} Symbol      {leave} Leave seat      {settings} Options";
                 case Page.JoinIp: return _typing ? "Type the address, then Enter      Esc: back" : "{confirm} Choose      {back} Back";
                 case Page.Main: return "{confirm} Choose";
+                case Page.Title: return "";
                 default: return "{confirm} Choose      {back} Back";
             }
         }

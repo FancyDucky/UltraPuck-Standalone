@@ -55,9 +55,9 @@ namespace UltraPuck.Game
 
         private void JoinTick()
         {
-            if (Local.SettingsPressed()) { Runner.OpenSettings(); return; }
+            if (Local.SettingsPressed()) { Sound.Select(); Runner.OpenSettings(); return; }
             Local.LobbyUpdate();
-            if (Local.LeaveLobbyHeld()) { Runner.GoMainMenu(); return; }
+            if (Local.LeaveLobbyHeld()) { Sound.Back(); Runner.GoMainMenu(); return; }
             if (Local.NameRequest != null) { OpenKeyboard(Local.NameRequest); Local.NameRequest = null; return; }
             if (Local.HumanCount > 0 && Local.StartPressed()) Continue();
         }
@@ -70,31 +70,33 @@ namespace UltraPuck.Game
                 if (colours > 2) Problem("Only two teams: red and blue.");
                 else if (colours < 2 && Local.Slots.Count > 1) Problem("Everyone's on the same team: pick another colour, or add a bot with " + (InputMode.Pad ? "RB" : "="));
                 else if (Local.Slots.Count < 2) Problem("Add a bot (" + (InputMode.Pad ? "RB" : "=") + ") or another player to play against.");
-                else Open(Page.Map);
+                else { Sound.Select(); Open(Page.Map); }
             }
         }
 
         private void MapTick()
         {
             var m = Local.MenuJoined();
-            if (m.Back) { Open(Page.Join); return; }
-            if (m.X != 0) Runner.StepMap(m.X);
-            if (m.Confirm || Local.StartPressed()) Open(Page.Rules);
+            if (m.Back) { Sound.Back(); Open(Page.Join); return; }
+            if (m.X != 0) { Runner.StepMap(m.X); Sound.Step(m.X); }
+            if (m.Confirm || Local.StartPressed()) { Sound.Select(); Open(Page.Rules); }
         }
 
         private void RulesTick()
         {
             var m = Local.MenuJoined();
-            if (m.Back) { Open(Page.Map); return; }
-            if (m.Y != 0) _rulesRow = (_rulesRow + 2 - m.Y) % 2;
+            if (m.Back) { Sound.Back(); Open(Page.Map); return; }
+            if (m.Y != 0) { _rulesRow = (_rulesRow + 2 - m.Y) % 2; Sound.Move(); }
             if (m.X != 0)
             {
                 Settings.MatchMode = _rulesRow;
                 if (_rulesRow == 0) Settings.GoalsToWin += m.X;
                 else Settings.MatchMinutes += m.X;
+                Sound.Step(m.X);
             }
             if (m.Confirm || Local.StartPressed())
             {
+                Sound.Select();
                 Settings.MatchMode = _rulesRow;
                 PlayerPrefs.Save();
                 Open(Page.None);
@@ -102,7 +104,7 @@ namespace UltraPuck.Game
             }
         }
 
-        private void Problem(string text) { _problem = text; _problemAt = Time.unscaledTime; }
+        private void Problem(string text) { _problem = text; _problemAt = Time.unscaledTime; Sound.Deny(); }
 
         // ------------------------------------------------------------------ the name keyboard
 
@@ -165,8 +167,8 @@ namespace UltraPuck.Game
             {
                 // a real keyboard: just type
                 if (kb.backspaceKey.wasPressedThisFrame && _buffer.Length > 0) _buffer = _buffer.Substring(0, _buffer.Length - 1);
-                if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) CloseKeyboard(true);
-                else if (kb.escapeKey.wasPressedThisFrame) CloseKeyboard(false);
+                if (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame) { Sound.Select(); CloseKeyboard(true); }
+                else if (kb.escapeKey.wasPressedThisFrame) { Sound.Back(); CloseKeyboard(false); }
                 return;
             }
             var slot = Local.Slots.IndexOf(_typist);
@@ -174,11 +176,13 @@ namespace UltraPuck.Game
             var g = Typer(_typist) as Gamepad;
             if (m.X != 0) _kx = (_kx + m.X + 10) % 10;
             if (m.Y != 0) _ky = (_ky - m.Y + SpecialRow + 1) % (SpecialRow + 1);
-            if (g != null && g.startButton.wasPressedThisFrame) { CloseKeyboard(true); return; }
-            if (g != null && g.buttonNorth.wasPressedThisFrame) { _lower = !_lower; return; }
+            if (m.X != 0 || m.Y != 0) Sound.Move();
+            if (g != null && g.startButton.wasPressedThisFrame) { Sound.Select(); CloseKeyboard(true); return; }
+            if (g != null && g.buttonNorth.wasPressedThisFrame) { _lower = !_lower; Sound.Move(); return; }
             if (m.Back)
             {
                 // B: rub out a letter; with nothing left, put the keyboard away
+                Sound.Back();
                 if (_buffer.Length > 0) _buffer = _buffer.Substring(0, _buffer.Length - 1);
                 else CloseKeyboard(false);
                 return;
@@ -192,14 +196,15 @@ namespace UltraPuck.Game
             {
                 var ch = Keys[y][x];
                 if (_lower && char.IsLetter(ch)) ch = char.ToLowerInvariant(ch);
-                if (_buffer.Length < Settings.MaxNameLength) _buffer += ch;
+                if (_buffer.Length < Settings.MaxNameLength) { _buffer += ch; Sound.Step(1); }
+                else Sound.Deny();
                 return;
             }
             // the bottom row: Aa (0-1), space (2-6), delete (7-8), OK (9)
-            if (x <= 1) _lower = !_lower;
-            else if (x <= 6) { if (_buffer.Length > 0 && _buffer.Length < Settings.MaxNameLength) _buffer += ' '; }
-            else if (x <= 8) { if (_buffer.Length > 0) _buffer = _buffer.Substring(0, _buffer.Length - 1); }
-            else CloseKeyboard(true);
+            if (x <= 1) { _lower = !_lower; Sound.Move(); }
+            else if (x <= 6) { if (_buffer.Length > 0 && _buffer.Length < Settings.MaxNameLength) { _buffer += ' '; Sound.Step(1); } }
+            else if (x <= 8) { if (_buffer.Length > 0) { _buffer = _buffer.Substring(0, _buffer.Length - 1); Sound.Back(); } }
+            else { Sound.Select(); CloseKeyboard(true); }
         }
 
         // ------------------------------------------------------------------ drawing
@@ -258,7 +263,7 @@ namespace UltraPuck.Game
             var fy = h - 128f;
             var ready = Local.AllReady;
             if (Chip(new Rect(w / 2f - 250f, fy, 240f, 46f), ready ? "{start} Continue" : Local.HumanCount == 0 ? "Press {join} to join" : "Press {join} when ready", ready, true, true) && ready) Continue();
-            if (Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Settings", true, false, true)) Runner.OpenSettings();
+            if (Chip(new Rect(w / 2f + 10f, fy, 240f, 46f), "{settings} Settings", true, false, true)) { Sound.Select(); Runner.OpenSettings(); }
 
             Hud.LeavingBar(new Rect(w / 2 - 150, h - 100, 300, 22), Local.NobodyLeaving, "Back to the main menu");
             HintLines(w, h, LobbyHint(Local, true));

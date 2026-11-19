@@ -38,7 +38,7 @@ namespace UltraPuck.Game
         private float _openedAt, _focusY = -1f, _tabX = -1f;
         private string _subtitle = "";
 
-        private static readonly string[] Tabs = { "Graphics", "Gameplay", "Camera", "Match" };
+        private static readonly string[] Tabs = { "Graphics", "Gameplay", "Camera", "Sound", "Match" };
         /// <summary>Rows shown at once; longer pages scroll with the focus.</summary>
         private const int MaxVisible = 8;
         private int _first;
@@ -196,6 +196,11 @@ namespace UltraPuck.Game
                     _rows.Add(cz);
                     break;
                 case 3:
+                    _rows.Add(Slider("Volume", () => Settings.Volume, v => Settings.Volume = v, Percent, "How loud the whole game is."));
+                    _rows.Add(Slider("Music", () => Settings.MusicVolume, v => Settings.MusicVolume = v, Percent, "How loud the music is next to everything else."));
+                    _rows.Add(Slider("Sound effects", () => Settings.SoundVolume, v => Settings.SoundVolume = v, Percent, "Hits, shots, goals, cards and menu sounds."));
+                    break;
+                case 4:
                     MatchRows();
                     break;
             }
@@ -322,6 +327,11 @@ namespace UltraPuck.Game
 
         private static string ZoomText(float v) { return v < 0.15f ? "Close" : v > 0.85f ? "Wide" : Mathf.RoundToInt(v * 100f) + "%"; }
 
+        private static string Percent(float v) { return v < 0.005f ? "Off" : Mathf.RoundToInt(v * 100f) + "%"; }
+
+        /// <summary>The sound for pressing a row: going back sounds different from choosing.</summary>
+        private static void PressSound(Row row) { if (row.Label == "Back") Sound.Back(); else Sound.Select(); }
+
         // ------------------------------------------------------------------ opening and closing
 
         public void OpenPause(string subtitle)
@@ -333,7 +343,7 @@ namespace UltraPuck.Game
             _focusY = -1f;
         }
 
-        /// <summary>Which settings tab is showing (0 Graphics, 1 Gameplay, 2 Camera).</summary>
+        /// <summary>Which settings tab is showing (0 Graphics, 1 Gameplay, 2 Camera, 3 Sound).</summary>
         public int Tab { get { return _tab; } set { _tab = Mathf.Clamp(value, 0, Tabs.Length - 1); _focus = 0; } }
 
         public void OpenSettings(bool fromLobby)
@@ -373,26 +383,29 @@ namespace UltraPuck.Game
             if (_rows.Count == 0) return;
             if (m.Back)
             {
+                Sound.Back();
                 if (Current == Page.Cards) { Current = _cardsFrom; _focus = 0; _first = 0; _focusY = -1f; }
                 else if (Current == Page.Match) { Current = Page.Pause; _focus = 0; _first = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }
                 else Back();
                 return;
             }
-            if (Current == Page.Settings && m.Tab != 0) { _tab = (_tab + m.Tab + TabCount) % TabCount; _focus = 0; _first = 0; return; }
+            if (Current == Page.Settings && m.Tab != 0) { _tab = (_tab + m.Tab + TabCount) % TabCount; _focus = 0; _first = 0; Sound.Move(); return; }
             if (m.Y != 0)
             {
+                var was = _focus;
                 // skip greyed-out rows
                 for (var k = 0; k < _rows.Count; k++)
                 {
                     _focus = (_focus - m.Y + _rows.Count) % _rows.Count;
                     if (_rows[_focus].Enabled()) break;
                 }
+                if (_focus != was) Sound.Move();
             }
             _focus = Mathf.Clamp(_focus, 0, _rows.Count - 1);
             var row = _rows[_focus];
             if (!row.Enabled()) return;
-            if (m.X != 0 && row.Step != null) row.Step(m.X);
-            else if (m.Confirm && row.Press != null) row.Press();
+            if (m.X != 0 && row.Step != null) { row.Step(m.X); Sound.Step(m.X); } // after the change: a volume slider ticks at its new volume
+            else if (m.Confirm && row.Press != null) { PressSound(row); row.Press(); }
         }
 
         // ------------------------------------------------------------------ drawing
@@ -444,10 +457,13 @@ namespace UltraPuck.Game
             for (var i = _first; i < last; i++)
             {
                 var r = new Rect(x + 30f, rowsTop + (i - _first) * (rowH + 8f), rowW, rowH);
-                if (r.Contains(mouse) && Ui.MouseMoved && _rows[i].Enabled()) _focus = i;
+                if (r.Contains(mouse) && Ui.MouseMoved && _rows[i].Enabled() && _focus != i) { _focus = i; Sound.Move(); }
             }
             if (Event.current.type == EventType.ScrollWheel && _rows.Count > visible)
-                _focus = Mathf.Clamp(_focus + (Event.current.delta.y > 0 ? 1 : -1), 0, _rows.Count - 1);
+            {
+                var to = Mathf.Clamp(_focus + (Event.current.delta.y > 0 ? 1 : -1), 0, _rows.Count - 1);
+                if (to != _focus) { _focus = to; Sound.Move(); }
+            }
             // the focus highlight glides between rows
             var focusTarget = rowsTop + (_focus - _first) * (rowH + 8f);
             _focusY = _focusY < 0f ? focusTarget : Mathf.Lerp(_focusY, focusTarget, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 22f));
@@ -478,7 +494,8 @@ namespace UltraPuck.Game
 
         private void Tabs_(float x, float y, float panelW)
         {
-            const float tabW = 150f, tabH = 40f, gap = 10f;
+            const float tabH = 40f, gap = 10f;
+            var tabW = TabCount > 4 ? 132f : 150f; // five tabs have to fit across the panel
             var total = TabCount * tabW + (TabCount - 1) * gap;
             var x0 = x + panelW / 2f - total / 2f;
             var target = x0 + _tab * (tabW + gap);
@@ -488,7 +505,7 @@ namespace UltraPuck.Game
             for (var i = 0; i < TabCount; i++)
             {
                 var r = new Rect(x0 + i * (tabW + gap), y, tabW, tabH);
-                if (r.Contains(Ui.Mouse) && Ui.Clicked && Event.current.type == EventType.Repaint) { _tab = i; _focus = 0; }
+                if (r.Contains(Ui.Mouse) && Ui.Clicked && Event.current.type == EventType.Repaint) { if (_tab != i) Sound.Move(); _tab = i; _focus = 0; }
                 var on = i == _tab;
                 Ui.Label(r, Tabs[i], Ui.Font(18, on, TextAnchor.MiddleCenter), on ? new Color(0.08f, 0.08f, 0.09f) : Ui.TextDim, !on);
             }
@@ -505,8 +522,8 @@ namespace UltraPuck.Game
                 Ui.Label(r, row.Label + (row.Value != null ? ":  " + row.Value() : ""), Ui.Font(21, focused, TextAnchor.MiddleCenter), textCol);
                 if (clicked)
                 {
-                    if (row.Step != null && row.Value != null) row.Step(mouse.x < r.center.x ? -1 : 1);
-                    else if (row.Press != null) row.Press();
+                    if (row.Step != null && row.Value != null) { var d = mouse.x < r.center.x ? -1 : 1; row.Step(d); Sound.Step(d); }
+                    else if (row.Press != null) { PressSound(row); row.Press(); }
                 }
                 return;
             }
@@ -522,7 +539,7 @@ namespace UltraPuck.Game
                 var knobX = on ? sw.xMax - 27f : sw.x + 3f;
                 Ui.Box(new Rect(knobX, sw.y + 3f, 24f, 24f), on ? new Color(0.08f, 0.08f, 0.09f) : new Color(1f, 1f, 1f, enabled ? 0.85f : 0.3f), 12f);
                 Ui.Label(new Rect(right.x, r.y, right.width - 80f, r.height), on ? "On" : "Off", Ui.Font(17, false, TextAnchor.MiddleRight), textCol);
-                if (clicked) row.Press();
+                if (clicked) { Sound.Select(); row.Press(); }
             }
             else if (row.Get01 != null)
             {
@@ -536,7 +553,11 @@ namespace UltraPuck.Game
                 // click or drag along the track
                 var grab = new Rect(track.x - 12f, r.y, track.width + 24f, r.height);
                 if (enabled && Ui.MouseHeld && grab.Contains(mouse) && Event.current.type == EventType.Repaint)
-                    row.Set01(Mathf.Clamp01((mouse.x - track.x) / track.width));
+                {
+                    var to = Mathf.Clamp01((mouse.x - track.x) / track.width);
+                    row.Set01(to);
+                    if (Mathf.Abs(to - v) > 0.001f) Sound.Drag(); // a tick now and then as it moves (so you hear a volume as you set it)
+                }
             }
             else if (row.Text)
             {
@@ -545,7 +566,7 @@ namespace UltraPuck.Game
                 Ui.Box(box, new Color(1f, 1f, 1f, editing ? 0.16f : 0.06f), 10f);
                 var caret = editing && (Time.unscaledTime * 2f) % 2f < 1.2f ? "|" : "";
                 Ui.Label(new Rect(box.x + 14f, box.y, box.width - 28f, box.height), row.Value() + caret, Ui.Font(18, focused), textCol);
-                if (clicked) row.Press();
+                if (clicked) { Sound.Select(); row.Press(); }
             }
             else if (row.Value != null)
             {
@@ -553,9 +574,9 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(right.x, r.y, right.width, r.height), "‹", Ui.Font(26, false, TextAnchor.MiddleLeft), new Color(col.r, col.g, col.b, col.a * 0.6f));
                 Ui.Label(new Rect(right.x, r.y, right.width, r.height), row.Value(), Ui.Font(18, focused, TextAnchor.MiddleCenter), col);
                 Ui.Label(new Rect(right.x, r.y, right.width, r.height), "›", Ui.Font(26, false, TextAnchor.MiddleRight), new Color(col.r, col.g, col.b, col.a * 0.6f));
-                if (clicked) row.Step(mouse.x < right.center.x ? -1 : 1);
+                if (clicked) { var d = mouse.x < right.center.x ? -1 : 1; row.Step(d); Sound.Step(d); }
             }
-            else if (clicked && row.Press != null) row.Press();
+            else if (clicked && row.Press != null) { PressSound(row); row.Press(); }
         }
     }
 }

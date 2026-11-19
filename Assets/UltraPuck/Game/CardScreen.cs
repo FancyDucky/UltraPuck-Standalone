@@ -284,6 +284,7 @@ namespace UltraPuck.Game
             if (k == _focus) return;
             var dir = k > _focus ? 1f : -1f;
             _focus = k;
+            Sound.Move();
             var c = _cards[k];
             // a little kick so the change is felt (capped, so rapid changes can't build up)
             c.RotVel.z = Mathf.Clamp(c.RotVel.z - dir * 160f, -200f, 200f);
@@ -298,6 +299,7 @@ namespace UltraPuck.Game
             _absorbed = false;
             _stage = Stage.Leaving;
             _stageAt = Time.unscaledTime;
+            if (chosen >= 0 && chosen < _cards.Count) Sound.Play(Sfx.CardPick, 0.55f);
             for (var k = 0; k < _cards.Count; k++)
             {
                 var c = _cards[k];
@@ -326,6 +328,14 @@ namespace UltraPuck.Game
             {
                 var c = _cards[k];
                 Vector3 tp; Vector3 tr; float ts;
+                if (live && !c.Dealt && since >= c.Delay)
+                {
+                    // its turn: off the deck with a flick (in the editor, only the rows on screen are heard)
+                    c.Dealt = true;
+                    var row = k / EditCols - _editTop;
+                    if (!_editing || (row >= 0 && row < EditRows))
+                        Sound.Play(Sfx.CardDeal, 0.5f, 1f + 0.04f * (k % 5), Mathf.Clamp(c.Home.x / 8f, -0.5f, 0.5f));
+                }
                 if (live && since < c.Delay)
                 {
                     // still in the deck, waiting its turn
@@ -631,7 +641,7 @@ namespace UltraPuck.Game
             // Start (or Enter) applies, first: in the menus it also counts as Back (or Confirm), which here would
             // take a card away (or add one) just before saving
             if (ready && Local.StartPressed()) { EditClose(true); return; }
-            if (m.Tab != 0 && _people.Count > 1) { _who = (_who + m.Tab + _people.Count) % _people.Count; _slot = _people[_who]; foreach (var c in _cards) c.ScaleVel += 1.5f; }
+            if (m.Tab != 0 && _people.Count > 1) { _who = (_who + m.Tab + _people.Count) % _people.Count; _slot = _people[_who]; foreach (var c in _cards) c.ScaleVel += 1.5f; Sound.Move(); }
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, EditCount - 1));
             if (m.Y != 0)
             {
@@ -688,8 +698,10 @@ namespace UltraPuck.Game
             {
                 // can't: a little shake
                 c.RotVel.z += (Random.value < 0.5f ? -1f : 1f) * 220f;
+                Sound.Deny();
                 return;
             }
+            if (d > 0) Sound.Select(); else Sound.Back();
             if (d > 0)
             {
                 // a pop and a puff of sparks in its colour
@@ -714,6 +726,7 @@ namespace UltraPuck.Game
         private void EditClose(bool apply)
         {
             foreach (var s in Local.Slots) s.Latched = 0; // the buttons pressed here don't carry into play
+            if (apply) Sound.Select(); else Sound.Back();
             if (apply && _state != null)
             {
                 for (var k = 0; k < _people.Count; k++)
@@ -828,6 +841,8 @@ namespace UltraPuck.Game
             public bool Rare;
             public float SweepAt = -10f, NextSweep, GlowBoost, GlowTarget, MoteTimer;
             public bool Landed;
+            /// <summary>Has left the deck (its deal sound has played).</summary>
+            public bool Dealt;
             public int Order;
 
             /// <summary>Springs towards the targets, overshooting a little, so every move has some bounce.</summary>

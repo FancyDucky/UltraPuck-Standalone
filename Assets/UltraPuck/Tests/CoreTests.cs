@@ -403,6 +403,39 @@ namespace UltraPuck.Tests
             Assert.Greater(s.PuckVel.Length.ToDouble(), quickSpeed + 5.0, "a charged shot is faster");
         }
 
+        /// <summary>Every shot is counted (the sound side plays one when the count goes up), with how hard it was.</summary>
+        [Test]
+        public void ShotsAreCountedWithTheirStrength()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = Carrying(sim);
+            Assert.AreEqual(0, s.Players[0].ShotsFired, "nothing shot yet");
+            sim.Step(s, new[] { Press(PlayerInput.ShootCheck) });
+            Assert.AreEqual(1, s.Players[0].ShotsFired, "a quick shot counts");
+            var quick = s.Players[0].ShotStrength.ToDouble();
+            Assert.AreEqual(sim.T.ShotSpeed.ToDouble() / sim.T.ChargedShotMax.ToDouble(), quick, 0.01, "a quick shot's strength");
+
+            var full = Carrying(sim);
+            for (var t = 0; t < 2 * sim.T.TicksPerSecond; t++) sim.Step(full, new[] { Press(PlayerInput.ChargeBrake) });
+            Assert.AreEqual(0, full.Players[0].ShotsFired, "charging isn't shooting");
+            sim.Step(full, new[] { default(PlayerInput) });
+            Assert.AreEqual(1, full.Players[0].ShotsFired, "letting go counts");
+            Assert.AreEqual(1.0, full.Players[0].ShotStrength.ToDouble(), 0.001, "a fully charged shot is as strong as it gets");
+
+            // losing the puck to a check isn't a shot
+            var two = sim.NewGame(new[] { 0, 1 });
+            PlayNow(two);
+            two.Players[1].Pos = new FixVec2(Fix.FromInt(2), Fix.Zero);
+            two.Players[1].Facing = new FixVec2(Fix.Zero, Fix.One);
+            two.Carrier = 1;
+            two.Players[0].Pos = new FixVec2(Fix.FromInt(-1), Fix.Zero);
+            two.Players[0].Facing = FixVec2.Right;
+            sim.Step(two, new[] { new PlayerInput { Buttons = PlayerInput.ShootCheck }, default(PlayerInput) });
+            for (var t = 0; t < 60 && two.Carrier == 1; t++) sim.Step(two, new[] { new PlayerInput { MoveX = 127 }, default(PlayerInput) });
+            Assert.AreEqual(-1, two.Carrier, "knocked loose");
+            Assert.AreEqual(0, two.Players[1].ShotsFired, "knocked loose, not shot");
+        }
+
         /// <summary>Charged shot speed follows how long charge was held, in a straight line, from a tap to full.</summary>
         [Test]
         public void ChargePowerFollowsHoldTime()

@@ -63,6 +63,8 @@ namespace UltraPuck.Game
         private void Awake()
         {
             Settings.ApplyGraphics();
+            Sound.Create(gameObject, ShotDir != null ? ShotVolume : -1f); // taking screenshots: silent unless asked
+            Sound.Music(false);
             _hud = gameObject.AddComponent<Hud>();
             _menus = gameObject.AddComponent<Menus>();
             _cardScreen = gameObject.AddComponent<CardScreen>();
@@ -101,6 +103,7 @@ namespace UltraPuck.Game
             {
                 if (i < 0 || i >= _players.Count || _players[i].Root == null) return;
                 Vector2 at = _players[i].Root.transform.position;
+                Sound.Play(Sfx.CardAbsorb, 0.75f, 1f, Pan(at));
                 // like a drop landing in water: a big ripple that bends the rink as it spreads, and a smaller echo
                 _ripples.Add(new Ripple { At = at, Colour = colour, When = Time.unscaledTime, Size = 5.5f, Life = 1.5f });
                 _ripples.Add(new Ripple { At = at, Colour = colour, When = Time.unscaledTime + 0.22f, Size = 3.2f, Life = 1.1f });
@@ -153,6 +156,7 @@ namespace UltraPuck.Game
                 StartMatch(true);
                 PickACard();
             }
+            else _mainMenu.Show(MainMenu.Page.Title); // a normal start: "press any button" first
         }
 
         private void LogDevicesLater() { LogDevices("after 3 s"); }
@@ -161,6 +165,19 @@ namespace UltraPuck.Game
 
         /// <summary>ULTRAPUCK_SHOTS=folder: set up each screen worth checking, save a picture of it there, then quit.</summary>
         private static readonly string ShotDir = System.Environment.GetEnvironmentVariable("ULTRAPUCK_SHOTS");
+        /// <summary>
+        /// Screenshots are silent, unless ULTRAPUCK_SHOTS_VOLUME says how loud to play them (0..1; 0.3 is the game's
+        /// normal volume). The player's saved volume is left alone either way.
+        /// </summary>
+        private static float ShotVolume
+        {
+            get
+            {
+                float v;
+                var text = System.Environment.GetEnvironmentVariable("ULTRAPUCK_SHOTS_VOLUME");
+                return float.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v) ? Mathf.Clamp01(v) : 0f;
+            }
+        }
         /// <summary>Screenshots: show the whole rink, not the players' part of it.</summary>
         private bool _shotWholeRink;
         /// <summary>Screenshots: move the camera by this much (to see what moving the view does).</summary>
@@ -173,6 +190,44 @@ namespace UltraPuck.Game
             System.Func<string, bool> want = n => string.IsNullOrEmpty(only) || only.Contains(n);
             yield return new WaitForSecondsRealtime(1f);
             var kb = UnityEngine.InputSystem.Keyboard.current;
+
+            if (want("title"))
+            {
+                // the screen the game starts on: partway through its entrance, settled, then handing over to the main menu
+                _mainMenu.TitleStays = true;
+                _mainMenu.Show(MainMenu.Page.Title);
+                yield return new WaitForSecondsRealtime(1.05f);
+                yield return Shot("title-1");
+                yield return new WaitForSecondsRealtime(2.4f);
+                yield return Shot("title-2");
+                _mainMenu.LeaveTitle();
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield return Shot("title-3");
+                yield return new WaitForSecondsRealtime(0.9f);
+                yield return Shot("title-4");
+            }
+
+            if (want("music"))
+            {
+                // nothing to look at: this one is read in the log. In a match, the song that's playing is jumped to
+                // a second before its end, four times over: each time another song must start, never the same one
+                // again. Then back to the menu, where the theme must carry on.
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Demo = true });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                for (var k = 1; k <= 4; k++)
+                {
+                    yield return new WaitForSecondsRealtime(1.5f);
+                    Debug.Log("Ultra Puck sound at music-" + k + ": " + Sound.Report());
+                    Sound.SkipToSongEnd(1f);
+                    yield return new WaitForSecondsRealtime(2.5f);
+                }
+                Debug.Log("Ultra Puck sound at music-5: " + Sound.Report());
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(1.5f);
+                Debug.Log("Ultra Puck sound at music-menu: " + Sound.Report());
+            }
 
             if (want("players"))
             {
@@ -347,6 +402,16 @@ namespace UltraPuck.Game
                 _menus.Tab = 1;
                 yield return new WaitForSecondsRealtime(0.6f);
                 yield return Shot("settings-gameplay");
+                // the Sound settings: volume, music, sound effects
+                _menus.Tab = 3;
+                yield return new WaitForSecondsRealtime(0.4f);
+                yield return Shot("settings-sound");
+                _menus.Close();
+                // the same from the players screen, where there are five tabs across (Match as well)
+                _menus.OpenSettings(true);
+                _menus.Tab = 3;
+                yield return new WaitForSecondsRealtime(0.4f);
+                yield return Shot("settings-sound-lobby");
                 _menus.Close();
             }
 
@@ -402,6 +467,8 @@ namespace UltraPuck.Game
 
         private System.Collections.IEnumerator Shot(string name)
         {
+            // nobody can hear a screenshot run: the log says which sounds each scene set off, and what the music is doing
+            Debug.Log("Ultra Puck sound at " + name + ": " + Sound.Report());
             yield return new WaitForEndOfFrame();
             ScreenCapture.CaptureScreenshot(Path.Combine(ShotDir, name + ".png"));
             yield return null;
@@ -567,6 +634,8 @@ namespace UltraPuck.Game
             _effects.Update();
             _cardScreen.Sim = _sim;
             _cardScreen.Frame(playing ? _state : null);
+            // the theme plays through the menus and lobbies; a match plays its own songs, one after another (see Sound)
+            Sound.Music(InMatch);
             _hud.Show(false, _free, _local, _state, _sim, _error, _menus.IsOpen || _cardScreen.Showing || !playing);
             _hud.Banner = _mode == Mode.Online && _session != null && OnlinePlaying ? OnlineBanner() : null;
         }
@@ -852,7 +921,7 @@ namespace UltraPuck.Game
                 {
                     _local.LobbyUpdate();
                     if (_local.NameRequest != null) { _play.OpenKeyboard(_local.NameRequest); _local.NameRequest = null; }
-                    if (_local.LeaveLobbyHeld()) { LeaveOnline(null); return; }
+                    if (_local.LeaveLobbyHeld()) { Sound.Back(); LeaveOnline(null); return; }
                 }
                 var mine = new List<KeyValuePair<string, int>>();
                 for (var k = 0; k < _local.Slots.Count; k++)
@@ -862,7 +931,7 @@ namespace UltraPuck.Game
                     mine.Add(new KeyValuePair<string, int>(nm, NetSession.Look(sl.Colour, sl.Symbol, sl.Ready)));
                 }
                 s.SetLocalPlayers(mine);
-                if (!busy && s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2 && !s.TooManyTeams && s.AllReady) StartOnlineMatch();
+                if (!busy && s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2 && !s.TooManyTeams && s.AllReady) { Sound.Select(); StartOnlineMatch(); }
                 AttractUpdate();
                 return;
             }
@@ -878,12 +947,13 @@ namespace UltraPuck.Game
             if (_menus.IsOpen) _menus.Tick(_local.Menu());
             else if (_state.Phase == Phase.GameOver)
             {
-                if (s.IsHost && _local.StartPressed()) { StartOnlineMatch(); return; }
-                if (_local.BackPressed()) { if (s.IsHost) s.BackToLobby(); else LeaveOnline(null); return; }
+                if (s.IsHost && _local.StartPressed()) { Sound.Select(); StartOnlineMatch(); return; }
+                if (_local.BackPressed()) { Sound.Back(); if (s.IsHost) s.BackToLobby(); else LeaveOnline(null); return; }
             }
             else if (_local.MenuPressed() && !_cardScreen.Showing)
             {
                 // online: the host's pause stops the game for everyone; anyone else just stands still while theirs is open
+                Sound.Select();
                 _menus.FreePlay = false;
                 _menus.OpenPause(s.IsHost ? "Online  ·  paused for everyone" : "Online  ·  the match keeps going");
             }
@@ -1171,11 +1241,12 @@ namespace UltraPuck.Game
             }
             if (!_free && _state.Phase == Phase.GameOver)
             {
-                if (_local.StartPressed()) { StartMatch(false); return; }
-                if (_local.BackPressed()) { BackToLobby(); return; }
+                if (_local.StartPressed()) { Sound.Select(); StartMatch(false); return; }
+                if (_local.BackPressed()) { Sound.Back(); BackToLobby(); return; }
             }
             else if (_local.MenuPressed() && !_cardScreen.Showing)
             {
+                Sound.Select();
                 _menus.FreePlay = _free;
                 _menus.OpenPause(_free ? "Free play" : Palette.TeamName(0) + "  " + _state.Score[0] + " : " + _state.Score[1] + "  " + Palette.TeamName(1));
                 foreach (var s in _local.Slots) s.Latched = 0; // presses in the menu don't carry into play
@@ -1273,13 +1344,91 @@ namespace UltraPuck.Game
             var i = _state.Carrier;
             var p = _state.Players[i];
             if (p.Charge <= Fix.Zero) return false;
-            bool human;
-            if (_mode == Mode.Online && _session != null) human = i < _session.Seats.Count && !_session.Seats[i].Bot && _session.Seats[i].Peer == _session.MyPeer;
-            else human = _mode == Mode.Match && i < _local.Slots.Count && !_local.Slots[i].Demo;
-            if (!human) return false;
+            if (!IsLocalPerson(i)) return false;
             goal = V.Of(Bot.GoalCentre(_sim.Map, 1 - p.Team));
             charge = Mathf.Clamp01(p.Charge.ToFloat());
             return true;
+        }
+
+        /// <summary>Match player <paramref name="i"/> is a person playing on this PC (not a bot, not someone online).</summary>
+        private bool IsLocalPerson(int i)
+        {
+            if (i < 0) return false;
+            if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count && !_session.Seats[i].Bot && _session.Seats[i].Peer == _session.MyPeer;
+            return _mode == Mode.Match && i < _local.Slots.Count && !_local.Slots[i].Demo;
+        }
+
+        // ------------------------------------------------------------------ sounds
+
+        /// <summary>A match is on (here or online), not the menus or a lobby.</summary>
+        private bool InMatch { get { return _mode == Mode.Match || (_mode == Mode.Online && OnlinePlaying); } }
+
+        // what the match looked like the last time its sounds were worked out
+        private int _heardTick = int.MinValue;
+        private Phase _heardPhase;
+        private float _heardMovingAt;
+        private readonly List<int> _heardHits = new List<int>(), _heardShots = new List<int>();
+        private readonly List<float> _heardDashes = new List<float>();
+
+        /// <summary>Where a spot on the rink sits between the speakers: a little left or right of centre, never hard over.</summary>
+        private float Pan(Vector2 at)
+        {
+            if (_cam == null) return 0f;
+            return Mathf.Clamp((at.x - _camPos.x) / Mathf.Max(1f, _camSize * _cam.aspect), -1f, 1f) * 0.5f;
+        }
+
+        /// <summary>
+        /// The match's sounds, from what's on screen now next to what was there last frame: new hits, shots and
+        /// dashes (the players' counters going up), a goal, and the hum of a shot being charged. Goal replays are
+        /// heard as well as seen. When the picture jumps (a new match, a replay starting or ending) there's nothing
+        /// to compare with, so that frame is silent.
+        /// </summary>
+        private void MatchSounds(GameState s)
+        {
+            var n = s.Players.Length;
+            var jump = _heardTick == int.MinValue || s.Tick < _heardTick || s.Tick - _heardTick > 60 || n != _heardHits.Count;
+            if (s.Tick != _heardTick) _heardMovingAt = Time.unscaledTime;
+            if (!jump)
+            {
+                bool orange, blue;
+                LocalTeams(out orange, out blue);
+                var hit = 0f;
+                var hitAt = Vector2.zero;
+                for (var i = 0; i < n; i++)
+                {
+                    var p = s.Players[i];
+                    var at = V.Of(p.Pos);
+                    var mine = IsLocalPerson(i);
+                    // both players in a hit report it: one sound, as hard as the harder report
+                    if (p.Hits > _heardHits[i] && p.HitPower.ToFloat() > hit) { hit = p.HitPower.ToFloat(); hitAt = at; }
+                    if (p.ShotsFired > _heardShots[i])
+                    {
+                        // a harder shot is louder and lower
+                        var k = p.ShotStrength.ToFloat();
+                        Sound.Play(Sfx.Shoot, Mathf.Lerp(0.5f, 1f, k) * (mine ? 1f : 0.75f), Mathf.Lerp(1.15f, 0.85f, k) * Random.Range(0.97f, 1.03f), Pan(at));
+                    }
+                    if (_heardDashes[i] - p.DashCharge.ToFloat() > 0.5f)
+                    {
+                        // an invisible opponent's dash would give them away
+                        var unseen = p.InvisibleTime > Fix.Zero && (p.Team == 0 ? blue && !orange : orange && !blue);
+                        if (!unseen) Sound.Play(Sfx.Dash, mine ? 0.55f : 0.36f, Random.Range(0.94f, 1.06f), Pan(at));
+                    }
+                }
+                // the big checks (the ones with lightning) get the heavy sound; light bumps a soft thud
+                if (hit >= 0.75f) Sound.Play(Sfx.BigHit, Mathf.Lerp(0.8f, 1f, (hit - 0.75f) / 0.25f), Random.Range(0.95f, 1.05f), Pan(hitAt));
+                else if (hit > 0.1f) Sound.Play(Sfx.Hit, Mathf.Lerp(0.25f, 0.85f, hit / 0.75f), Mathf.Lerp(1.2f, 0.92f, hit / 0.75f) * Random.Range(0.96f, 1.04f), Pan(hitAt));
+                if (s.Phase == Phase.Scored && _heardPhase != Phase.Scored) Sound.Play(Sfx.Goal, 0.55f, 1f, Pan(V.Of(s.PuckPos))); // it's a long, thick sound: at full level it drowned everything else
+            }
+
+            // charging a shot hums while the game is actually running (not paused, not waiting for other players)
+            var c = s.Carrier;
+            if (c >= 0 && c < n && s.Players[c].Charge > Fix.Zero && !s.Paused && Time.unscaledTime - _heardMovingAt < 0.15f)
+                Sound.Charge(s.Players[c].Charge.ToFloat(), IsLocalPerson(c) ? 1f : 0.6f, Pan(V.Of(s.Players[c].Pos)));
+
+            _heardTick = s.Tick;
+            _heardPhase = s.Phase;
+            _heardHits.Clear(); _heardShots.Clear(); _heardDashes.Clear();
+            foreach (var p in s.Players) { _heardHits.Add(p.Hits); _heardShots.Add(p.ShotsFired); _heardDashes.Add(p.DashCharge.ToFloat()); }
         }
 
         /// <summary>Draw the moment <paramref name="t"/> of the way from <paramref name="a"/> to <paramref name="b"/>.</summary>
@@ -1427,6 +1576,7 @@ namespace UltraPuck.Game
             }
             _puck.Visible(b.Phase != Phase.Scored);
             _puck.Show((pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t), b.PuckTeam);
+            if (InMatch) MatchSounds(b); // the bots playing behind the menus are silent
         }
     }
 

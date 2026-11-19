@@ -66,6 +66,29 @@ namespace UltraPuck.Game
             }
         }
 
+        // ------------------------------------------------------------------ sound
+
+        /// <summary>How loud the whole game is, 0 (silent) .. 1 (full). Starts at 30%.</summary>
+        public static float Volume
+        {
+            get { return Mathf.Clamp01(PlayerPrefs.GetFloat("volume", 0.3f)); }
+            set { PlayerPrefs.SetFloat("volume", Mathf.Clamp01(value)); }
+        }
+
+        /// <summary>The music's share of <see cref="Volume"/>, 0 (off) .. 1.</summary>
+        public static float MusicVolume
+        {
+            get { return Mathf.Clamp01(PlayerPrefs.GetFloat("music_volume", 1f)); }
+            set { PlayerPrefs.SetFloat("music_volume", Mathf.Clamp01(value)); }
+        }
+
+        /// <summary>The sound effects' share of <see cref="Volume"/>, 0 (off) .. 1.</summary>
+        public static float SoundVolume
+        {
+            get { return Mathf.Clamp01(PlayerPrefs.GetFloat("sound_volume", 1f)); }
+            set { PlayerPrefs.SetFloat("sound_volume", Mathf.Clamp01(value)); }
+        }
+
         // ------------------------------------------------------------------ gameplay
 
         /// <summary>Screen shake on hits, 0 (off) .. 1 (full).</summary>

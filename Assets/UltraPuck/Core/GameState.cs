@@ -143,6 +143,12 @@ namespace UltraPuck.Core
         public int Hits;
         public Fix HitPower;
         public FixVec2 HitDir;
+        /// <summary>
+        /// Counts every shot this player has taken, so the sound side can play one when it goes up.
+        /// <see cref="ShotStrength"/> (0..1) is how hard the last one was: 1 = a fully charged shot.
+        /// </summary>
+        public int ShotsFired;
+        public Fix ShotStrength;
         /// <summary>Seconds before this player may pick up the puck again (after shooting or losing it).</summary>
         public Fix NoPickup;
         /// <summary>Last tick's buttons, so presses (not holds) can be told apart.</summary>
@@ -312,6 +318,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.Team); Mix(ref h, p.Pos); Mix(ref h, p.Vel); Mix(ref h, p.Facing);
                 Mix(ref h, p.DashCharge); Mix(ref h, p.DashTime); Mix(ref h, p.Charge); Mix(ref h, p.NoPickup); Mix(ref h, p.PrevButtons); Mix(ref h, p.Bot ? 1 : 0); Mix(ref h, p.SkipVote ? 1 : 0);
                 Mix(ref h, p.Stun); Mix(ref h, p.HitLag); Mix(ref h, p.Hits); Mix(ref h, p.HitPower); Mix(ref h, p.HitDir);
+                Mix(ref h, p.ShotsFired); Mix(ref h, p.ShotStrength);
                 p.Stats.Hash(ref h);
                 Mix(ref h, p.Cards.Length); foreach (var c in p.Cards) Mix(ref h, c);
                 Mix(ref h, p.Offer.Length); foreach (var c in p.Offer) Mix(ref h, c);
