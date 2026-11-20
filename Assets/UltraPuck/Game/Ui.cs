@@ -57,6 +57,18 @@ namespace UltraPuck.Game
             get { var m = UnityEngine.InputSystem.Mouse.current; return m != null && m.leftButton.wasPressedThisFrame && !LocalPlayers.Blocked; }
         }
 
+        /// <summary>
+        /// True once per frame when the left mouse was pressed (consumes the click so OnGUI can't fire it twice).
+        /// Use this for menu buttons instead of <see cref="Clicked"/> + Repaint.
+        /// </summary>
+        public static bool TakeClick()
+        {
+            if (!Clicked || _clickFrame == Time.frameCount) return false;
+            _clickFrame = Time.frameCount;
+            return true;
+        }
+        private static int _clickFrame = -1;
+
         public static bool MouseHeld
         {
             get { var m = UnityEngine.InputSystem.Mouse.current; return m != null && m.leftButton.isPressed && !LocalPlayers.Blocked; }

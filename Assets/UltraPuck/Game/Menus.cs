@@ -125,6 +125,18 @@ namespace UltraPuck.Game
                         Step = d => SetBots(Mathf.Clamp(BotCount() + d, 0, MaxBots())),
                         Press = () => SetBots(BotCount() >= MaxBots() ? 0 : BotCount() + 1),
                     });
+                    if (MapCount != null && MapCount() > 0)
+                    {
+                        _rows.Add(new Row
+                        {
+                            Label = "Rink",
+                            Value = () => MapName != null ? MapName(_pendingMap) : "",
+                            Step = d => _pendingMap = (_pendingMap + d + MapCount()) % MapCount(),
+                            Press = () => _pendingMap = (_pendingMap + 1) % MapCount(),
+                            Hint = "Pick a rink, then Change rink to switch (starts the free play again).",
+                        });
+                        _rows.Add(Button("Change rink", () => { var map = _pendingMap; Close(); if (OnRestart != null) OnRestart(map); }));
+                    }
                     _rows.Add(Button("Cards", () => { Close(); if (OnGetCard != null) OnGetCard(); }));
                 }
                 if (!FreePlay && CanEditMatch != null && CanEditMatch()) _rows.Add(Button("Match settings", OpenMatch));
@@ -215,6 +227,11 @@ namespace UltraPuck.Game
                     _rows.Add(Slider("Aim line", () => Settings.AimLine, v => Settings.AimLine = v,
                         v => v < 0.01f ? "Off" : Mathf.RoundToInt(v * 100f) + "%",
                         "How long the shot aim line is while you have the puck. 100% is the original length."));
+                    _rows.Add(Choice("Mouse reticle", Settings.ReticleNames, () => Settings.ReticleStyle, v => Settings.ReticleStyle = v,
+                        "The aim marker while you play with keyboard and mouse."));
+                    _rows.Add(Slider("Reticle size", () => Settings.ReticleSize, v => Settings.ReticleSize = v,
+                        v => Mathf.RoundToInt(50f + v * 100f) + "%"));
+                    _rows.Add(Choice("Reticle colour", Settings.ReticleColourNames, () => Settings.ReticleColour, v => Settings.ReticleColour = v));
                     break;
                 case 3:
                     _rows.Add(Slider("Volume", () => Settings.Volume, v => Settings.Volume = v, Percent, "How loud the whole game is."));
@@ -385,6 +402,7 @@ namespace UltraPuck.Game
         {
             Current = Page.Pause;
             _subtitle = subtitle ?? "";
+            _pendingMap = CurrentMap != null ? CurrentMap() : 0;
             _focus = 0;
             _openedAt = Time.unscaledTime;
             _focusY = -1f;
@@ -539,9 +557,10 @@ namespace UltraPuck.Game
             for (var i = _first; i < last; i++)
             {
                 var r = new Rect(x + 30f, rowsTop + (i - _first) * (rowH + 8f), rowW, rowH);
-                if (r.Contains(mouse) && Ui.MouseMoved && _rows[i].Enabled() && _focus != i) { _focus = i; Sound.Move(); }
+                // hover focuses; a resting mouse doesn't steal focus from the pad
+                if (r.Contains(mouse) && (Ui.MouseMoved || Ui.Clicked) && _rows[i].Enabled() && _focus != i) { _focus = i; if (Ui.MouseMoved) Sound.Move(); }
             }
-            if (Event.current.type == EventType.ScrollWheel && _rows.Count > visible)
+            if (Event.current.type == EventType.ScrollWheel && _rows.Count > 0)
             {
                 var to = Mathf.Clamp(_focus + (Event.current.delta.y > 0 ? 1 : -1), 0, _rows.Count - 1);
                 if (to != _focus) { _focus = to; Sound.Move(); }
@@ -587,7 +606,7 @@ namespace UltraPuck.Game
             for (var i = 0; i < TabCount; i++)
             {
                 var r = new Rect(x0 + i * (tabW + gap), y, tabW, tabH);
-                if (r.Contains(Ui.Mouse) && Ui.Clicked && Event.current.type == EventType.Repaint) { if (_tab != i) Sound.Move(); _tab = i; _focus = 0; _listen = null; }
+                if (r.Contains(Ui.Mouse) && Ui.TakeClick()) { if (_tab != i) Sound.Move(); _tab = i; _focus = 0; _listen = null; }
                 var on = i == _tab;
                 Ui.Label(r, Tabs[i], Ui.Font(18, on, TextAnchor.MiddleCenter), on ? new Color(0.08f, 0.08f, 0.09f) : Ui.TextDim, !on);
             }
@@ -597,7 +616,8 @@ namespace UltraPuck.Game
         {
             var enabled = row.Enabled();
             var textCol = enabled ? (focused ? Ui.Text : new Color(1f, 1f, 1f, 0.8f)) : new Color(1f, 1f, 1f, 0.3f);
-            var clicked = enabled && Ui.Clicked && r.Contains(mouse) && Event.current.type == EventType.Repaint;
+            // TakeClick: once per frame, so Layout + Repaint can't double-fire a button
+            var clicked = enabled && r.Contains(mouse) && Ui.TakeClick();
 
             if (pause)
             {

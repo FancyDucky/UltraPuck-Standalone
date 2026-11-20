@@ -209,7 +209,7 @@ namespace UltraPuck.Game
         }
 
         /// <summary>A target under the mouse for keyboard aiming (system cursor is hidden).</summary>
-        private static void DrawReticle()
+        private void DrawReticle()
         {
             if (Event.current.type != EventType.Repaint) return;
             var m = Mouse.current;
@@ -217,20 +217,38 @@ namespace UltraPuck.Game
             var sp = m.position.ReadValue();
             var k = Screen.height / 720f * Settings.UiScale;
             var p = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
-            const float r = 14f, gap = 5f, arm = 10f, thick = 2f;
-            var c = new Color(1f, 1f, 1f, 0.9f);
+            var team = 0;
+            if (_local != null)
+                foreach (var s in _local.Slots) if (!s.Demo) { team = s.Team; break; }
+            var c = Settings.ReticleTint(team); c.a = 0.92f;
             var dim = new Color(0f, 0f, 0f, 0.35f);
-            // soft shadow ring
-            Ui.Box(new Rect(p.x - r - 1f, p.y - r - 1f, (r + 1f) * 2f, (r + 1f) * 2f), dim, r + 1f);
-            // ring
-            Ui.Box(new Rect(p.x - r, p.y - r, r * 2f, r * 2f), new Color(1f, 1f, 1f, 0.15f), r);
-            // crosshair arms (gap in the middle so the aim point stays clear)
-            Ui.Box(new Rect(p.x - arm - gap, p.y - thick * 0.5f, arm, thick), c, 1f);
-            Ui.Box(new Rect(p.x + gap, p.y - thick * 0.5f, arm, thick), c, 1f);
-            Ui.Box(new Rect(p.x - thick * 0.5f, p.y - arm - gap, thick, arm), c, 1f);
-            Ui.Box(new Rect(p.x - thick * 0.5f, p.y + gap, thick, arm), c, 1f);
-            // centre dot
-            Ui.Box(new Rect(p.x - 1.5f, p.y - 1.5f, 3f, 3f), c, 1.5f);
+            var scale = 0.7f + Settings.ReticleSize * 0.9f; // ~0.7 .. 1.6
+            var r = 14f * scale;
+            var gap = 5f * scale;
+            var arm = 10f * scale;
+            var thick = Mathf.Max(1.5f, 2f * scale);
+            var style = Settings.ReticleStyle;
+            if (style == 0 || style == 1 || style == 2)
+            {
+                // soft shadow ring (crosshair, circle, dot)
+                Ui.Box(new Rect(p.x - r - 1f, p.y - r - 1f, (r + 1f) * 2f, (r + 1f) * 2f), dim, r + 1f);
+            }
+            if (style == 0 || style == 1)
+                Ui.Box(new Rect(p.x - r, p.y - r, r * 2f, r * 2f), new Color(c.r, c.g, c.b, 0.18f), r);
+            if (style == 0 || style == 3)
+            {
+                Ui.Box(new Rect(p.x - arm - gap, p.y - thick * 0.5f, arm, thick), c, 1f);
+                Ui.Box(new Rect(p.x + gap, p.y - thick * 0.5f, arm, thick), c, 1f);
+                Ui.Box(new Rect(p.x - thick * 0.5f, p.y - arm - gap, thick, arm), c, 1f);
+                Ui.Box(new Rect(p.x - thick * 0.5f, p.y + gap, thick, arm), c, 1f);
+            }
+            if (style == 0 || style == 2)
+            {
+                var d = style == 2 ? 4f * scale : 1.5f * scale;
+                Ui.Box(new Rect(p.x - d, p.y - d, d * 2f, d * 2f), c, d);
+            }
+            else if (style == 1)
+                Ui.Box(new Rect(p.x - 1.5f * scale, p.y - 1.5f * scale, 3f * scale, 3f * scale), c, 1.5f * scale);
         }
 
         /// <summary>Names over the players, so it's easy to tell who is who.</summary>

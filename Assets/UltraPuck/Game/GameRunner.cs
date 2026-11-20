@@ -125,7 +125,7 @@ namespace UltraPuck.Game
             {
                 if (map != _mapIndex) UseMap(map);
                 if (_mode == Mode.Online) StartOnlineMatch();
-                else StartMatch(false);
+                else StartMatch(_free); // free play stays free play when you change rink
             };
             _menus.Cards = _cards;
             _hud.PlayerName = NameOf;
@@ -684,7 +684,9 @@ namespace UltraPuck.Game
         /// <summary>Mouse aiming for keyboard players, and a reticle instead of the system cursor in a match.</summary>
         private void WireMouseAim(bool playing)
         {
-            var open = _menus.IsOpen || _cardScreen.Showing;
+            var menus = _menus.IsOpen;
+            var cards = _cardScreen.Showing;
+            var open = menus || cards;
             _local.AllowMouseButtons = playing && !open && !LocalPlayers.Blocked;
             _local.MouseWorld = () =>
             {
@@ -692,18 +694,27 @@ namespace UltraPuck.Game
                 var m = UnityEngine.InputSystem.Mouse.current;
                 if (m == null) return null;
                 var sp = m.position.ReadValue();
-                var w = _cam.ScreenToWorldPoint(new Vector3(sp.x, sp.y, -_cam.transform.position.z));
+                // distance from the camera to the rink plane (z = 0)
+                var w = _cam.ScreenToWorldPoint(new Vector3(sp.x, sp.y, Mathf.Abs(_cam.transform.position.z)));
                 return new Vector2(w.x, w.y);
             };
+            // local slot → match player (online seats aren't in the same order as this PC's slots)
             _local.PlayerWorld = i =>
             {
-                if (_state == null || i < 0 || i >= _state.Players.Length) return Vector2.zero;
-                return V.Of(_state.Players[i].Pos);
+                var p = i;
+                if (_mode == Mode.Online && _session != null)
+                {
+                    p = _session.PlayerOf(i);
+                    if (p < 0) return Vector2.zero;
+                }
+                if (_state == null || p < 0 || p >= _state.Players.Length) return Vector2.zero;
+                return V.Of(_state.Players[p].Pos);
             };
-            // reticle only in keyboard/mouse mode (controller mode hides the system cursor via InputMode)
+            // reticle in a match (KBM); system cursor for menus and the card pick
             var reticle = playing && !open && !InputMode.Pad && _local.AnyKeyboardHuman();
             _hud.Reticle = reticle;
-            if (reticle) Cursor.visible = false;
+            if (menus || cards) Cursor.visible = true;
+            else if (reticle) Cursor.visible = false;
         }
 
         private void OnApplicationQuit()

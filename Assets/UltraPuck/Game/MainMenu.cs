@@ -365,7 +365,7 @@ namespace UltraPuck.Game
             Ui.Label(new Rect(p.x + 30f, p.y + 18f, pw - 60f, 44f), "Options", Ui.Font(28, true), Color.white);
             Rows(p.x + 20f, p.y + 76f, pw - 40f, rowH, gap, 20, Time.unscaledTime - _optionsAt);
             Glyphs.Hint(new Rect(p.x, p.yMax - 40f, pw, 28f), "{confirm} Choose      {side} Change      {back} Close", 14, new Color(1f, 1f, 1f, 0.55f));
-            if (Ui.Clicked && !p.Contains(Ui.Mouse) && Event.current.type == EventType.Repaint) { Sound.Back(); OpenOptions(false); }
+            if (!p.Contains(Ui.Mouse) && Ui.TakeClick()) { Sound.Back(); OpenOptions(false); }
         }
 
         /// <summary>The page's buttons, in a column at (<paramref name="x"/>, <paramref name="top"/>).</summary>
@@ -397,7 +397,7 @@ namespace UltraPuck.Game
             {
                 if (_rows.Count > fit && (i < _scroll || i >= _scroll + fit)) continue;
                 var r = new Rect(x, top + i * (rowH + gap), w, rowH);
-                if (r.Contains(mouse) && Ui.MouseMoved && _rows[i].Enabled()) { if (_focus != i) Sound.Move(); _focus = i; if (!_rows[i].TextField) _typing = false; }
+                if (r.Contains(mouse) && (Ui.MouseMoved || Ui.Clicked) && _rows[i].Enabled()) { if (_focus != i && Ui.MouseMoved) Sound.Move(); _focus = i; if (!_rows[i].TextField) _typing = false; }
             }
             _focus = Mathf.Clamp(_focus, 0, Mathf.Max(0, _rows.Count - 1));
             var target = top + _focus * (rowH + gap);
@@ -424,7 +424,7 @@ namespace UltraPuck.Game
                 var pad = rowH >= 60f ? 26f : 16f;
                 Ui.Label(new Rect(r.x + pad, r.y + (detail ? 6f : 0f), r.width - pad - 10f, detail ? 36f : r.height), label, Ui.Font(font, i == _focus), col);
                 if (detail) Ui.Label(new Rect(r.x + pad + 1f, r.y + 36f, r.width - 40f, 22f), row.Detail, Ui.Font(14), new Color(1f, 1f, 1f, 0.5f * appear));
-                if (on && Ui.Clicked && r.Contains(mouse) && Event.current.type == EventType.Repaint && Time.frameCount != _openedFrame)
+                if (on && r.Contains(mouse) && Time.frameCount != _openedFrame && Ui.TakeClick())
                 {
                     if (row.Step != null) { var d = mouse.x < r.center.x ? -1 : 1; row.Step(d); Sound.Step(d); }
                     else if (row.Press != null) { PressSound(row); row.Press(); }
@@ -449,7 +449,7 @@ namespace UltraPuck.Game
             _address = GUI.TextField(new Rect(r.x + 150f, r.y + 14f, r.width - 170f, r.height - 28f), _address ?? "", 64, style);
             if (_typing) GUI.FocusControl("address");
             else if (GUI.GetNameOfFocusedControl() == "address") GUI.FocusControl(null);
-            if (Ui.Clicked && r.Contains(Ui.Mouse) && Event.current.type == EventType.Repaint) _typing = true;
+            if (r.Contains(Ui.Mouse) && Ui.TakeClick()) _typing = true;
         }
 
         private string Subtitle()

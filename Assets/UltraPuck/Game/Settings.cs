@@ -117,6 +117,46 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetFloat("aim_line", Mathf.Clamp01(value)); }
         }
 
+        /// <summary>Mouse aim reticle styles (Settings &gt; Camera).</summary>
+        public static readonly string[] ReticleNames = { "Crosshair", "Circle", "Dot", "Cross" };
+
+        /// <summary>Which reticle to draw while aiming with the mouse.</summary>
+        public static int ReticleStyle
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("reticle_style", 0), 0, ReticleNames.Length - 1); }
+            set { PlayerPrefs.SetInt("reticle_style", Mathf.Clamp(value, 0, ReticleNames.Length - 1)); }
+        }
+
+        /// <summary>Reticle size, 0 (small) .. 1 (large). Default mid.</summary>
+        public static float ReticleSize
+        {
+            get { return Mathf.Clamp01(PlayerPrefs.GetFloat("reticle_size", 0.45f)); }
+            set { PlayerPrefs.SetFloat("reticle_size", Mathf.Clamp01(value)); }
+        }
+
+        /// <summary>Reticle colours.</summary>
+        public static readonly string[] ReticleColourNames = { "White", "Team", "Green", "Cyan", "Yellow" };
+
+        /// <summary>Reticle colour index into <see cref="ReticleColourNames"/>.</summary>
+        public static int ReticleColour
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("reticle_colour", 0), 0, ReticleColourNames.Length - 1); }
+            set { PlayerPrefs.SetInt("reticle_colour", Mathf.Clamp(value, 0, ReticleColourNames.Length - 1)); }
+        }
+
+        /// <summary>Colour for the reticle; <paramref name="team"/> is used when set to Team.</summary>
+        public static Color ReticleTint(int team)
+        {
+            switch (ReticleColour)
+            {
+                case 1: return team == 0 || team == 1 ? Palette.TeamTint(team) : Color.white;
+                case 2: return new Color(0.45f, 1f, 0.55f);
+                case 3: return new Color(0.4f, 0.95f, 1f);
+                case 4: return new Color(1f, 0.92f, 0.4f);
+                default: return Color.white;
+            }
+        }
+
         /// <summary>Squash, flash and impact rings on hits (off: only the bump itself).</summary>
         public static bool HitEffects
         {

@@ -415,7 +415,7 @@ namespace UltraPuck.Game
             Ui.Box(r, bg, 14f);
             // on the white button: dark bold text, no shadow (a shadow smudges dark text)
             Glyphs.Hint(r, text, 17, lit ? new Color(0.06f, 0.08f, 0.12f, 1f) : new Color(1f, 1f, 1f, on ? 0.9f : 0.45f), TextAnchor.MiddleCenter, null, true, !lit);
-            return clickable && on && Ui.Clicked && r.Contains(Ui.Mouse) && Event.current.type == EventType.Repaint;
+            return clickable && on && r.Contains(Ui.Mouse) && Ui.TakeClick();
         }
 
         // ------------------------------------------------------------------ player cards (the join screen and the online lobby)
