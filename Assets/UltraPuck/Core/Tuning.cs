@@ -83,10 +83,10 @@ namespace UltraPuck.Core
         public Fix ChargedShotMin = Fix.FromInt(5);
         public Fix ChargedShotMax = Fix.Ratio(207, 4); // 51.75 (45, +15%)
         public Fix ChargeTime = Fix.Ratio(9, 10);
-        /// <summary>Invisible Quick Shot: how long the puck stays hidden.</summary>
+        /// <summary>Invisible Shot: how long the puck stays hidden.</summary>
         public Fix GhostShotTime = Fix.Ratio(3, 2);
-        /// <summary>Cannon Ball: share of the puck's speed the catcher is carried along with, and the hit lag.</summary>
-        public Fix CannonCarry = Fix.Ratio(45, 100);
+        /// <summary>Cannon Ball: the catcher is sent off along the shot at this share of the puck's speed, gliding (little control) this long.</summary>
+        public Fix CannonCarry = Fix.Ratio(8, 10), CannonTime = Fix.Half;
         public Fix ShotPickupDelay = Fix.Ratio(1, 5);
         /// <summary>Checking the carrier knocks the puck loose: how fast it pops out, and how long the checker must wait to grab it.</summary>
         public Fix KnockLooseSpeed = Fix.FromInt(4), CheckerPickupDelay = Fix.Ratio(1, 4);

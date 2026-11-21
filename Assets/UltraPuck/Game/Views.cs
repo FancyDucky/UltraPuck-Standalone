@@ -38,7 +38,7 @@ namespace UltraPuck.Game
                 {
                     var team = side < 0f ? 0 : 1;
                     foreach (var g in map.Goals) if ((V.Of(g.Min).x + V.Of(g.Max).x) / 2f < cx == side < 0f) { team = g.Team; break; }
-                    AcrossLine(map, cx + side * size.x * 0.19f, min.y, max.y, Palette.Darker(Palette.Team(team), 0.42f), "SideLine");
+                    AcrossLine(map, cx + side * size.x * 0.19f, min.y, max.y, Palette.Darker(Palette.Team(team), 0.3f), "SideLine");
                 }
             }
 
@@ -910,7 +910,7 @@ namespace UltraPuck.Game
             _solid[0] = Draw.Make("Glow", Root.transform, _glow, 31).gameObject;
             _solid[1] = Draw.Make("Edge", Root.transform, Draw.Disc(radius, Palette.PuckEdge), 32).gameObject;
             _solid[2] = Draw.Make("Fill", Root.transform, Draw.Disc(radius * 0.68f, Palette.Puck), 33).gameObject;
-            // Invisible Quick Shot: just an outline (for the shooter's team)
+            // Invisible Shot: just an outline (for the shooter's team)
             _ghost = Draw.Make("Ghost", Root.transform, Draw.Ring(radius * 0.8f, radius, 1f, new Color(1f, 1f, 1f, 0.8f)), 33).gameObject;
             _ghost.SetActive(false);
         }
@@ -919,7 +919,7 @@ namespace UltraPuck.Game
         private readonly GameObject _ghost;
         private int _ghostMode;
 
-        /// <summary>Invisible Quick Shot: 0 the puck as normal, 1 an outline only (your team's shot), 2 not drawn at all (the other team's).</summary>
+        /// <summary>Invisible Shot: 0 the puck as normal, 1 an outline only (your team's shot), 2 not drawn at all (the other team's).</summary>
         public void Ghost(int mode)
         {
             if (mode == _ghostMode) return;

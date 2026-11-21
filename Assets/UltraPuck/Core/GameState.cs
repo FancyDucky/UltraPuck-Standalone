@@ -119,7 +119,7 @@ namespace UltraPuck.Core
         public int PassRefreshTeam;
         /// <summary>Power Shot: a quick shot is as hard as a full charge (Over Charge doesn't add to it).</summary>
         public int QuickShotFull;
-        /// <summary>Invisible Quick Shot: a quick shot hides the puck from the other team for a moment.</summary>
+        /// <summary>Invisible Shot: a quick shot hides the puck from the other team for a moment.</summary>
         public int GhostShot;
         /// <summary>Cannon Ball: a full charge keeps going through whoever on the other team catches it.</summary>
         public int CannonBall;
@@ -224,6 +224,8 @@ namespace UltraPuck.Core
         public bool SwapHeld;
         /// <summary>Match stats (for the screen after the match): goals, assists, saves and checks landed.</summary>
         public int Goals, Assists, Saves, Bumps;
+        /// <summary>Cannon Ball: seconds left of being carried off by a caught shot (little control, little drag).</summary>
+        public Fix Shoved;
 
         public PlayerState Clone()
         {
@@ -325,7 +327,7 @@ namespace UltraPuck.Core
         public int Touch1 = -1, Touch2 = -1;
         /// <summary>The carrier the last time bots were handed to people (so a new carrier is noticed once).</summary>
         public int AutoCarrier = -1;
-        /// <summary>Invisible Quick Shot: seconds the loose puck stays hidden from everyone but <see cref="PuckHiddenTeam"/>.</summary>
+        /// <summary>Invisible Shot: seconds the loose puck stays hidden from everyone but <see cref="PuckHiddenTeam"/>.</summary>
         public Fix PuckHidden;
         public int PuckHiddenTeam = -1;
         /// <summary>Cannon Ball: the team whose full-charge shot this is (-1: none); an opponent catching it is knocked back.</summary>
@@ -403,7 +405,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);
-                Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps);
+                Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps); Mix(ref h, p.Shoved);
             }
             return h;
         }

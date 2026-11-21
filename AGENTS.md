@@ -82,6 +82,12 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.41 (Claude, 21 Nov 2026): **Cannon Ball really shoves; Invisible Shot; darker lines.**
+  Cannon Ball: the catcher's speed along the shot is replaced by `CannonCarry` (0.8) × the puck's speed (by weight /
+  Knockback Taken), sideways speed kept, and `PlayerState.Shoved` (`CannonTime` 0.5 s) gives toss-like low drag and
+  stun-level control so a skating bot can't just cancel it. No hit lag, no hit flash. Card face "Knock Back +100%".
+  "Invisible Quick Shot" renamed "Invisible Shot" (the title didn't fit). Rink side lines darker (0.3 of the team
+  colour). **NetSession.Version 47.** Checked: 133 tests (128 pass, 5 skipped), Windows build, cards / maps shots.
 - 0.1.40 (Claude, 21 Nov 2026): **Power Shot = full charge; Invisible Quick Shot; Cannon Ball;
   menu strip gone; team-coloured lines.** Power Shot (max 1): `Stats.QuickShotFull` makes a quick shot
   `ChargedShotMax` (Over Charge doesn't add; `QuickShotSpeed()` used for puck, rock and teammate throws). New cards

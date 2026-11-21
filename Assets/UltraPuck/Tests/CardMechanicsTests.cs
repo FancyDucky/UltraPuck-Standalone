@@ -483,19 +483,24 @@ namespace UltraPuck.Tests
                 if (cannon) Give(s, 0, "ultrapuck.cannonball");
                 Play(s);
                 s.Players[0].Pos = At(-8, 0); s.Players[0].Facing = FixVec2.Right;
-                s.Players[1].Pos = At(2, 0); s.Players[1].Facing = new FixVec2(-Fix.One, Fix.Zero);
+                s.Players[1].Pos = At(6, 0); s.Players[1].Facing = new FixVec2(-Fix.One, Fix.Zero);
                 s.Carrier = 0;
                 var hold = new PlayerInput { Buttons = PlayerInput.ChargeBrake };
-                for (var t = 0; t < 130; t++) _sim.Step(s, new[] { hold, default(PlayerInput) });
-                _sim.Step(s, new PlayerInput[2]); // let go: a full charge
-                var most = 0.0;
-                for (var t = 0; t < 40; t++) { _sim.Step(s, new PlayerInput[2]); most = System.Math.Max(most, s.Players[1].Vel.X.ToDouble()); }
-                Assert.AreEqual(1, s.Carrier, "caught it");
-                return most;
+                // the catcher skates at the shooter the whole time (like a bot going for the puck)
+                var at = new PlayerInput { MoveX = -127 };
+                for (var t = 0; t < 130; t++) { _sim.Step(s, new[] { hold, default(PlayerInput) }); s.Players[1].Pos = At(6, 0); }
+                _sim.Step(s, new[] { default(PlayerInput), at }); // let go: a full charge
+                var caughtAt = -1.0;
+                for (var t = 0; t < 120 && caughtAt < 0; t++) { _sim.Step(s, new[] { default(PlayerInput), at }); if (s.Carrier == 1) caughtAt = s.Players[1].Pos.X.ToDouble(); }
+                Assert.GreaterOrEqual(caughtAt, -100.0, "caught it");
+                Assert.AreEqual(0.0, s.Players[1].HitLag.ToDouble(), "no hit pause");
+                for (var t = 0; t < 60; t++) _sim.Step(s, new[] { default(PlayerInput), at });
+                return s.Players[1].Pos.X.ToDouble() - caughtAt; // how far along the shot (+x) they went in half a second
             };
             var plain = catcher(false);
             var cannon = catcher(true);
-            Assert.Greater(cannon, plain + 8.0, "carried back by the cannon ball");
+            Assert.Less(plain, 0.0, "without it, they just keep skating at the shooter");
+            Assert.Greater(cannon, 3.0, "carried off the way the shot was going, even skating against it");
         }
 
         [Test]

@@ -47,7 +47,7 @@
     },
     {
       "id": "ultrapuck.ghostshot",
-      "name": "Invisible Quick Shot",
+      "name": "Invisible Shot",
       "tier": "A",
       "max": 1,
       "color": "#3CC84B",
@@ -66,7 +66,7 @@
       "color": "#F2B21B",
       "flavor": "Catch this.",
       "face": [
-        { "label": "Catcher", "value": "[good]knocked back[/]" }
+        { "label": "Knock Back", "value": "[good]+100%[/]" }
       ],
       "text": "[note]Full charge shots. Opponents who catch it are carried along.[/]",
       "stats": { "CannonBall": "+1" }

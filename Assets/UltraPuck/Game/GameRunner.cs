@@ -461,7 +461,7 @@ namespace UltraPuck.Game
                     if (count == 4 && _cards != null && _state.Players.Length > 0)
                     {
                         // the newest cards, so their faces get looked at
-                        var ids = new[] { "ultrapuck.powershot", "ultrapuck.ghostshot", "ultrapuck.cannonball", "ultrapuck.friendlyfire" };
+                        var ids = new[] { "ultrapuck.ghostshot", "ultrapuck.cannonball", "ultrapuck.powershot", "ultrapuck.friendlyfire" };
                         var offer = new List<int>();
                         foreach (var id in ids) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                         _state.Players[0].Offer = offer.ToArray();
@@ -2038,7 +2038,7 @@ namespace UltraPuck.Game
                 _shake = Mathf.Max(_shake, 0.7f);
             }
             _puck.Visible(b.Phase != Phase.Scored);
-            // Invisible Quick Shot: hidden from a screen with only the other team on it; an outline for the shooter's
+            // Invisible Shot: hidden from a screen with only the other team on it; an outline for the shooter's
             // team (and in replays, so everyone can follow it)
             var ghost = 0;
             if (b.PuckHidden > Fix.Zero && b.PuckHiddenTeam >= 0 && b.Carrier < 0)

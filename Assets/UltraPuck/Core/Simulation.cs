@@ -469,7 +469,7 @@ namespace UltraPuck.Core
 
             if (s.Ice.Length > 0 || s.IceLaying > Fix.Zero) Ice(s, dt);
 
-            // Invisible Quick Shot runs out (or ends once someone has the puck); a Cannon Ball ends once it's slowed down
+            // Invisible Shot runs out (or ends once someone has the puck); a Cannon Ball ends once it's slowed down
             if (s.PuckHidden > Fix.Zero) { s.PuckHidden -= dt; if (s.PuckHidden <= Fix.Zero || s.Carrier >= 0) { s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1; } }
             if (s.CannonTeam >= 0 && (s.Carrier >= 0 || s.PuckVel.SqrLength < T.ShotSpeed * T.ShotSpeed)) s.CannonTeam = -1;
 
@@ -658,7 +658,8 @@ namespace UltraPuck.Core
             var holding = carrying || carryingRock || holdingMate;
             // carried by a teammate, or flying after being thrown: no skating (you can still shoot the puck)
             var flying = p.HeldBy >= 0 || p.TossTime > Fix.Zero;
-            var control = p.Stun > Fix.Zero ? T.StunControl : Fix.One;
+            p.Shoved = Fix.Max(Fix.Zero, p.Shoved - dt);
+            var control = p.Stun > Fix.Zero || p.Shoved > Fix.Zero ? T.StunControl : Fix.One;
             var speed = p.Stats.MoveSpeed * (holding ? p.Stats.MoveSpeedWithPuck : Fix.One);
             if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave
             if (holding && input.Has(PlayerInput.ChargeBrake)) speed *= T.ChargeMoveSpeed; // charging a shot: slower
@@ -676,7 +677,7 @@ namespace UltraPuck.Core
             var braking = !holding && input.Has(PlayerInput.ChargeBrake);
             p.DashCoast = Fix.Max(Fix.Zero, p.DashCoast - dt);
             // after a dash, lighter drag for a bit so you keep more speed when you chain them
-            var drag = p.TossTime > Fix.Zero ? T.TossDrag : braking ? T.BrakeDrag : (p.DashCoast > Fix.Zero ? T.DashCoastDrag : T.Drag);
+            var drag = p.TossTime > Fix.Zero || p.Shoved > Fix.Zero ? T.TossDrag : braking ? T.BrakeDrag : (p.DashCoast > Fix.Zero ? T.DashCoastDrag : T.Drag);
             p.Vel -= p.Vel * Fix.Min(Fix.One, drag * dt);
 
             var maxDashes = MaxDashes(p);
@@ -774,7 +775,7 @@ namespace UltraPuck.Core
             p.ShotStrength = Fix.Clamp01(speed / T.ChargedShotMax);
             // Ice Trail: a fully charged shot lays ice behind the puck
             if (released && p.Charge >= Fix.One && p.Stats.IceTrail > 0) StartIce(s, p);
-            // Invisible Quick Shot: a quick shot hides the puck from the other team for a moment
+            // Invisible Shot: a quick shot hides the puck from the other team for a moment
             s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1;
             if (!released && p.Stats.GhostShot > 0) { s.PuckHidden = T.GhostShotTime; s.PuckHiddenTeam = p.Team; }
             // Cannon Ball: a full charge knocks back whoever on the other team catches it
@@ -987,13 +988,17 @@ namespace UltraPuck.Core
                     s.PassFrom = -1;
                     s.Carrier = best;
                     s.PuckTeam = p.Team;
-                    // Cannon Ball: catching the other team's full charge: it keeps going, and takes you with it
+                    // Cannon Ball: catching the other team's full charge: it keeps going, and takes you with it along
+                    // the shot (whatever way you were skating), gliding with little control for a moment. No hit pause.
                     if (s.CannonTeam >= 0 && s.CannonTeam != p.Team && s.PuckVel.SqrLength > T.ShotSpeed * T.ShotSpeed)
                     {
                         var light = Fix.One / WeightOf(p) * Fix.Clamp(p.Stats.KnockbackTaken, Fix.Ratio(1, 20), Fix.FromInt(10));
-                        p.Vel += s.PuckVel * (T.CannonCarry * light);
-                        p.HitLag = Fix.Max(p.HitLag, T.HitLagMax);
-                        Hit(p, -s.PuckVel.Normalized, Fix.One);
+                        var dir = s.PuckVel.Normalized;
+                        var along = FixVec2.Dot(p.Vel, dir);
+                        var push = s.PuckVel.Length * T.CannonCarry * light;
+                        // keep any sideways speed, replace the speed along the shot with the push (if it's harder)
+                        p.Vel = p.Vel - dir * along + dir * Fix.Max(push, along);
+                        p.Shoved = T.CannonTime;
                     }
                     s.CannonTeam = -1;
                     s.PuckPos = CarrySpot(p); // (a pre-charge carries on: see Control)
