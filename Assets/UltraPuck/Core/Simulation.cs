@@ -107,8 +107,15 @@ namespace UltraPuck.Core
             foreach (var p in s.Players) if (p.Team == team && p.Offer.Length > 0) { offer = p.Offer; break; }
             if (offer == null) return;
             var votes = new int[offer.Length];
+            var humans = false;
+            // humans decide the vote; bots only fill in when the team has no one human
             foreach (var p in s.Players)
-                if (p.Team == team && p.Offer.Length > 0 && p.Picked >= 0) { var k = Array.IndexOf(offer, p.Picked); if (k >= 0) votes[k]++; }
+                if (p.Team == team && !p.Bot && p.Offer.Length > 0 && p.Picked >= 0)
+                { var k = Array.IndexOf(offer, p.Picked); if (k >= 0) { votes[k]++; humans = true; } }
+            if (!humans)
+                foreach (var p in s.Players)
+                    if (p.Team == team && p.Bot && p.Offer.Length > 0 && p.Picked >= 0)
+                    { var k = Array.IndexOf(offer, p.Picked); if (k >= 0) votes[k]++; }
             var most = 0;
             foreach (var v in votes) most = Math.Max(most, v);
             var tied = new System.Collections.Generic.List<int>();

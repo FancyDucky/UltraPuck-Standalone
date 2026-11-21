@@ -15,7 +15,11 @@ namespace UltraPuck.Core
         {
             if (sim == null || s == null || i < 0 || i >= s.Players.Length) return default(PlayerInput);
             var me = s.Players[i];
-            if (s.Phase == Phase.Picking) return new PlayerInput { Pick = PickCard(sim, me) };
+            if (s.Phase == Phase.Picking)
+            {
+                var pick = PickCard(sim, s, me);
+                return new PlayerInput { Pick = pick, Hover = pick };
+            }
             var pos = me.Pos;
             var attack = GoalCentre(sim.Map, 1 - me.Team);
             var defend = GoalCentre(sim.Map, me.Team);
@@ -178,14 +182,39 @@ namespace UltraPuck.Core
             return new PlayerInput { MoveX = Axis(m.X), MoveY = Axis(m.Y), AimX = Axis(aim.X), AimY = Axis(aim.Y), Buttons = b };
         }
 
-        /// <summary>A bot takes the strongest card it's offered, by tier (the first of them on a tie). Returns the 1-based pick, or 0.</summary>
-        private static byte PickCard(Simulation sim, PlayerState me)
+        /// <summary>
+        /// Team Vote: follow whatever most humans on the team are on (a locked pick, else their hover). Alone with
+        /// other bots (or no Team Vote): take the strongest card by tier (first on a tie). Returns the 1-based pick, or 0.
+        /// </summary>
+        private static byte PickCard(Simulation sim, GameState s, PlayerState me)
         {
             if (me.Offer.Length == 0 || me.Picked >= 0 || sim.Cards == null) return 0;
-            var best = 0;
+            if (sim.T.TeamVote)
+            {
+                var votes = new int[me.Offer.Length];
+                var any = false;
+                foreach (var p in s.Players)
+                {
+                    if (p.Team != me.Team || p.Bot || p.Offer.Length == 0) continue;
+                    var idx = -1;
+                    if (p.Picked >= 0) idx = System.Array.IndexOf(me.Offer, p.Picked);
+                    else if (p.Hover >= 1 && p.Hover <= me.Offer.Length) idx = p.Hover - 1;
+                    if (idx < 0) continue;
+                    votes[idx]++;
+                    any = true;
+                }
+                if (any)
+                {
+                    var best = 0;
+                    for (var k = 1; k < votes.Length; k++) if (votes[k] > votes[best]) best = k;
+                    return (byte)(best + 1);
+                }
+                return 0; // wait until a human looks at a card
+            }
+            var tier = 0;
             for (var k = 1; k < me.Offer.Length; k++)
-                if (sim.Cards.Cards[me.Offer[k]].Tier < sim.Cards.Cards[me.Offer[best]].Tier) best = k;
-            return (byte)(best + 1);
+                if (sim.Cards.Cards[me.Offer[k]].Tier < sim.Cards.Cards[me.Offer[tier]].Tier) tier = k;
+            return (byte)(tier + 1);
         }
 
         /// <summary>The goal a player on <paramref name="team"/> shoots at.</summary>

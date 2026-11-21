@@ -1429,7 +1429,7 @@ namespace UltraPuck.Game
             if (_replayPending && Time.unscaledTime >= _replayStartAt)
             {
                 _replayPending = false;
-                _wipe.Begin(_wipeStyle, ReplayTransition.TeamStripeColours());
+                _wipe.Begin(_wipeStyle, ReplayTransition.GreyStripeColours());
             }
 
             if (_wipe.Active) _wipe.Tick(dt);
@@ -1472,7 +1472,7 @@ namespace UltraPuck.Game
             {
                 _replay = null;
                 _replayExit = true;
-                _wipe.Begin(_wipeStyle, ReplayTransition.TeamStripeColours());
+                _wipe.Begin(_wipeStyle, ReplayTransition.GreyStripeColours());
                 if (_replayHoldA != null) Show(_replayHoldA, _replayHoldB ?? _replayHoldA, _replayHoldT);
                 else Show(_state, _state, 0f);
                 return true;
@@ -1738,7 +1738,7 @@ namespace UltraPuck.Game
             }
             _shots.Show(b, _sim.T.ShotRadius.ToFloat());
             _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
-            _rocks.Show(b, _sim.T.RockRadius.ToFloat());
+            _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team));
             _ice.Show(b, _sim.T.IceRadius.ToFloat());
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);

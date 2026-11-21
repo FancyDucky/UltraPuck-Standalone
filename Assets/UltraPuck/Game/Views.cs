@@ -1103,29 +1103,38 @@ namespace UltraPuck.Game
         }
     }
 
-    /// <summary>Swap rocks: small dark stones with a blue rim.</summary>
+    /// <summary>Swap rocks: the thrower's symbol on a darker shade of their colour, so you can tell whose it is.</summary>
     internal sealed class RockViews
     {
         private readonly Transform _parent;
         private readonly List<GameObject> _pool = new List<GameObject>();
+        private readonly List<string> _keys = new List<string>();
 
         public RockViews(Transform parent) { _parent = parent; }
 
-        public void Show(GameState s, float radius)
+        public void Show(GameState s, float radius, System.Func<int, int> symbolOf, System.Func<int, Color> colourOf)
         {
             for (var k = 0; k < s.Rocks.Length; k++)
             {
                 var rk = s.Rocks[k];
-                if (k >= _pool.Count) _pool.Add(null);
-                if (_pool[k] == null)
+                var owner = rk.Owner;
+                var symbol = owner >= 0 ? symbolOf(owner) : 0;
+                var col = owner >= 0 && owner < s.Players.Length ? colourOf(owner) : new Color(0.35f, 0.35f, 0.4f);
+                var body = Palette.Darker(col, 0.42f);
+                var rim = Palette.Darker(col, 0.62f);
+                var key = "Rock" + symbol + "_" + Mathf.RoundToInt(radius * 1000f) + "_" + ColorUtility.ToHtmlStringRGB(body);
+                while (_pool.Count <= k) { _pool.Add(null); _keys.Add(""); }
+                if (_pool[k] == null || _keys[k] != key)
                 {
-                    var go = new GameObject("Rock");
+                    if (_pool[k] != null) Object.Destroy(_pool[k]);
+                    var go = new GameObject(key);
                     go.transform.SetParent(_parent, false);
                     Draw.Make("Shadow", go.transform, Draw.Disc(radius * 1.05f, Palette.Shadow), 7).transform.localPosition = new Vector3(radius * 0.15f, -radius * 0.28f, 0f);
-                    Draw.Make("Rim", go.transform, Draw.Disc(radius, new Color(0.25f, 0.35f, 0.85f)), 11);
-                    Draw.Make("Body", go.transform, Draw.Disc(radius * 0.78f, new Color(0.18f, 0.2f, 0.28f)), 12);
-                    Draw.Make("Facet", go.transform, Draw.Disc(radius * 0.35f, new Color(0.32f, 0.38f, 0.55f)), 13);
+                    Draw.Make("Rim", go.transform, Draw.Disc(radius, rim), 11);
+                    Draw.Make("Body", go.transform, Draw.Disc(radius * 0.82f, body), 12);
+                    Draw.Make("Symbol", go.transform, Symbols.Mesh(symbol, radius * 0.95f, Color.white), 13);
                     _pool[k] = go;
+                    _keys[k] = key;
                 }
                 _pool[k].SetActive(true);
                 _pool[k].transform.localPosition = new Vector3(rk.Pos.X.ToFloat(), rk.Pos.Y.ToFloat(), 0f);

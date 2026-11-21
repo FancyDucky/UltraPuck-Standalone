@@ -3,9 +3,8 @@ using UnityEngine;
 namespace UltraPuck.Game
 {
     /// <summary>
-    /// Full-screen wipe used going into a goal replay and coming back out. Horizontal or diagonal team-colour
-    /// blinds; the match picks one at random for both ends of the replay. Stripe colours come from the teams'
-    /// palette colours, so more teams later just add more stripes.
+    /// Full-screen wipe used going into a goal replay and coming back out. Horizontal or diagonal grey blinds; the
+    /// match picks one style at random for both ends of the replay.
     /// </summary>
     internal sealed class ReplayTransition
     {
@@ -15,7 +14,7 @@ namespace UltraPuck.Game
 
         private Phase _phase;
         private Style _style;
-        private Color[] _colours = { Palette.Team(0), Palette.Team(1) };
+        private Color[] _colours = GreyStripeColours();
         private float _t;
         private float _holdLeft;
         private const int Stripes = 4;
@@ -40,23 +39,17 @@ namespace UltraPuck.Game
             return (seed & 1) == 0 ? Style.Horizontal : Style.Diagonal;
         }
 
-        /// <summary>
-        /// Team colours for the stripes. Uses every team index that currently has a palette colour; when more than
-        /// two sides are allowed, <see cref="Palette.TeamCount"/> grows and so do the stripes.
-        /// </summary>
-        public static Color[] TeamStripeColours()
+        /// <summary>Grey / dark-grey stripes for the wipe (no team colours for now).</summary>
+        public static Color[] GreyStripeColours()
         {
-            var n = Mathf.Max(2, Palette.TeamCount);
-            var c = new Color[n];
-            for (var i = 0; i < n; i++) c[i] = Palette.Team(i);
-            return c;
+            return new[] { new Color(0.48f, 0.48f, 0.48f, 1f), new Color(0.22f, 0.22f, 0.22f, 1f) };
         }
 
         public void Begin(Style style, Color[] colours)
         {
             _style = style;
             if (colours != null && colours.Length > 0) _colours = colours;
-            else _colours = TeamStripeColours();
+            else _colours = GreyStripeColours();
             _phase = Phase.Cover;
             _t = 0f;
             _holdLeft = HoldSecs;

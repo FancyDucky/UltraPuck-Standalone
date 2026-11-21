@@ -81,6 +81,13 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.32 (Composer, 20 Nov 2026): **team-vote bots follow humans; grey replay wipe; rock = owner look.**
+  Team Vote tallies humans only (bots copy majority hover/pick). Replay blinds are grey / dark grey. Swap rocks
+  show the thrower's symbol on a darker shade of their team colour. **NetSession.Version 35.** GitHub release
+  v0.1.32.
+  Files: `Core/Bot.cs`, `Simulation.cs`, `Net/NetSession.cs`; `Game/ReplayTransition.cs`, `Views.cs`, `GameRunner.cs`;
+  `Tests/CardMechanicsTests.cs`; this file.
+  Checked: 108 tests (103 pass, 5 skipped), Windows + Linux builds, release published.
 - 0.1.31 (Composer, 20 Nov 2026): **Swap card, one-utility rule, Shockwave remake, Kenney prompts.** New Swap
   utility (throw rock / teleport with momentum + clap reverb; rocks pickable, shootable, bounce off puck). One
   utility at a time (match setting for multiple; hover replace hint). Shockwave: push everyone, 2× shove, ring FX.

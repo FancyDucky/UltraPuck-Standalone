@@ -55,6 +55,32 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0, s.Players[3].Cards.Length, "the other team didn't pick");
         }
 
+        /// <summary>Team Vote: bots don't swing the vote — only humans count, and bots copy them.</summary>
+        [Test]
+        public void TeamVoteBotsFollowHumanMajority()
+        {
+            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3 }, _lib);
+            var s = sim.NewGame(new[] { 0, 0, 0, 1 }, 11u);
+            s.Players[1].Bot = true;
+            s.Players[2].Bot = true;
+            sim.StartPicking(s, new[] { 0, 1, 2 });
+            var humanPick = s.Players[0].Offer[0];
+            // human picks the first card; bots would prefer a higher tier but must follow the human
+            var botAlone = Bot.Think(sim, s, 1);
+            Assert.AreEqual(0, botAlone.Pick, "bots wait until a human looks");
+            s.Players[0].Hover = 1;
+            Assert.AreEqual(1, Bot.Think(sim, s, 1).Pick, "bots follow the human's hover");
+            sim.Step(s, new[] {
+                new PlayerInput { Pick = 1 },
+                Bot.Think(sim, s, 1),
+                Bot.Think(sim, s, 2),
+                default(PlayerInput)
+            });
+            Assert.AreEqual(humanPick, s.Players[0].Cards[s.Players[0].Cards.Length - 1]);
+            Assert.AreEqual(humanPick, s.Players[1].Cards[s.Players[1].Cards.Length - 1], "bot got the human's card");
+            Assert.AreEqual(humanPick, s.Players[2].Cards[s.Players[2].Cards.Length - 1], "other bot too");
+        }
+
         /// <summary>Pylon goalies can be pushed around (they're heavier than a player), and go back to their spot at a face-off.</summary>
         [Test]
         public void PylonGoaliesCanBePushed()
