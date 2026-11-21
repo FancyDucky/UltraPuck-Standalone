@@ -489,6 +489,9 @@ namespace UltraPuck.Game
             {
                 // the Gameplay settings (the keyboard and controller options are at the top)
                 _menus.OpenSettings(false);
+                _menus.Tab = 0;
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("settings-graphics");
                 _menus.Tab = 1;
                 yield return new WaitForSecondsRealtime(0.6f);
                 yield return Shot("settings-gameplay");

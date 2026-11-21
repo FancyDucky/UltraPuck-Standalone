@@ -1741,7 +1741,9 @@ namespace UltraPuck.Core
             var a = s.Players[i];
             if (a.Stats.Swap <= 0) return;
             if (s.Carrier == i) return; // holding the puck: no throw or teleport
-            if (a.Bot && a.SwapCooldown > Fix.Zero) return;
+            // the bot playing them (a bot, or a person's own player while they steer a bot teammate) waits between uses
+            var botRun = a.Bot || DriverOf(s, i) < 0;
+            if (botRun && a.SwapCooldown > Fix.Zero) return;
             for (var k = 0; k < s.Rocks.Length; k++)
             {
                 if (s.Rocks[k].Owner != i) continue;
@@ -1762,7 +1764,7 @@ namespace UltraPuck.Core
                 a.Swaps++; // clap + particle burst (throw does not count)
                 a.SwapFrom = from;
                 a.SwapTo = to;
-                if (a.Bot) a.SwapCooldown = T.SwapBotCooldown;
+                if (botRun) a.SwapCooldown = T.SwapBotCooldown;
                 return;
             }
             // no rock yet: throw one out of the wedge like a quick shot
@@ -1773,7 +1775,7 @@ namespace UltraPuck.Core
             rocks[rocks.Length - 1] = new Rock { Pos = start, Vel = vel, Owner = i, Carrier = -1 };
             s.Rocks = rocks;
             a.NoPickup = Fix.Max(a.NoPickup, T.ShotPickupDelay); // don't scoop your own throw back up
-            if (a.Bot) a.SwapCooldown = T.SwapBotCooldown;
+            if (botRun) a.SwapCooldown = T.SwapBotCooldown;
         }
 
         /// <summary>Shoot a carried Swap rock the same way as the puck (quick or charged).</summary>

@@ -219,6 +219,15 @@ namespace UltraPuck.Game
             {
                 case 0:
                     _rows.Add(Choice("Window", Settings.WindowNames, () => (int)Settings.WindowMode, v => Settings.WindowMode = (Settings.Window)v));
+                    var sizes = Settings.Resolutions();
+                    var sizeNames = new string[sizes.Length];
+                    for (var k = 0; k < sizes.Length; k++) sizeNames[k] = sizes[k].x + " × " + sizes[k].y;
+                    _rows.Add(Choice("Resolution", sizeNames, () =>
+                    {
+                        var now = Settings.Resolution.x > 0 ? Settings.Resolution : new Vector2Int(Screen.width, Screen.height);
+                        var at = Array.IndexOf(sizes, now);
+                        return at >= 0 ? at : 0;
+                    }, v => Settings.Resolution = sizes[v], "How many pixels the game draws. Lower is faster on slow PCs."));
                     _rows.Add(Switch("V-Sync", () => Settings.VSync, v => Settings.VSync = v, "Matches your monitor's refresh rate and stops tearing."));
                     var caps = new string[Settings.FpsCaps.Length];
                     for (var k = 0; k < caps.Length; k++) caps[k] = Settings.FpsCaps[k] == 0 ? "Unlimited" : Settings.FpsCaps[k] + " fps";

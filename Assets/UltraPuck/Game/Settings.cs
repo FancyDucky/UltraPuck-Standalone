@@ -16,6 +16,27 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("window_mode", (int)value); ApplyGraphics(); }
         }
 
+        /// <summary>The screen sizes this monitor offers (biggest first, each once).</summary>
+        public static Vector2Int[] Resolutions()
+        {
+            var list = new System.Collections.Generic.List<Vector2Int>();
+            foreach (var r in Screen.resolutions)
+            {
+                var v = new Vector2Int(r.width, r.height);
+                if (v.x >= 640 && v.y >= 360 && !list.Contains(v)) list.Add(v);
+            }
+            if (list.Count == 0) list.Add(new Vector2Int(Screen.currentResolution.width, Screen.currentResolution.height));
+            list.Sort((a, b) => b.x != a.x ? b.x.CompareTo(a.x) : b.y.CompareTo(a.y));
+            return list.ToArray();
+        }
+
+        /// <summary>The chosen resolution, or (0, 0) for the monitor's own (the default).</summary>
+        public static Vector2Int Resolution
+        {
+            get { return new Vector2Int(PlayerPrefs.GetInt("res_w", 0), PlayerPrefs.GetInt("res_h", 0)); }
+            set { PlayerPrefs.SetInt("res_w", value.x); PlayerPrefs.SetInt("res_h", value.y); ApplyGraphics(true); }
+        }
+
         public static bool VSync
         {
             get { return PlayerPrefs.GetInt("vsync", 1) != 0; }
@@ -58,12 +79,21 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Put the window mode, V-Sync and frame cap into effect.</summary>
-        public static void ApplyGraphics()
+        public static void ApplyGraphics() { ApplyGraphics(false); }
+
+        /// <param name="resize">The resolution was just changed: set it even if the window mode is the same.</param>
+        public static void ApplyGraphics(bool resize)
         {
             QualitySettings.vSyncCount = VSync ? 1 : 0;
             Application.targetFrameRate = VSync || FpsCap <= 0 ? -1 : FpsCap;
             var mode = WindowMode == Window.Fullscreen ? FullScreenMode.ExclusiveFullScreen
                 : WindowMode == Window.Borderless ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
+            var want = Resolution;
+            if (want.x > 0 && want.y > 0)
+            {
+                if (resize || Screen.fullScreenMode != mode || Screen.width != want.x || Screen.height != want.y) Screen.SetResolution(want.x, want.y, mode);
+                return;
+            }
             if (Screen.fullScreenMode == mode) return;
             if (mode == FullScreenMode.Windowed) Screen.fullScreenMode = mode;
             else

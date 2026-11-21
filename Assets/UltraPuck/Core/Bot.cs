@@ -34,7 +34,18 @@ namespace UltraPuck.Core
             byte b = 0;
             var rockHeld = -1;
             for (var k = 0; k < s.Rocks.Length; k++) if (s.Rocks[k].Carrier == i) { rockHeld = k; break; }
-            if (s.Carrier == i)
+            var mateHeld = -1;
+            for (var j = 0; j < s.Players.Length; j++) if (s.Players[j].HeldBy == i) { mateHeld = j; break; }
+            if (mateHeld >= 0)
+            {
+                // Friendly Fire: carrying a teammate: fire them straight at the puck (or whoever has it); if the one
+                // being carried has the puck, at the net
+                target = pos;
+                aim = ((s.Carrier == mateHeld ? attack : s.PuckPos) - pos).Normalized;
+                if (aim.SqrLength.Raw <= 0) aim = me.Facing;
+                if (FixVec2.Dot(me.Facing, aim) > Fix.Ratio(9, 10) && (s.Tick & 1) == 0) b |= PlayerInput.ShootCheck;
+            }
+            else if (s.Carrier == i)
             {
                 // aim somewhere in the goal mouth, not always dead centre (a net that says which way it opens: across its mouth)
                 var net = AttackGoal(sim.Map, me.Team);

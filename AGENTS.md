@@ -82,6 +82,13 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.38 (Claude, 21 Nov 2026): **Resolution setting; Friendly Fire text; bots throw
+  teammates; Swap spam fix.** Graphics tab "Resolution" (`Settings.Resolution`, PlayerPrefs res_w / res_h, 0 = the
+  monitor's own; `Settings.Resolutions()` lists the monitor's sizes). Friendly Fire card: plain text "Allows you to pick
+  up and shoot teammates as if they were the puck." (the face entry with a "text" key wasn't read by the card loader).
+  Bots carrying a teammate aim at the puck (the net if the carried one has it) and fire at once. A person's own player
+  run by the bot while they steer a bot teammate now waits `SwapBotCooldown` between Swap uses (it was spamming
+  teleports). **NetSession.Version 45.** Checked: 130 tests (125 pass, 5 skipped), Windows build, settings-graphics shot.
 - 0.1.37 part 2 (Claude, 21 Nov 2026): **countdown sounds + START, leave/rejoin mid-match,
   host kick-off / score, hold-for-scoreboard.** Countdown beeps (Sfx.CountBeep / CountGo) and a START! banner; after a
   card pick the countdown waits `Tuning.PickOutroTime` (1.5 s, in the sim) so the cards finish leaving before 3.

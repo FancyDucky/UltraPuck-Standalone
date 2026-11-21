@@ -199,9 +199,7 @@
       "minTeam": 2,
       "color": "#FF7359",
       "flavor": "Bob, throw me!",
-      "face": [
-        { "text": "You can pick up and throw your teammate's as if they were the puck![/]" }
-      ],
+      "text": "Allows you to pick up and shoot teammates as if they were the puck.",
       "stats": { "FriendlyFire": "+1" }
     },
     {

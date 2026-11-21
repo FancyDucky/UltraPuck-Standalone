@@ -389,6 +389,45 @@ namespace UltraPuck.Tests
             }
         }
 
+        /// <summary>A bot carrying a teammate (Friendly Fire) fires them at the puck straight away.</summary>
+        [Test]
+        public void BotsThrowACarriedTeammateAtThePuck()
+        {
+            var s = _sim.NewGame(new[] { 0, 0, 1 }, 1u, new[] { true, true, true });
+            Give(s, 0, "ultrapuck.friendlyfire");
+            Play(s);
+            s.Players[0].Pos = At(-4, 0); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].HeldBy = 0;
+            s.Players[2].Pos = At(10, 9);
+            s.PuckPos = At(6, 0);
+            var thrown = false;
+            for (var t = 0; t < 120 && !thrown; t++)
+            {
+                _sim.Step(s, _sim.Route(s, new PlayerInput[3]));
+                thrown = s.Players[1].HeldBy < 0;
+            }
+            Assert.IsTrue(thrown, "thrown within a second");
+            Assert.Greater(s.Players[1].Vel.X.ToDouble(), 3.0, "towards the puck");
+        }
+
+        /// <summary>Your own player, run by the bot while you steer a bot teammate, waits between Swap uses like any bot.</summary>
+        [Test]
+        public void ABotRunPlayerDoesntSpamSwap()
+        {
+            var s = _sim.NewGame(new[] { 0, 0, 1 }, 1u, new[] { false, true, true });
+            Give(s, 0, "ultrapuck.swap");
+            Play(s);
+            s.Players[0].Pilot = 1; // the person steers the bot teammate
+            var swaps = 0;
+            for (var t = 0; t < 2 * _sim.T.TicksPerSecond; t++)
+            {
+                var before = s.Players[0].Swaps + s.Rocks.Length;
+                _sim.Step(s, _sim.Route(s, new PlayerInput[3]));
+                if (s.Players[0].Swaps + s.Rocks.Length != before) swaps++;
+            }
+            Assert.LessOrEqual(swaps, 1, "at most one use in two seconds (bots wait three)");
+        }
+
         [Test]
         public void TheHostCanAddABotMidMatch()
         {
