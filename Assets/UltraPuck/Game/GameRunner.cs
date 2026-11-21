@@ -458,6 +458,14 @@ namespace UltraPuck.Game
                     _sim.T.CardsOffered = count;
                     yield return new WaitForSecondsRealtime(0.8f);
                     PickACard();
+                    if (count == 4 && _cards != null && _state.Players.Length > 0)
+                    {
+                        // the newest cards, so their faces get looked at
+                        var ids = new[] { "ultrapuck.powershot", "ultrapuck.ghostshot", "ultrapuck.cannonball", "ultrapuck.friendlyfire" };
+                        var offer = new List<int>();
+                        foreach (var id in ids) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                        _state.Players[0].Offer = offer.ToArray();
+                    }
                     yield return new WaitForSecondsRealtime(2.2f);
                     yield return Shot("cards-" + count);
                     GoMainMenu();
@@ -2030,6 +2038,18 @@ namespace UltraPuck.Game
                 _shake = Mathf.Max(_shake, 0.7f);
             }
             _puck.Visible(b.Phase != Phase.Scored);
+            // Invisible Quick Shot: hidden from a screen with only the other team on it; an outline for the shooter's
+            // team (and in replays, so everyone can follow it)
+            var ghost = 0;
+            if (b.PuckHidden > Fix.Zero && b.PuckHiddenTeam >= 0 && b.Carrier < 0)
+            {
+                bool red, blue;
+                LocalTeams(out red, out blue);
+                var mine = b.PuckHiddenTeam == 0 ? red : blue;
+                var theirs = b.PuckHiddenTeam == 0 ? blue : red;
+                ghost = theirs && !mine && !_hud.Replay ? 2 : 1;
+            }
+            _puck.Ghost(ghost);
             _puck.Show((pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t), b.PuckTeam);
             if (InMatch) MatchSounds(b); // the bots playing behind the menus are silent
         }

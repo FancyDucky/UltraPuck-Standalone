@@ -428,6 +428,76 @@ namespace UltraPuck.Tests
             Assert.LessOrEqual(swaps, 1, "at most one use in two seconds (bots wait three)");
         }
 
+        /// <summary>The speed of a quick shot (shoot pressed with the puck) for a player holding these cards.</summary>
+        private double QuickShot(params string[] cards)
+        {
+            var s = Game(0, 1);
+            if (cards.Length > 0) Give(s, 0, cards);
+            Play(s);
+            s.Players[1].Pos = At(10, 8);
+            s.Players[0].Pos = At(-6, 0); s.Players[0].Facing = FixVec2.Right; s.Players[0].Vel = FixVec2.Zero;
+            s.Carrier = 0;
+            _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput) });
+            return s.PuckVel.Length.ToDouble();
+        }
+
+        [Test]
+        public void PowerShotIsAFullChargeAndOverChargeDoesntAdd()
+        {
+            var full = _sim.T.ChargedShotMax.ToDouble();
+            Assert.AreEqual(_sim.T.ShotSpeed.ToDouble(), QuickShot(), 0.3, "a plain quick shot");
+            Assert.AreEqual(full, QuickShot("ultrapuck.powershot"), 0.3, "Power Shot: a full charge's speed");
+            Assert.AreEqual(full, QuickShot("ultrapuck.powershot", "ultrapuck.overcharge"), 0.3, "Over Charge doesn't add to it");
+            Assert.AreEqual(1, _lib.ById("ultrapuck.powershot").MaxPerPlayer);
+        }
+
+        [Test]
+        public void InvisibleQuickShotHidesThePuckForASecondAndAHalf()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.ghostshot");
+            Play(s);
+            s.Players[1].Pos = At(10, 8);
+            s.Players[0].Pos = At(-6, -3); s.Players[0].Facing = FixVec2.Right;
+            s.Carrier = 0;
+            _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput) });
+            Assert.Greater(s.PuckHidden.ToDouble(), 1.4);
+            Assert.AreEqual(0, s.PuckHiddenTeam);
+            Run(s, 2 * _sim.T.TicksPerSecond, default(PlayerInput), default(PlayerInput));
+            Assert.AreEqual(0.0, s.PuckHidden.ToDouble(), "seen again");
+            // a charged shot isn't hidden
+            s.Carrier = 0; s.PuckHidden = Fix.Zero;
+            var hold = new PlayerInput { Buttons = PlayerInput.ChargeBrake };
+            for (var t = 0; t < 60; t++) _sim.Step(s, new[] { hold, default(PlayerInput) });
+            _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(0.0, s.PuckHidden.ToDouble());
+        }
+
+        [Test]
+        public void CannonBallKnocksBackTheOpponentWhoCatchesIt()
+        {
+            System.Func<bool, double> catcher = cannon =>
+            {
+                Make();
+                var s = Game(0, 1);
+                if (cannon) Give(s, 0, "ultrapuck.cannonball");
+                Play(s);
+                s.Players[0].Pos = At(-8, 0); s.Players[0].Facing = FixVec2.Right;
+                s.Players[1].Pos = At(2, 0); s.Players[1].Facing = new FixVec2(-Fix.One, Fix.Zero);
+                s.Carrier = 0;
+                var hold = new PlayerInput { Buttons = PlayerInput.ChargeBrake };
+                for (var t = 0; t < 130; t++) _sim.Step(s, new[] { hold, default(PlayerInput) });
+                _sim.Step(s, new PlayerInput[2]); // let go: a full charge
+                var most = 0.0;
+                for (var t = 0; t < 40; t++) { _sim.Step(s, new PlayerInput[2]); most = System.Math.Max(most, s.Players[1].Vel.X.ToDouble()); }
+                Assert.AreEqual(1, s.Carrier, "caught it");
+                return most;
+            };
+            var plain = catcher(false);
+            var cannon = catcher(true);
+            Assert.Greater(cannon, plain + 8.0, "carried back by the cannon ball");
+        }
+
         [Test]
         public void TheHostCanAddABotMidMatch()
         {

@@ -269,7 +269,6 @@ namespace UltraPuck.Game
             var arriving = Current == Page.Main && leave < 1f;
             var slide = arriving ? (1f - Ui.EaseOut(leave)) * -740f : 0f;
             Ui.Box(new Rect(slide, 0f, 620f, Ui.H), new Color(0f, 0f, 0f, 0.62f), 0f);
-            Ui.Box(new Rect(620f + slide, 0f, 120f, Ui.H), new Color(0f, 0f, 0f, 0.3f), 0f);
 
             var x = TitleScreen.MenuX;
             if (!arriving) TitleScreen.Logo(x, TitleScreen.MenuY, 1f, 1f);

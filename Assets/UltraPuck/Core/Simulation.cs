@@ -187,6 +187,7 @@ namespace UltraPuck.Core
             s.Carrier = -1;
             s.PuckTeam = -1;
             s.PassFrom = -1;
+            s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1; s.CannonTeam = -1;
             s.Shots = new Shot[0];
             s.Ice = new IcePoint[0];
             s.IceLaying = Fix.Zero;
@@ -468,6 +469,10 @@ namespace UltraPuck.Core
 
             if (s.Ice.Length > 0 || s.IceLaying > Fix.Zero) Ice(s, dt);
 
+            // Invisible Quick Shot runs out (or ends once someone has the puck); a Cannon Ball ends once it's slowed down
+            if (s.PuckHidden > Fix.Zero) { s.PuckHidden -= dt; if (s.PuckHidden <= Fix.Zero || s.Carrier >= 0) { s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1; } }
+            if (s.CannonTeam >= 0 && (s.Carrier >= 0 || s.PuckVel.SqrLength < T.ShotSpeed * T.ShotSpeed)) s.CannonTeam = -1;
+
             // the puck slows down on its own
             s.PuckVel -= s.PuckVel * Fix.Min(Fix.One, T.PuckDrag * dt);
             s.PuckVel = s.PuckVel.ClampLength(T.PuckMaxSpeed);
@@ -744,6 +749,9 @@ namespace UltraPuck.Core
             p.Facing = turned.SqrLength.Raw > 0 ? turned : want;
         }
 
+        /// <summary>A quick shot's speed: Power Shot makes it a full charge's (Over Charge doesn't add).</summary>
+        private Fix QuickShotSpeed(PlayerState p) { return p.Stats.QuickShotFull > 0 ? T.ChargedShotMax : T.ShotSpeed * p.Stats.QuickShotPower; }
+
         private void Shoot(GameState s, int i, bool released)
         {
             var p = s.Players[i];
@@ -752,7 +760,7 @@ namespace UltraPuck.Core
             var charged = p.Charge <= Fix.One
                 ? T.ChargedShotMin + (T.ChargedShotMax - T.ChargedShotMin) * p.Charge
                 : T.ChargedShotMax * p.Charge;
-            var quick = T.ShotSpeed * p.Stats.QuickShotPower;
+            var quick = QuickShotSpeed(p);
             var speed = (released ? charged : Fix.Max(quick, p.Charge > Fix.Zero ? charged : Fix.Zero)) * p.Stats.ShotPower;
             s.Carrier = -1;
             // from where the puck is (it may have been pushed aside), unless it isn't actually at the wedge yet
@@ -766,6 +774,11 @@ namespace UltraPuck.Core
             p.ShotStrength = Fix.Clamp01(speed / T.ChargedShotMax);
             // Ice Trail: a fully charged shot lays ice behind the puck
             if (released && p.Charge >= Fix.One && p.Stats.IceTrail > 0) StartIce(s, p);
+            // Invisible Quick Shot: a quick shot hides the puck from the other team for a moment
+            s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1;
+            if (!released && p.Stats.GhostShot > 0) { s.PuckHidden = T.GhostShotTime; s.PuckHiddenTeam = p.Team; }
+            // Cannon Ball: a full charge knocks back whoever on the other team catches it
+            s.CannonTeam = released && p.Charge >= Fix.One && p.Stats.CannonBall > 0 ? p.Team : -1;
             p.Charge = Fix.Zero;
             p.NoPickup = T.ShotPickupDelay;
         }
@@ -974,6 +987,15 @@ namespace UltraPuck.Core
                     s.PassFrom = -1;
                     s.Carrier = best;
                     s.PuckTeam = p.Team;
+                    // Cannon Ball: catching the other team's full charge: it keeps going, and takes you with it
+                    if (s.CannonTeam >= 0 && s.CannonTeam != p.Team && s.PuckVel.SqrLength > T.ShotSpeed * T.ShotSpeed)
+                    {
+                        var light = Fix.One / WeightOf(p) * Fix.Clamp(p.Stats.KnockbackTaken, Fix.Ratio(1, 20), Fix.FromInt(10));
+                        p.Vel += s.PuckVel * (T.CannonCarry * light);
+                        p.HitLag = Fix.Max(p.HitLag, T.HitLagMax);
+                        Hit(p, -s.PuckVel.Normalized, Fix.One);
+                    }
+                    s.CannonTeam = -1;
                     s.PuckPos = CarrySpot(p); // (a pre-charge carries on: see Control)
                     s.PuckVel = p.Vel;
                     return;
@@ -1545,7 +1567,7 @@ namespace UltraPuck.Core
             var charged = p.Charge <= Fix.One
                 ? T.ChargedShotMin + (T.ChargedShotMax - T.ChargedShotMin) * p.Charge
                 : T.ChargedShotMax * p.Charge;
-            var quick = T.ShotSpeed * p.Stats.QuickShotPower;
+            var quick = QuickShotSpeed(p);
             var speed = (released ? charged : Fix.Max(quick, p.Charge > Fix.Zero ? charged : Fix.Zero)) * p.Stats.ShotPower;
             speed = Fix.Min(T.MateThrowMax, speed * T.MateThrow);
             m.HeldBy = -1;
@@ -1788,7 +1810,7 @@ namespace UltraPuck.Core
             var charged = p.Charge <= Fix.One
                 ? T.ChargedShotMin + (T.ChargedShotMax - T.ChargedShotMin) * p.Charge
                 : T.ChargedShotMax * p.Charge;
-            var quick = T.ShotSpeed * p.Stats.QuickShotPower;
+            var quick = QuickShotSpeed(p);
             var speed = (released ? charged : Fix.Max(quick, p.Charge > Fix.Zero ? charged : Fix.Zero)) * p.Stats.ShotPower;
             var reach = RadiusOf(p) + T.RockRadius + T.CarrySlack;
             if ((rk.Pos - p.Pos).SqrLength > reach * reach) rk.Pos = RockCarrySpot(p);

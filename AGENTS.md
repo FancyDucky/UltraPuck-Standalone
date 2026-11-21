@@ -82,6 +82,16 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.40 (Claude, 21 Nov 2026): **Power Shot = full charge; Invisible Quick Shot; Cannon Ball;
+  menu strip gone; team-coloured lines.** Power Shot (max 1): `Stats.QuickShotFull` makes a quick shot
+  `ChargedShotMax` (Over Charge doesn't add; `QuickShotSpeed()` used for puck, rock and teammate throws). New cards
+  `ultrapuck.ghostshot` (GhostShot: a quick shot sets `GameState.PuckHidden` 1.5 s / `PuckHiddenTeam`; ends on any
+  pickup; `PuckView.Ghost` draws an outline for that team, nothing for a screen with only the other team, outline in
+  replays) and `ultrapuck.cannonball` (CannonBall: a released full charge sets `CannonTeam`; an opponent catching it
+  while it's faster than a quick shot is carried along by `CannonCarry` × the puck's speed, scaled by weight / Knockback
+  Taken). Art from the user's desktop. Main menu: the 120 px see-through strip beside the panel is gone. Rink side lines
+  are a dark shade of the team defending that end (centre line grey). **NetSession.Version 46.** Checked: 133 tests
+  (128 pass, 5 skipped), Windows build, title / cards / maps screenshots. Not looked at: the invisible-puck outline in play.
 - 0.1.39 (Claude, 21 Nov 2026): **round posts; Big Rink.** Open walls (the nets' posts) are
   drawn with round joints and ends like the outer walls (`Draw.Line` no longer gets `square` for them; 20-segment
   caps), matching the round collision they always had. New map `big-rink.json` ("Big Rink"): the Hockey Rink 70%

@@ -33,7 +33,13 @@ namespace UltraPuck.Game
             if (map.Route.Count < 2)
             {
                 AcrossLine(map, cx, min.y, max.y, Palette.FloorLines, "CentreLine");
-                foreach (var side in new[] { -1f, 1f }) AcrossLine(map, cx + side * size.x * 0.19f, min.y, max.y, Palette.FloorLinesSide, "SideLine");
+                // each half's line in a dark shade of the team that defends that end (the centre line stays grey)
+                foreach (var side in new[] { -1f, 1f })
+                {
+                    var team = side < 0f ? 0 : 1;
+                    foreach (var g in map.Goals) if ((V.Of(g.Min).x + V.Of(g.Max).x) / 2f < cx == side < 0f) { team = g.Team; break; }
+                    AcrossLine(map, cx + side * size.x * 0.19f, min.y, max.y, Palette.Darker(Palette.Team(team), 0.42f), "SideLine");
+                }
             }
 
             // goals in a dark shade of the colour of the team that defends them
@@ -901,9 +907,26 @@ namespace UltraPuck.Game
                 _trail[i].gameObject.SetActive(false);
             }
             _glow = Draw.SoftDisc(radius * 1.6f, Color.white, Palette.Clear(Color.white));
-            Draw.Make("Glow", Root.transform, _glow, 31);
-            Draw.Make("Edge", Root.transform, Draw.Disc(radius, Palette.PuckEdge), 32);
-            Draw.Make("Fill", Root.transform, Draw.Disc(radius * 0.68f, Palette.Puck), 33);
+            _solid[0] = Draw.Make("Glow", Root.transform, _glow, 31).gameObject;
+            _solid[1] = Draw.Make("Edge", Root.transform, Draw.Disc(radius, Palette.PuckEdge), 32).gameObject;
+            _solid[2] = Draw.Make("Fill", Root.transform, Draw.Disc(radius * 0.68f, Palette.Puck), 33).gameObject;
+            // Invisible Quick Shot: just an outline (for the shooter's team)
+            _ghost = Draw.Make("Ghost", Root.transform, Draw.Ring(radius * 0.8f, radius, 1f, new Color(1f, 1f, 1f, 0.8f)), 33).gameObject;
+            _ghost.SetActive(false);
+        }
+
+        private readonly GameObject[] _solid = new GameObject[3];
+        private readonly GameObject _ghost;
+        private int _ghostMode;
+
+        /// <summary>Invisible Quick Shot: 0 the puck as normal, 1 an outline only (your team's shot), 2 not drawn at all (the other team's).</summary>
+        public void Ghost(int mode)
+        {
+            if (mode == _ghostMode) return;
+            _ghostMode = mode;
+            foreach (var g in _solid) g.SetActive(mode == 0);
+            _ghost.SetActive(mode == 1);
+            if (mode != 0) { foreach (var t in _trail) t.gameObject.SetActive(false); _historyCount = 0; }
         }
 
         /// <summary>The glow and trail colour: the team's light tint, or white for nobody (-1).</summary>
@@ -955,7 +978,7 @@ namespace UltraPuck.Game
                 {
                     var p = _history[i + 1];
                     var speed = (_history[i] - p).magnitude / TrailStep;
-                    on = Settings.PuckTrail && speed > TrailMinSpeed && (pos - p).sqrMagnitude > _r * _r;
+                    on = Settings.PuckTrail && _ghostMode == 0 && speed > TrailMinSpeed && (pos - p).sqrMagnitude > _r * _r;
                     if (on) _trail[i].localPosition = new Vector3(p.x, p.y, 0f);
                 }
                 _trail[i].gameObject.SetActive(on);

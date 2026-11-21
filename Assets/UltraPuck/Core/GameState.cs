@@ -117,6 +117,12 @@ namespace UltraPuck.Core
         public int PassRefresh;
         /// <summary>...and the whole team's (Team Play).</summary>
         public int PassRefreshTeam;
+        /// <summary>Power Shot: a quick shot is as hard as a full charge (Over Charge doesn't add to it).</summary>
+        public int QuickShotFull;
+        /// <summary>Invisible Quick Shot: a quick shot hides the puck from the other team for a moment.</summary>
+        public int GhostShot;
+        /// <summary>Cannon Ball: a full charge keeps going through whoever on the other team catches it.</summary>
+        public int CannonBall;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
@@ -124,6 +130,7 @@ namespace UltraPuck.Core
         {
             GameState.Mix(ref h, MoveSpeed); GameState.Mix(ref h, MoveSpeedWithPuck); GameState.Mix(ref h, ShotPower);
             GameState.Mix(ref h, QuickShotPower); GameState.Mix(ref h, ChargeSpeed); GameState.Mix(ref h, OverCharge);
+            GameState.Mix(ref h, QuickShotFull); GameState.Mix(ref h, GhostShot); GameState.Mix(ref h, CannonBall);
             GameState.Mix(ref h, DashCooldown); GameState.Mix(ref h, DashPower); GameState.Mix(ref h, ExtraDashes);
             GameState.Mix(ref h, Size); GameState.Mix(ref h, Weight); GameState.Mix(ref h, KnockbackGiven); GameState.Mix(ref h, KnockbackTaken);
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
@@ -318,6 +325,11 @@ namespace UltraPuck.Core
         public int Touch1 = -1, Touch2 = -1;
         /// <summary>The carrier the last time bots were handed to people (so a new carrier is noticed once).</summary>
         public int AutoCarrier = -1;
+        /// <summary>Invisible Quick Shot: seconds the loose puck stays hidden from everyone but <see cref="PuckHiddenTeam"/>.</summary>
+        public Fix PuckHidden;
+        public int PuckHiddenTeam = -1;
+        /// <summary>Cannon Ball: the team whose full-charge shot this is (-1: none); an opponent catching it is knocked back.</summary>
+        public int CannonTeam = -1;
         /// <summary>A timed match: time left on the clock (counts down only while the puck is in play).</summary>
         public Fix Clock;
         /// <summary>A timed match ended level: the next goal wins.</summary>
@@ -370,7 +382,7 @@ namespace UltraPuck.Core
         {
             ulong h = 14695981039346656037UL;
             Mix(ref h, Clock); Mix(ref h, Overtime ? 1 : 0); Mix(ref h, Paused ? 1 : 0);
-            Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, LastGoalPlayer); Mix(ref h, LastAssist); Mix(ref h, LastGoalBy); Mix(ref h, Touch1); Mix(ref h, Touch2); Mix(ref h, AutoCarrier); Mix(ref h, (long)Rng);
+            Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, LastGoalPlayer); Mix(ref h, LastAssist); Mix(ref h, LastGoalBy); Mix(ref h, Touch1); Mix(ref h, Touch2); Mix(ref h, AutoCarrier); Mix(ref h, PuckHidden); Mix(ref h, PuckHiddenTeam); Mix(ref h, CannonTeam); Mix(ref h, (long)Rng);
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); Mix(ref h, py.Radius); }

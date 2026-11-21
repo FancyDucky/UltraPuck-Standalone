@@ -37,11 +37,39 @@
       "name": "Power Shot",
       "tier": "S",
       "color": "#EB544D",
+      "max": 1,
       "flavor": "Why even charge up?",
       "face": [
-        { "label": "Quick Shot Strength", "value": "[good]+50%[/]" },
+        { "label": "Quick Shot", "value": "[good]100% charge[/]" }
       ],
-      "stats": { "QuickShotPower": "x1.5" }
+      "text": "[note]Over Charge doesn't add to it.[/]",
+      "stats": { "QuickShotFull": "+1" }
+    },
+    {
+      "id": "ultrapuck.ghostshot",
+      "name": "Invisible Quick Shot",
+      "tier": "A",
+      "max": 1,
+      "color": "#3CC84B",
+      "flavor": "Now you see it...",
+      "face": [
+        { "label": "Invisible Puck", "value": "[good]1.5 s[/]" }
+      ],
+      "text": "[note]After a quick shot. Only your team can see it.[/]",
+      "stats": { "GhostShot": "+1" }
+    },
+    {
+      "id": "ultrapuck.cannonball",
+      "name": "Cannon Ball",
+      "tier": "A",
+      "max": 1,
+      "color": "#F2B21B",
+      "flavor": "Catch this.",
+      "face": [
+        { "label": "Catcher", "value": "[good]knocked back[/]" }
+      ],
+      "text": "[note]Full charge shots. Opponents who catch it are carried along.[/]",
+      "stats": { "CannonBall": "+1" }
     },
     {
       "id": "ultrapuck.quickrecharge",
