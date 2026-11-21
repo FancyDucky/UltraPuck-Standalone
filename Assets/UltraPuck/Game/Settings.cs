@@ -189,6 +189,13 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("shared_controls", value ? 1 : 0); }
         }
 
+        /// <summary>A check dashes the way you're moving when the move stick is pushed (true, the default), or always the way you face.</summary>
+        public static bool DashWhereMoving
+        {
+            get { return PlayerPrefs.GetInt("dash_where_moving", 1) != 0; }
+            set { PlayerPrefs.SetInt("dash_where_moving", value ? 1 : 0); }
+        }
+
         /// <summary>With separate keyboard and controller players: player 1 is the controller (true) or the keyboard.</summary>
         public static bool ControllerIsPlayer1
         {

@@ -186,6 +186,8 @@ namespace UltraPuck.Game
         }
         /// <summary>Screenshots: show the whole rink, not the players' part of it.</summary>
         private bool _shotWholeRink;
+        /// <summary>Screenshots: nobody presses anything (bots and devices alike), so a set-up scene stays as it was set.</summary>
+        private bool _shotNoInput;
         /// <summary>Screenshots: move the camera by this much (to see what moving the view does).</summary>
         private Vector2 _shotNudge;
 
@@ -502,6 +504,78 @@ namespace UltraPuck.Game
                 yield return new WaitForSecondsRealtime(1.5f);
                 yield return Shot("ice-2");
                 _shotNudge = Vector2.zero;
+                GoMainMenu();
+            }
+
+            if (want("carry"))
+            {
+                // Friendly Fire: orange carrying a teammate who has the puck, then the throw; blue's pylon goalie with
+                // three cards (35% bigger each) in front of its net
+                _shotWholeRink = true;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 2, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(3.5f);
+                Debug.Log("Ultra Puck carry shot: cards " + (_sim.Cards != null));
+                int ff = _sim.Cards.ById("ultrapuck.friendlyfire").Index, pg = _sim.Cards.ById("ultrapuck.pylongoalie").Index;
+                // whoever ended up on player 0's team is the one carried; the other side gets the pylon cards
+                int mate = -1, foe = -1;
+                for (var j = 1; j < _state.Players.Length; j++)
+                    if (_state.Players[j].Team == _state.Players[0].Team) { if (mate < 0) mate = j; } else if (foe < 0) foe = j;
+                if (mate < 0 || foe < 0) { Debug.Log("Ultra Puck carry shot: teams didn't come out 2v1"); mate = 1; foe = 2; }
+                _state.Players[0].Cards = new[] { ff };
+                _state.Players[foe].Cards = new[] { pg, pg, pg };
+                _sim.Cards.Recompute(_state);
+                _sim.PlacePylons(_state);
+                _state.Players[0].Pos = new FixVec2(Fix.FromInt(-4), Fix.FromInt(-3));
+                _state.Players[0].Facing = FixVec2.Right;
+                _state.Players[0].Vel = FixVec2.Zero;
+                _state.Players[mate].HeldBy = 0;
+                _state.Players[foe].Pos = new FixVec2(Fix.FromInt(-12), Fix.FromInt(8));
+                _state.Carrier = mate;
+                _state.PuckTeam = _state.Players[0].Team;
+                _seenCarrier = mate; // (no handing the human over to the carrier)
+                _shotNoInput = true;
+                _state.PuckPos = _state.Players[0].Pos + FixVec2.Right * Fix.Two;
+                Debug.Log("Ultra Puck carry shot: pylons=" + _state.Pylons.Length + (_state.Pylons.Length > 0 ? " radius=" + _state.Pylons[0].Radius : ""));
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield return new WaitForSecondsRealtime(0.1f);
+                yield return Shot("carry-1");
+                // the throw: a half charge let go
+                _state.Players[0].Charge = Fix.Half;
+                _sim.Step(_state, new PlayerInput[_state.Players.Length]);
+                Debug.Log("Ultra Puck carry shot: held by " + _state.Players[mate].HeldBy + ", toss " + _state.Players[mate].TossTime + ", carrier " + _state.Carrier + " (mate " + mate + "), vel " + _state.Players[mate].Vel);
+                yield return new WaitForSecondsRealtime(0.25f);
+                yield return Shot("carry-2");
+                _shotNoInput = false;
+                _shotWholeRink = false;
+                GoMainMenu();
+            }
+
+            if (want("dash"))
+            {
+                // dashing up while looking right (Dash direction: Where you move): the streaks trail below, not to the left
+                _shotWholeRink = true;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(0.6f);
+                _shotNoInput = true;
+                var me = _state.Players[0];
+                me.Pos = FixVec2.Zero;
+                me.Facing = FixVec2.Right;
+                me.Vel = new FixVec2(Fix.Zero, Fix.FromInt(3));
+                me.DashDir = new FixVec2(Fix.Zero, Fix.One);
+                me.DashTime = _sim.T.DashHitTime * Fix.Ratio(3, 10);
+                me.DashCoast = Fix.Zero;
+                yield return null;
+                yield return Shot("dash");
+                _shotNoInput = false;
+                _shotWholeRink = false;
                 GoMainMenu();
             }
 
@@ -1380,7 +1454,9 @@ namespace UltraPuck.Game
             while (_acc >= dt)
             {
                 _prev = _state.Clone();
-                _sim.Step(_state, _local.Sample(_sim, _state));
+                // the card screen: anyone driving a bot teammate goes back to their own player first
+                if (_state.Phase == Phase.Picking) _local.ReturnHome();
+                _sim.Step(_state, _shotNoInput ? new PlayerInput[_state.Players.Length] : _local.Sample(_sim, _state));
                 // a bot teammate just got the puck: hand a random human on that team over to them
                 if (_state.Carrier >= 0 && _state.Carrier != _seenCarrier)
                     _local.AutoSwapToCarrier(_state.Carrier, _state);
@@ -1649,9 +1725,9 @@ namespace UltraPuck.Game
             _cooldowns[2] = p.Stats.Shockwave > 0 ? 1f - p.ShockCooldown.ToFloat() / _sim.T.ShockCooldown.ToFloat()
                 : p.Stats.Swap > 0 ? 1f // Swap has no cooldown — always ready
                 : -1f;
-            _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.BoostTime > Fix.Zero, _cooldowns,
+            _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, false, _cooldowns,
                 p.Stun > Fix.Zero, p.DashTime.ToFloat() / Mathf.Max(0.01f, _sim.T.DashHitTime.ToFloat()), p.HitLag > Fix.Zero,
-                _state != null && _state.Carrier == i);
+                _state != null && _state.Carrier == i, V.Of(p.DashDir));
 
             while (_seenShocks.Count <= i) { _seenShocks.Add(-1); _seenRefreshes.Add(-1); _seenSwaps.Add(-1); }
             if (_seenShocks[i] >= 0 && p.Shocks > _seenShocks[i] && Settings.HitEffects)

@@ -254,6 +254,8 @@ namespace UltraPuck.Game
 
         private void ControlsRows()
         {
+            _rows.Add(Choice("Dash direction", new[] { "Where you move", "Where you look" }, () => Settings.DashWhereMoving ? 0 : 1, v => Settings.DashWhereMoving = v == 0,
+                "Which way a check dashes. Where you move: along the move stick (where you look if it's still)."));
             foreach (Controls.Act a in Enum.GetValues(typeof(Controls.Act)))
             {
                 var act = a;

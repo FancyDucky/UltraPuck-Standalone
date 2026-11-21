@@ -172,7 +172,7 @@ namespace UltraPuck.Core
                     p.NoPickup = Fix.Zero;
                     p.Stun = Fix.Zero;
                     p.GunCooldown = Fix.Zero; p.InvisCooldown = Fix.Zero; p.InvisibleTime = Fix.Zero; p.ShockCooldown = Fix.Zero;
-                    p.SlowTime = Fix.Zero; p.BoostTime = Fix.Zero;
+                    p.SlowTime = Fix.Zero; p.HeldBy = -1; p.HeldTime = Fix.Zero; p.TossTime = Fix.Zero;
                 }
             s.PuckPos = Map.PuckSpot;
             s.PuckVel = FixVec2.Zero;
@@ -214,38 +214,78 @@ namespace UltraPuck.Core
             if (keep.Count != s.Rocks.Length) s.Rocks = keep.ToArray();
         }
 
-        /// <summary>Pylon goalies in a row in front of each net's mouth: one per Pylon Goalie card on that team, up to three.</summary>
+        /// <summary>How big a team's pylon goalie is with <paramref name="cards"/> Pylon Goalie cards: 35% bigger per card after the first (up to 4).</summary>
+        public Fix PylonSize(int cards)
+        {
+            var r = T.PylonRadius;
+            for (var k = 1; k < Math.Min(4, cards); k++) r = r * Fix.Ratio(135, 100);
+            return r;
+        }
+
+        /// <summary>
+        /// One pylon goalie in front of each net's mouth whose team has the Pylon Goalie card: 35% bigger for every
+        /// copy after the first. It never stands in a goal box (see <see cref="KeepPylonOut"/>).
+        /// </summary>
         public void PlacePylons(GameState s)
         {
             var list = new System.Collections.Generic.List<Pylon>();
             for (var team = 0; team < 2; team++)
             {
-                var n = 0;
-                foreach (var p in s.Players) if (p.Team == team) n += p.Stats.Pylons;
-                n = Math.Min(3, n);
-                if (n == 0) continue;
+                var cards = 0;
+                foreach (var p in s.Players) if (p.Team == team) cards += p.Stats.Pylons;
+                if (cards <= 0) continue;
+                var radius = PylonSize(cards);
                 var goal = Bot.GoalCentre(Map, team);
                 // in front of the net is the way its mouth faces, if the map says; otherwise towards the puck's spot.
-                // The row runs across the mouth, starting on the same side for both teams (the side away from the
-                // puck's spot), so a mirrored rink gets mirrored pylons.
+                // A bigger one stands further out, so its edge is no closer to the net than a small one's.
                 GoalDef net = null;
                 foreach (var g in Map.Goals) if (g.Team == team && g.HasFacing) { net = g; break; }
-                var mid = new FixVec2(goal.X + (Map.PuckSpot.X > goal.X ? Fix.One : -Fix.One) * T.PylonOut, goal.Y);
-                var across = new FixVec2(Fix.Zero, Fix.One);
-                if (net != null)
-                {
-                    mid = goal + net.Facing * T.PylonOut;
-                    across = new FixVec2(-net.Facing.Y, net.Facing.X);
-                    if (FixVec2.Dot(across, Map.PuckSpot - goal) < Fix.Zero) across = -across;
-                }
-                for (var k = 0; k < n; k++)
-                {
-                    // 1: middle; 2: either side; 3: middle and either side
-                    Fix y = n == 1 ? Fix.Zero : n == 2 ? (k == 0 ? -T.PylonSpread : T.PylonSpread) : T.PylonSpread * Fix.Ratio(3, 2) * (k - 1);
-                    list.Add(new Pylon { Pos = net != null ? mid + across * y : new FixVec2(mid.X, mid.Y + y), Team = team });
-                }
+                var front = net != null ? net.Facing : new FixVec2(Map.PuckSpot.X > goal.X ? Fix.One : -Fix.One, Fix.Zero);
+                var py = new Pylon { Pos = goal + front * (T.PylonOut + radius - T.PylonRadius), Team = team, Radius = radius };
+                KeepPylonOut(ref py);
+                list.Add(py);
             }
             s.Pylons = list.ToArray();
+        }
+
+        /// <summary>
+        /// Pylon goalies may not go into a goal box (so nobody can plug a net with one): push one back out of any box
+        /// it reaches into, through the box's open side when the map says which way that is, and stop it going in.
+        /// </summary>
+        private void KeepPylonOut(ref Pylon py)
+        {
+            var r = py.Radius;
+            foreach (var g in Map.Goals)
+            {
+                if (!g.Touches(py.Pos, r)) continue;
+                FixVec2 n;
+                if (!g.Contains(py.Pos))
+                {
+                    // its edge is over the box: back out to just touching it
+                    var near = new FixVec2(Fix.Clamp(py.Pos.X, g.Min.X, g.Max.X), Fix.Clamp(py.Pos.Y, g.Min.Y, g.Max.Y));
+                    var d = py.Pos - near;
+                    var dist = d.Length;
+                    n = dist.Raw > 0 ? d / dist : (g.HasFacing ? g.Facing : FixVec2.Right);
+                    py.Pos = near + n * r;
+                }
+                else
+                {
+                    // its middle is inside: out through the mouth (or the nearest side, on a map that doesn't say)
+                    Fix l = py.Pos.X - g.Min.X, rt = g.Max.X - py.Pos.X, lo = py.Pos.Y - g.Min.Y, hi = g.Max.Y - py.Pos.Y;
+                    if (g.HasFacing) n = g.Facing;
+                    else
+                    {
+                        var least = Fix.Min(Fix.Min(l, rt), Fix.Min(lo, hi));
+                        n = least == l ? -FixVec2.Right : least == rt ? FixVec2.Right
+                            : least == lo ? new FixVec2(Fix.Zero, -Fix.One) : new FixVec2(Fix.Zero, Fix.One);
+                    }
+                    // nets face straight along an axis: the distance to that side of the box, then the radius past it
+                    var edge = n.X > Fix.Half ? rt : n.X < -Fix.Half ? l : n.Y > Fix.Zero ? hi : lo;
+                    py.Pos += n * (edge + r);
+                }
+                var vn = FixVec2.Dot(py.Vel, n);
+                if (vn < Fix.Zero) py.Vel -= n * vn;
+            }
         }
 
         /// <summary>Head Start: the team with the most copies starts holding the puck (a tie: it starts in the middle).</summary>
@@ -323,6 +363,12 @@ namespace UltraPuck.Core
             s.Players = players;
             if (s.Carrier == index) s.Carrier = -1;
             else if (s.Carrier > index) s.Carrier--;
+            // Friendly Fire: whoever they carried is let go; everyone after them moves down one
+            foreach (var p in players)
+            {
+                if (p.HeldBy == index) { p.HeldBy = -1; p.HeldTime = Fix.Zero; }
+                else if (p.HeldBy > index) p.HeldBy--;
+            }
         }
 
         public Fix RadiusOf(PlayerState p) { return T.PlayerRadius * Fix.Clamp(p.Stats.Size, Fix.Ratio(1, 4), Fix.FromInt(4)); }
@@ -381,6 +427,8 @@ namespace UltraPuck.Core
                     PushPylons(s, p);
                     PushRocks(s, p);
                 }
+                CarryMates(s);
+                GrabTouching(s);
                 MovePylons(s, sub);
                 MoveRocks(s, sub);
                 Bumps(s);
@@ -461,15 +509,25 @@ namespace UltraPuck.Core
             p.ShockCooldown = Fix.Max(Fix.Zero, p.ShockCooldown - dt);
             p.SwapCooldown = Fix.Max(Fix.Zero, p.SwapCooldown - dt);
             p.SlowTime = Fix.Max(Fix.Zero, p.SlowTime - dt);
-            p.BoostTime = Fix.Max(Fix.Zero, p.BoostTime - dt);
+            p.TossTime = Fix.Max(Fix.Zero, p.TossTime - dt);
             var rockHeld = RockCarriedBy(s, i);
             var carryingRock = rockHeld >= 0;
-            var holding = carrying || carryingRock;
+            // Friendly Fire: the teammate this player is carrying (thrown anyway once held too long)
+            var mate = MateHeldBy(s, i);
+            if (mate >= 0)
+            {
+                var m = s.Players[mate];
+                m.HeldTime += dt;
+                if (m.HeldTime >= T.MateHoldMax) { ThrowMate(s, i, mate, false); mate = -1; }
+            }
+            var holdingMate = mate >= 0;
+            var holding = carrying || carryingRock || holdingMate;
+            // carried by a teammate, or flying after being thrown: no skating (you can still shoot the puck)
+            var flying = p.HeldBy >= 0 || p.TossTime > Fix.Zero;
             var control = p.Stun > Fix.Zero ? T.StunControl : Fix.One;
             var speed = p.Stats.MoveSpeed * (holding ? p.Stats.MoveSpeedWithPuck : Fix.One);
             if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave
-            if (p.BoostTime > Fix.Zero) speed *= T.FriendlyBoost;           // Friendly Fire
-            var push = T.MoveForce * speed * control;
+            var push = flying ? Fix.Zero : T.MoveForce * speed * control;
             p.Vel += move * (push * dt);
             // getting going: an extra push, the further below top speed (along the stick) the stronger
             var stick = move.Length;
@@ -483,7 +541,7 @@ namespace UltraPuck.Core
             var braking = !holding && input.Has(PlayerInput.ChargeBrake);
             p.DashCoast = Fix.Max(Fix.Zero, p.DashCoast - dt);
             // after a dash, lighter drag for a bit so you keep more speed when you chain them
-            var drag = braking ? T.BrakeDrag : (p.DashCoast > Fix.Zero ? T.DashCoastDrag : T.Drag);
+            var drag = p.TossTime > Fix.Zero ? T.TossDrag : braking ? T.BrakeDrag : (p.DashCoast > Fix.Zero ? T.DashCoastDrag : T.Drag);
             p.Vel -= p.Vel * Fix.Min(Fix.One, drag * dt);
 
             var maxDashes = MaxDashes(p);
@@ -497,12 +555,16 @@ namespace UltraPuck.Core
             {
                 if (p.Stats.Shockwave > 0 && p.ShockCooldown <= Fix.Zero) FireShockwave(s, i);
                 if (p.Stats.Invisibility > 0 && p.InvisCooldown <= Fix.Zero) { p.InvisibleTime = T.InvisTime; p.InvisCooldown = T.InvisCooldown; }
-                if (p.Stats.Swap > 0 && !carrying) UseSwap(s, i); // no throw/teleport while holding the puck
+                if (p.Stats.Swap > 0 && !carrying && !holdingMate && !flying) UseSwap(s, i); // no throw/teleport while holding the puck or a teammate
             }
 
+            var step = dt * Fix.Clamp(p.Stats.ChargeSpeed, Fix.Ratio(1, 10), Fix.FromInt(10)) / T.ChargeTime;
+            var full = Fix.One + Fix.Clamp(p.Stats.OverCharge, Fix.Zero, Fix.FromInt(5));
             if (!holding)
             {
-                p.Charge = Fix.Zero;
+                // pre-charge: holding charge/brake without the puck charges a shot (and still brakes), so a pass can
+                // be fired on straight away (a one-timer). Let go without the puck and the charge is gone.
+                p.Charge = input.Has(PlayerInput.ChargeBrake) && !flying ? Fix.Min(full, p.Charge + step) : Fix.Zero;
                 // after a quick shot: wait until Shoot/check is let go before a hold can check
                 if (!input.Has(PlayerInput.ShootCheck)) p.SuppressDash = false;
                 // Puck Gun: brake fires it (when you don't have the puck or a rock)
@@ -511,9 +573,12 @@ namespace UltraPuck.Core
                 // Holding the button keeps dashing: the next one as soon as there's a dash ready and the last one has finished.
                 var dashWanted = !p.SuppressDash
                     && ((pressed & PlayerInput.ShootCheck) != 0 || (input.Has(PlayerInput.ShootCheck) && p.DashTime <= Fix.Zero));
-                if (dashWanted && p.DashCharge >= Fix.One && p.Stun <= Fix.Zero)
+                if (dashWanted && p.DashCharge >= Fix.One && p.Stun <= Fix.Zero && !flying)
                 {
-                    p.Vel += p.Facing * (T.DashSpeed * p.Stats.DashPower);
+                    // the way you're skating if you're pushing the stick and have "dash where you move" on; else the way you face
+                    var dashDir = input.Has(PlayerInput.DashMove) && move.SqrLength > deadzone * deadzone ? move.Normalized : p.Facing;
+                    p.Vel += dashDir * (T.DashSpeed * p.Stats.DashPower);
+                    p.DashDir = dashDir;
                     p.DashCharge -= Fix.One;
                     p.DashTime = T.DashHitTime;
                     p.DashCoast = T.DashCoast;
@@ -524,17 +589,15 @@ namespace UltraPuck.Core
             // with the puck or a rock: shoot/check fires now; charge/brake charges until let go
             if ((pressed & PlayerInput.ShootCheck) != 0)
             {
-                if (carrying) Shoot(s, i, false); else ShootRock(s, i, rockHeld, false);
+                if (carrying) Shoot(s, i, false); else if (carryingRock) ShootRock(s, i, rockHeld, false); else ThrowMate(s, i, mate, false);
                 p.SuppressDash = true;
                 return;
             }
-            var step = dt * Fix.Clamp(p.Stats.ChargeSpeed, Fix.Ratio(1, 10), Fix.FromInt(10)) / T.ChargeTime;
-            var full = Fix.One + Fix.Clamp(p.Stats.OverCharge, Fix.Zero, Fix.FromInt(5));
-            // holding charge/brake as you pick it up starts charging straight away
+            // holding charge/brake as you pick it up carries on charging (a pre-charge keeps what it has)
             if (input.Has(PlayerInput.ChargeBrake)) p.Charge = Fix.Min(full, p.Charge + step);
             else if (p.Charge > Fix.Zero)
             {
-                if (carrying) Shoot(s, i, true); else ShootRock(s, i, rockHeld, true);
+                if (carrying) Shoot(s, i, true); else if (carryingRock) ShootRock(s, i, rockHeld, true); else ThrowMate(s, i, mate, true);
             }
         }
 
@@ -760,8 +823,8 @@ namespace UltraPuck.Core
                     var p = s.Players[i];
                     var r = RadiusOf(p) + T.PuckRadius;
                     var d2 = (s.PuckPos - p.Pos).SqrLength;
-                    // already holding a Swap rock: can't pick the puck up until they shoot/drop it
-                    if (RockCarriedBy(s, i) >= 0) continue;
+                    // already holding a Swap rock or a teammate: can't pick the puck up until they shoot/drop it
+                    if (RockCarriedBy(s, i) >= 0 || MateHeldBy(s, i) >= 0) continue;
                     if (p.NoPickup > Fix.Zero || (d2 >= r * r && !(T.WedgePickup && OnWedge(p, s.PuckPos)))) continue;
                     if (best < 0 || d2 < bestD) { best = i; bestD = d2; ties = 1; }
                     else if (d2 == bestD && s.NextRandom() % (uint)(++ties) == 0) best = i; // fair among equals
@@ -780,8 +843,7 @@ namespace UltraPuck.Core
                     s.PassFrom = -1;
                     s.Carrier = best;
                     s.PuckTeam = p.Team;
-                    p.Charge = Fix.Zero;
-                    s.PuckPos = CarrySpot(p);
+                    s.PuckPos = CarrySpot(p); // (a pre-charge carries on: see Control)
                     s.PuckVel = p.Vel;
                     return;
                 }
@@ -832,11 +894,13 @@ namespace UltraPuck.Core
         private readonly int[] _pushOrder = new int[8];
         private readonly Fix[] _pushD = new Fix[8];
 
-        private bool OnWedge(PlayerState p, FixVec2 puck)
+        private bool OnWedge(PlayerState p, FixVec2 puck) { return OnWedge(p, puck, T.PuckRadius); }
+
+        /// <summary>Whether a circle of radius <paramref name="pr"/> at <paramref name="at"/> touches the player's wedge.</summary>
+        private bool OnWedge(PlayerState p, FixVec2 at, Fix pr)
         {
             var R = RadiusOf(p);
-            var pr = T.PuckRadius;
-            var d = puck - p.Pos;
+            var d = at - p.Pos;
             var x = FixVec2.Dot(d, p.Facing);
             var tipX = R * T.WedgeTip;
             var backX = R * T.WedgeBack;
@@ -938,7 +1002,7 @@ namespace UltraPuck.Core
             if (!PuckFits(s.Players[carrier].Pos, at)) return true;
             foreach (var py in s.Pylons)
             {
-                var r = T.PylonRadius + T.PuckRadius;
+                var r = py.Radius + T.PuckRadius;
                 if ((at - py.Pos).SqrLength < r * r) return true;
             }
             for (var j = 0; j < s.Players.Length; j++)
@@ -962,7 +1026,7 @@ namespace UltraPuck.Core
             for (var j = 0; j < s.Players.Length; j++)
             {
                 var q = s.Players[j];
-                if (j == s.Carrier || q.Team == c.Team || q.NoPickup > Fix.Zero || q.Stun > Fix.Zero) continue;
+                if (j == s.Carrier || q.Team == c.Team || q.NoPickup > Fix.Zero || q.Stun > Fix.Zero || MateHeldBy(s, j) >= 0) continue;
                 var tip = q.Pos + q.Facing * RadiusOf(q);
                 var r = T.PuckRadius + T.StealReach;
                 var d2 = (s.PuckPos - tip).SqrLength;
@@ -1029,7 +1093,7 @@ namespace UltraPuck.Core
         /// Shove players (except <paramref name="skipPlayer"/>), and optionally the loose puck and loose Swap rocks,
         /// away from <paramref name="at"/>. Used by the goal explosion and Shockwave.
         /// </summary>
-        private void BlastFrom(GameState s, FixVec2 at, Fix radius, Fix push, int skipPlayer, bool markHit, bool shovePuck, bool shoveRocks)
+        private void BlastFrom(GameState s, FixVec2 at, Fix radius, Fix push, int skipPlayer, bool markHit, bool shovePuck, bool shoveRocks, bool knockLoose = false)
         {
             if (radius.Raw <= 0 || push.Raw <= 0) return;
             for (var j = 0; j < s.Players.Length; j++)
@@ -1049,6 +1113,14 @@ namespace UltraPuck.Core
                 var falloff = Fix.One - Fix.Half * Fix.Clamp01(dist / radius);
                 q.Vel += n * (push * falloff);
                 if (markHit) Hit(q, -n, Fix.Half);
+                if (knockLoose)
+                {
+                    // Shockwave: a carrier it reaches loses the puck (it pops out the way they were blown), and
+                    // anyone carrying a teammate (Friendly Fire) drops them
+                    if (s.Carrier == j) KnockLoose(s, j, n, -1);
+                    DropMate(s, j);
+                    q.HeldBy = -1; q.HeldTime = Fix.Zero;
+                }
             }
             if (shovePuck && s.Carrier < 0)
             {
@@ -1097,6 +1169,7 @@ namespace UltraPuck.Core
                 for (var j = i + 1; j < ps.Length; j++)
                 {
                     PlayerState a = ps[i], b = ps[j];
+                    if (a.HeldBy == j || b.HeldBy == i) continue; // Friendly Fire: carrying them
                     var d = b.Pos - a.Pos;
                     var minD = RadiusOf(a) + RadiusOf(b);
                     if (d.SqrLength >= minD * minD) continue;
@@ -1154,14 +1227,18 @@ namespace UltraPuck.Core
             b.Vel += n * (T.DashKnockback * heavier);
             // what the screen shows: an even check at full speed is 0.6; lightning needs a clearly heavier checker
             var power = Fix.Clamp(force * Fix.Ratio(3, 5), Fix.Ratio(2, 5), Fix.One);
-            if (a.Team == b.Team && b.Stats.FriendlyFire > 0)
+            if (a.Team == b.Team && (a.Stats.FriendlyFire > 0 || a.TossTime > Fix.Zero))
             {
-                // Friendly Fire: a teammate's check launches you with a speed boost instead of dazing you (and you keep the puck)
-                b.BoostTime = T.FriendlyTime;
+                // Friendly Fire: checking a teammate with your wedge picks them up (puck and all) to throw; they're never dazed by
+                // it and keep the puck. A thrown teammate landing on a teammate is just a bump, too.
+                if (CanGrab(s, from, to) && OnWedge(a, b.Pos, RadiusOf(b) + T.MateGrabReach)) GrabMate(s, from, to);
                 Hit(b, -n, Fix.Ratio(1, 2));
                 Hit(a, n, Fix.Ratio(2, 5));
                 return;
             }
+            // a real check frees a carried teammate, and makes a carrier drop the one they hold
+            b.HeldBy = -1; b.HeldTime = Fix.Zero;
+            DropMate(s, to);
             // no daze from a check (only the Puck Gun stuns): the hit lag above is the pause
             Hit(b, -n, power);
             Hit(a, n, power * Fix.Half);
@@ -1171,6 +1248,127 @@ namespace UltraPuck.Core
                 // owns it until someone picks it up (the checker has to wait a moment, so it doesn't just change hands)
                 KnockLoose(s, to, n, from);
             }
+        }
+
+        // ------------------------------------------------------------------ Friendly Fire: carrying teammates
+
+        /// <summary>Index of the teammate this player is carrying, or -1.</summary>
+        private static int MateHeldBy(GameState s, int holder)
+        {
+            for (var j = 0; j < s.Players.Length; j++) if (s.Players[j].HeldBy == holder) return j;
+            return -1;
+        }
+
+        /// <summary>Whether <paramref name="from"/> may pick up their teammate <paramref name="to"/>: hands free, nobody already carried or flying.</summary>
+        private bool CanGrab(GameState s, int from, int to)
+        {
+            PlayerState a = s.Players[from], b = s.Players[to];
+            if (s.Phase != Phase.Play || a.Team != b.Team || a.Stats.FriendlyFire <= 0) return false;
+            if (a.HeldBy >= 0 || b.HeldBy >= 0 || a.TossTime > Fix.Zero || b.TossTime > Fix.Zero) return false;
+            if (s.Carrier == from || RockCarriedBy(s, from) >= 0 || RockCarriedBy(s, to) >= 0) return false;
+            return MateHeldBy(s, from) < 0 && MateHeldBy(s, to) < 0;
+        }
+
+        /// <summary>
+        /// Friendly Fire: a teammate who touches your wedge is picked up, the same way the puck is. Of every pair, the
+        /// closest goes first; an exact tie (two with the card touching each other) is settled by the match's random numbers,
+        /// never by player order.
+        /// </summary>
+        private void GrabTouching(GameState s)
+        {
+            if (s.Phase != Phase.Play) return;
+            var any = false;
+            foreach (var p in s.Players) if (p.Stats.FriendlyFire > 0) { any = true; break; }
+            if (!any) return;
+            while (true)
+            {
+                int bestFrom = -1, bestTo = -1, ties = 0;
+                var bestD = Fix.Zero;
+                for (var i = 0; i < s.Players.Length; i++)
+                {
+                    var a = s.Players[i];
+                    if (a.Stats.FriendlyFire <= 0 || a.NoPickup > Fix.Zero || a.HitLag > Fix.Zero) continue;
+                    for (var j = 0; j < s.Players.Length; j++)
+                    {
+                        if (j == i || s.Players[j].Team != a.Team) continue;
+                        var d2 = (s.Players[j].Pos - a.Pos).SqrLength;
+                        if (!OnWedge(a, s.Players[j].Pos, RadiusOf(s.Players[j]) + T.MateGrabReach) || !CanGrab(s, i, j)) continue;
+                        if (bestFrom < 0 || d2 < bestD) { bestFrom = i; bestTo = j; bestD = d2; ties = 1; }
+                        else if (d2 == bestD && s.NextRandom() % (uint)(++ties) == 0) { bestFrom = i; bestTo = j; }
+                    }
+                }
+                if (bestFrom < 0) return;
+                GrabMate(s, bestFrom, bestTo);
+            }
+        }
+
+        private void GrabMate(GameState s, int from, int to)
+        {
+            PlayerState a = s.Players[from], b = s.Players[to];
+            b.HeldBy = from;
+            b.HeldTime = Fix.Zero;
+            b.DashTime = Fix.Zero;
+            b.Pos = MateSpot(a, b);
+            b.Vel = a.Vel;
+        }
+
+        /// <summary>Where a carried teammate rides: just in front of their carrier, touching.</summary>
+        private FixVec2 MateSpot(PlayerState holder, PlayerState mate)
+        {
+            return holder.Pos + holder.Facing * (RadiusOf(holder) + RadiusOf(mate) + Fix.Ratio(1, 50));
+        }
+
+        /// <summary>Carried teammates go where their carrier's arms are, facing the same way (they stop at the boards).</summary>
+        private void CarryMates(GameState s)
+        {
+            for (var j = 0; j < s.Players.Length; j++)
+            {
+                var m = s.Players[j];
+                if (m.HeldBy < 0) continue;
+                if (m.HeldBy >= s.Players.Length || m.HeldBy == j) { m.HeldBy = -1; continue; }
+                var h = s.Players[m.HeldBy];
+                m.Pos = MateSpot(h, m);
+                m.Vel = h.Vel;
+                m.Facing = h.Facing; // facing out, the way they'll be thrown (and with their puck clear of the carrier)
+                CollideWalls(ref m.Pos, ref m.Vel, RadiusOf(m), T.WallBounce);
+            }
+        }
+
+        /// <summary><paramref name="holder"/> lets go of the teammate they carry (if any): they slide off with the carrier's speed.</summary>
+        private void DropMate(GameState s, int holder)
+        {
+            var mate = MateHeldBy(s, holder);
+            if (mate < 0) return;
+            var m = s.Players[mate];
+            m.HeldBy = -1;
+            m.HeldTime = Fix.Zero;
+        }
+
+        /// <summary>Throw a carried teammate the way the player faces, like a shot (quick or charged) but slower. They keep the puck if they have it.</summary>
+        private void ThrowMate(GameState s, int i, int mate, bool released)
+        {
+            if (mate < 0 || mate >= s.Players.Length) return;
+            var p = s.Players[i];
+            var m = s.Players[mate];
+            if (m.HeldBy != i) return;
+            var charged = p.Charge <= Fix.One
+                ? T.ChargedShotMin + (T.ChargedShotMax - T.ChargedShotMin) * p.Charge
+                : T.ChargedShotMax * p.Charge;
+            var quick = T.ShotSpeed * p.Stats.QuickShotPower;
+            var speed = (released ? charged : Fix.Max(quick, p.Charge > Fix.Zero ? charged : Fix.Zero)) * p.Stats.ShotPower;
+            speed = Fix.Min(T.MateThrowMax, speed * T.MateThrow);
+            m.HeldBy = -1;
+            m.HeldTime = Fix.Zero;
+            m.Pos = MateSpot(p, m);
+            CollideWalls(ref m.Pos, ref m.Vel, RadiusOf(m), T.WallBounce);
+            m.Vel = p.Facing * speed + p.Vel * Fix.Half;
+            m.Facing = p.Facing;
+            m.TossTime = T.TossTime;
+            m.DashTime = T.TossTime; // a thrown teammate checks whoever they hit
+            p.ShotsFired++;
+            p.ShotStrength = Fix.Clamp01(speed / T.ChargedShotMax);
+            p.Charge = Fix.Zero;
+            p.NoPickup = T.ShotPickupDelay;
         }
 
         /// <summary>
@@ -1201,7 +1399,6 @@ namespace UltraPuck.Core
             s.Carrier = to;
             s.PuckTeam = p.Team;
             s.PassFrom = -1;
-            p.Charge = Fix.Zero;
             s.PuckPos = CarrySpot(p);
             s.PuckVel = p.Vel;
         }
@@ -1236,7 +1433,7 @@ namespace UltraPuck.Core
                 foreach (var w in Map.Segments) if (!gone && !w.FarFrom(sh.Pos, sr) && (sh.Pos - Closest(w, sh.Pos)).SqrLength < sr * sr) gone = true;
                 foreach (var py in s.Pylons)
                 {
-                    var r = T.PylonRadius + T.ShotRadius;
+                    var r = py.Radius + T.ShotRadius;
                     if (!gone && (sh.Pos - py.Pos).SqrLength < r * r) gone = true;
                 }
                 // the puck: a loose one gets knocked along; a carried one is knocked loose
@@ -1286,7 +1483,8 @@ namespace UltraPuck.Core
                 py.Pos += py.Vel * sub;
                 py.Vel -= py.Vel * Fix.Min(Fix.One, T.PylonDrag * sub);
                 if (py.Vel.SqrLength < Fix.Ratio(1, 400)) py.Vel = FixVec2.Zero;
-                CollideWalls(ref py.Pos, ref py.Vel, T.PylonRadius, T.WallBounce);
+                CollideWalls(ref py.Pos, ref py.Vel, py.Radius, T.WallBounce);
+                KeepPylonOut(ref py);
                 s.Pylons[k] = py;
             }
         }
@@ -1299,11 +1497,12 @@ namespace UltraPuck.Core
             {
                 var py = s.Pylons[k];
                 var d = p.Pos - py.Pos;
-                var min = r + T.PylonRadius;
+                var min = r + py.Radius;
                 if (d.SqrLength >= min * min) continue;
                 var dist = d.Length;
                 var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
-                Fix wp = WeightOf(p), wy = T.PylonWeight, sum = wp + wy;
+                // a bigger pylon is heavier too
+                Fix wp = WeightOf(p), wy = T.PylonWeight * py.Radius / T.PylonRadius, sum = wp + wy;
                 var overlap = min - dist;
                 p.Pos += n * (overlap * wy / sum);
                 py.Pos -= n * (overlap * wp / sum);
@@ -1315,8 +1514,9 @@ namespace UltraPuck.Core
                     py.Vel -= n * (impulse / wy);
                 }
                 var v = py.Vel;
-                CollideWalls(ref py.Pos, ref v, T.PylonRadius, T.WallBounce);
+                CollideWalls(ref py.Pos, ref v, py.Radius, T.WallBounce);
                 py.Vel = v;
+                KeepPylonOut(ref py);
                 s.Pylons[k] = py;
             }
         }
@@ -1326,7 +1526,7 @@ namespace UltraPuck.Core
             foreach (var py in s.Pylons)
             {
                 var d = pos - py.Pos;
-                var min = r + T.PylonRadius;
+                var min = r + py.Radius;
                 if (d.SqrLength >= min * min) continue;
                 var dist = d.Length;
                 var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
@@ -1468,7 +1668,7 @@ namespace UltraPuck.Core
                 var bestD = Fix.Zero;
                 for (var i = 0; i < s.Players.Length; i++)
                 {
-                    if (s.Carrier == i || RockCarriedBy(s, i) >= 0) continue;
+                    if (s.Carrier == i || RockCarriedBy(s, i) >= 0 || MateHeldBy(s, i) >= 0) continue;
                     var p = s.Players[i];
                     var r = RadiusOf(p) + T.RockRadius;
                     var d2 = (rk.Pos - p.Pos).SqrLength;
@@ -1480,7 +1680,6 @@ namespace UltraPuck.Core
                 rk.Carrier = best;
                 rk.Pos = RockCarrySpot(s.Players[best]);
                 rk.Vel = s.Players[best].Vel;
-                s.Players[best].Charge = Fix.Zero;
                 s.Rocks[k] = rk;
             }
         }
@@ -1623,7 +1822,7 @@ namespace UltraPuck.Core
             a.ShockCooldown = T.ShockCooldown;
             var radius = RadiusOf(a) * T.ShockRange * (Fix.One + Fix.Ratio(15, 100) * (copies - 1));
             var push = T.DashKnockback * T.ShockPush * (Fix.One + Fix.Ratio(1, 10) * (copies - 1));
-            BlastFrom(s, a.Pos, radius, push, i, true, true, true);
+            BlastFrom(s, a.Pos, radius, push, i, true, true, true, true);
             a.Shocks++;
             a.ShockAt = a.Pos;
             a.ShockRadius = radius;

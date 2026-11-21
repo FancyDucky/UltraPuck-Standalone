@@ -145,20 +145,20 @@ namespace UltraPuck.Tests
             s.Players[1].Cards = new[] { pg, pg, pg };
             _lib.Recompute(s);
             sim.PlacePylons(s);
-            Assert.AreEqual(6, s.Pylons.Length);
+            Assert.AreEqual(2, s.Pylons.Length, "one each, however many cards");
             foreach (var py in s.Pylons)
             {
                 var g = map.Goals.Find(x => x.Team == py.Team);
                 Assert.IsTrue(map.Inside(py.Pos), "on the ice: " + py.Pos);
-                Assert.IsFalse(g.Touches(py.Pos, sim.T.PylonRadius), "not in the net itself");
+                Assert.IsFalse(g.Touches(py.Pos, py.Radius), "not in the net itself");
                 // which way the net opens: it says, or (a straight rink) towards the middle
                 var mid = new FixVec2((g.Min.X + g.Max.X) / 2, (g.Min.Y + g.Max.Y) / 2);
                 var front = g.HasFacing ? g.Facing : new FixVec2(map.PuckSpot.X > mid.X ? Fix.One : -Fix.One, Fix.Zero);
                 var off = py.Pos - mid;
                 var ahead = FixVec2.Dot(off, front).ToDouble();
                 var aside = System.Math.Abs(FixVec2.Dot(off, new FixVec2(-front.Y, front.X)).ToDouble());
-                Assert.AreEqual(sim.T.PylonOut.ToDouble(), ahead, 1e-3, "out in front of the mouth");
-                Assert.LessOrEqual(aside, sim.T.PylonSpread.ToDouble() * 1.5 + 1e-3, "and across it, not off to one side");
+                Assert.GreaterOrEqual(ahead, sim.T.PylonOut.ToDouble() - 1e-3, "out in front of the mouth");
+                Assert.AreEqual(0.0, aside, 1e-3, "in the middle of it, not off to one side");
                 // nothing between it and the net's middle but the open mouth
                 Assert.IsFalse(map.Blocked(py.Pos, mid), "no wall between the pylon and the inside of its net");
             }
@@ -224,9 +224,39 @@ namespace UltraPuck.Tests
             s.PuckVel = At(25, 0);
             Run(s, 240);
             Assert.AreEqual(0, s.Score[0], "the shot was blocked");
+            var small = s.Pylons[0].Radius;
             Give(s, 1, "ultrapuck.pylongoalie", "ultrapuck.pylongoalie");
             _sim.FaceOff(s);
-            Assert.AreEqual(2, s.Pylons.Length, "one per copy");
+            Assert.AreEqual(1, s.Pylons.Length, "still one pylon");
+            Assert.AreEqual(small.ToDouble() * 1.35, s.Pylons[0].Radius.ToDouble(), 1e-3, "35% bigger for the second copy");
+        }
+
+        /// <summary>A pylon goalie can't be pushed into a net: it stops at the goal box, so nobody can plug a net with it.</summary>
+        [Test]
+        public void PylonGoaliesStayOutOfTheNet()
+        {
+            var s = Game(0, 1);
+            Give(s, 1, "ultrapuck.pylongoalie", "ultrapuck.pylongoalie");
+            _sim.FaceOff(s);
+            Play(s);
+            s.Players[0].Pos = At(-10, 8); s.Players[1].Pos = At(-10, -8);
+            var py = s.Pylons[0];
+            var net = _sim.Map.Goals.Find(g => g.Team == 1);
+            // sent flying straight into blue's net
+            py.Vel = new FixVec2(Fix.FromInt(net.Min.X > Fix.Zero ? 30 : -30), Fix.Zero);
+            s.Pylons[0] = py;
+            for (var t = 0; t < 240; t++)
+            {
+                _sim.Step(s, new PlayerInput[2]);
+                Assert.IsFalse(net.Touches(s.Pylons[0].Pos, s.Pylons[0].Radius - Fix.Ratio(1, 100)), "in the goal box at tick " + t + ": " + s.Pylons[0].Pos);
+            }
+            // and a player shoving it in doesn't get it there either
+            s.Players[1].Pos = s.Pylons[0].Pos - new FixVec2(net.Min.X > Fix.Zero ? Fix.Two : -Fix.Two, Fix.Zero);
+            for (var t = 0; t < 240; t++)
+            {
+                _sim.Step(s, new[] { default(PlayerInput), new PlayerInput { MoveX = (sbyte)(net.Min.X > Fix.Zero ? 127 : -127) } });
+                Assert.IsFalse(net.Touches(s.Pylons[0].Pos, s.Pylons[0].Radius - Fix.Ratio(1, 100)), "pushed into the goal box at tick " + t);
+            }
         }
 
         [Test]
@@ -304,14 +334,111 @@ namespace UltraPuck.Tests
             return s;
         }
 
-        [Test]
-        public void FriendlyFireBoostsInsteadOfDazing()
+        /// <summary>Friendly Fire: player 0 (with the card) checks teammate 1, who has the puck, and picks them up.</summary>
+        private GameState Grab(bool card = true)
         {
-            var s = Check(true, "ultrapuck.friendlyfire");
-            Assert.Greater(s.Players[1].BoostTime.ToDouble(), 1.5, "boosted");
+            var s = Game(0, 0, 1);
+            if (card) Give(s, 0, "ultrapuck.friendlyfire");
+            Play(s);
+            s.Players[2].Pos = At(-10, 8);
+            s.Players[0].Pos = At(-1, -6); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(1.5, -6); s.Players[1].Facing = FixVec2.Right;
+            s.Carrier = 1; s.PuckTeam = 0;
+            s.PuckPos = At(2.3, -6);
+            _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput), default(PlayerInput) });
+            for (var t = 0; t < 40 && s.Players[1].Hits == 0; t++) _sim.Step(s, new[] { new PlayerInput { MoveX = 127 }, default(PlayerInput), default(PlayerInput) });
+            // until the hit lag is over
+            for (var t = 0; t < 60 && s.Players[0].HitLag > Fix.Zero; t++) _sim.Step(s, new PlayerInput[3]);
+            return s;
+        }
+
+        [Test]
+        public void FriendlyFirePicksUpATeammateWithThePuck()
+        {
+            var s = Grab();
+            Assert.AreEqual(0, s.Players[1].HeldBy, "picked up");
+            Assert.AreEqual(1, s.Carrier, "still has the puck");
             Assert.AreEqual(Fix.Zero, s.Players[1].Stun, "not dazed");
-            var plain = Check(true, null);
-            Assert.AreEqual(Fix.Zero, plain.Players[1].BoostTime, "without the card, no boost");
+            // carried along: they stay just in front of the carrier
+            for (var t = 0; t < 30; t++) _sim.Step(s, new[] { new PlayerInput { MoveY = 127 }, default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(0, s.Players[1].HeldBy);
+            var gap = (s.Players[1].Pos - s.Players[0].Pos).Length.ToDouble();
+            Assert.AreEqual(1.0, gap, 0.1, "right in front of the carrier");
+
+            var plain = Grab(false);
+            Assert.AreEqual(-1, plain.Players[1].HeldBy, "without the card, a check is a check");
+            Assert.AreEqual(-1, plain.Carrier, "and knocks the puck loose");
+        }
+
+        /// <summary>Picking a teammate up is as easy as the puck: just skate into them, no check needed.</summary>
+        [Test]
+        public void FriendlyFirePicksUpATeammateJustByTouching()
+        {
+            var s = Game(0, 0, 1);
+            Give(s, 0, "ultrapuck.friendlyfire");
+            Play(s);
+            s.Players[2].Pos = At(-10, 8);
+            s.Players[0].Pos = At(-1, -6); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(1.5, -6);
+            for (var t = 0; t < 120 && s.Players[1].HeldBy < 0; t++) _sim.Step(s, new[] { new PlayerInput { MoveX = 127 }, default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(0, s.Players[1].HeldBy, "picked up by skating into them");
+            Assert.AreEqual(0, s.Players[1].Hits, "no check happened");
+            // a teammate bumping into your back or side isn't picked up: only on the wedge
+            var side = Game(0, 0, 1);
+            Give(side, 0, "ultrapuck.friendlyfire");
+            Play(side);
+            side.Players[2].Pos = At(-10, 8);
+            side.Players[0].Pos = At(0, -6); side.Players[0].Facing = FixVec2.Right;
+            side.Players[1].Pos = At(-2.5, -6); // behind, skating into their back
+            for (var t = 0; t < 120; t++) _sim.Step(side, new[] { default(PlayerInput), new PlayerInput { MoveX = 127 }, default(PlayerInput) });
+            Assert.AreEqual(-1, side.Players[1].HeldBy, "touching the back doesn't pick them up");
+            // thrown: not straight back into the thrower's arms
+            _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(-1, s.Players[1].HeldBy, "thrown");
+            Run(s, 20, default(PlayerInput), default(PlayerInput), default(PlayerInput));
+            Assert.AreEqual(-1, s.Players[1].HeldBy, "still flying, not grabbed again");
+        }
+
+        [Test]
+        public void FriendlyFireThrowsTheTeammateAndTheyKeepThePuck()
+        {
+            var s = Grab();
+            Assert.AreEqual(0, s.Players[1].HeldBy);
+            // face up the rink and throw
+            for (var t = 0; t < 30; t++) _sim.Step(s, new[] { new PlayerInput { AimY = 127 }, default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(1, s.Carrier, "kept the puck while carried round");
+            Assert.Greater(s.Players[1].Pos.Y.ToDouble(), s.Players[0].Pos.Y.ToDouble() + 0.8, "carried round to the front");
+            _sim.Step(s, new[] { new PlayerInput { AimY = 127, Buttons = PlayerInput.ShootCheck }, default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(-1, s.Players[1].HeldBy, "thrown");
+            Assert.Greater(s.Players[1].TossTime.ToDouble(), 0.5, "flying");
+            Assert.Greater(s.Players[1].Vel.Y.ToDouble(), 5.0, "thrown the way the carrier faces");
+            for (var t = 0; t < 20; t++) _sim.Step(s, new PlayerInput[3]);
+            Assert.AreEqual(1, s.Carrier, "they kept the puck while flying");
+        }
+
+        [Test]
+        public void FriendlyFireThrowsAnywayAfterAWhile()
+        {
+            var s = Grab();
+            Assert.AreEqual(0, s.Players[1].HeldBy);
+            Run(s, (int)(_sim.T.MateHoldMax.ToDouble() * _sim.T.TicksPerSecond) + 2, default(PlayerInput), default(PlayerInput), default(PlayerInput));
+            Assert.AreEqual(-1, s.Players[1].HeldBy, "not carried forever");
+        }
+
+        [Test]
+        public void ShockwaveKnocksThePuckOffItsCarrier()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.shockwave");
+            Play(s);
+            s.Players[0].Pos = At(0, -6);
+            s.Players[1].Pos = At(1.5, -6); s.Players[1].Facing = FixVec2.Right;
+            s.Carrier = 1; s.PuckTeam = 1;
+            s.PuckPos = At(2.3, -6);
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.AreEqual(1, s.Players[0].Shocks);
+            Assert.AreEqual(-1, s.Carrier, "the carrier lost the puck");
+            Assert.Greater(s.PuckVel.X.ToDouble(), 0.5, "it pops away from the shockwave");
         }
 
         [Test]
@@ -606,7 +733,62 @@ namespace UltraPuck.Tests
             var s = Pass("ultrapuck.teamplay", At(10, 8));
             Assert.AreEqual(1, s.Players[0].Refreshes);
             Assert.GreaterOrEqual(s.Players[0].DashCharge.ToDouble(), 1.0, "the passer's check is ready again");
-            Assert.Less(s.Players[1].DashCharge.ToDouble(), 1.0, "Team Play is only the passer's");
+            Assert.GreaterOrEqual(s.Players[1].DashCharge.ToDouble(), 1.0, "and the teammate's");
+            Assert.AreEqual(1, s.Players[1].Refreshes);
+            Assert.AreEqual(0, s.Players[2].Refreshes, "not the other team");
+        }
+
+        /// <summary>Holding charge/brake without the puck charges a shot; a pass arriving can be fired straight off (a one-timer).</summary>
+        [Test]
+        public void ChargeWithoutThePuckForAOneTimer()
+        {
+            var s = Game(0, 0, 1);
+            Play(s);
+            s.Players[2].Pos = At(10, 8);
+            s.Players[0].Pos = At(-6, -5); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(0, -5); s.Players[1].Facing = new FixVec2(-Fix.One, Fix.Zero);
+            s.Carrier = 0;
+            var hold = new PlayerInput { Buttons = PlayerInput.ChargeBrake };
+            _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), hold, default(PlayerInput) });
+            for (var t = 0; t < 120 && s.Carrier != 1; t++) _sim.Step(s, new[] { default(PlayerInput), hold, default(PlayerInput) });
+            Assert.AreEqual(1, s.Carrier, "the pass arrived");
+            Assert.Greater(s.Players[1].Charge.ToDouble(), 0.2, "charged while waiting, and kept it on the pickup");
+            // let go: a charged shot straight away
+            _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(-1, s.Carrier, "fired");
+            Assert.Greater(s.PuckVel.Length.ToDouble(), 12.0, "a charged shot, as hard as that much charge makes it");
+            // without the puck, letting go just drops the charge
+            for (var t = 0; t < 30; t++) _sim.Step(s, new[] { hold, default(PlayerInput), default(PlayerInput) });
+            Assert.Greater(s.Players[0].Charge.ToDouble(), 0.1);
+            _sim.Step(s, new PlayerInput[3]);
+            Assert.AreEqual(Fix.Zero, s.Players[0].Charge, "gone, nothing fired");
+        }
+
+        private FixVec2 _lastDashDir;
+
+        /// <summary>Dash where you move: along the move stick when it's pushed, where you face when it isn't (or with the setting off).</summary>
+        [Test]
+        public void DashGoesWhereYouMoveWithTheSetting()
+        {
+            System.Func<sbyte, byte, FixVec2> dash = (moveY, extra) =>
+            {
+                var s = Game(0, 1);
+                Play(s);
+                s.Players[0].Pos = At(0, -3); s.Players[0].Facing = FixVec2.Right; s.Players[0].Vel = FixVec2.Zero;
+                s.Players[1].Pos = At(10, 8);
+                // aim right (so facing stays right), move up, press check
+                _sim.Step(s, new[] { new PlayerInput { AimX = 127, MoveY = moveY, Buttons = (byte)(PlayerInput.ShootCheck | extra) }, default(PlayerInput) });
+                _lastDashDir = s.Players[0].DashDir;
+                return s.Players[0].Vel;
+            };
+            var along = dash(127, PlayerInput.DashMove);
+            Assert.Greater(_lastDashDir.Y.ToDouble(), 0.99, "the dash lines go the way the dash did");
+            Assert.Greater(along.Y.ToDouble(), 5.0, "dashed up, the way the stick pushes");
+            Assert.Less(System.Math.Abs(along.X.ToDouble()), 1.0);
+            var still = dash(0, PlayerInput.DashMove);
+            Assert.Greater(still.X.ToDouble(), 5.0, "not moving: dashed where they look");
+            var off = dash(127, 0);
+            Assert.Greater(off.X.ToDouble(), 5.0, "setting off: always where they look");
         }
 
         [Test]
@@ -615,15 +797,6 @@ namespace UltraPuck.Tests
             // close enough to the puck's path to touch it, too far to pick it up
             var s = Pass("ultrapuck.teamplay", At(-3, -4.05));
             Assert.AreEqual(0, s.Players[0].Refreshes);
-        }
-
-        [Test]
-        public void TeamPlayTwoRestoresTheWholeTeam()
-        {
-            var s = Pass("ultrapuck.teamplay2", At(10, 8));
-            Assert.GreaterOrEqual(s.Players[1].DashCharge.ToDouble(), 1.0, "the teammate's check too");
-            Assert.AreEqual(1, s.Players[1].Refreshes);
-            Assert.AreEqual(0, s.Players[2].Refreshes, "not the other team");
         }
 
         /// <summary>
@@ -671,24 +844,21 @@ namespace UltraPuck.Tests
         }
 
         [Test]
-        public void TeamCardsNeedATeamAndTeamPlayTwoNeedsTeamPlay()
+        public void TeamCardsNeedATeam()
         {
             var solo = Game(0, 1, 1);
             var tp = _lib.ById("ultrapuck.teamplay").Index;
-            var tp2 = _lib.ById("ultrapuck.teamplay2").Index;
             var ff = _lib.ById("ultrapuck.friendlyfire").Index;
+            Assert.IsNull(_lib.ById("ultrapuck.teamplay2"), "Team Play II is gone (Team Play does what it did)");
             for (var k = 0; k < 300; k++)
             {
                 var offer = _lib.DrawOffer(solo, 0, 3);
                 CollectionAssert.DoesNotContain(offer, tp, "orange is on their own");
                 CollectionAssert.DoesNotContain(offer, ff);
-                CollectionAssert.DoesNotContain(offer, tp2, "blue has no Team Play yet");
-                CollectionAssert.DoesNotContain(_lib.DrawOffer(solo, 1, 3), tp2);
             }
-            solo.Players[2].Cards = new[] { tp };
             var seen = false;
-            for (var k = 0; k < 2000 && !seen; k++) seen = System.Array.IndexOf(_lib.DrawOffer(solo, 1, 3), tp2) >= 0;
-            Assert.IsTrue(seen, "once a teammate has Team Play, Team Play II can turn up");
+            for (var k = 0; k < 2000 && !seen; k++) seen = System.Array.IndexOf(_lib.DrawOffer(solo, 1, 3), tp) >= 0;
+            Assert.IsTrue(seen, "blue (two players) can get Team Play");
         }
     }
 }

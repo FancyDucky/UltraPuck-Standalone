@@ -77,7 +77,7 @@ namespace UltraPuck.Game
             switch (a)
             {
                 case Act.Shoot: return "With the puck: shoot. Without: check (dash).";
-                case Act.Charge: return "With the puck: hold to charge, let go to fire. Without: brake.";
+                case Act.Charge: return "With the puck: hold to charge, let go to fire. Without: brake, and pre-charge a shot for when the puck comes to you.";
                 case Act.Utility: return "Power-up cards that need a button (Puck Gun, invisibility...).";
                 case Act.Swap: return "Take over a bot on your team (cycles through them).";
                 case Act.ResetPuck: return "Free play: put the puck back in the middle.";

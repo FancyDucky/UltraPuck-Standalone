@@ -38,7 +38,7 @@ namespace UltraPuck.Core
         public CardTier Tier = CardTier.C;
         /// <summary>Most copies one player can hold (0 = no limit).</summary>
         public int MaxPerPlayer;
-        /// <summary>Only offered once someone on your team has this card (an id), e.g. Team Play II needs Team Play.</summary>
+        /// <summary>Only offered once someone on your team has this card (an id), e.g. a card that builds on another.</summary>
         public string Requires;
         /// <summary>Only offered on teams at least this big (team cards are no use alone).</summary>
         public int MinTeam;

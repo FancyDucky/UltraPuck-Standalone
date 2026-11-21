@@ -82,6 +82,29 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.35 (Claude, 21 Nov 2026, part 2): **pre-charge; dash where you move; back home for cards; one Team Play.**
+  Holding charge/brake without the puck charges a shot (still brakes); puck/rock/teammate pickups keep the charge,
+  so a pass can be one-timed by letting go. Controls tab (top row) "Dash direction" (Settings.DashWhereMoving, default
+  Where you move) sends input bit `PlayerInput.DashMove` (32); a check then dashes along the move stick, or the
+  facing when the stick is centred. `PlayerState.DashDir` (checksummed) records the dash's way so the dash lines
+  (Views Status dashDir) follow it, not the facing; screenshot scene `dash`. `LocalPlayers.ReturnHome()` (Slot.Home tracks whose player a swapped human
+  really is) runs every tick of Phase.Picking, so nobody picks cards while driving a bot. Team Play now refreshes
+  the whole team (tier S); Team Play II card + art removed. NetSession.Version 41. GitHub release v0.1.35.
+  Checked: 119 tests (114 pass, 5 skipped).
+- 0.1.35 (Claude, 21 Nov 2026, part 1): **Friendly Fire carry/throw; Shockwave knocks the puck loose; one growing
+  Pylon Goalie kept out of the nets.** Friendly Fire no longer boosts: a player with the card picks up a teammate who
+  touches their wedge, like the puck (`GrabTouching` with `OnWedge(p, at, r)`, slack `MateGrabReach`; a check
+  on the wedge works too; body/back contact doesn't). State
+  `PlayerState.HeldBy`/`HeldTime`; `CanGrab`/`GrabMate`/`CarryMates`/`ThrowMate`/`DropMate` in Simulation. The carried one rides in front facing the same way and keeps the puck; shoot/charge throws them
+  (shot speed × `MateThrow`, max `MateThrowMax`), auto-throw after `MateHoldMax` 3 s. Thrown = `TossTime` 0.75 s
+  of no skating, low drag, and it counts as a check (DashTime) on opponents; on teammates just a bump. A real
+  check / Shockwave frees them. Holders can't pick up the puck/rocks, steal or Swap. Shockwave (`BlastFrom`
+  knockLoose) knocks the puck off any carrier it reaches. Pylon Goalie: one per team, `Pylon.Radius` = 0.5 ×
+  1.35^(cards−1) (cap 4 cards), heavier when bigger; `KeepPylonOut` stops it entering any goal box. Views scale
+  pylons; no ring on carried/thrown players (the old boost ring is never shown now). Card texts updated. New screenshot scene
+  `carry` (+ `_shotNoInput`). **NetSession.Version 41.**
+  Files: Core (Simulation, GameState, Tuning, NetSession), Game (GameRunner, Views), cards json, tests; this file.
+  Checked: 118 tests (113 pass, 5 skipped), Windows + Linux builds, carry screenshots. Released in v0.1.35.
 - 0.1.34 (Composer, 21 Nov 2026): **team-vote bot cursors; swap/puck; bot swap; rock line; goal opening;
   dash coast; match songs.** Team-vote bots hover-follow without locking until a human locks (online watchers
   see cursors move). No Swap while holding the puck. Square/X (+ F) and auto-swap fixed. Camera "Swap rock

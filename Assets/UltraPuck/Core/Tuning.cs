@@ -130,8 +130,15 @@ namespace UltraPuck.Core
         /// </summary>
         public Fix WedgeTip = Fix.Ratio(9, 5), WedgeBack = Fix.Ratio(3, 5), WedgeHalfWidth = Fix.Ratio(7, 10);
         public bool WedgePickup = true;
-        /// <summary>Friendly Fire: speed multiplier and how long it lasts.</summary>
-        public Fix FriendlyBoost = Fix.Ratio(9, 5), FriendlyTime = Fix.FromInt(2);
+        /// <summary>
+        /// Friendly Fire: a teammate touching your wedge is picked up; shoot throws them like a shot, times <see cref="MateThrow"/>
+        /// (and no faster than <see cref="MateThrowMax"/>). A thrown teammate flies for <see cref="TossTime"/> seconds
+        /// with <see cref="TossDrag"/> and no skating, checking whoever they hit. Held longer than <see cref="MateHoldMax"/>:
+        /// they're thrown anyway (a quick throw).
+        /// </summary>
+        public Fix MateThrow = Fix.Half, MateThrowMax = Fix.FromInt(30), TossTime = Fix.Ratio(3, 4), TossDrag = Fix.One, MateHoldMax = Fix.FromInt(3);
+        /// <summary>Friendly Fire: how far past touching your wedge a teammate can be and still be picked up.</summary>
+        public Fix MateGrabReach = Fix.Ratio(1, 10);
         /// <summary>Team Play: how close an opponent may get to a passed puck before the pass no longer counts.</summary>
         public Fix PassTouch = Fix.Ratio(3, 10);
         /// <summary>Pylon goalies: size, distance out from the goal line, and spacing.</summary>

@@ -366,7 +366,7 @@ namespace UltraPuck.Game
         /// <param name="dash">How much of a dash is left (0..1, 0 = not dashing): streaks behind and a bright rim.</param>
         /// <param name="lagged">Frozen by hit lag: the body shakes.</param>
         /// <param name="aiming">Carrying the puck: show the short aim line out of the wedge.</param>
-        public void Status(bool hidden, bool faint, bool slowed, bool boosted, float[] cooldowns, bool stunned = false, float dash = 0f, bool lagged = false, bool aiming = false)
+        public void Status(bool hidden, bool faint, bool slowed, bool boosted, float[] cooldowns, bool stunned = false, float dash = 0f, bool lagged = false, bool aiming = false, Vector2 dashDir = default(Vector2))
         {
             if (Root.activeSelf == hidden) Root.SetActive(!hidden);
             if (hidden) return;
@@ -411,7 +411,7 @@ namespace UltraPuck.Game
                 }
             }
 
-            // dashing: streaks behind (along the way they're facing) and a bright rim
+            // dashing: streaks behind (along the way the dash went) and a bright rim
             dash = faint ? 0f : Mathf.Clamp01(dash);
             dash = Mathf.Round(dash * 60f) / 60f; // fine steps: the streaks grow smoothly
             if (dash != _dashShown)
@@ -430,7 +430,10 @@ namespace UltraPuck.Game
                     Draw.Recolor(_dashMesh[3], new Color(1f, 1f, 1f, 0.9f * dash));
                 }
             }
-            if (dash > 0f) _dashRoot.localRotation = _body.localRotation;
+            if (dash > 0f)
+                _dashRoot.localRotation = dashDir.sqrMagnitude > 1e-6f
+                    ? Quaternion.Euler(0f, 0f, Mathf.Atan2(dashDir.y, dashDir.x) * Mathf.Rad2Deg)
+                    : _body.localRotation;
 
             // hit lag: a quick shake while frozen
             _squash.localPosition = lagged ? (Vector3)(Random.insideUnitCircle * _r * 0.12f) : Vector3.zero;
@@ -1098,6 +1101,9 @@ namespace UltraPuck.Game
                 }
                 _pool[k].SetActive(true);
                 _pool[k].transform.localPosition = new Vector3(py.Pos.X.ToFloat(), py.Pos.Y.ToFloat(), 0f);
+                // drawn at the base size, scaled to this one's (it grows with every Pylon Goalie card)
+                var size = py.Radius.Raw > 0 && radius > 0f ? py.Radius.ToFloat() / radius : 1f;
+                _pool[k].transform.localScale = new Vector3(size, size, 1f);
             }
             for (var k = s.Pylons.Length; k < _pool.Count; k++) if (_pool[k] != null && _pool[k].activeSelf) _pool[k].SetActive(false);
         }

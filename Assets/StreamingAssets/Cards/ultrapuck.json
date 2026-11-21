@@ -143,9 +143,9 @@
       "color": "#B3B8C2",
       "flavor": "It's his first day, be kind.",
       "face": [
-        { "label": "Pylon Goalie", "value": "[good]+1[/]" }
+        { "label": "Pylon Goalie Size", "value": "[good]+35%[/]" }
       ],
-      "text": "[note]Can be shoved aside; back at every face-off.[/]",
+      "text": "[note]Can be shoved aside, but never into the net; back at every face-off.[/]",
       "stats": { "Pylons": "+1" }
     },
     {
@@ -199,10 +199,8 @@
       "color": "#FF7359",
       "flavor": "Bob, throw me!",
       "face": [
-        { "label": "Bumping your teammate speeds them up by:", "value": "[good]+80%[/]" },
-        { "label": "Duration", "value": "[good]3 s[/]" }
+        { "text": "You can pick up and throw your teammate's as if they were the puck![/]" }
       ],
-      "text": "[note]You keep the puck.[/]",
       "stats": { "FriendlyFire": "+1" }
     },
     {
@@ -217,7 +215,7 @@
         { "label": "Range", "value": "[good]15[/]" },
         { "label": "Cooldown", "value": "[note]6 s[/]" }
       ],
-      "text": "Press {utility} to use.",
+      "text": "Press {utility} to use. [note]Knocks the puck off whoever has it.[/]",
       "stats": { "Shockwave": "+1" }
     },
     {
@@ -238,30 +236,15 @@
     {
       "id": "ultrapuck.teamplay",
       "name": "Team Play",
-      "tier": "A",
-      "max": 1,
-      "minTeam": 2,
-      "color": "#4DC78C",
-      "flavor": "A clean pass resets your kit.",
-      "face": [
-        { "label": "On Pass", "value": "[good]your cooldowns[/]" }
-      ],
-      "text": "[note]Doesn't count if an opponent touches the puck first.[/]",
-      "stats": { "PassRefresh": "+1" }
-    },
-    {
-      "id": "ultrapuck.teamplay2",
-      "name": "Team Play II",
       "tier": "S",
       "max": 1,
       "minTeam": 2,
-      "requires": "ultrapuck.teamplay",
-      "color": "#33D980",
+      "color": "#4DC78C",
       "flavor": "Your passes reset everyone.",
       "face": [
         { "label": "On Pass", "value": "[good]team cooldowns[/]" }
       ],
-      "text": "[note]Only offered once your team has Team Play.[/]",
+      "text": "[note]Doesn't count if an opponent touches the puck first.[/]",
       "stats": { "PassRefresh": "+1", "PassRefreshTeam": "+1" }
     }
   ]

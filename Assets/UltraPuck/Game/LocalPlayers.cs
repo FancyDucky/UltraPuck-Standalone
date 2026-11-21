@@ -59,6 +59,8 @@ namespace UltraPuck.Game
             public bool PrevLeft, PrevRight, PrevUp, PrevDown;
             /// <summary>A computer player (free play bots, or the ULTRAPUCK_DEMO players).</summary>
             public bool Demo;
+            /// <summary>While a human steers a bot teammate: the slot that's really theirs (-1: they're at home).</summary>
+            public int Home = -1;
             /// <summary>How long B / Escape has been held (holding it long enough leaves).</summary>
             public float BackHeld;
             /// <summary>Readied up on the players screen: from then on their controls work the bots instead.</summary>
@@ -705,9 +707,29 @@ namespace UltraPuck.Game
             var h = Slots[human];
             var b = Slots[bot];
             var device = h.Device; var extra = h.Extra; var name = h.Name; var latched = h.Latched;
-            h.Device = null; h.Extra = null; h.Demo = true; h.Name = "Bot"; h.Latched = 0; h.WantSwap = false;
+            var home = h.Home >= 0 ? h.Home : human;
+            h.Device = null; h.Extra = null; h.Demo = true; h.Name = "Bot"; h.Latched = 0; h.WantSwap = false; h.Home = -1;
             b.Device = device; b.Extra = extra; b.Demo = false; b.Name = name; b.Latched = latched; b.WantSwap = false;
+            b.Home = home == bot ? -1 : home;
             Debug.Log("Ultra Puck: " + (string.IsNullOrEmpty(name) ? "a player" : name) + " now steers player " + (bot + 1));
+        }
+
+        /// <summary>
+        /// Everyone steering a bot teammate goes back to their own player (for the card screen, so each person picks
+        /// for themselves and the match knows who's a person). Returns true if anyone moved.
+        /// </summary>
+        public bool ReturnHome()
+        {
+            var moved = false;
+            for (var i = 0; i < Slots.Count; i++)
+            {
+                var s = Slots[i];
+                if (s.Demo || s.Home < 0 || s.Home == i || s.Home >= Slots.Count) continue;
+                if (!Slots[s.Home].Demo) { s.Home = -1; continue; } // (someone else is there now: stay)
+                SwapControl(i, s.Home);
+                moved = true;
+            }
+            return moved;
         }
 
         /// <summary>
@@ -788,7 +810,8 @@ namespace UltraPuck.Game
                     MoveY = PlayerInput.Axis(m.y),
                     AimX = PlayerInput.Axis(a.x),
                     AimY = PlayerInput.Axis(a.y),
-                    Buttons = (byte)(Buttons(s.Device, false) | Buttons(s.Extra, false) | (HasKeyboard(s) ? MouseButtons(false) : 0) | s.Latched),
+                    Buttons = (byte)(Buttons(s.Device, false) | Buttons(s.Extra, false) | (HasKeyboard(s) ? MouseButtons(false) : 0) | s.Latched
+                        | (Settings.DashWhereMoving ? PlayerInput.DashMove : 0)),
                     Pick = state != null && state.Phase == Phase.Picking && PickFor != null ? PickFor(i) : (byte)0,
                     Hover = state != null && state.Phase == Phase.Picking && HoverFor != null ? HoverFor(i) : (byte)0,
                 };
