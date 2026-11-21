@@ -214,7 +214,7 @@
       "flavor": "Woah Nelly!",
       "face": [
         { "label": "Shockwave Strength", "value": "[good]+1[/]" },
-        { "label": "Range", "value": "[good]5[/]" },
+        { "label": "Range", "value": "[good]15[/]" },
         { "label": "Cooldown", "value": "[note]6 s[/]" }
       ],
       "text": "Press {utility} to use.",

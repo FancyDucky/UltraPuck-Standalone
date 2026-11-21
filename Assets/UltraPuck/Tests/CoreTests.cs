@@ -285,6 +285,25 @@ namespace UltraPuck.Tests
         }
 
         [Test]
+        public void DashCoastsWithLighterDrag()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = sim.NewGame(new[] { 0, 1 });
+            PlayNow(s);
+            s.Players[0].Pos = new FixVec2(Fix.Zero, Fix.Zero);
+            s.Players[0].Facing = FixVec2.Right;
+            s.Players[0].Vel = FixVec2.Zero;
+            s.Players[0].DashCharge = Fix.One;
+            sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput) });
+            Assert.Greater(s.Players[0].DashCoast.ToDouble(), 0.4, "coast starts after a dash");
+            Assert.Greater(s.Players[0].Vel.X.ToDouble(), 5.0, "dashed right");
+            var afterDash = s.Players[0].Vel.X.ToDouble();
+            // a few ticks of coasting: still faster than the same ticks at full drag would leave you
+            for (var t = 0; t < 20; t++) sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.Greater(s.Players[0].Vel.X.ToDouble(), afterDash * 0.55, "kept more speed while coasting");
+        }
+
+        [Test]
         public void HoldingShootAfterAQuickShotDoesNotDash()
         {
             var sim = new Simulation(LoadRink());
@@ -871,7 +890,8 @@ namespace UltraPuck.Tests
             {
                 double w = (g.Max.X - g.Min.X).ToDouble(), h = (g.Max.Y - g.Min.Y).ToDouble();
                 Assert.AreEqual(2.44 * 1.3, System.Math.Max(w, h), 0.002, "across the mouth");
-                Assert.AreEqual(1.56 * 1.3 - 0.2, System.Math.Min(w, h), 0.002, "mouth to back");
+                // front at the opening (no 0.2 inset): mouth to back is a full net depth inside the walls
+                Assert.AreEqual(1.56 * 1.3, System.Math.Min(w, h), 0.002, "mouth to back");
             }
         }
 

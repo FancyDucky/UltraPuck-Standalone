@@ -33,6 +33,10 @@ namespace UltraPuck.Game
         /// <summary>Draw a mouse reticle (keyboard players aiming with the mouse).</summary>
         public bool Reticle;
 
+        private float _fpsTimer;
+        private int _fpsFrames, _fpsShown;
+        private GUIStyle _fpsStyle;
+
         /// <param name="covered">A menu or the card screen is up: keep the score and messages out of the way.</param>
         public void Show(bool lobby, bool free, LocalPlayers local, GameState state, Simulation sim, string error, bool covered)
         {
@@ -40,6 +44,18 @@ namespace UltraPuck.Game
             var kb = Keyboard.current;
             if (kb != null && !Menus.Typing && !LocalPlayers.Blocked && (kb.leftBracketKey.wasPressedThisFrame || kb.rightBracketKey.wasPressedThisFrame))
                 Settings.UiScale += kb.rightBracketKey.wasPressedThisFrame ? 0.1f : -0.1f;
+            // count once per Update (OnGUI runs more than once a frame)
+            if (Settings.ShowFps)
+            {
+                _fpsFrames++;
+                _fpsTimer += Time.unscaledDeltaTime;
+                if (_fpsTimer >= 0.4f)
+                {
+                    _fpsShown = Mathf.RoundToInt(_fpsFrames / _fpsTimer);
+                    _fpsFrames = 0;
+                    _fpsTimer = 0f;
+                }
+            }
         }
 
         private void OnGUI()
@@ -47,6 +63,7 @@ namespace UltraPuck.Game
             GUI.depth = 10;
             Ui.Begin();
             float w = Ui.W, h = Ui.H;
+            DrawFps();
             if (!string.IsNullOrEmpty(_error)) { Ui.Label(new Rect(0, h / 2 - 40, w, 80), _error, Ui.Font(24, true, TextAnchor.MiddleCenter), Color.white); return; }
             if (_lobby) { if (!_covered) Lobby(w, h); return; }
             if (Reticle) DrawReticle();
@@ -252,6 +269,27 @@ namespace UltraPuck.Game
             }
             else if (style == 1)
                 Ui.Box(new Rect(p.x - 1.5f * scale, p.y - 1.5f * scale, 3f * scale, 3f * scale), c, 1.5f * scale);
+        }
+
+        /// <summary>Tiny FPS in the top-left, like Steam's overlay (doesn't follow UI size).</summary>
+        private void DrawFps()
+        {
+            if (!Settings.ShowFps || Event.current.type != EventType.Repaint) return;
+            if (_fpsStyle == null)
+            {
+                _fpsStyle = new GUIStyle(GUI.skin.label)
+                {
+                    fontSize = 12,
+                    fontStyle = FontStyle.Bold,
+                    alignment = TextAnchor.UpperLeft,
+                    richText = false,
+                };
+                _fpsStyle.normal.textColor = new Color(1f, 1f, 1f, 0.55f);
+            }
+            var prev = GUI.matrix;
+            GUI.matrix = Matrix4x4.identity;
+            GUI.Label(new Rect(6f, 4f, 64f, 18f), _fpsShown.ToString(), _fpsStyle);
+            GUI.matrix = prev;
         }
 
         /// <summary>Names over the players, so it's easy to tell who is who.</summary>

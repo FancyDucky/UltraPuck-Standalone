@@ -182,6 +182,7 @@ namespace UltraPuck.Game
                     var cap = Choice("Frame rate limit", caps, () => Mathf.Max(0, Array.IndexOf(Settings.FpsCaps, Settings.FpsCap)), v => Settings.FpsCap = Settings.FpsCaps[v], "Only used with V-Sync off.");
                     cap.Enabled = () => !Settings.VSync;
                     _rows.Add(cap);
+                    _rows.Add(Switch("Show FPS", () => Settings.ShowFps, v => Settings.ShowFps = v, "A small frame-rate number in the top-left corner."));
                     _rows.Add(Slider("UI size", () => (Settings.UiScale - 0.6f) / 1.4f, v => Settings.UiScale = 0.6f + v * 1.4f, v => Mathf.RoundToInt((0.6f + v * 1.4f) * 100f) + "%"));
                     _rows.Add(Switch("Puck trail", () => Settings.PuckTrail, v => Settings.PuckTrail = v));
                     _rows.Add(Switch("Card effects", () => Settings.CardEffects, v => Settings.CardEffects = v, "Holo foil, glare and sparkle on cards."));
@@ -226,6 +227,8 @@ namespace UltraPuck.Game
                     _rows.Add(Slider("Aim line", () => Settings.AimLine, v => Settings.AimLine = v,
                         v => v < 0.01f ? "Off" : Mathf.RoundToInt(v * 100f) + "%",
                         "How long the shot aim line is while you have the puck. 100% is the original length."));
+                    _rows.Add(Switch("Swap rock line", () => Settings.RockLine, v => Settings.RockLine = v,
+                        "A faint dotted line from you to your Swap rock while it's on the ice."));
                     _rows.Add(Choice("Mouse reticle", Settings.ReticleNames, () => Settings.ReticleStyle, v => Settings.ReticleStyle = v,
                         "The aim marker while you play with keyboard and mouse."));
                     _rows.Add(Slider("Reticle size", () => Settings.ReticleSize, v => Settings.ReticleSize = v,

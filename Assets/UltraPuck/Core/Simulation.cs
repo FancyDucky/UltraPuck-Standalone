@@ -108,14 +108,21 @@ namespace UltraPuck.Core
             if (offer == null) return;
             var votes = new int[offer.Length];
             var humans = false;
-            // humans decide the vote; bots only fill in when the team has no one human
+            // humans decide the vote (locked picks); bots only fill in when the team has no one human
             foreach (var p in s.Players)
                 if (p.Team == team && !p.Bot && p.Offer.Length > 0 && p.Picked >= 0)
                 { var k = Array.IndexOf(offer, p.Picked); if (k >= 0) { votes[k]++; humans = true; } }
             if (!humans)
+            {
+                // time ran out with nobody locked: use where humans were looking, else bot picks
                 foreach (var p in s.Players)
-                    if (p.Team == team && p.Bot && p.Offer.Length > 0 && p.Picked >= 0)
-                    { var k = Array.IndexOf(offer, p.Picked); if (k >= 0) votes[k]++; }
+                    if (p.Team == team && !p.Bot && p.Offer.Length > 0 && p.Hover >= 1 && p.Hover <= offer.Length)
+                    { votes[p.Hover - 1]++; humans = true; }
+                if (!humans)
+                    foreach (var p in s.Players)
+                        if (p.Team == team && p.Bot && p.Offer.Length > 0 && p.Picked >= 0)
+                        { var k = Array.IndexOf(offer, p.Picked); if (k >= 0) votes[k]++; }
+            }
             var most = 0;
             foreach (var v in votes) most = Math.Max(most, v);
             var tied = new System.Collections.Generic.List<int>();
@@ -160,6 +167,7 @@ namespace UltraPuck.Core
                     p.Vel = FixVec2.Zero;
                     p.DashCharge = MaxDashes(p);
                     p.DashTime = Fix.Zero;
+                    p.DashCoast = Fix.Zero;
                     p.Charge = Fix.Zero;
                     p.NoPickup = Fix.Zero;
                     p.Stun = Fix.Zero;
@@ -473,7 +481,9 @@ namespace UltraPuck.Core
                 p.Vel += move * (push * T.Acceleration * short_ * dt);
             }
             var braking = !holding && input.Has(PlayerInput.ChargeBrake);
-            var drag = braking ? T.BrakeDrag : T.Drag;
+            p.DashCoast = Fix.Max(Fix.Zero, p.DashCoast - dt);
+            // after a dash, lighter drag for a bit so you keep more speed when you chain them
+            var drag = braking ? T.BrakeDrag : (p.DashCoast > Fix.Zero ? T.DashCoastDrag : T.Drag);
             p.Vel -= p.Vel * Fix.Min(Fix.One, drag * dt);
 
             var maxDashes = MaxDashes(p);
@@ -487,7 +497,7 @@ namespace UltraPuck.Core
             {
                 if (p.Stats.Shockwave > 0 && p.ShockCooldown <= Fix.Zero) FireShockwave(s, i);
                 if (p.Stats.Invisibility > 0 && p.InvisCooldown <= Fix.Zero) { p.InvisibleTime = T.InvisTime; p.InvisCooldown = T.InvisCooldown; }
-                if (p.Stats.Swap > 0) UseSwap(s, i);
+                if (p.Stats.Swap > 0 && !carrying) UseSwap(s, i); // no throw/teleport while holding the puck
             }
 
             if (!holding)
@@ -506,6 +516,7 @@ namespace UltraPuck.Core
                     p.Vel += p.Facing * (T.DashSpeed * p.Stats.DashPower);
                     p.DashCharge -= Fix.One;
                     p.DashTime = T.DashHitTime;
+                    p.DashCoast = T.DashCoast;
                 }
                 return;
             }
@@ -1333,6 +1344,7 @@ namespace UltraPuck.Core
         {
             var a = s.Players[i];
             if (a.Stats.Swap <= 0) return;
+            if (s.Carrier == i) return; // holding the puck: no throw or teleport
             if (a.Bot && a.SwapCooldown > Fix.Zero) return;
             for (var k = 0; k < s.Rocks.Length; k++)
             {

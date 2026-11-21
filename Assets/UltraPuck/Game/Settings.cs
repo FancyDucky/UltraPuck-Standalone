@@ -50,6 +50,13 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("card_fx", value ? 1 : 0); }
         }
 
+        /// <summary>Small FPS number in the top-left corner (like Steam's overlay).</summary>
+        public static bool ShowFps
+        {
+            get { return PlayerPrefs.GetInt("show_fps", 0) != 0; }
+            set { PlayerPrefs.SetInt("show_fps", value ? 1 : 0); }
+        }
+
         /// <summary>Put the window mode, V-Sync and frame cap into effect.</summary>
         public static void ApplyGraphics()
         {
@@ -115,6 +122,15 @@ namespace UltraPuck.Game
         {
             get { return Mathf.Clamp01(PlayerPrefs.GetFloat("aim_line", 0.6f)); }
             set { PlayerPrefs.SetFloat("aim_line", Mathf.Clamp01(value)); }
+        }
+
+        /// <summary>
+        /// A faint dotted line from you to your Swap rock while it's on the ice (Settings &gt; Camera).
+        /// </summary>
+        public static bool RockLine
+        {
+            get { return PlayerPrefs.GetInt("rock_line", 1) != 0; }
+            set { PlayerPrefs.SetInt("rock_line", value ? 1 : 0); }
         }
 
         /// <summary>Mouse aim reticle styles (Settings &gt; Camera).</summary>

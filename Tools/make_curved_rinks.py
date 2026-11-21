@@ -12,7 +12,6 @@ WALL = 0.68                    # wall thickness (Tuning.WallThickness)
 GROW = 1.3                     # the nets are 30% bigger than they first were: the opening and the depth, inside the walls
 MOUTH = round((1.56 - WALL / 2) * GROW + WALL / 2, 3)   # the Hockey Rink's nets: mouth half height (wall middle)
 DEPTH = round((1.9 - WALL / 2) * GROW + WALL / 2, 3)    # and depth (mouth to the back wall's middle)
-LINE = 0.2                     # how far past the mouth the puck has to be to count
 ROOM = 6.0                     # the ice behind a net: from the end wall to the net's back, like the Hockey Rink
 
 
@@ -30,7 +29,8 @@ def goal_box(centre, out, team):
     """The scoring box in a net whose mouth is at centre and whose back is DEPTH further along out (axis-aligned)."""
     u = (-out[1], out[0])
     corners = []
-    for along in (LINE, DEPTH - WALL / 2):
+    # front edge at the mouth opening (along=0); sides stop at the walls' inner edge
+    for along in (0.0, DEPTH - WALL / 2):
         for side in (-1, 1):
             corners.append(add(add(centre, mul(out, along)), mul(u, side * (MOUTH - WALL / 2))))
     xs = [c[0] for c in corners]

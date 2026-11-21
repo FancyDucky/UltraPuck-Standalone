@@ -132,6 +132,8 @@ namespace UltraPuck.Core
         public Fix DashCharge = Fix.One;
         /// <summary>Seconds left of the current check's hit window (a bump during it knocks people back).</summary>
         public Fix DashTime;
+        /// <summary>Seconds left of lighter drag after a dash (keeps speed up when chaining checks).</summary>
+        public Fix DashCoast;
         /// <summary>Shot charge while holding charge with the puck, 0..1 (more with Over Charge; above 0 means a charge is going).</summary>
         public Fix Charge;
         /// <summary>Seconds left of being dazed after a check: you push the stick with much less force.</summary>
@@ -345,7 +347,7 @@ namespace UltraPuck.Core
             foreach (var p in Players)
             {
                 Mix(ref h, p.Team); Mix(ref h, p.Pos); Mix(ref h, p.Vel); Mix(ref h, p.Facing);
-                Mix(ref h, p.DashCharge); Mix(ref h, p.DashTime); Mix(ref h, p.Charge); Mix(ref h, p.NoPickup); Mix(ref h, p.PrevButtons); Mix(ref h, p.SuppressDash ? 1 : 0); Mix(ref h, p.Bot ? 1 : 0); Mix(ref h, p.SkipVote ? 1 : 0);
+                Mix(ref h, p.DashCharge); Mix(ref h, p.DashTime); Mix(ref h, p.DashCoast); Mix(ref h, p.Charge); Mix(ref h, p.NoPickup); Mix(ref h, p.PrevButtons); Mix(ref h, p.SuppressDash ? 1 : 0); Mix(ref h, p.Bot ? 1 : 0); Mix(ref h, p.SkipVote ? 1 : 0);
                 Mix(ref h, p.Stun); Mix(ref h, p.HitLag); Mix(ref h, p.Hits); Mix(ref h, p.HitPower); Mix(ref h, p.HitDir);
                 Mix(ref h, p.ShotsFired); Mix(ref h, p.ShotStrength);
                 p.Stats.Hash(ref h);

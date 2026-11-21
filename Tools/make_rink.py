@@ -28,7 +28,6 @@ for p in pts:
     if not clean or clean[-1] != p: clean.append(p)
 if clean[0] == clean[-1]: clean.pop()
 
-line = 0.2   # how far into the net the puck has to be to count (as on the Hockey Rink)
 spawns = []
 for team, sx in ((0, -1), (1, 1)):
     for x, y in ((9, 0), (12.5, 5), (12.5, -5), (17, 0)):
@@ -39,8 +38,9 @@ m = {
     "author": "Ultra Puck",
     "walls": [{"closed": True, "points": clean}],
     "goals": [
-        {"team": 0, "min": [r3(-W - DEPTH + WALL / 2), r3(-MOUTH + WALL / 2)], "max": [r3(-W - line), r3(MOUTH - WALL / 2)]},
-        {"team": 1, "min": [r3(W + line), r3(-MOUTH + WALL / 2)], "max": [r3(W + DEPTH - WALL / 2), r3(MOUTH - WALL / 2)]},
+        # front edge at the mouth opening (between the posts); sides stop at the walls' inner edge
+        {"team": 0, "min": [r3(-W - DEPTH + WALL / 2), r3(-MOUTH + WALL / 2)], "max": [r3(-W), r3(MOUTH - WALL / 2)]},
+        {"team": 1, "min": [r3(W), r3(-MOUTH + WALL / 2)], "max": [r3(W + DEPTH - WALL / 2), r3(MOUTH - WALL / 2)]},
     ],
     "spawns": spawns,
     "puck": [0, 0],

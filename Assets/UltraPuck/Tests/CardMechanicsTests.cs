@@ -69,9 +69,23 @@ namespace UltraPuck.Tests
             var botAlone = Bot.Think(sim, s, 1);
             Assert.AreEqual(0, botAlone.Pick, "bots wait until a human looks");
             s.Players[0].Hover = 1;
-            Assert.AreEqual(1, Bot.Think(sim, s, 1).Pick, "bots follow the human's hover");
+            var looking = Bot.Think(sim, s, 1);
+            Assert.AreEqual(1, looking.Hover, "bots' cursor follows the human's hover");
+            Assert.AreEqual(0, looking.Pick, "bots don't lock until a human locks (so the cursor can keep moving)");
+            s.Players[0].Hover = 2;
+            Assert.AreEqual(2, Bot.Think(sim, s, 1).Hover, "bots keep following when the human looks elsewhere");
+            // human locks card 1; bots only hover this tick (they see the lock on the next)
             sim.Step(s, new[] {
-                new PlayerInput { Pick = 1 },
+                new PlayerInput { Pick = 1, Hover = 1 },
+                Bot.Think(sim, s, 1),
+                Bot.Think(sim, s, 2),
+                default(PlayerInput)
+            });
+            Assert.AreEqual(humanPick, s.Players[0].Picked, "human locked");
+            Assert.Less(s.Players[1].Picked, 0, "bot still open so its cursor can move");
+            // bots see the lock, lock with them, vote resolves
+            sim.Step(s, new[] {
+                new PlayerInput { Pick = 1, Hover = 1 },
                 Bot.Think(sim, s, 1),
                 Bot.Think(sim, s, 2),
                 default(PlayerInput)
@@ -89,9 +103,10 @@ namespace UltraPuck.Tests
             var s = sim.NewGame(new[] { 0, 1 }, 3u);
             s.Players[1].Bot = true;
             sim.StartPicking(s, new[] { 1 });
-            var pick = Bot.Think(sim, s, 1).Pick;
-            Assert.Greater(pick, 0, "bot alone on the team picks straight away");
-            Assert.LessOrEqual(pick, s.Players[1].Offer.Length);
+            var alone = Bot.Think(sim, s, 1);
+            Assert.Greater(alone.Pick, 0, "bot alone on the team picks straight away");
+            Assert.AreEqual(alone.Pick, alone.Hover, "hover matches the pick");
+            Assert.LessOrEqual(alone.Pick, s.Players[1].Offer.Length);
         }
 
         /// <summary>Pylon goalies can be pushed around (they're heavier than a player), and go back to their spot at a face-off.</summary>
@@ -360,6 +375,26 @@ namespace UltraPuck.Tests
             _lib.Recompute(s);
             Assert.AreEqual(1, s.Players[0].Stats.Invisibility);
             Assert.AreEqual(1, s.Players[0].Stats.Shockwave);
+        }
+
+        [Test]
+        public void SwapDoesNothingWhileHoldingThePuck()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.swap");
+            Play(s);
+            s.Players[0].Pos = At(0, -6);
+            s.Players[0].Facing = FixVec2.Right;
+            s.Carrier = 0;
+            s.PuckPos = At(0.5, -6);
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.AreEqual(0, s.Rocks.Length, "no rock while carrying the puck");
+            s.Rocks = new[] { new Rock { Pos = At(4, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1 } };
+            var at = s.Players[0].Pos;
+            _sim.Step(s, new PlayerInput[2]);
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.AreEqual(at, s.Players[0].Pos, "no teleport while carrying the puck");
+            Assert.AreEqual(0, s.Players[0].Swaps);
         }
 
         [Test]

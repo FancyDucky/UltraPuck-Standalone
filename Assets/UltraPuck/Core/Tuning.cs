@@ -38,8 +38,13 @@ namespace UltraPuck.Core
 
         // checking (the dash you do with shoot/check when you don't have the puck)
         public Fix DashSpeed = Fix.FromInt(10);
-        public Fix DashCooldown = Fix.Ratio(3, 2);
+        /// <summary>Seconds to refill one stored check (10% longer than the old 1.5 s).</summary>
+        public Fix DashCooldown = Fix.Ratio(33, 20); // 1.65
         public Fix DashHitTime = Fix.Ratio(1, 4);
+        /// <summary>After a dash: this long of lighter drag so you keep more speed when chaining checks.</summary>
+        public Fix DashCoast = Fix.Ratio(11, 20); // 0.55 s
+        /// <summary>Drag while <see cref="DashCoast"/> is active (normal skating drag is <see cref="Drag"/> = 3).</summary>
+        public Fix DashCoastDrag = Fix.Ratio(19, 10); // 1.9
         public Fix DashKnockback = Fix.FromInt(17);
         /// <summary>How long a checked player is dazed, and how much of their stick force they keep meanwhile.</summary>
         public Fix HitStun = Fix.Ratio(7, 20);

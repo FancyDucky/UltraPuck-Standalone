@@ -20,7 +20,7 @@ so whoever works next knows what changed.
    Tests live in `Assets/UltraPuck/Tests/` (CoreTests, CardMechanicsTests, CardTests, NetTests, PerfTests,
    SoundTests). Set env var `ULTRAPUCK_SOUNDS=<folder>` while running them to save every sound effect there as a .wav.
 4. **Build** to check it compiles: `-batchmode -quit -projectPath . -executeMethod UltraPuck.Editor.BuildScript.BuildWindows`
-   (also `BuildLinux`). Close the Unity editor first if it has the project open. Owner shortcut: double-click
+   (also `BuildLinux`). Close the Unity editor first if it has the project open.    Owner shortcut: double-click
    `Build Windows.bat` (or `powershell -File Tools/build-windows.ps1`) after editing cards/maps so the built game
    picks up `StreamingAssets`. For face text / art / maps only, `Sync Cards.bat` copies StreamingAssets without a
    Unity compile. Card `face` rows are display only — Shockwave slow/range/duration/cooldown in play come from
@@ -36,9 +36,10 @@ so whoever works next knows what changed.
    line `Ultra Puck sound at <name>: ...` with how many times each sound effect has played so far, what the music is
    doing, and how loud the output is. `ULTRAPUCK_SHOTS_VOLUME=0.3` plays the run out loud; `0.001` can't be heard
    but still shows a non-zero output level in the log (at 0 the level always reads 0).
-6. **Don't commit or push unless asked.** Releases: when the owner says "Release X", run
-   `powershell -File Tools/release.ps1 -Bump -Notes "<plain-English notes>"` (builds Windows + Linux, publishes a
-   GitHub release, every copy auto-updates), then `git add -A`, commit (`0.1.N: summary`), push.
+6. **Don't commit or push unless asked.** Releases: double-click `Release.bat` (asks what changed, bumps the
+   version, builds Windows + Linux, publishes a GitHub release, commits and pushes), or
+   `powershell -File Tools/release.ps1 -Bump -Notes "<plain-English notes>"` then `git add -A`, commit
+   (`0.1.N: summary`), push.
 7. **Keep the game original**: no names, art, levels or text from other games (it was inspired by ClusterPuck 99 but
    must not copy it).
 8. Write UI text and notes in plain, friendly English (no jargon).
@@ -81,6 +82,14 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.34 (Composer, 21 Nov 2026): **team-vote bot cursors; swap/puck; bot swap; rock line; goal opening;
+  dash coast; match songs.** Team-vote bots hover-follow without locking until a human locks (online watchers
+  see cursors move). No Swap while holding the puck. Square/X (+ F) and auto-swap fixed. Camera "Swap rock
+  line" + Graphics Show FPS. Softer goal zoom. Goal boxes at the net opening. Dash CD 1.65 s + coast.
+  Three match songs (Determination, One last fight, Stand your ground). **NetSession.Version 40.**
+  GitHub release v0.1.34.
+  Files: Core + Game + maps + music + tests; Release.bat; this file.
+  Checked: 113 tests (108 pass, 5 skipped), Windows + Linux builds, release published.
 - 0.1.33 (Composer, 20 Nov 2026): **scorer cam follow; lobby rename off; goal blast + Shockwave rocks.**
   Goal zoom centres and follows the scorer only (snap then stick). Lobby name keyboard disabled (hints too).
   Goal explosion shove + LastGoalPlayer; Shockwave shoves puck/rocks; 3 s before replay; thinner horizontal wipe.

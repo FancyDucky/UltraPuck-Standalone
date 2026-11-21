@@ -2,6 +2,7 @@
 # and dist/UltraPuck-Linux.tar.gz (the Linux / Steam Deck version), and publishes a GitHub release. Every copy of the game checks for the newest release when it starts and updates
 # itself, so publishing is all it takes to update everyone.
 #
+#   Double-click Release.bat at the project root (asks for notes, bump + build + publish + commit + push).
 #   powershell -File Tools/release.ps1 -Bump -Notes "What changed"   (0.1.0 -> 0.1.1, build, publish)
 #   powershell -File Tools/release.ps1                                (publish the version in version.txt)
 #   powershell -File Tools/release.ps1 -NoPublish                     (just make the zip, e.g. to send someone)

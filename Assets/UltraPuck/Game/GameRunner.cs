@@ -588,12 +588,12 @@ namespace UltraPuck.Game
             var goalHero = GoalZoomHero();
             if (goalHero)
             {
-                // tight on the scorer alone and keep following them (puck stays in the net — don't average with it)
+                // ease onto the scorer (not a hard cut, not a close-up) and keep following them
                 var at = V.Of3(_players[_state.LastGoalPlayer].Root.transform.position);
-                var pad = 3.2f;
+                var pad = 5.5f;
                 lo = at - Vector2.one * pad;
                 hi = at + Vector2.one * pad;
-                minHalfHeight = 3.6f;
+                minHalfHeight = Mathf.Min(minHalfHeight, 6.8f);
             }
             else if (follow && _players.Count > 0)
             {
@@ -645,16 +645,12 @@ namespace UltraPuck.Game
             var pos = new Vector2(c.x, c.y + size * ScoreBarShare); // shift up so the score bar sits over empty space
             pos += _shotNudge;
 
-            if (snap || (goalHero && _goalZoomSnap))
-            {
-                _camPos = pos; _camSize = size; _camVel = Vector2.zero; _camSizeVel = 0f;
-                if (goalHero) _goalZoomSnap = false;
-            }
+            if (snap) { _camPos = pos; _camSize = size; _camVel = Vector2.zero; _camSizeVel = 0f; }
             else
             {
                 var smooth = Mathf.Lerp(0.12f, 0.8f, Settings.CameraSmoothing);
                 if (zooming) smooth *= 0.5f; // pulling back for a shot shouldn't lag behind it
-                if (goalHero) smooth = 0.06f; // stick to the scorer as they fly back
+                if (goalHero) smooth = Mathf.Max(smooth, 0.45f); // ease in on the scorer (no hard cut)
                 _camPos = Vector2.SmoothDamp(_camPos, pos, ref _camVel, smooth, Mathf.Infinity, Time.unscaledDeltaTime);
                 _camSize = Mathf.SmoothDamp(_camSize, size, ref _camSizeVel, smooth * 1.3f, Mathf.Infinity, Time.unscaledDeltaTime);
             }
@@ -1386,9 +1382,8 @@ namespace UltraPuck.Game
                 _prev = _state.Clone();
                 _sim.Step(_state, _local.Sample(_sim, _state));
                 // a bot teammate just got the puck: hand a random human on that team over to them
-                if (_mode == Mode.Match && _state.Carrier >= 0 && _state.Carrier != _seenCarrier
-                    && _state.Carrier < _local.Slots.Count && _local.Slots[_state.Carrier].Demo)
-                    _local.AutoSwapToCarrier(_state.Carrier, _state.Players[_state.Carrier].Team);
+                if (_state.Carrier >= 0 && _state.Carrier != _seenCarrier)
+                    _local.AutoSwapToCarrier(_state.Carrier, _state);
                 _seenCarrier = _state.Carrier;
                 Recorder.Record(_state);
                 _acc -= dt;
@@ -1415,7 +1410,6 @@ namespace UltraPuck.Game
         private bool _replayStarted;
         private float _replayStartAt;
         private float _goalZoomUntil;
-        private bool _goalZoomSnap;
         private int _goalTick;
         private Phase _lastPhase;
         private readonly ReplayTransition _wipe = new ReplayTransition();
@@ -1460,7 +1454,6 @@ namespace UltraPuck.Game
                 _wipeStyle = ReplayTransition.PickStyle(_goalTick + _state.LastScorer * 17);
                 _replayStartAt = Time.unscaledTime + 3f; // zoom on the scorer, then wipe in
                 _goalZoomUntil = _replayStartAt;
-                _goalZoomSnap = true; // jump onto them the first frame, then follow
             }
 
             if (_replayPending && Time.unscaledTime >= _replayStartAt)

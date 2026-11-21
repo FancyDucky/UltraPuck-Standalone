@@ -17,8 +17,9 @@ namespace UltraPuck.Core
             var me = s.Players[i];
             if (s.Phase == Phase.Picking)
             {
-                var pick = PickCard(sim, s, me);
-                return new PlayerInput { Pick = pick, Hover = pick };
+                byte hover, pick;
+                PickCard(sim, s, me, out hover, out pick);
+                return new PlayerInput { Pick = pick, Hover = hover };
             }
             var pos = me.Pos;
             var attack = GoalCentre(sim.Map, 1 - me.Team);
@@ -183,16 +184,20 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// Team Vote: follow whatever most humans on the team are on (a locked pick, else their hover). If no human is
-        /// on this team yet (1v1 bot side, or all-bot team), or Team Vote is off: take the strongest card by tier
-        /// (first on a tie). Returns the 1-based pick, or 0 while waiting for a human teammate to look.
+        /// Team Vote: hover follows whatever most humans on the team are on (a locked pick, else their hover). Pick
+        /// only locks once a human has locked — otherwise the bot's cursor would freeze on the first card looked at
+        /// (online spectators watch those cursors). If no human is on this team, or Team Vote is off: take the
+        /// strongest card by tier (first on a tie).
         /// </summary>
-        private static byte PickCard(Simulation sim, GameState s, PlayerState me)
+        private static void PickCard(Simulation sim, GameState s, PlayerState me, out byte hover, out byte pick)
         {
-            if (me.Offer.Length == 0 || me.Picked >= 0 || sim.Cards == null) return 0;
+            hover = 0;
+            pick = 0;
+            if (me.Offer.Length == 0 || me.Picked >= 0 || sim.Cards == null) return;
             if (sim.T.TeamVote)
             {
                 var humans = false;
+                var anyLocked = false;
                 var votes = new int[me.Offer.Length];
                 var anyLook = false;
                 foreach (var p in s.Players)
@@ -201,7 +206,7 @@ namespace UltraPuck.Core
                     if (!p.Bot) humans = true;
                     if (p.Bot) continue;
                     var idx = -1;
-                    if (p.Picked >= 0) idx = System.Array.IndexOf(me.Offer, p.Picked);
+                    if (p.Picked >= 0) { idx = System.Array.IndexOf(me.Offer, p.Picked); anyLocked = true; }
                     else if (p.Hover >= 1 && p.Hover <= me.Offer.Length) idx = p.Hover - 1;
                     if (idx < 0) continue;
                     votes[idx]++;
@@ -209,17 +214,19 @@ namespace UltraPuck.Core
                 }
                 if (humans)
                 {
-                    if (!anyLook) return 0; // wait for a human teammate to look / lock
+                    if (!anyLook) return; // wait for a human teammate to look / lock
                     var best = 0;
                     for (var k = 1; k < votes.Length; k++) if (votes[k] > votes[best]) best = k;
-                    return (byte)(best + 1);
+                    hover = (byte)(best + 1);
+                    if (anyLocked) pick = hover; // lock with them; stay on hover-only until then
+                    return;
                 }
                 // no human on this team: pick by tier like a normal bot pick
             }
             var tier = 0;
             for (var k = 1; k < me.Offer.Length; k++)
                 if (sim.Cards.Cards[me.Offer[k]].Tier < sim.Cards.Cards[me.Offer[tier]].Tier) tier = k;
-            return (byte)(tier + 1);
+            hover = pick = (byte)(tier + 1);
         }
 
         /// <summary>The goal a player on <paramref name="team"/> shoots at.</summary>

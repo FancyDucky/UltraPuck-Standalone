@@ -38,13 +38,12 @@ def net(side):
         [r3(mouth), r3(-MOUTH)],
     ]
 
-line = 0.2  # how far past the mouth the puck has to be to count
 spawns = []
 for team, sx in ((0, -1), (1, 1)):
     for x, y in ((8, 0), (11, 5), (11, -5), (14.5, 0)):
         spawns.append({"team": team, "pos": [r3(sx * x * STRETCH), y], "facing": [-sx, 0]})
 
-goal_in = NET_X - DEPTH + line   # mouth line, plus a little
+mouth_x = NET_X - DEPTH  # front of the goal box at the net opening
 m = {
     "name": "Hockey Rink",
     "author": "Ultra Puck",
@@ -54,8 +53,9 @@ m = {
         {"closed": False, "points": net(1)},
     ],
     "goals": [
-        {"team": 0, "min": [r3(-NET_X + WALL / 2), r3(-MOUTH + WALL / 2)], "max": [r3(-goal_in), r3(MOUTH - WALL / 2)]},
-        {"team": 1, "min": [r3(goal_in), r3(-MOUTH + WALL / 2)], "max": [r3(NET_X - WALL / 2), r3(MOUTH - WALL / 2)]},
+        # front edge at the mouth opening; sides stop at the walls' inner edge
+        {"team": 0, "min": [r3(-NET_X + WALL / 2), r3(-MOUTH + WALL / 2)], "max": [r3(-mouth_x), r3(MOUTH - WALL / 2)]},
+        {"team": 1, "min": [r3(mouth_x), r3(-MOUTH + WALL / 2)], "max": [r3(NET_X - WALL / 2), r3(MOUTH - WALL / 2)]},
     ],
     "spawns": spawns,
     "puck": [0, 0],

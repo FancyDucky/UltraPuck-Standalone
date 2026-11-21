@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UltraPuck.Core;
 using UnityEngine;
@@ -660,11 +661,16 @@ namespace UltraPuck.Game
             if (human < 0 || human >= Slots.Count || Slots[human].Demo) return false;
             var team = TeamOf(human, state);
             var bots = new List<int>();
-            for (var i = 0; i < SlotCount(state); i++)
-                if (IsBot(i, state) && TeamOf(i, state) == team) bots.Add(i);
+            var n = SlotCount(state);
+            for (var i = 0; i < n; i++)
+            {
+                if (i >= Slots.Count || !Slots[i].Demo) continue;
+                if (TeamOf(i, state) != team) continue;
+                bots.Add(i);
+            }
             if (bots.Count == 0)
             {
-                Debug.Log("Ultra Puck: swap: no bot teammates on " + Palette.TeamName(team));
+                Debug.Log("Ultra Puck: swap: no bot teammates on " + Palette.TeamName(team) + " (you are player " + (human + 1) + ")");
                 return false;
             }
             // next bot after this human's index, wrapping
@@ -708,27 +714,49 @@ namespace UltraPuck.Game
         /// A bot on <paramref name="team"/> just got the puck: hand a random human on that team over to them (so you
         /// always drive whoever has it when you're the only person, or one of you at random when there are several).
         /// </summary>
-        public bool AutoSwapToCarrier(int carrier, int team)
+        public bool AutoSwapToCarrier(int carrier, GameState state)
         {
-            if (carrier < 0 || carrier >= Slots.Count || !Slots[carrier].Demo) return false;
+            if (state == null || carrier < 0 || carrier >= Slots.Count || carrier >= state.Players.Length) return false;
+            if (!Slots[carrier].Demo) return false;
+            var team = state.Players[carrier].Team & 1;
             var humans = new List<int>();
-            for (var i = 0; i < Slots.Count; i++)
-                if (!Slots[i].Demo && (Slots[i].Team & 1) == (team & 1)) humans.Add(i);
+            for (var i = 0; i < Math.Min(Slots.Count, state.Players.Length); i++)
+            {
+                if (Slots[i].Demo) continue;
+                if ((state.Players[i].Team & 1) != team) continue;
+                humans.Add(i);
+            }
             if (humans.Count == 0) return false;
             var who = humans[UnityEngine.Random.Range(0, humans.Count)];
             SwapControl(who, carrier);
             return true;
         }
 
-        /// <summary>Swap binding pressed (this frame, or latched) on this slot's devices.</summary>
+        /// <summary>
+        /// Swap-to-bot binding, plus Square / X and F as a fallback so teammate swap still works if the rebind was
+        /// cleared or shared with another action.
+        /// </summary>
         private static bool SwapPressed(Slot s, bool pressedThisFrame)
         {
-            return One(s.Device,
-                       g => pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Swap) : Controls.PadHeld(g, Controls.Act.Swap),
-                       k => pressedThisFrame ? Controls.KeyPressed(k, Controls.Act.Swap) : Controls.KeyHeld(k, Controls.Act.Swap))
-                || One(s.Extra,
-                       g => pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Swap) : Controls.PadHeld(g, Controls.Act.Swap),
-                       k => pressedThisFrame ? Controls.KeyPressed(k, Controls.Act.Swap) : Controls.KeyHeld(k, Controls.Act.Swap));
+            return SwapOn(s.Device, pressedThisFrame) || SwapOn(s.Extra, pressedThisFrame);
+        }
+
+        private static bool SwapOn(InputDevice d, bool pressedThisFrame)
+        {
+            if (d == null) return false;
+            var g = d as Gamepad;
+            if (g != null)
+            {
+                if (pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Swap) : Controls.PadHeld(g, Controls.Act.Swap)) return true;
+                // hard fallback: X / Square always cycles bots (even if Controls.Act.Swap was rebound away)
+                var west = g.buttonWest;
+                return west != null && (pressedThisFrame ? west.wasPressedThisFrame : west.isPressed);
+            }
+            var kb = d as Keyboard;
+            if (kb == null) return false;
+            if (pressedThisFrame ? Controls.KeyPressed(kb, Controls.Act.Swap) : Controls.KeyHeld(kb, Controls.Act.Swap)) return true;
+            var f = kb.fKey;
+            return f != null && (pressedThisFrame ? f.wasPressedThisFrame : f.isPressed);
         }
 
         /// <summary>Once per tick: everyone's controls, in slot order. <paramref name="state"/> is only read by computer players.</summary>

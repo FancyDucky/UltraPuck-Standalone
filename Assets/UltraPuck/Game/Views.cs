@@ -1109,6 +1109,11 @@ namespace UltraPuck.Game
         private readonly Transform _parent;
         private readonly List<GameObject> _pool = new List<GameObject>();
         private readonly List<string> _keys = new List<string>();
+        private readonly List<MeshFilter> _lines = new List<MeshFilter>();
+        private readonly List<Mesh> _lineMeshes = new List<Mesh>();
+        private readonly List<Vector3> _lineVerts = new List<Vector3>(64);
+        private readonly List<int> _lineTris = new List<int>(128);
+        private readonly List<Color> _lineCols = new List<Color>(64);
 
         public RockViews(Transform parent) { _parent = parent; }
 
@@ -1140,6 +1145,70 @@ namespace UltraPuck.Game
                 _pool[k].transform.localPosition = new Vector3(rk.Pos.X.ToFloat(), rk.Pos.Y.ToFloat(), 0f);
             }
             for (var k = s.Rocks.Length; k < _pool.Count; k++) if (_pool[k] != null && _pool[k].activeSelf) _pool[k].SetActive(false);
+
+            // optional dotted line from each Swap-capable owner to their rock (one reused mesh each — no Destroy)
+            var lineN = 0;
+            if (Settings.RockLine)
+            {
+                for (var k = 0; k < s.Rocks.Length; k++)
+                {
+                    var rk = s.Rocks[k];
+                    var o = rk.Owner;
+                    if (o < 0 || o >= s.Players.Length || s.Players[o].Stats.Swap <= 0) continue;
+                    var from = V.Of(s.Players[o].Pos);
+                    var to = V.Of(rk.Pos);
+                    var col = colourOf(o);
+                    col.a = 0.35f;
+                    SetDashedLine(lineN, from, to, col);
+                    lineN++;
+                }
+            }
+            for (var k = lineN; k < _lines.Count; k++) if (_lines[k] != null && _lines[k].gameObject.activeSelf) _lines[k].gameObject.SetActive(false);
+        }
+
+        private void SetDashedLine(int i, Vector2 from, Vector2 to, Color colour)
+        {
+            while (_lines.Count <= i)
+            {
+                var mesh = new Mesh { name = "RockLine" };
+                var mf = Draw.Make("RockLine", _parent, mesh, 8);
+                _lines.Add(mf);
+                _lineMeshes.Add(mesh);
+            }
+            var delta = to - from;
+            var len = delta.magnitude;
+            if (len < 0.35f) { _lines[i].gameObject.SetActive(false); return; }
+            var dir = delta / len;
+            var n = new Vector2(-dir.y, dir.x) * 0.032f;
+            const float dash = 0.38f, gap = 0.26f;
+            _lineVerts.Clear();
+            _lineTris.Clear();
+            _lineCols.Clear();
+            var t = 0.45f;
+            var end = len - 0.4f;
+            while (t < end)
+            {
+                var a = from + dir * t;
+                var b = from + dir * Mathf.Min(t + dash, end);
+                if ((b - a).sqrMagnitude > 0.0001f)
+                {
+                    var i0 = _lineVerts.Count;
+                    _lineVerts.Add(a + n); _lineVerts.Add(a - n); _lineVerts.Add(b - n); _lineVerts.Add(b + n);
+                    _lineTris.Add(i0); _lineTris.Add(i0 + 2); _lineTris.Add(i0 + 1);
+                    _lineTris.Add(i0); _lineTris.Add(i0 + 3); _lineTris.Add(i0 + 2);
+                    for (var c = 0; c < 4; c++) _lineCols.Add(colour);
+                }
+                t += dash + gap;
+            }
+            var m = _lineMeshes[i];
+            m.Clear();
+            if (_lineVerts.Count == 0) { _lines[i].gameObject.SetActive(false); return; }
+            m.SetVertices(_lineVerts);
+            m.SetTriangles(_lineTris, 0);
+            m.SetColors(_lineCols);
+            m.RecalculateBounds();
+            _lines[i].sharedMesh = m;
+            _lines[i].gameObject.SetActive(true);
         }
     }
 }
