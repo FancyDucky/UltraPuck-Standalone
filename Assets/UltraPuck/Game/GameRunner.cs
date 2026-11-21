@@ -585,7 +585,17 @@ namespace UltraPuck.Game
             var minHalfHeight = Mathf.Lerp(7.5f, 14f, zoom); // the closest it gets
 
             Vector2 lo = mapMin, hi = mapMax;
-            if (follow && _players.Count > 0)
+            var goalHero = GoalZoomHero();
+            if (goalHero)
+            {
+                // tight on the scorer alone and keep following them (puck stays in the net — don't average with it)
+                var at = V.Of3(_players[_state.LastGoalPlayer].Root.transform.position);
+                var pad = 3.2f;
+                lo = at - Vector2.one * pad;
+                hi = at + Vector2.one * pad;
+                minHalfHeight = 3.6f;
+            }
+            else if (follow && _players.Count > 0)
             {
                 lo = hi = V.Of3(_puck.Root.transform.position);
                 foreach (var p in _players)
@@ -599,7 +609,7 @@ namespace UltraPuck.Game
 
             // Charge Zoom: while someone on this PC charges a shot, pull back until the goal they're attacking is in view
             var goal = Vector2.zero; var charge = 0f;
-            var zooming = follow && Settings.ChargeZoom && LocalCharge(out goal, out charge);
+            var zooming = follow && !goalHero && Settings.ChargeZoom && LocalCharge(out goal, out charge);
             if (zooming)
             {
                 var gLo = Vector2.Min(lo, goal - Vector2.one * 2.5f);
@@ -621,16 +631,30 @@ namespace UltraPuck.Game
             var halfW = size * aspect;
             var halfH = size * keep;
             var c = (lo + hi) / 2f;
-            c.x = halfW * 2f >= mapMax.x - mapMin.x ? (mapMin.x + mapMax.x) / 2f : Mathf.Clamp(c.x, mapMin.x + halfW, mapMax.x - halfW);
-            c.y = halfH * 2f >= mapMax.y - mapMin.y ? (mapMin.y + mapMax.y) / 2f : Mathf.Clamp(c.y, mapMin.y + halfH, mapMax.y - halfH);
+            if (goalHero)
+            {
+                // stay locked on the scorer — never jump the view to rink centre
+                if (halfW * 2f < mapMax.x - mapMin.x) c.x = Mathf.Clamp(c.x, mapMin.x + halfW, mapMax.x - halfW);
+                if (halfH * 2f < mapMax.y - mapMin.y) c.y = Mathf.Clamp(c.y, mapMin.y + halfH, mapMax.y - halfH);
+            }
+            else
+            {
+                c.x = halfW * 2f >= mapMax.x - mapMin.x ? (mapMin.x + mapMax.x) / 2f : Mathf.Clamp(c.x, mapMin.x + halfW, mapMax.x - halfW);
+                c.y = halfH * 2f >= mapMax.y - mapMin.y ? (mapMin.y + mapMax.y) / 2f : Mathf.Clamp(c.y, mapMin.y + halfH, mapMax.y - halfH);
+            }
             var pos = new Vector2(c.x, c.y + size * ScoreBarShare); // shift up so the score bar sits over empty space
             pos += _shotNudge;
 
-            if (snap) { _camPos = pos; _camSize = size; _camVel = Vector2.zero; _camSizeVel = 0f; }
+            if (snap || (goalHero && _goalZoomSnap))
+            {
+                _camPos = pos; _camSize = size; _camVel = Vector2.zero; _camSizeVel = 0f;
+                if (goalHero) _goalZoomSnap = false;
+            }
             else
             {
                 var smooth = Mathf.Lerp(0.12f, 0.8f, Settings.CameraSmoothing);
                 if (zooming) smooth *= 0.5f; // pulling back for a shot shouldn't lag behind it
+                if (goalHero) smooth = 0.06f; // stick to the scorer as they fly back
                 _camPos = Vector2.SmoothDamp(_camPos, pos, ref _camVel, smooth, Mathf.Infinity, Time.unscaledDeltaTime);
                 _camSize = Mathf.SmoothDamp(_camSize, size, ref _camSizeVel, smooth * 1.3f, Mathf.Infinity, Time.unscaledDeltaTime);
             }
@@ -642,6 +666,17 @@ namespace UltraPuck.Game
             _cam.transform.position = new Vector3(_camPos.x + jolt.x, _camPos.y + jolt.y, -10f);
             _cam.orthographicSize = _camSize;
             Shader.SetGlobalVector("_UltraPuckCam", new Vector4(_camPos.x, _camPos.y, 0f, 0f)); // the ice's reflection moves with the view
+        }
+
+        /// <summary>Live celebration before the replay wipe: frame the player who scored.</summary>
+        private bool GoalZoomHero()
+        {
+            if (_state == null || _puck == null || _puck.Root == null) return false;
+            if (_state.Phase != Phase.Scored) return false;
+            if (_replay != null || _wipe.Active || _replayExit) return false;
+            if (Time.unscaledTime >= _goalZoomUntil) return false;
+            var i = _state.LastGoalPlayer;
+            return i >= 0 && i < _players.Count && _players[i].Root != null;
         }
 
         private void Update()
@@ -997,14 +1032,12 @@ namespace UltraPuck.Game
                 if (_menus.IsOpen) _menus.Close();
                 if (_mainMenu.Current != MainMenu.Page.Friends) _mainMenu.Show(MainMenu.Page.OnlineLobby);
                 _mainMenu.Message = s.Problem;
-                if (_play.Typing) { _play.Tick(); AttractUpdate(); return; } // typing a name: the keyboard has the controls
                 _mainMenu.Tick(); // before joining: pressing A to join mustn't also press the highlighted button
                 if (_mode != Mode.Online || _session == null) return;
                 var busy = _mainMenu.LobbyBusy; // the options panel or the invite page is on top
                 if (!busy)
                 {
                     _local.LobbyUpdate();
-                    if (_local.NameRequest != null) { _play.OpenKeyboard(_local.NameRequest); _local.NameRequest = null; }
                     if (_local.LeaveLobbyHeld()) { Sound.Back(); LeaveOnline(null); return; }
                 }
                 var mine = new List<KeyValuePair<string, int>>();
@@ -1381,6 +1414,8 @@ namespace UltraPuck.Game
         private bool _replayExit;
         private bool _replayStarted;
         private float _replayStartAt;
+        private float _goalZoomUntil;
+        private bool _goalZoomSnap;
         private int _goalTick;
         private Phase _lastPhase;
         private readonly ReplayTransition _wipe = new ReplayTransition();
@@ -1423,7 +1458,9 @@ namespace UltraPuck.Game
                 _replayStarted = false;
                 _replayHoldA = _replayHoldB = null;
                 _wipeStyle = ReplayTransition.PickStyle(_goalTick + _state.LastScorer * 17);
-                _replayStartAt = Time.unscaledTime + 0.95f; // GOAL! beat, then wipe in
+                _replayStartAt = Time.unscaledTime + 3f; // zoom on the scorer, then wipe in
+                _goalZoomUntil = _replayStartAt;
+                _goalZoomSnap = true; // jump onto them the first frame, then follow
             }
 
             if (_replayPending && Time.unscaledTime >= _replayStartAt)

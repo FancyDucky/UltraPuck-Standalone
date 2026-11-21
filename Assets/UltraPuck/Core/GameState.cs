@@ -280,6 +280,8 @@ namespace UltraPuck.Core
         public Fix PhaseTime;
         /// <summary>Team that scored last (-1 = nobody yet), or the winner once the game is over.</summary>
         public int LastScorer = -1;
+        /// <summary>Player who scored last (-1 = nobody yet). Used to zoom the camera on them after a goal.</summary>
+        public int LastGoalPlayer = -1;
         /// <summary>A timed match: time left on the clock (counts down only while the puck is in play).</summary>
         public Fix Clock;
         /// <summary>A timed match ended level: the next goal wins.</summary>
@@ -332,7 +334,7 @@ namespace UltraPuck.Core
         {
             ulong h = 14695981039346656037UL;
             Mix(ref h, Clock); Mix(ref h, Overtime ? 1 : 0); Mix(ref h, Paused ? 1 : 0);
-            Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, (long)Rng);
+            Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, LastGoalPlayer); Mix(ref h, (long)Rng);
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); }

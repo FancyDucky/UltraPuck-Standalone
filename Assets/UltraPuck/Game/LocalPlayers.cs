@@ -219,10 +219,10 @@ namespace UltraPuck.Game
         public void UnreadyAll() { foreach (var s in Slots) s.Ready = false; }
 
         /// <summary>
-        /// Lobby: join with A / Space; left / right switches team, Y / N types a name, X / M changes the symbol, A again
-        /// readies up. Readied, up / down picks a bot, left / right moves it to the other team, X / M changes its symbol,
+        /// Lobby: join with A / Space; left / right switches team, X / M changes the symbol, A again readies up.
+        /// Readied, up / down picks a bot, left / right moves it to the other team, X / M changes its symbol,
         /// LB / RB (- / =) removes or adds one, and B / Escape un-readies. B / Escape before that gives up the seat;
-        /// held by someone without a seat, it leaves.
+        /// held by someone without a seat, it leaves. (Renaming from the lobby is off for now.)
         /// </summary>
         public void LobbyUpdate()
         {
@@ -252,22 +252,19 @@ namespace UltraPuck.Game
             NobodyLeaving = Mathf.Clamp01(nobody / HoldToLeave);
             PairDevices();
             BotRequest = 0;
+            NameRequest = null; // renaming from the lobby is off for now
             foreach (var s in Slots.ToArray())
             {
                 if (s.Demo || s.Typing || !Slots.Contains(s)) continue;
                 var nav = Nav(s);
                 // either of the player's devices (the keyboard and a controller, when they share)
                 var confirm = s.JoinedFrame != Time.frameCount && Any(s, g => g.buttonSouth.wasPressedThisFrame, k => k.spaceKey.wasPressedThisFrame);
-                var namer = Pressed(s, g => g.buttonNorth.wasPressedThisFrame, k => k.nKey.wasPressedThisFrame);
-                var name = namer != null;
                 var symbol = Any(s, g => g.buttonWest.wasPressedThisFrame, k => k.mKey.wasPressedThisFrame);
                 var less = Any(s, g => g.leftShoulder.wasPressedThisFrame, k => k.minusKey.wasPressedThisFrame);
                 var more = Any(s, g => g.rightShoulder.wasPressedThisFrame, k => k.equalsKey.wasPressedThisFrame);
-                if (name) s.TypingDevice = namer;
                 if (!s.Ready)
                 {
                     if (nav.x != 0) { s.Colour = ((s.Colour + nav.x) % Palette.Choosable + Palette.Choosable) % Palette.Choosable; AssignTeams(); Sound.Step(nav.x); }
-                    if (name) { NameRequest = s; Sound.Select(); }
                     if (symbol) { s.Symbol = (s.Symbol + 1) % Symbols.Count; Sound.Move(); }
                     if (confirm) { s.Ready = true; s.Cursor = 0; Sound.Select(); }
                     continue;

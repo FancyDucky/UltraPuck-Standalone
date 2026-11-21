@@ -58,7 +58,6 @@ namespace UltraPuck.Game
             if (Local.SettingsPressed()) { Sound.Select(); Runner.OpenSettings(); return; }
             Local.LobbyUpdate();
             if (Local.LeaveLobbyHeld()) { Sound.Back(); Runner.GoMainMenu(); return; }
-            if (Local.NameRequest != null) { OpenKeyboard(Local.NameRequest); Local.NameRequest = null; return; }
             if (Local.HumanCount > 0 && Local.StartPressed()) Continue();
         }
 
@@ -313,7 +312,7 @@ namespace UltraPuck.Game
             var anyNot = false;
             foreach (var s in local.Slots) { if (s.Demo) continue; if (s.Ready) anyReady = true; else anyNot = true; }
             if (local.HumanCount == 0) return "{join} Join      Hold {leave} Leave      {settings} " + "Options";
-            var notReady = "{join} Ready      {side} Switch team      {profile} Name      {shape} Symbol      {leave} Leave seat";
+            var notReady = "{join} Ready      {side} Switch team      {shape} Symbol      {leave} Leave seat";
             var ready = canEditBots && local.Bots != null
                 ? "{nav} Pick a bot      {side} Its team      {shape} Its symbol      {bots} Remove / add bot      {leave} Not ready"
                 : "{leave} Not ready";

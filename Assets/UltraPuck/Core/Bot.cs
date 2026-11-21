@@ -183,33 +183,38 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// Team Vote: follow whatever most humans on the team are on (a locked pick, else their hover). Alone with
-        /// other bots (or no Team Vote): take the strongest card by tier (first on a tie). Returns the 1-based pick, or 0.
+        /// Team Vote: follow whatever most humans on the team are on (a locked pick, else their hover). If no human is
+        /// on this team yet (1v1 bot side, or all-bot team), or Team Vote is off: take the strongest card by tier
+        /// (first on a tie). Returns the 1-based pick, or 0 while waiting for a human teammate to look.
         /// </summary>
         private static byte PickCard(Simulation sim, GameState s, PlayerState me)
         {
             if (me.Offer.Length == 0 || me.Picked >= 0 || sim.Cards == null) return 0;
             if (sim.T.TeamVote)
             {
+                var humans = false;
                 var votes = new int[me.Offer.Length];
-                var any = false;
+                var anyLook = false;
                 foreach (var p in s.Players)
                 {
-                    if (p.Team != me.Team || p.Bot || p.Offer.Length == 0) continue;
+                    if (p.Team != me.Team || p.Offer.Length == 0) continue;
+                    if (!p.Bot) humans = true;
+                    if (p.Bot) continue;
                     var idx = -1;
                     if (p.Picked >= 0) idx = System.Array.IndexOf(me.Offer, p.Picked);
                     else if (p.Hover >= 1 && p.Hover <= me.Offer.Length) idx = p.Hover - 1;
                     if (idx < 0) continue;
                     votes[idx]++;
-                    any = true;
+                    anyLook = true;
                 }
-                if (any)
+                if (humans)
                 {
+                    if (!anyLook) return 0; // wait for a human teammate to look / lock
                     var best = 0;
                     for (var k = 1; k < votes.Length; k++) if (votes[k] > votes[best]) best = k;
                     return (byte)(best + 1);
                 }
-                return 0; // wait until a human looks at a card
+                // no human on this team: pick by tier like a normal bot pick
             }
             var tier = 0;
             for (var k = 1; k < me.Offer.Length; k++)

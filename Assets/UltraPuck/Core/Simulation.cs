@@ -986,11 +986,94 @@ namespace UltraPuck.Core
                 var scorer = 1 - g.Team;
                 s.Score[scorer]++;
                 s.LastScorer = scorer;
+                s.LastGoalPlayer = WhoScored(s, scorer);
+                var blastAt = s.PuckPos;
                 if (s.Carrier >= 0) { s.PuckVel = s.Players[s.Carrier].Vel; s.Carrier = -1; }
                 s.Phase = Phase.Scored;
                 s.PhaseTime = T.CelebrateTime;
                 foreach (var p in s.Players) p.SkipVote = false;
+                // goal explosion: shove everyone and loose rocks away from the puck (puck stays in the net)
+                BlastFrom(s, blastAt, T.GoalBlastRange, T.DashKnockback * T.GoalBlastPush, -1, true, false, true);
                 return;
+            }
+        }
+
+        /// <summary>Player to celebrate: the last passer/shooter on the scoring team, else whoever on that team is nearest the puck.</summary>
+        private static int WhoScored(GameState s, int team)
+        {
+            if (s.PassFrom >= 0 && s.PassFrom < s.Players.Length && s.Players[s.PassFrom].Team == team) return s.PassFrom;
+            if (s.Carrier >= 0 && s.Carrier < s.Players.Length && s.Players[s.Carrier].Team == team) return s.Carrier;
+            var best = -1;
+            var bestD = Fix.Zero;
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                if (s.Players[i].Team != team) continue;
+                var d = (s.Players[i].Pos - s.PuckPos).SqrLength;
+                if (best < 0 || d < bestD) { best = i; bestD = d; }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Shove players (except <paramref name="skipPlayer"/>), and optionally the loose puck and loose Swap rocks,
+        /// away from <paramref name="at"/>. Used by the goal explosion and Shockwave.
+        /// </summary>
+        private void BlastFrom(GameState s, FixVec2 at, Fix radius, Fix push, int skipPlayer, bool markHit, bool shovePuck, bool shoveRocks)
+        {
+            if (radius.Raw <= 0 || push.Raw <= 0) return;
+            for (var j = 0; j < s.Players.Length; j++)
+            {
+                if (j == skipPlayer) continue;
+                var q = s.Players[j];
+                var d = q.Pos - at;
+                var dist = d.Length;
+                if (dist > radius + RadiusOf(q)) continue;
+                FixVec2 n;
+                if (dist.Raw > 0) n = d / dist;
+                else
+                {
+                    var bits = s.NextRandom();
+                    n = new FixVec2((bits & 1) == 0 ? Fix.One : -Fix.One, (bits & 2) == 0 ? Fix.One : -Fix.One).Normalized;
+                }
+                var falloff = Fix.One - Fix.Half * Fix.Clamp01(dist / radius);
+                q.Vel += n * (push * falloff);
+                if (markHit) Hit(q, -n, Fix.Half);
+            }
+            if (shovePuck && s.Carrier < 0)
+            {
+                var d = s.PuckPos - at;
+                var dist = d.Length;
+                if (dist <= radius + T.PuckRadius)
+                {
+                    FixVec2 n;
+                    if (dist.Raw > 0) n = d / dist;
+                    else
+                    {
+                        var bits = s.NextRandom();
+                        n = new FixVec2((bits & 1) == 0 ? Fix.One : -Fix.One, (bits & 2) == 0 ? Fix.One : -Fix.One).Normalized;
+                    }
+                    var falloff = Fix.One - Fix.Half * Fix.Clamp01(dist / radius);
+                    s.PuckVel += n * (push * falloff);
+                }
+            }
+            if (!shoveRocks) return;
+            for (var r = 0; r < s.Rocks.Length; r++)
+            {
+                var rk = s.Rocks[r];
+                if (rk.Carrier >= 0) continue; // carried rocks ride with their player
+                var d = rk.Pos - at;
+                var dist = d.Length;
+                if (dist > radius + T.RockRadius) continue;
+                FixVec2 n;
+                if (dist.Raw > 0) n = d / dist;
+                else
+                {
+                    var bits = s.NextRandom();
+                    n = new FixVec2((bits & 1) == 0 ? Fix.One : -Fix.One, (bits & 2) == 0 ? Fix.One : -Fix.One).Normalized;
+                }
+                var falloff = Fix.One - Fix.Half * Fix.Clamp01(dist / radius);
+                rk.Vel += n * (push * falloff);
+                s.Rocks[r] = rk;
             }
         }
 
@@ -1517,7 +1600,8 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// Shockwave (utility): shove every other player away from you. Ready on Triangle / Y when the card is held.
+        /// Shockwave (utility): shove every other player, the loose puck, and loose Swap rocks away from you.
+        /// Ready on Triangle / Y when the card is held.
         /// </summary>
         private void FireShockwave(GameState s, int i)
         {
@@ -1527,25 +1611,7 @@ namespace UltraPuck.Core
             a.ShockCooldown = T.ShockCooldown;
             var radius = RadiusOf(a) * T.ShockRange * (Fix.One + Fix.Ratio(15, 100) * (copies - 1));
             var push = T.DashKnockback * T.ShockPush * (Fix.One + Fix.Ratio(1, 10) * (copies - 1));
-            for (var j = 0; j < s.Players.Length; j++)
-            {
-                if (j == i) continue;
-                var q = s.Players[j];
-                var d = q.Pos - a.Pos;
-                var dist = d.Length;
-                if (dist > radius + RadiusOf(q)) continue;
-                // on top of you: a fair diagonal shove (no favoured axis)
-                FixVec2 n;
-                if (dist.Raw > 0) n = d / dist;
-                else
-                {
-                    var bits = s.NextRandom();
-                    n = new FixVec2((bits & 1) == 0 ? Fix.One : -Fix.One, (bits & 2) == 0 ? Fix.One : -Fix.One).Normalized;
-                }
-                var falloff = Fix.One - Fix.Half * Fix.Clamp01(dist / radius);
-                q.Vel += n * (push * falloff);
-                Hit(q, -n, Fix.Half);
-            }
+            BlastFrom(s, a.Pos, radius, push, i, true, true, true);
             a.Shocks++;
             a.ShockAt = a.Pos;
             a.ShockRadius = radius;

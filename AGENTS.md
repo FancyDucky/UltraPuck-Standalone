@@ -81,6 +81,24 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.33 (Composer, 20 Nov 2026): **scorer cam follow; lobby rename off; goal blast + Shockwave rocks.**
+  Goal zoom centres and follows the scorer only (snap then stick). Lobby name keyboard disabled (hints too).
+  Goal explosion shove + LastGoalPlayer; Shockwave shoves puck/rocks; 3 s before replay; thinner horizontal wipe.
+  **NetSession.Version 37.** GitHub release v0.1.33.
+  Files: Core + Game (camera, lobby, wipe) + tests; this file.
+  Checked: 111 tests (106 pass, 5 skipped), Windows + Linux builds, release published.
+- After 0.1.32, not released (Composer, 20 Nov 2026): **goal blast + scorer zoom; thinner wipe; Shockwave
+  shoves puck/rocks.** Goal explosion shoves everyone (and loose Swap rocks) away from the net; `LastGoalPlayer`
+  remembered. Camera zooms on the scorer for 3 s before the replay wipe (`ReplaySkipFrom` 3 s). Horizontal wipe
+  uses thinner stripes (7). Shockwave also shoves the loose puck and loose rocks. **NetSession.Version 37.**
+  Files: `Core/Simulation.cs`, `GameState.cs`, `Tuning.cs`, `Net/NetSession.cs`; `Game/GameRunner.cs`,
+  `ReplayTransition.cs`; tests; this file.
+  Checked: 111 tests (106 pass, 5 skipped), Windows build.
+- After 0.1.32, not released (Composer, 20 Nov 2026): **card absorb on team vote; bot-alone team picks.**
+  Team Vote leave dives the locked card into the player again (absorb + ripple). Bots with no human teammate
+  pick by tier so 1v1 isn't stuck waiting. **NetSession.Version 36.**
+  Files: `Game/CardScreen.cs`; `Core/Bot.cs`, `Net/NetSession.cs`; `Tests/CardMechanicsTests.cs`; this file.
+  Checked: 109 tests (104 pass, 5 skipped), Windows build.
 - 0.1.32 (Composer, 20 Nov 2026): **team-vote bots follow humans; grey replay wipe; rock = owner look.**
   Team Vote tallies humans only (bots copy majority hover/pick). Replay blinds are grey / dark grey. Swap rocks
   show the thrower's symbol on a darker shade of their team colour. **NetSession.Version 35.** GitHub release

@@ -652,6 +652,28 @@ namespace UltraPuck.Tests
         }
 
         [Test]
+        public void GoalExplosionPushesEveryoneAway()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = sim.NewGame(new[] { 0, 1 });
+            PlayNow(s);
+            var g = sim.Map.Goals.Find(x => x.Team == 1);
+            // stand near the net (test rink goals are around ±24)
+            s.Players[0].Pos = new FixVec2(g.Min.X - Fix.FromInt(4), Fix.Zero);
+            s.Players[0].Vel = FixVec2.Zero;
+            s.Players[1].Pos = new FixVec2(g.Min.X - Fix.FromInt(2), Fix.FromInt(2));
+            s.Players[1].Vel = FixVec2.Zero;
+            s.PassFrom = 0;
+            s.PuckPos = new FixVec2(g.Min.X + Fix.Half, Fix.Zero);
+            s.PuckVel = FixVec2.Zero;
+            sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(Phase.Scored, s.Phase);
+            Assert.AreEqual(0, s.LastGoalPlayer, "the shooter is remembered");
+            Assert.Less(s.Players[0].Vel.X.ToDouble(), -2.0, "scorer shoved back from the net");
+            Assert.Less(s.Players[1].Vel.X.ToDouble(), -1.0, "defender shoved away too");
+        }
+
+        [Test]
         public void EveryonePressingShootSkipsTheReplayAndBotsAgree()
         {
             var tuning = new Tuning { Replays = true, CelebrateTime = Fix.FromInt(11) };
@@ -667,7 +689,7 @@ namespace UltraPuck.Tests
             // before the replay starts, presses don't count
             sim.Step(s, new[] { Press(PlayerInput.ShootCheck), Press(PlayerInput.ShootCheck), default(PlayerInput) });
             Assert.IsFalse(s.Players[0].SkipVote);
-            for (var t = 0; t < 120 * 2; t++) sim.Step(s, none);
+            for (var t = 0; t < 120 * 4; t++) sim.Step(s, none); // 3 s zoom, then skip votes open
             // one person wants to skip: it keeps going
             sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput), default(PlayerInput) });
             Assert.AreEqual(Phase.Scored, s.Phase);

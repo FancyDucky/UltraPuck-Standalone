@@ -351,15 +351,39 @@ namespace UltraPuck.Game
             if (!anyLeft && since > 1.1f) LeaveTeamVote();
         }
 
-        /// <summary>Team Vote: put the cards away without diving into one player (everyone already locked their vote).</summary>
+        /// <summary>
+        /// Team Vote: put the cards away. Locals: the card they locked (first voter) dives into that player and
+        /// absorbs like a normal pick. Watching the other side: cards just leave (no dive).
+        /// </summary>
         private void LeaveTeamVote()
         {
-            _chosen = -1;
+            var chosen = -1;
+            if (!_watching)
+            {
+                byte pick;
+                if (_voters.Count > 0 && _ready.TryGetValue(_voters[0], out pick) && pick >= 1)
+                    chosen = pick - 1;
+                else if (_focus >= 0 && _focus < _cards.Count)
+                    chosen = _focus;
+            }
+            _chosen = chosen;
             _absorbed = false;
             _stage = Stage.Leaving;
             _stageAt = Time.unscaledTime;
+            // confirm already played CardPick — just the dive / leave motion here
             for (var k = 0; k < _cards.Count; k++)
-                _cards[k].Delay = Time.unscaledTime - _stageAt + 0.05f * k;
+            {
+                var c = _cards[k];
+                if (k == chosen)
+                {
+                    c.ScaleVel += 7f;
+                    c.RotVel.z += (k % 2 == 0 ? 1f : -1f) * 140f;
+                    c.SweepAt = Time.unscaledTime;
+                    c.GlowTarget = 1.2f;
+                    Burst(c);
+                }
+                else c.Delay = Time.unscaledTime - _stageAt + 0.05f * Mathf.Abs(k - Mathf.Max(0, chosen));
+            }
         }
 
         /// <summary>Does any team-vote cursor sit on card <paramref name="k"/>?</summary>

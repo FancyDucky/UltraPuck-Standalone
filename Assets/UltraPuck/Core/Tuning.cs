@@ -106,8 +106,10 @@ namespace UltraPuck.Core
         public Fix GunSpeed = Fix.FromInt(38), GunLife = Fix.One, GunCooldown = Fix.FromInt(2), GunStun = Fix.Ratio(5, 4), ShotRadius = Fix.Ratio(6, 25);
         /// <summary>Invisibility: how long, and the cooldown.</summary>
         public Fix InvisTime = Fix.FromInt(5), InvisCooldown = Fix.FromInt(15);
-        /// <summary>Shockwave (utility): cooldown; reach in player radii; push (share of a check's knockback) — shoves every other player away.</summary>
+        /// <summary>Shockwave (utility): cooldown; reach in player radii; push (share of a check's knockback) — shoves every other player, the loose puck, and loose Swap rocks away.</summary>
         public Fix ShockCooldown = Fix.FromInt(6), ShockRange = Fix.FromInt(5), ShockPush = Fix.Two;
+        /// <summary>Goal explosion: shove everyone (and loose rocks) away from the puck; reach in world units, push as a share of a check's knockback.</summary>
+        public Fix GoalBlastRange = Fix.FromInt(12), GoalBlastPush = Fix.FromInt(3);
         /// <summary>
         /// Ice Trail: the puck lays ice for up to <see cref="IceTime"/>. The start of the trail lasts
         /// <see cref="IceLife"/>, then the melting creeps along it <see cref="IceMeltPace"/> times slower than it was
@@ -157,7 +159,7 @@ namespace UltraPuck.Core
         /// <summary>Goals are shown again (the celebration is long enough for the replay; the replay itself is just drawing).</summary>
         public bool Replays;
         /// <summary>How long after a goal the replay starts; from then on, everyone pressing shoot skips it.</summary>
-        public Fix ReplaySkipFrom = Fix.Ratio(3, 2);
+        public Fix ReplaySkipFrom = Fix.FromInt(3);
 
         /// <summary>
         /// Free play: practice with no winner. Goals still count, but only the puck goes back to its spot (players

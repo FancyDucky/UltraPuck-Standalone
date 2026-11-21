@@ -17,7 +17,8 @@ namespace UltraPuck.Game
         private Color[] _colours = GreyStripeColours();
         private float _t;
         private float _holdLeft;
-        private const int Stripes = 4;
+        private const int DiagonalStripes = 4;
+        private const int HorizontalStripes = 7; // thinner lines than the diagonal wipe
         private const float CoverSecs = 0.55f;
         private const float RevealSecs = 0.55f;
         private const float HoldSecs = 0.08f;
@@ -110,8 +111,9 @@ namespace UltraPuck.Game
                 w += pad * 2f;
                 h += pad * 2f;
             }
-            var stripeH = h / Stripes;
-            for (var i = 0; i < Stripes; i++)
+            var stripes = diagonal ? DiagonalStripes : HorizontalStripes;
+            var stripeH = h / stripes;
+            for (var i = 0; i < stripes; i++)
             {
                 // stagger: top stripes lead slightly
                 var local = Mathf.Clamp01((cover - i * 0.06f) / 0.78f);

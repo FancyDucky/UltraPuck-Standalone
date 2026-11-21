@@ -81,6 +81,19 @@ namespace UltraPuck.Tests
             Assert.AreEqual(humanPick, s.Players[2].Cards[s.Players[2].Cards.Length - 1], "other bot too");
         }
 
+        [Test]
+        public void TeamVoteBotAlonePicksByTier()
+        {
+            // 1v1: bot's team has no human — must still pick (not wait forever)
+            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3 }, _lib);
+            var s = sim.NewGame(new[] { 0, 1 }, 3u);
+            s.Players[1].Bot = true;
+            sim.StartPicking(s, new[] { 1 });
+            var pick = Bot.Think(sim, s, 1).Pick;
+            Assert.Greater(pick, 0, "bot alone on the team picks straight away");
+            Assert.LessOrEqual(pick, s.Players[1].Offer.Length);
+        }
+
         /// <summary>Pylon goalies can be pushed around (they're heavier than a player), and go back to their spot at a face-off.</summary>
         [Test]
         public void PylonGoaliesCanBePushed()
@@ -303,6 +316,24 @@ namespace UltraPuck.Tests
             Assert.Greater(s.Players[0].ShockCooldown.ToDouble(), 5.5, "cooling down");
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput), default(PlayerInput) });
             Assert.AreEqual(1, s.Players[0].Shocks, "still cooling down: no second wave");
+        }
+
+        [Test]
+        public void ShockwaveAlsoPushesThePuckAndRocks()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.shockwave");
+            Play(s);
+            s.Players[0].Pos = At(0, -6);
+            s.Players[1].Pos = At(8, 0);
+            s.Carrier = -1;
+            s.PuckPos = At(1.2, -6);
+            s.PuckVel = FixVec2.Zero;
+            s.Rocks = new[] { new Rock { Pos = At(-1.2, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1 } };
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.AreEqual(1, s.Players[0].Shocks);
+            Assert.Greater(s.PuckVel.X.ToDouble(), 0.5, "puck shoved away");
+            Assert.Less(s.Rocks[0].Vel.X.ToDouble(), -0.5, "rock shoved away");
         }
 
         [Test]

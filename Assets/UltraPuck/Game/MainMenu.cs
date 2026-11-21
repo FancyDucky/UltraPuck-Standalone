@@ -498,7 +498,7 @@ namespace UltraPuck.Game
         {
             switch (Current)
             {
-                case Page.OnlineLobby: return "{join} Join      {side} Switch team      {profile} Name      {shape} Symbol      {leave} Leave seat      {settings} Options";
+                case Page.OnlineLobby: return "{join} Join      {side} Switch team      {shape} Symbol      {leave} Leave seat      {settings} Options";
                 case Page.JoinIp: return _typing ? "Type the address, then Enter      Esc: back" : "{confirm} Choose      {back} Back";
                 case Page.Main: return "{confirm} Choose";
                 case Page.Title: return "";
