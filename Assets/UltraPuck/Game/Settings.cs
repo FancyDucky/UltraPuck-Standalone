@@ -256,6 +256,13 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("team_vote", value ? 1 : 0); }
         }
 
+        /// <summary>Allow more than one utility card per player. Off (default): taking a new utility replaces the one you have.</summary>
+        public static bool MultiUtility
+        {
+            get { return PlayerPrefs.GetInt("multi_utility", 0) != 0; }
+            set { PlayerPrefs.SetInt("multi_utility", value ? 1 : 0); }
+        }
+
         /// <summary>How a match is won: 0 = first to <see cref="GoalsToWin"/> goals, 1 = most goals when <see cref="MatchMinutes"/> run out.</summary>
         public static int MatchMode
         {

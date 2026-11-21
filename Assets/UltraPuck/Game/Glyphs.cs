@@ -111,30 +111,42 @@ namespace UltraPuck.Game
     /// <summary>
     /// Hints with button pictures. Write the action in braces and it's drawn as the right button for whatever the
     /// person is using: "{confirm} Choose   {back} Back" shows an A and a B on an Xbox pad, a cross and a circle on
-    /// a PlayStation pad, or Enter and Esc keys on the keyboard.
+    /// a PlayStation pad, or Enter and Esc keys on the keyboard. Prefers Kenney Input Prompts from
+    /// StreamingAssets/InputPrompts when those files are present.
     /// </summary>
     internal static class Glyphs
     {
-        private enum B { South, East, West, North, LB, RB, Start, Select, LS, RS, DPad, DPadLR }
+        /// <summary>Controller face / shoulder / stick / d-pad used by hints and <see cref="InputIcons"/>.</summary>
+        public enum PadButton { South, East, West, North, LB, RB, Start, Select, LS, RS, DPad, DPadLR }
+
+        /// <summary>Controller button(s) for an action (uses the player's rebinds for shoot / charge / utility / swap).</summary>
+        public static PadButton[] PadButtons(string action) { return PadFor(action); }
+
+        /// <summary>Keyboard label(s) for an action (uses rebinds where they apply).</summary>
+        public static string[] KeyLabels(string action) { return KeysFor(action); }
 
         /// <summary>Controller button(s) for an action.</summary>
-        private static B[] PadFor(string action)
+        private static PadButton[] PadFor(string action)
         {
             switch (action)
             {
-                case "confirm": case "join": case "shoot": return new[] { B.South };
-                case "back": case "charge": case "leave": return new[] { B.East };
-                case "utility": case "freeplay": case "profile": return new[] { B.North };
-                case "shape": return new[] { B.West };
-                case "bots": return new[] { B.LB, B.RB };
-                case "start": case "menu": return new[] { B.Start };
-                case "settings": case "reset": return new[] { B.Select };
-                case "tabs": return new[] { B.LB, B.RB };
-                case "move": return new[] { B.LS };
-                case "aim": case "look": return new[] { B.RS };
-                case "side": return new[] { B.DPadLR };
-                case "nav": return new[] { B.DPad };
-                default: return new B[0];
+                case "confirm": case "join": return new[] { PadButton.South };
+                case "shoot": return new[] { InputIcons.FromControls(Controls.PadOf(Controls.Act.Shoot)) };
+                case "back": case "leave": return new[] { PadButton.East };
+                case "charge": return new[] { InputIcons.FromControls(Controls.PadOf(Controls.Act.Charge)) };
+                case "utility": return new[] { InputIcons.FromControls(Controls.PadOf(Controls.Act.Utility)) };
+                case "freeplay": case "profile": return new[] { PadButton.North };
+                case "shape": case "swap": return new[] { InputIcons.FromControls(Controls.PadOf(Controls.Act.Swap)) };
+                case "bots": return new[] { PadButton.LB, PadButton.RB };
+                case "start": case "menu": return new[] { PadButton.Start };
+                case "settings": return new[] { PadButton.Select };
+                case "reset": return new[] { InputIcons.FromControls(Controls.PadOf(Controls.Act.ResetPuck)) };
+                case "tabs": return new[] { PadButton.LB, PadButton.RB };
+                case "move": return new[] { PadButton.LS };
+                case "aim": case "look": return new[] { PadButton.RS };
+                case "side": return new[] { PadButton.DPadLR };
+                case "nav": return new[] { PadButton.DPad };
+                default: return new PadButton[0];
             }
         }
 
@@ -144,18 +156,19 @@ namespace UltraPuck.Game
             switch (action)
             {
                 case "confirm": return new[] { "Enter" };
-                case "join": case "shoot": return new[] { "Space" };
+                case "join": return new[] { "Space" };
+                case "shoot": return new[] { Controls.KeyName(Controls.KeyOf(Controls.Act.Shoot)) };
                 case "back": case "leave": return new[] { "Esc" };
-                case "charge": return new[] { "Shift" };
-                case "utility": return new[] { "E" };
+                case "charge": return new[] { Controls.KeyName(Controls.KeyOf(Controls.Act.Charge)) };
+                case "utility": return new[] { Controls.KeyName(Controls.KeyOf(Controls.Act.Utility)) };
                 case "freeplay": return new[] { "F" };
                 case "profile": return new[] { "N" };
-                case "shape": return new[] { "M" };
+                case "shape": case "swap": return new[] { Controls.KeyName(Controls.KeyOf(Controls.Act.Swap)) };
                 case "bots": return new[] { "-", "=" };
                 case "start": return new[] { "Enter" };
                 case "menu": return new[] { "Esc" };
                 case "settings": return new[] { "Tab" };
-                case "reset": return new[] { "R" };
+                case "reset": return new[] { Controls.KeyName(Controls.KeyOf(Controls.Act.ResetPuck)) };
                 case "tabs": return new[] { "Q", "E" };
                 case "move": return new[] { "WASD" };
                 case "aim": return new[] { "Arrows" };
@@ -251,12 +264,24 @@ namespace UltraPuck.Game
 
         private static float KeyWidth(string key, float h, int size)
         {
+            if (InputIcons.ForKeyLabel(key) != null) return h; // Kenney key art is square
             var w = Ui.Font(Mathf.RoundToInt(size * 0.8f), true).CalcSize(new GUIContent(key)).x + size * 0.7f;
             return Mathf.Max(w, h * 0.95f);
         }
 
         private static void DrawKey(Rect r, string key, float alpha, int size)
         {
+            var kenney = InputIcons.ForKeyLabel(key);
+            if (kenney != null && Event.current.type == EventType.Repaint)
+            {
+                var d = r.height * 0.95f;
+                var box = new Rect(r.center.x - d / 2f, r.center.y - d / 2f, d, d);
+                var old = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, alpha);
+                GUI.DrawTexture(box, kenney, ScaleMode.ScaleToFit, true);
+                GUI.color = old;
+                return;
+            }
             var cap = new Rect(r.x, r.y + r.height * 0.06f, r.width, r.height * 0.88f);
             Ui.Box(new Rect(cap.x, cap.y + 2f, cap.width, cap.height), new Color(0f, 0f, 0f, 0.45f * alpha), 6f);
             Ui.Box(cap, new Color(0.92f, 0.92f, 0.94f, 0.95f * alpha), 6f);
@@ -266,41 +291,55 @@ namespace UltraPuck.Game
 
         // ------------------------------------------------------------------ controller buttons
 
-        private static float ButtonWidth(B b, float h, int size)
+        private static float ButtonWidth(PadButton b, float h, int size)
         {
+            // Kenney pictures are square; shoulders/menu still a bit wider when falling back to pills
+            var tex = InputIcons.ForPad(b, _f);
+            if (tex != null) return h;
             switch (b)
             {
-                case B.LB: case B.RB: return h * 1.5f;
-                case B.Start: case B.Select:
+                case PadButton.LB: case PadButton.RB: return h * 1.5f;
+                case PadButton.Start: case PadButton.Select:
                     var label = PillLabel(b);
                     return label.Length <= 1 ? h : Ui.Font(Mathf.RoundToInt(size * 0.72f), true).CalcSize(new GUIContent(label)).x + size * 0.9f;
                 default: return h;
             }
         }
 
-        private static string PillLabel(B b)
+        private static string PillLabel(PadButton b)
         {
             var f = _f;
             switch (b)
             {
-                case B.LB: return f == InputMode.Family.PlayStation ? "L1" : f == InputMode.Family.Switch ? "L" : "LB";
-                case B.RB: return f == InputMode.Family.PlayStation ? "R1" : f == InputMode.Family.Switch ? "R" : "RB";
-                case B.Start: return f == InputMode.Family.PlayStation ? "OPTIONS" : f == InputMode.Family.Switch ? "+" : f == InputMode.Family.Xbox ? "MENU" : "START";
-                case B.Select: return f == InputMode.Family.PlayStation ? (InputMode.DualSense ? "CREATE" : "SHARE") : f == InputMode.Family.Switch ? "−" : f == InputMode.Family.Xbox ? "VIEW" : "SELECT";
+                case PadButton.LB: return f == InputMode.Family.PlayStation ? "L1" : f == InputMode.Family.Switch ? "L" : "LB";
+                case PadButton.RB: return f == InputMode.Family.PlayStation ? "R1" : f == InputMode.Family.Switch ? "R" : "RB";
+                case PadButton.Start: return f == InputMode.Family.PlayStation ? "OPTIONS" : f == InputMode.Family.Switch ? "+" : f == InputMode.Family.Xbox ? "MENU" : "START";
+                case PadButton.Select: return f == InputMode.Family.PlayStation ? (InputMode.DualSense ? "CREATE" : "SHARE") : f == InputMode.Family.Switch ? "−" : f == InputMode.Family.Xbox ? "VIEW" : "SELECT";
                 default: return "";
             }
         }
 
         private static readonly Color Body = new Color(0.13f, 0.13f, 0.15f);
 
-        private static void DrawButton(Rect r, B b, float alpha, int size)
+        private static void DrawButton(Rect r, PadButton b, float alpha, int size)
         {
             var d = r.height * 0.9f;
             var circle = new Rect(r.center.x - d / 2f, r.center.y - d / 2f, d, d);
             var f = _f;
+            var kenney = InputIcons.ForPad(b, f);
+            if (kenney != null && Event.current.type == EventType.Repaint)
+            {
+                var old = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, alpha);
+                // slightly larger than the line so Kenney art stays readable
+                var pad = d * 0.06f;
+                GUI.DrawTexture(new Rect(circle.x - pad, circle.y - pad, d + pad * 2f, d + pad * 2f), kenney, ScaleMode.ScaleToFit, true);
+                GUI.color = old;
+                return;
+            }
             switch (b)
             {
-                case B.South: case B.East: case B.West: case B.North:
+                case PadButton.South: case PadButton.East: case PadButton.West: case PadButton.North:
                     Ui.Box(new Rect(circle.x, circle.y + 1.5f, d, d), new Color(0f, 0f, 0f, 0.4f * alpha), d / 2f);
                     Ui.Box(circle, WithAlpha(Body, 0.95f * alpha), d / 2f);
                     if (f == InputMode.Family.PlayStation) Shape(circle, b, alpha);
@@ -311,43 +350,43 @@ namespace UltraPuck.Game
                         Ui.Label(circle, letter, Ui.Font(Mathf.RoundToInt(size * 0.85f), true, TextAnchor.MiddleCenter), WithAlpha(col, alpha), false);
                     }
                     break;
-                case B.LB: case B.RB: case B.Start: case B.Select:
+                case PadButton.LB: case PadButton.RB: case PadButton.Start: case PadButton.Select:
                     var pill = new Rect(r.x, r.y + r.height * 0.14f, r.width, r.height * 0.72f);
                     Ui.Box(new Rect(pill.x, pill.y + 1.5f, pill.width, pill.height), new Color(0f, 0f, 0f, 0.4f * alpha), pill.height / 2f);
                     Ui.Box(pill, WithAlpha(Body, 0.95f * alpha), pill.height / 2f);
-                    var small = b == B.Start || b == B.Select;
+                    var small = b == PadButton.Start || b == PadButton.Select;
                     Ui.Label(pill, PillLabel(b), Ui.Font(Mathf.RoundToInt(size * (small ? 0.6f : 0.75f)), true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, alpha), false);
                     break;
-                case B.LS: case B.RS:
+                case PadButton.LS: case PadButton.RS:
                     Ui.Box(new Rect(circle.x, circle.y + 1.5f, d, d), new Color(0f, 0f, 0f, 0.4f * alpha), d / 2f);
                     Ui.Box(circle, WithAlpha(Body, 0.95f * alpha), d / 2f);
                     Ui.Box(new Rect(circle.x + d * 0.14f, circle.y + d * 0.14f, d * 0.72f, d * 0.72f), new Color(1f, 1f, 1f, 0.16f * alpha), d * 0.36f);
-                    Ui.Label(circle, b == B.LS ? "L" : "R", Ui.Font(Mathf.RoundToInt(size * 0.75f), true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, alpha), false);
+                    Ui.Label(circle, b == PadButton.LS ? "L" : "R", Ui.Font(Mathf.RoundToInt(size * 0.75f), true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, alpha), false);
                     break;
-                case B.DPad: case B.DPadLR:
+                case PadButton.DPad: case PadButton.DPadLR:
                     var arm = d * 0.32f;
                     var dim = new Color(1f, 1f, 1f, 0.35f * alpha);
                     var lit = new Color(1f, 1f, 1f, 0.95f * alpha);
-                    Ui.Box(new Rect(circle.center.x - arm / 2f, circle.y + d * 0.04f, arm, d * 0.92f), b == B.DPad ? lit : dim, 2.5f);
-                    Ui.Box(new Rect(circle.x + d * 0.04f, circle.center.y - arm / 2f, d * 0.92f, arm), b == B.DPadLR ? lit : dim, 2.5f);
+                    Ui.Box(new Rect(circle.center.x - arm / 2f, circle.y + d * 0.04f, arm, d * 0.92f), b == PadButton.DPad ? lit : dim, 2.5f);
+                    Ui.Box(new Rect(circle.x + d * 0.04f, circle.center.y - arm / 2f, d * 0.92f, arm), b == PadButton.DPadLR ? lit : dim, 2.5f);
                     break;
             }
         }
 
-        private static void Face(B b, InputMode.Family f, out string letter, out Color col)
+        private static void Face(PadButton b, InputMode.Family f, out string letter, out Color col)
         {
             if (f == InputMode.Family.Switch)
             {
                 // Nintendo's layout: B at the bottom, A on the right
-                letter = b == B.South ? "B" : b == B.East ? "A" : b == B.West ? "Y" : "X";
+                letter = b == PadButton.South ? "B" : b == PadButton.East ? "A" : b == PadButton.West ? "Y" : "X";
                 col = Color.white;
                 return;
             }
             switch (b)
             {
-                case B.South: letter = "A"; col = new Color(0.45f, 0.82f, 0.3f); break;
-                case B.East: letter = "B"; col = new Color(0.95f, 0.33f, 0.3f); break;
-                case B.West: letter = "X"; col = new Color(0.3f, 0.6f, 1f); break;
+                case PadButton.South: letter = "A"; col = new Color(0.45f, 0.82f, 0.3f); break;
+                case PadButton.East: letter = "B"; col = new Color(0.95f, 0.33f, 0.3f); break;
+                case PadButton.West: letter = "X"; col = new Color(0.3f, 0.6f, 1f); break;
                 default: letter = "Y"; col = new Color(1f, 0.8f, 0.2f); break;
             }
         }
@@ -357,16 +396,16 @@ namespace UltraPuck.Game
         // PlayStation shapes, drawn from small textures made once (a cross, circle, square and triangle outline)
         private static Texture2D[] _shapes;
 
-        private static void Shape(Rect circle, B b, float alpha)
+        private static void Shape(Rect circle, PadButton b, float alpha)
         {
             if (Event.current.type != EventType.Repaint) return;
             if (_shapes == null) _shapes = new[] { MakeShape(0), MakeShape(1), MakeShape(2), MakeShape(3) };
             int k; Color col;
             switch (b)
             {
-                case B.South: k = 0; col = new Color(0.55f, 0.7f, 1f); break;     // cross
-                case B.East: k = 1; col = new Color(1f, 0.42f, 0.45f); break;     // circle
-                case B.West: k = 2; col = new Color(0.95f, 0.55f, 0.85f); break;  // square
+                case PadButton.South: k = 0; col = new Color(0.55f, 0.7f, 1f); break;     // cross
+                case PadButton.East: k = 1; col = new Color(1f, 0.42f, 0.45f); break;     // circle
+                case PadButton.West: k = 2; col = new Color(0.95f, 0.55f, 0.85f); break;  // square
                 default: k = 3; col = new Color(0.35f, 0.9f, 0.75f); break;       // triangle
             }
             var old = GUI.color;

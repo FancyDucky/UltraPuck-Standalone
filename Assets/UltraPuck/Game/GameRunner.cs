@@ -46,6 +46,8 @@ namespace UltraPuck.Game
         private Effects _effects;
         private ShotViews _shots;
         private PylonViews _pylons;
+        private RockViews _rocks;
+        private readonly List<int> _seenSwaps = new List<int>();
         private IceViews _ice;
         // what each player's effect counters were last frame, to spot new shockwaves and Team Play refreshes
         private readonly List<int> _seenShocks = new List<int>(), _seenRefreshes = new List<int>();
@@ -80,6 +82,7 @@ namespace UltraPuck.Game
             LoadMaps();
             if (_maps.Count == 0) { _error = "Couldn't load any map: " + _mapProblem; Debug.LogError(_error); return; }
             _cards = LoadCards();
+            InputIcons.Warm(); // Kenney button pictures for hints and utility card prompts
             _fingerprint = Fingerprint();
             var saved = PlayerPrefs.GetString("map_file", "test-rink.json");
             BuildSims(Mathf.Max(0, _mapFiles.IndexOf(saved)));
@@ -136,6 +139,7 @@ namespace UltraPuck.Game
             _effects = new Effects(_entities);
             _shots = new ShotViews(_entities);
             _pylons = new PylonViews(_entities);
+            _rocks = new RockViews(_entities);
             _ice = new IceViews(_entities);
             SetUpCamera();
             _mainMenu.Show(MainMenu.Page.Main);
@@ -300,7 +304,9 @@ namespace UltraPuck.Game
                 _state.PuckPos = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
                 _state.PuckVel = FixVec2.Zero;
                 _state.Carrier = -1;
-                yield return new WaitForSecondsRealtime(3f);
+                yield return new WaitForSecondsRealtime(1.2f); // GOAL! then the wipe in
+                yield return Shot("replay-wipe");
+                yield return new WaitForSecondsRealtime(2.5f); // into the replay
                 yield return Shot("replay");
                 GoMainMenu();
             }
@@ -834,7 +840,7 @@ namespace UltraPuck.Game
         private byte[] PackRules()
         {
             var b = new List<byte>();
-            b.Add((byte)((Settings.Rounds ? 1 : 0) | (Settings.TeamVote ? 2 : 0) | (Settings.Replays ? 4 : 0)));
+            b.Add((byte)((Settings.Rounds ? 1 : 0) | (Settings.TeamVote ? 2 : 0) | (Settings.Replays ? 4 : 0) | (Settings.MultiUtility ? 8 : 0)));
             b.Add((byte)Settings.CardsOffered);
             b.Add((byte)Mathf.Clamp(Settings.PickTime, 0, 255));
             b.Add((byte)Settings.MatchMode);
@@ -854,6 +860,7 @@ namespace UltraPuck.Game
             if (!free) t.CardsAfterGoals = (rules[0] & 1) != 0;
             if (!free && (rules[0] & 4) != 0) { t.Replays = true; t.CelebrateTime = Fix.FromInt(11); } // the explosion, then the replay
             t.TeamVote = (rules[0] & 2) != 0;
+            t.MultiUtility = (rules[0] & 8) != 0;
             t.CardsOffered = Mathf.Clamp(rules[1], 1, 5);
             t.PickTime = Fix.FromInt(rules[2]);
             if (rules.Length < 7) return t;
@@ -1250,6 +1257,11 @@ namespace UltraPuck.Game
             _seenCarrier = -1;
             Recorder.Clear();
             _replay = null;
+            _replayPending = false;
+            _replayExit = false;
+            _replayStarted = false;
+            _replayHoldA = _replayHoldB = null;
+            _wipe.Stop();
             _mode = Mode.Match;
             _menus.FreePlay = free;
             foreach (var s in _local.Slots) s.Latched = 0;
@@ -1366,52 +1378,108 @@ namespace UltraPuck.Game
         private ReplayBuffer Recorder { get { return _recorder ?? (_recorder = new ReplayBuffer(_sim.T.TicksPerSecond)); } }
         private GoalReplay _replay;
         private bool _replayPending;
+        private bool _replayExit;
+        private bool _replayStarted;
         private float _replayStartAt;
         private int _goalTick;
         private Phase _lastPhase;
+        private readonly ReplayTransition _wipe = new ReplayTransition();
+        private ReplayTransition.Style _wipeStyle;
+        private GameState _replayHoldA, _replayHoldB;
+        private float _replayHoldT;
 
         /// <summary>
-        /// After a goal (with replays on): the explosion plays live, then the replay. Returns true while the replay is
-        /// what's on screen. <paramref name="local"/>: a game on this PC only, so A / Start may skip it (online
-        /// everyone's game has to wait the same time, so it just plays).
+        /// After a goal (with replays on): the explosion plays live, then a team-colour wipe, the replay, and the same
+        /// wipe back out. Returns true while the replay or its wipes are what's on screen.
         /// </summary>
         private bool ReplayFrame(bool local)
         {
             if (_state == null || _sim == null) return false;
+            _hud.Wipe = _wipe;
             var tps = _sim.T.TicksPerSecond;
+            var dt = Time.unscaledDeltaTime;
+
             if (_state.Phase != Phase.Scored)
             {
+                // celebration over (cards, face-off, game over, skip): drop the wipe immediately — never run it
+                // over the card pick or the next face-off
                 _lastPhase = _state.Phase;
                 _replay = null;
                 _replayPending = false;
+                _replayExit = false;
+                _replayStarted = false;
+                _replayHoldA = _replayHoldB = null;
+                _wipe.Stop();
                 _hud.Replay = false;
                 return false;
             }
+
             if (_lastPhase != Phase.Scored)
             {
                 _lastPhase = Phase.Scored;
                 _goalTick = _state.Tick;
                 _replayPending = _sim.T.Replays;
-                _replayStartAt = Time.unscaledTime + 1.4f;
+                _replayExit = false;
+                _replayStarted = false;
+                _replayHoldA = _replayHoldB = null;
+                _wipeStyle = ReplayTransition.PickStyle(_goalTick + _state.LastScorer * 17);
+                _replayStartAt = Time.unscaledTime + 0.95f; // GOAL! beat, then wipe in
             }
+
             if (_replayPending && Time.unscaledTime >= _replayStartAt)
             {
                 _replayPending = false;
-                var frames = Recorder.Before(_goalTick + tps * 7 / 10, tps);
-                _replay = new GoalReplay(frames, _state.LastScorer, _sim, _state.PhaseTime.ToFloat() - 0.4f);
+                _wipe.Begin(_wipeStyle, ReplayTransition.TeamStripeColours());
             }
-            if (_replay == null) return false;
-            // skipping is a vote in the game itself (everyone presses shoot, bots always agree): the celebration
-            // then ends, the phase changes, and the replay stops above
-            GameState a, b;
-            float t;
-            _replay.Advance(Time.unscaledDeltaTime, tps, out a, out b, out t);
-            if (_replay.Done || a == null)
+
+            if (_wipe.Active) _wipe.Tick(dt);
+
+            // cover the live goal, then start the replay underneath and reveal it
+            if (!_replayExit && _wipe.Active && _replay == null)
             {
-                _replay = null;
+                if (_wipe.Covered)
+                {
+                    var frames = Recorder.Before(_goalTick + tps * 7 / 10, tps);
+                    _replay = new GoalReplay(frames, _state.LastScorer, _sim, _state.PhaseTime.ToFloat() - 0.4f);
+                    _replayStarted = true;
+                }
+                Show(_state, _state, 0f);
+                return true;
+            }
+
+            if (_replayExit)
+            {
+                if (_wipe.Covered) _replayHoldA = _replayHoldB = null;
+                if (_wipe.Active)
+                {
+                    if (_replayHoldA != null) Show(_replayHoldA, _replayHoldB ?? _replayHoldA, _replayHoldT);
+                    else Show(_state, _state, 0f);
+                    _hud.Replay = _replayHoldA != null;
+                    return true;
+                }
+                _replayExit = false;
+                _replayStarted = false;
                 _hud.Replay = false;
                 return false;
             }
+
+            if (_replay == null) return false;
+
+            GameState a, b;
+            float t;
+            _replay.Advance(dt, tps, out a, out b, out t);
+            if (_replay.Done || a == null)
+            {
+                _replay = null;
+                _replayExit = true;
+                _wipe.Begin(_wipeStyle, ReplayTransition.TeamStripeColours());
+                if (_replayHoldA != null) Show(_replayHoldA, _replayHoldB ?? _replayHoldA, _replayHoldT);
+                else Show(_state, _state, 0f);
+                return true;
+            }
+            _replayHoldA = a;
+            _replayHoldB = b;
+            _replayHoldT = t;
             _hud.Replay = true;
             _hud.ReplaySkippable = true;
             _hud.ReplaySlow = _replay.Slow < 0.9f;
@@ -1450,7 +1518,7 @@ namespace UltraPuck.Game
         private int _heardTick = int.MinValue;
         private Phase _heardPhase;
         private float _heardMovingAt;
-        private readonly List<int> _heardHits = new List<int>(), _heardShots = new List<int>();
+        private readonly List<int> _heardHits = new List<int>(), _heardShots = new List<int>(), _heardSwaps = new List<int>();
         private readonly List<float> _heardDashes = new List<float>();
 
         /// <summary>Where a spot on the rink sits between the speakers: a little left or right of centre, never hard over.</summary>
@@ -1496,6 +1564,8 @@ namespace UltraPuck.Game
                         var unseen = p.InvisibleTime > Fix.Zero && (p.Team == 0 ? blue && !orange : orange && !blue);
                         if (!unseen) Sound.Play(Sfx.Dash, mine ? 0.55f : 0.36f, Random.Range(0.94f, 1.06f), Pan(at));
                     }
+                    if (p.Swaps > _heardSwaps[i])
+                        Sound.Play(Sfx.Swap, mine ? 0.7f : 0.5f, Random.Range(0.97f, 1.03f), Pan(at));
                 }
                 // the big checks (the ones with lightning) get the heavy sound; light bumps a soft thud
                 if (hit >= 0.75f) Sound.Play(Sfx.BigHit, Mathf.Lerp(0.8f, 1f, (hit - 0.75f) / 0.25f), Random.Range(0.95f, 1.05f), Pan(hitAt));
@@ -1510,8 +1580,12 @@ namespace UltraPuck.Game
 
             _heardTick = s.Tick;
             _heardPhase = s.Phase;
-            _heardHits.Clear(); _heardShots.Clear(); _heardDashes.Clear();
-            foreach (var p in s.Players) { _heardHits.Add(p.Hits); _heardShots.Add(p.ShotsFired); _heardDashes.Add(p.DashCharge.ToFloat()); }
+            _heardHits.Clear(); _heardShots.Clear(); _heardDashes.Clear(); _heardSwaps.Clear();
+            foreach (var p in s.Players)
+            {
+                _heardHits.Add(p.Hits); _heardShots.Add(p.ShotsFired); _heardDashes.Add(p.DashCharge.ToFloat());
+                _heardSwaps.Add(p.Swaps);
+            }
         }
 
         /// <summary>Draw the moment <paramref name="t"/> of the way from <paramref name="a"/> to <paramref name="b"/>.</summary>
@@ -1536,26 +1610,36 @@ namespace UltraPuck.Game
             var invisible = p.InvisibleTime > Fix.Zero;
             var teammateHere = p.Team == 0 ? orange : blue;
             var opponentHere = p.Team == 0 ? blue : orange;
-            // hidden from a screen with only opponents on it; an outline for a screen with a teammate (or nobody, like the menu)
-            var hidden = invisible && opponentHere && !teammateHere;
+            // hidden from a screen with only opponents on it; an outline for a teammate (or nobody, like the menu).
+            // Replays always show the outline so everyone can follow who was invisible.
+            var hidden = invisible && opponentHere && !teammateHere && !_hud.Replay;
             var faint = invisible && !hidden;
             _cooldowns[0] = p.Stats.PuckGun > 0 ? 1f - p.GunCooldown.ToFloat() / _sim.T.GunCooldown.ToFloat() : -1f;
             _cooldowns[1] = p.Stats.Invisibility > 0 ? (invisible ? 0f : 1f - p.InvisCooldown.ToFloat() / _sim.T.InvisCooldown.ToFloat()) : -1f;
-            _cooldowns[2] = p.Stats.Shockwave > 0 ? 1f - p.ShockCooldown.ToFloat() / _sim.T.ShockCooldown.ToFloat() : -1f;
+            _cooldowns[2] = p.Stats.Shockwave > 0 ? 1f - p.ShockCooldown.ToFloat() / _sim.T.ShockCooldown.ToFloat()
+                : p.Stats.Swap > 0 ? 1f // Swap has no cooldown — always ready
+                : -1f;
             _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.BoostTime > Fix.Zero, _cooldowns,
                 p.Stun > Fix.Zero, p.DashTime.ToFloat() / Mathf.Max(0.01f, _sim.T.DashHitTime.ToFloat()), p.HitLag > Fix.Zero,
                 _state != null && _state.Carrier == i);
 
-            while (_seenShocks.Count <= i) { _seenShocks.Add(-1); _seenRefreshes.Add(-1); }
+            while (_seenShocks.Count <= i) { _seenShocks.Add(-1); _seenRefreshes.Add(-1); _seenSwaps.Add(-1); }
             if (_seenShocks[i] >= 0 && p.Shocks > _seenShocks[i] && Settings.HitEffects)
             {
-                _effects.Ring(V.Of(p.ShockAt), 1f, new Color(0.45f, 0.8f, 1f), p.ShockRadius.ToFloat() * 1.15f, 0.45f);
-                _shake = Mathf.Max(_shake, 0.25f);
+                // thin expanding ring stuck to the caster, sized to the real hit radius
+                _effects.Shockwave(_players[i].Root.transform, p.ShockRadius.ToFloat(), new Color(0.55f, 0.85f, 1f), 0.35f);
+                _shake = Mathf.Max(_shake, 0.22f);
+            }
+            if (_seenSwaps[i] >= 0 && p.Swaps > _seenSwaps[i] && Settings.HitEffects)
+            {
+                _effects.SwapBurst(V.Of(p.SwapFrom), V.Of(p.SwapTo));
+                _shake = Mathf.Max(_shake, 0.18f);
             }
             if (_seenRefreshes[i] >= 0 && p.Refreshes > _seenRefreshes[i])
                 _effects.Ring(pos, 0.6f, new Color(0.35f, 0.95f, 0.55f), 1.3f, 0.5f);
             _seenShocks[i] = p.Shocks;
             _seenRefreshes[i] = p.Refreshes;
+            _seenSwaps[i] = p.Swaps;
             return hidden;
         }
 
@@ -1646,9 +1730,15 @@ namespace UltraPuck.Game
             }
             _hitsThisFrame.Clear();
             _impactsThisFrame.Clear();
-            if (_seenShocks.Count > b.Players.Length) { _seenShocks.RemoveRange(b.Players.Length, _seenShocks.Count - b.Players.Length); _seenRefreshes.RemoveRange(b.Players.Length, _seenRefreshes.Count - b.Players.Length); }
+            if (_seenShocks.Count > b.Players.Length)
+            {
+                _seenShocks.RemoveRange(b.Players.Length, _seenShocks.Count - b.Players.Length);
+                _seenRefreshes.RemoveRange(b.Players.Length, _seenRefreshes.Count - b.Players.Length);
+                if (_seenSwaps.Count > b.Players.Length) _seenSwaps.RemoveRange(b.Players.Length, _seenSwaps.Count - b.Players.Length);
+            }
             _shots.Show(b, _sim.T.ShotRadius.ToFloat());
             _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
+            _rocks.Show(b, _sim.T.RockRadius.ToFloat());
             _ice.Show(b, _sim.T.IceRadius.ToFloat());
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);

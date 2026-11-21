@@ -33,7 +33,8 @@ namespace UltraPuck.Tests
             {
                 var art = Path.Combine(Application.streamingAssetsPath, "Cards", "Art", c.Art);
                 Assert.IsTrue(File.Exists(art + ".jpg") || File.Exists(art + ".png"), c.Id + " has art");
-                Assert.IsNotEmpty(c.Text, c.Id + " has text");
+                Assert.IsTrue(c.Face.Count > 0 || !string.IsNullOrEmpty(c.Text), c.Id + " has face rows or text");
+                Assert.IsNotEmpty(c.Flavor, c.Id + " has flavour");
             }
         }
 

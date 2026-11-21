@@ -19,12 +19,20 @@ namespace UltraPuck.Core
         public bool Opponents;
     }
 
+    /// <summary>One row on the card face under the rule: label on the left, value on the right.</summary>
+    public sealed class FaceStat
+    {
+        public string Label, Value;
+    }
+
     /// <summary>A card: what it's called, what it says, how strong it is, and the numbers it changes.</summary>
     public sealed class CardDef
     {
         /// <summary>Position in the library: what game states store. The same on every PC as long as the card files are.</summary>
         public int Index;
         public string Id, Name, Text, Art;
+        /// <summary>Short line under the title (above the coloured rule), or null / empty for none.</summary>
+        public string Flavor;
         /// <summary>The card's accent colour as "#RRGGBB" (for its frame), or null for the default.</summary>
         public string Color;
         public CardTier Tier = CardTier.C;
@@ -34,6 +42,8 @@ namespace UltraPuck.Core
         public string Requires;
         /// <summary>Only offered on teams at least this big (team cards are no use alone).</summary>
         public int MinTeam;
+        /// <summary>Stat rows under the rule (label left, value right). Empty = use <see cref="Text"/> as a free block.</summary>
+        public readonly List<FaceStat> Face = new List<FaceStat>();
         public readonly List<StatMod> Mods = new List<StatMod>();
     }
 
@@ -41,11 +51,12 @@ namespace UltraPuck.Core
     /// Every card in the game, read from JSON files (Assets/StreamingAssets/Cards/*.json; mods can add more files).
     /// A card file looks like:
     /// <code>
-    /// { "cards": [ { "id": "ultrapuck.speedup", "name": "Speed Up", "tier": "A", "max": 0, "art": "ultrapuck.speedup",
-    ///                "text": "[good]+15%[/] Move Speed", "stats": { "MoveSpeed": "x1.15" } } ] }
+    /// { "cards": [ { "id": "ultrapuck.speedup", "name": "Speed Up", "tier": "A", "flavor": "…",
+    ///                "face": [ { "label": "Move Speed", "value": "[good]+15%[/]" } ],
+    ///                "stats": { "MoveSpeed": "x1.15" } } ] }
     /// </code>
     /// Stat values: "x1.5" multiplies, "/1.6" divides, "+1" or "-0.5" adds. Prefix a stat with "Opponent" to change
-    /// the other team's instead. Text markup for the card face: [good]...[/], [bad]...[/], [note]...[/].
+    /// the other team's instead. Face value markup: [good]...[/], [bad]...[/], [note]...[/], [gold]...[/].
     /// Cards that need new mechanics (not just numbers) are added in code later.
     /// </summary>
     public sealed class CardLibrary
@@ -58,8 +69,11 @@ namespace UltraPuck.Core
         {
             "MoveSpeed", "MoveSpeedWithPuck", "ShotPower", "QuickShotPower", "ChargeSpeed", "OverCharge", "DashCooldown",
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
-            "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "PassRefresh", "PassRefreshTeam", "IceTrail",
+            "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "Swap", "PassRefresh", "PassRefreshTeam", "IceTrail",
         };
+
+        /// <summary>Stats that need the utility button (Triangle / Y). Used to offer only one utility at a time.</summary>
+        public static readonly string[] UtilityStats = { "PuckGun", "Invisibility", "Shockwave", "Swap" };
 
         public CardDef ById(string id) { CardDef c; return id != null && _byId.TryGetValue(id, out c) ? c : null; }
 
@@ -77,6 +91,7 @@ namespace UltraPuck.Core
                     Id = Json.Str(Json.Get(o, "id"), null),
                     Name = Json.Str(Json.Get(o, "name"), "?"),
                     Text = Json.Str(Json.Get(o, "text"), ""),
+                    Flavor = Json.Str(Json.Get(o, "flavor"), null),
                     Art = Json.Str(Json.Get(o, "art"), null),
                     Color = Json.Str(Json.Get(o, "color"), null),
                     MaxPerPlayer = Json.Get(o, "max") != null ? Json.Int(Json.Get(o, "max"), what + ".max") : 0,
@@ -89,6 +104,19 @@ namespace UltraPuck.Core
                 if (!Enum.TryParse(Json.Str(Json.Get(o, "tier"), "C"), true, out tier)) throw new FormatException(what + ": tier must be S, A, B, C, D or F");
                 c.Tier = tier;
                 if (c.Art == null) c.Art = c.Id;
+                if (Json.Get(o, "face") != null)
+                {
+                    var face = Json.Arr(Json.Get(o, "face"), what + ".face");
+                    for (var f = 0; f < face.Count; f++)
+                    {
+                        var fo = Json.Obj(face[f], what + ".face[" + f + "]");
+                        c.Face.Add(new FaceStat
+                        {
+                            Label = Json.Str(Json.Get(fo, "label"), ""),
+                            Value = Json.Str(Json.Get(fo, "value"), ""),
+                        });
+                    }
+                }
                 var stats = Json.Get(o, "stats") as Dictionary<string, object>;
                 if (stats != null)
                 {
@@ -163,6 +191,7 @@ namespace UltraPuck.Core
                 case "Invisibility": st.Invisibility = Count(st.Invisibility, m); break;
                 case "FriendlyFire": st.FriendlyFire = Count(st.FriendlyFire, m); break;
                 case "Shockwave": st.Shockwave = Count(st.Shockwave, m); break;
+                case "Swap": st.Swap = Count(st.Swap, m); break;
                 case "IceTrail": st.IceTrail = Count(st.IceTrail, m); break;
                 case "PassRefresh": st.PassRefresh = Count(st.PassRefresh, m); break;
                 case "PassRefreshTeam": st.PassRefreshTeam = Count(st.PassRefreshTeam, m); break;
@@ -185,9 +214,52 @@ namespace UltraPuck.Core
             return false;
         }
 
+        /// <summary>Does this card use the utility button?</summary>
+        public bool IsUtility(CardDef c)
+        {
+            if (c == null) return false;
+            foreach (var m in c.Mods)
+                if (!m.Opponents && Array.IndexOf(UtilityStats, m.Stat) >= 0) return true;
+            return false;
+        }
+
+        public bool IsUtilityIndex(int index) { return index >= 0 && index < Cards.Count && IsUtility(Cards[index]); }
+
+        /// <summary>The first utility card this player holds, or null.</summary>
+        public CardDef UtilityHeld(PlayerState p)
+        {
+            if (p == null) return null;
+            foreach (var ci in p.Cards) if (IsUtilityIndex(ci)) return Cards[ci];
+            return null;
+        }
+
+        /// <summary>
+        /// Taking <paramref name="offered"/> would replace another utility already held (one-utility mode).
+        /// Same utility again (extra copy) does not count as a replace.
+        /// </summary>
+        public bool WouldReplaceUtility(PlayerState p, int offered)
+        {
+            if (!IsUtilityIndex(offered)) return false;
+            var held = UtilityHeld(p);
+            return held != null && held.Index != offered;
+        }
+
+        /// <summary>
+        /// Drop every utility card that isn't <paramref name="keep"/> (used when one utility is allowed at a time).
+        /// </summary>
+        public static int[] WithoutOtherUtilities(CardLibrary lib, int[] cards, int keep)
+        {
+            if (cards == null || cards.Length == 0) return cards ?? new int[0];
+            var keepList = new List<int>();
+            foreach (var c in cards)
+                if (!lib.IsUtilityIndex(c) || c == keep) keepList.Add(c);
+            return keepList.ToArray();
+        }
+
         /// <summary>
         /// Up to <paramref name="count"/> different cards player <paramref name="i"/> may still take, picked at random:
         /// every card they could be offered is as likely as any other, whatever its tier.
+        /// Other utilities stay in the pool — picking one replaces the utility you already have (unless MultiUtility).
         /// </summary>
         public int[] DrawOffer(GameState s, int i, int count, int[] off = null)
         {

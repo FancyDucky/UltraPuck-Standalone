@@ -97,8 +97,10 @@ namespace UltraPuck.Core
         public int Invisibility;
         /// <summary>A teammate's check boosts you instead of dazing you.</summary>
         public int FriendlyFire;
-        /// <summary>Your checks on opponents send out a slowing shockwave (stronger with more copies).</summary>
+        /// <summary>Utility: shove every other player away (stronger with more copies).</summary>
         public int Shockwave;
+        /// <summary>Utility: throw a rock, then swap places with it (no cooldown).</summary>
+        public int Swap;
         /// <summary>Fully charged shots leave a trail of ice that slows opponents (10% per copy).</summary>
         public int IceTrail;
         /// <summary>A clean pass to a teammate restores your cooldowns (Team Play).</summary>
@@ -116,7 +118,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, Size); GameState.Mix(ref h, Weight); GameState.Mix(ref h, KnockbackGiven); GameState.Mix(ref h, KnockbackTaken);
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
-            GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
+            GameState.Mix(ref h, Swap); GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
         }
     }
 
@@ -182,6 +184,11 @@ namespace UltraPuck.Core
         public int Shocks;
         public FixVec2 ShockAt;
         public Fix ShockRadius;
+        /// <summary>Counts Swap teleports (for the clap and dark-blue particle bursts at both spots).</summary>
+        public int Swaps;
+        public FixVec2 SwapFrom, SwapTo;
+        /// <summary>Bots only: wait this long between Swap uses (throw or teleport).</summary>
+        public Fix SwapCooldown;
         /// <summary>Counts Team Play cooldown refreshes (for the drawing side's flash).</summary>
         public int Refreshes;
 
@@ -231,6 +238,17 @@ namespace UltraPuck.Core
         public int Team;
     }
 
+    /// <summary>A Swap rock: thrown by a player, knockable / pickable / shootable by everyone, then swapped with.</summary>
+    [Serializable]
+    public struct Rock
+    {
+        public FixVec2 Pos, Vel;
+        /// <summary>Player who threw it (still theirs for Swap teleport).</summary>
+        public int Owner;
+        /// <summary>Who is carrying it in their wedge, or -1 if loose.</summary>
+        public int Carrier;
+    }
+
     public enum Phase : byte
     {
         /// <summary>Everyone frozen at their spawns, counting down to the face-off.</summary>
@@ -274,6 +292,8 @@ namespace UltraPuck.Core
         public Shot[] Shots = new Shot[0];
         /// <summary>Pylon goalies standing in front of the nets (from the Pylon Goalie card).</summary>
         public Pylon[] Pylons = new Pylon[0];
+        /// <summary>Swap rocks currently on the ice.</summary>
+        public Rock[] Rocks = new Rock[0];
         /// <summary>Ice Trail: the ice on the rink.</summary>
         public IcePoint[] Ice = new IcePoint[0];
         /// <summary>Ice Trail: time left laying the trail behind the puck (0 = not laying one).</summary>
@@ -293,6 +313,7 @@ namespace UltraPuck.Core
             s.Score = (int[])Score.Clone();
             s.Shots = (Shot[])Shots.Clone();
             s.Pylons = (Pylon[])Pylons.Clone();
+            s.Rocks = (Rock[])Rocks.Clone();
             s.Ice = (IcePoint[])Ice.Clone();
             return s;
         }
@@ -315,6 +336,7 @@ namespace UltraPuck.Core
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); }
+            foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); }
             Mix(ref h, IceLaying); Mix(ref h, IceAge); Mix(ref h, IceTrails);
             foreach (var ice in Ice) { Mix(ref h, ice.Pos); Mix(ref h, ice.Trail); Mix(ref h, ice.Team); Mix(ref h, ice.Slow); Mix(ref h, ice.Melt); Mix(ref h, ice.Laying ? 1 : 0); }
             foreach (var sc in Score) Mix(ref h, sc);
@@ -330,7 +352,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.Picked);
                 Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.BoostTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
-                Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes);
+                Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);
             }
             return h;
         }

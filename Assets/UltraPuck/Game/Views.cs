@@ -533,7 +533,14 @@ namespace UltraPuck.Game
     /// <summary>Rings that burst out from where players hit each other, then fade.</summary>
     internal sealed class Effects
     {
-        private sealed class Burst { public GameObject Go; public Mesh Mesh; public float Age, Life, Size; public Color Colour = Color.white; }
+        private sealed class Burst
+        {
+            public GameObject Go; public Mesh Mesh;
+            public float Age, Life, Size;
+            public Color Colour = Color.white;
+            public Transform Follow; // shockwave: stay on the caster while it expands
+            public bool Exact;       // grow 0 → Size (hit radius), not the impact overshoot curve
+        }
         private readonly List<Burst> _live = new List<Burst>(), _spare = new List<Burst>();
         private readonly Transform _parent;
 
@@ -546,7 +553,15 @@ namespace UltraPuck.Game
         private readonly List<Spark> _sparks = new List<Spark>(), _spareSparks = new List<Spark>();
 
         // lightning: jagged forked bolts that crackle out from a hard hit for a moment (like a fighting game's big hits)
-        private sealed class Bolt { public GameObject Go, Glow; public float Age, Life; public Color Colour, Core; public Mesh Mesh, GlowMesh; }
+        private sealed class Bolt
+        {
+            public GameObject Go, Glow;
+            public float Age, Life;
+            public Color Colour, Core;
+            public Mesh Mesh, GlowMesh;
+            public Transform Follow; // shockwave: move with the caster
+            public Vector2 Anchor;   // Follow's position when the bolt was drawn
+        }
         private readonly List<Bolt> _bolts = new List<Bolt>();
 
         /// <summary>Sparks out of a collision: more, faster and longer the harder it was.</summary>
@@ -578,10 +593,13 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Forked lightning crackling out of a hard hit.</summary>
-        public void Lightning(Vector2 at, float power, Color colour) { Lightning(at, power, colour, Color.white); }
+        public void Lightning(Vector2 at, float power, Color colour) { Lightning(at, power, colour, Color.white, null); }
 
         /// <summary>Lightning with its own core colour (hits: a near-black red core in a red glow).</summary>
-        public void Lightning(Vector2 at, float power, Color colour, Color core)
+        public void Lightning(Vector2 at, float power, Color colour, Color core) { Lightning(at, power, colour, core, null); }
+
+        /// <summary>Lightning that stays glued to <paramref name="follow"/> (shockwave on a moving player).</summary>
+        public void Lightning(Vector2 at, float power, Color colour, Color core, Transform follow)
         {
             var bolts = Random.Range(3, 5 + Mathf.RoundToInt(2f * power));
             var start = Random.Range(0f, Mathf.PI * 2f);
@@ -589,11 +607,11 @@ namespace UltraPuck.Game
             {
                 var a = start + k * Mathf.PI * 2f / bolts + Random.Range(-0.35f, 0.35f);
                 var length = Random.Range(1.1f, 1.8f) * (0.8f + power);
-                AddBolt(at, a, length, colour, core, 0.075f, 2);
+                AddBolt(at, a, length, colour, core, 0.075f, 2, follow);
             }
         }
 
-        private void AddBolt(Vector2 from, float angle, float length, Color colour, Color core, float width, int forks)
+        private void AddBolt(Vector2 from, float angle, float length, Color colour, Color core, float width, int forks, Transform follow = null)
         {
             var pts = new List<Vector2> { from };
             var steps = 6;
@@ -606,14 +624,27 @@ namespace UltraPuck.Game
                 pts.Add(p);
                 // a fork off the side now and then
                 if (forks > 0 && i > 1 && i < steps && Random.value < 0.35f)
-                    AddBolt(p, angle + Random.Range(0.5f, 0.9f) * (Random.value < 0.5f ? -1f : 1f), length * Random.Range(0.3f, 0.5f), colour, core, width * 0.7f, forks - 1);
+                    AddBolt(p, angle + Random.Range(0.5f, 0.9f) * (Random.value < 0.5f ? -1f : 1f), length * Random.Range(0.3f, 0.5f), colour, core, width * 0.7f, forks - 1, follow);
             }
-            var b = new Bolt { Age = 0f, Life = Random.Range(0.16f, 0.26f), Colour = colour, Core = core };
+            var b = new Bolt { Age = 0f, Life = Random.Range(0.16f, 0.26f), Colour = colour, Core = core, Follow = follow };
+            if (follow != null) b.Anchor = new Vector2(follow.localPosition.x, follow.localPosition.y);
+            else b.Anchor = from;
             b.GlowMesh = Draw.Line(pts, false, width * 3.2f, Palette.Clear(colour));
             b.Glow = Draw.Make("BoltGlow", _parent, b.GlowMesh, 22).gameObject;
             b.Mesh = Draw.Line(pts, false, width, Color.white);
             b.Go = Draw.Make("Bolt", _parent, b.Mesh, 24).gameObject;
             _bolts.Add(b);
+            StickBolt(b);
+        }
+
+        /// <summary>Shift a bolt so it stays on its Follow (mesh verts were drawn in rink space at fire time).</summary>
+        private static void StickBolt(Bolt b)
+        {
+            if (b.Follow == null) return;
+            var d = new Vector2(b.Follow.localPosition.x, b.Follow.localPosition.y) - b.Anchor;
+            var p = new Vector3(d.x, d.y, 0f);
+            b.Go.transform.localPosition = p;
+            b.Glow.transform.localPosition = p;
         }
 
         /// <summary>
@@ -645,21 +676,77 @@ namespace UltraPuck.Game
         /// <summary>A ring that bursts out to <paramref name="size"/> (radius) in <paramref name="colour"/> over <paramref name="life"/> seconds.</summary>
         public void Ring(Vector2 at, float power, Color colour, float size, float life)
         {
-            Burst b;
-            if (_spare.Count > 0) { b = _spare[_spare.Count - 1]; _spare.RemoveAt(_spare.Count - 1); }
-            else
-            {
-                b = new Burst { Mesh = Draw.Ring(0.82f, 1f, 1f, Color.white) };
-                b.Go = Draw.Make("Impact", _parent, b.Mesh, 17).gameObject;
-            }
+            var b = TakeBurst();
             b.Go.SetActive(true);
             b.Go.transform.localPosition = new Vector3(at.x, at.y, 0f);
             b.Age = 0f;
             b.Life = life;
             b.Size = size;
             b.Colour = colour;
+            b.Follow = null;
+            b.Exact = false;
             _live.Add(b);
             Step(b);
+        }
+
+        /// <summary>
+        /// Swap teleport: dark-blue particle bursts at both spots (Todo / Boogie Woogie vibe), no lightning.
+        /// </summary>
+        public void SwapBurst(Vector2 from, Vector2 to)
+        {
+            var blue = new Color(0.25f, 0.35f, 0.95f);
+            var deep = new Color(0.12f, 0.15f, 0.55f);
+            Sparks(from, 0.9f, blue, 22);
+            Sparks(from, 0.55f, deep, 12);
+            Sparks(to, 0.9f, blue, 22);
+            Sparks(to, 0.55f, deep, 12);
+            Ring(from, 0.7f, blue, 1.1f, 0.28f);
+            Ring(to, 0.7f, blue, 1.1f, 0.28f);
+        }
+
+        /// <summary>
+        /// Shockwave (style A): one thin bright ring that expands to <paramref name="radius"/> while stuck to
+        /// <paramref name="follow"/>. No lightning, no sparks.
+        /// </summary>
+        public void Shockwave(Transform follow, float radius, Color colour, float life)
+        {
+            if (follow == null) return;
+            var at = new Vector2(follow.localPosition.x, follow.localPosition.y);
+            var b = TakeBurst(true);
+            b.Go.SetActive(true);
+            b.Go.transform.localPosition = new Vector3(at.x, at.y, 0f);
+            b.Age = 0f;
+            b.Life = life;
+            b.Size = radius;
+            b.Colour = colour;
+            b.Follow = follow;
+            b.Exact = true;
+            _live.Add(b);
+            Step(b);
+        }
+
+        /// <param name="thin">Shockwave uses a thinner ring than hit impacts.</param>
+        private Burst TakeBurst(bool thin = false)
+        {
+            Burst b;
+            if (_spare.Count > 0) { b = _spare[_spare.Count - 1]; _spare.RemoveAt(_spare.Count - 1); }
+            else
+            {
+                b = new Burst { Mesh = Draw.Ring(thin ? 0.94f : 0.82f, 1f, 1f, Color.white) };
+                b.Go = Draw.Make(thin ? "Shockwave" : "Impact", _parent, b.Mesh, 17).gameObject;
+                return b;
+            }
+            // reuse: rebuild the ring mesh if thickness doesn't match what we need
+            var wantThin = thin;
+            var isThin = b.Go.name == "Shockwave";
+            if (wantThin != isThin)
+            {
+                Object.Destroy(b.Mesh);
+                b.Mesh = Draw.Ring(wantThin ? 0.94f : 0.82f, 1f, 1f, Color.white);
+                b.Go.GetComponent<MeshFilter>().sharedMesh = b.Mesh;
+                b.Go.name = wantThin ? "Shockwave" : "Impact";
+            }
+            return b;
         }
 
         // water ripples: a quad that bends the picture behind it (shader UltraPuck/Ripple)
@@ -733,7 +820,9 @@ namespace UltraPuck.Game
             {
                 var b = _live[i];
                 b.Age += dt;
-                if (b.Age >= b.Life) { b.Go.SetActive(false); _live.RemoveAt(i); _spare.Add(b); continue; }
+                if (b.Age >= b.Life) { b.Go.SetActive(false); b.Follow = null; _live.RemoveAt(i); _spare.Add(b); continue; }
+                if (b.Follow != null)
+                    b.Go.transform.localPosition = b.Follow.localPosition;
                 Step(b);
             }
             for (var i = _sparks.Count - 1; i >= 0; i--)
@@ -753,6 +842,7 @@ namespace UltraPuck.Game
                     _bolts.RemoveAt(i);
                     continue;
                 }
+                StickBolt(b);
                 // a crackle: flickers as it fades
                 var k = b.Age / b.Life;
                 var flicker = Random.value < 0.25f ? 0.35f : 1f;
@@ -765,10 +855,12 @@ namespace UltraPuck.Game
 
         private static void Step(Burst b)
         {
-            var k = b.Age / b.Life;
+            var k = Mathf.Clamp01(b.Age / b.Life);
             var ease = 1f - (1f - k) * (1f - k);
-            b.Go.transform.localScale = Vector3.one * (0.25f + ease) * b.Size;
-            var c = b.Colour; c.a *= 0.85f * (1f - k);
+            // Exact (shockwave): outer edge reaches Size at the end, matching the hit radius. Impacts overshoot a little.
+            b.Go.transform.localScale = Vector3.one * (b.Exact ? ease * b.Size : (0.25f + ease) * b.Size);
+            var c = b.Colour;
+            c.a *= (b.Exact ? 1f : 0.85f) * (1f - k);
             Draw.Recolor(b.Mesh, c);
         }
     }
@@ -1008,6 +1100,37 @@ namespace UltraPuck.Game
                 _pool[k].transform.localPosition = new Vector3(py.Pos.X.ToFloat(), py.Pos.Y.ToFloat(), 0f);
             }
             for (var k = s.Pylons.Length; k < _pool.Count; k++) if (_pool[k] != null && _pool[k].activeSelf) _pool[k].SetActive(false);
+        }
+    }
+
+    /// <summary>Swap rocks: small dark stones with a blue rim.</summary>
+    internal sealed class RockViews
+    {
+        private readonly Transform _parent;
+        private readonly List<GameObject> _pool = new List<GameObject>();
+
+        public RockViews(Transform parent) { _parent = parent; }
+
+        public void Show(GameState s, float radius)
+        {
+            for (var k = 0; k < s.Rocks.Length; k++)
+            {
+                var rk = s.Rocks[k];
+                if (k >= _pool.Count) _pool.Add(null);
+                if (_pool[k] == null)
+                {
+                    var go = new GameObject("Rock");
+                    go.transform.SetParent(_parent, false);
+                    Draw.Make("Shadow", go.transform, Draw.Disc(radius * 1.05f, Palette.Shadow), 7).transform.localPosition = new Vector3(radius * 0.15f, -radius * 0.28f, 0f);
+                    Draw.Make("Rim", go.transform, Draw.Disc(radius, new Color(0.25f, 0.35f, 0.85f)), 11);
+                    Draw.Make("Body", go.transform, Draw.Disc(radius * 0.78f, new Color(0.18f, 0.2f, 0.28f)), 12);
+                    Draw.Make("Facet", go.transform, Draw.Disc(radius * 0.35f, new Color(0.32f, 0.38f, 0.55f)), 13);
+                    _pool[k] = go;
+                }
+                _pool[k].SetActive(true);
+                _pool[k].transform.localPosition = new Vector3(rk.Pos.X.ToFloat(), rk.Pos.Y.ToFloat(), 0f);
+            }
+            for (var k = s.Rocks.Length; k < _pool.Count; k++) if (_pool[k] != null && _pool[k].activeSelf) _pool[k].SetActive(false);
         }
     }
 }

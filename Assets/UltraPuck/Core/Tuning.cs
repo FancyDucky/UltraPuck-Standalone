@@ -60,7 +60,11 @@ namespace UltraPuck.Core
         // the puck
         public Fix PuckDrag = Fix.Ratio(7, 10);
         public Fix PuckWallBounce = Fix.Ratio(4, 5);
-        public Fix PuckMaxSpeed = Fix.FromInt(69);
+        /// <summary>
+        /// Hard cap on puck speed. Sized so Over Charge can land: a full charge is <see cref="ChargedShotMax"/> (~52),
+        /// and four Over Charge copies push the meter to 3× that (~156).
+        /// </summary>
+        public Fix PuckMaxSpeed = Fix.FromInt(165);
         /// <summary>A quick shot (shoot/check with the puck).</summary>
         public Fix ShotSpeed = Fix.Ratio(69, 4); // 17.25 (15, +15%)
         /// <summary>
@@ -102,9 +106,8 @@ namespace UltraPuck.Core
         public Fix GunSpeed = Fix.FromInt(38), GunLife = Fix.One, GunCooldown = Fix.FromInt(2), GunStun = Fix.Ratio(5, 4), ShotRadius = Fix.Ratio(6, 25);
         /// <summary>Invisibility: how long, and the cooldown.</summary>
         public Fix InvisTime = Fix.FromInt(5), InvisCooldown = Fix.FromInt(15);
-        /// <summary>Shockwave: cooldown; slow (45%, +5% per extra copy) for 2 s (+0.5 s per copy); reach in player radii; push (share of a check's).</summary>
-        public Fix ShockCooldown = Fix.FromInt(7), ShockSlow = Fix.Ratio(9, 20), ShockSlowPerCopy = Fix.Ratio(5, 100);
-        public Fix ShockTime = Fix.FromInt(2), ShockTimePerCopy = Fix.Half, ShockRange = Fix.FromInt(3), ShockPush = Fix.Ratio(4, 5);
+        /// <summary>Shockwave (utility): cooldown; reach in player radii; push (share of a check's knockback) — shoves every other player away.</summary>
+        public Fix ShockCooldown = Fix.FromInt(6), ShockRange = Fix.FromInt(5), ShockPush = Fix.Two;
         /// <summary>
         /// Ice Trail: the puck lays ice for up to <see cref="IceTime"/>. The start of the trail lasts
         /// <see cref="IceLife"/>, then the melting creeps along it <see cref="IceMeltPace"/> times slower than it was
@@ -128,12 +131,19 @@ namespace UltraPuck.Core
         public Fix PylonRadius = Fix.Half, PylonOut = Fix.Ratio(12, 5), PylonSpread = Fix.Ratio(11, 10);
         /// <summary>Pylon goalies can be pushed: how heavy they are (a player is 1) and how fast they slow down.</summary>
         public Fix PylonWeight = Fix.Two, PylonDrag = Fix.FromInt(6);
+        /// <summary>Swap rock: size, weight (lighter than a player), how fast it slows, throw speed (like a quick shot).</summary>
+        // Swap rock: light and very glidey so anyone can knock it around; throw still uses quick-shot speed
+        public Fix RockRadius = Fix.Ratio(2, 5), RockWeight = Fix.Ratio(12, 100), RockDrag = Fix.Ratio(18, 100), RockSpeed = Fix.Ratio(69, 4);
+        /// <summary>Bots wait this long between Swap uses so they don't spam throw/teleport.</summary>
+        public Fix SwapBotCooldown = Fix.FromInt(3);
 
         // cards
         /// <summary>After every goal, the team that conceded picks a card (needs a card library).</summary>
         public bool CardsAfterGoals = true;
         /// <summary>Team Vote: each team is offered one set of cards, everyone votes, and the whole team gets the winner (a tie is random).</summary>
         public bool TeamVote;
+        /// <summary>Allow more than one utility card per player. Off: taking a new utility replaces the one you have.</summary>
+        public bool MultiUtility;
         /// <summary>Cards that may not be offered (library indexes), from the settings' card list.</summary>
         public int[] CardsOff = new int[0];
         public int CardsOffered = 3;

@@ -33,8 +33,13 @@ namespace UltraPuck.Game
         public static readonly string[] ColourNames = { "Red", "Blue", "Orange", "Green", "Yellow", "Purple", "Pink", "Teal" };
         /// <summary>How many of <see cref="Colours"/> players can pick for now: just red and blue, so teams are clear.</summary>
         public const int Choosable = 2;
+        /// <summary>
+        /// How many sides a match has right now (two). Replay wipes and anything else that stripes by team colour
+        /// use this; raise it when more than two teams are allowed.
+        /// </summary>
+        public static int TeamCount { get { return 2; } }
 
-        private static readonly int[] _teamColour = { 0, 1 };
+        private static readonly int[] _teamColour = { 0, 1, 2, 3, 4, 5, 6, 7 };
         /// <summary>Goes up whenever the teams' colours change (things drawn in team colours are built again).</summary>
         public static int Version { get; private set; }
 
@@ -48,13 +53,13 @@ namespace UltraPuck.Game
             Version++;
         }
 
-        public static int TeamColour(int t) { return _teamColour[t & 1]; }
-        public static Color Team(int t) { return Colours[_teamColour[t & 1]]; }
+        public static int TeamColour(int t) { return _teamColour[t & 7]; }
+        public static Color Team(int t) { return Colours[_teamColour[t & 7]]; }
         /// <summary>Light tint for things drawn in team colour on the dark rink (the facing arrow, trails).</summary>
-        public static Color TeamTint(int t) { return Tint(_teamColour[t & 1]); }
+        public static Color TeamTint(int t) { return Tint(_teamColour[t & 7]); }
         /// <summary>The goal mouths, a dark shade of the defending team's colour.</summary>
-        public static Color Goal(int t) { return Darker(Colours[_teamColour[t & 1]], 0.38f); }
-        public static string TeamName(int t) { return ColourNames[_teamColour[t & 1]]; }
+        public static Color Goal(int t) { return Darker(Colours[_teamColour[t & 7]], 0.38f); }
+        public static string TeamName(int t) { return ColourNames[_teamColour[t & 7]]; }
         public static Color Tint(int colour) { return Color.Lerp(Colours[colour & 7], Color.white, 0.45f); }
         public static Color Clear(Color c) { c.a = 0f; return c; }
 

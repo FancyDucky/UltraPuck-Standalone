@@ -1,11 +1,13 @@
 // Ultra Puck's own cards. Mods can add more files next to this one (every *.json here is read, in name order).
-//   id     unique, never change it once released
-//   tier   S (strongest) A B C D F (weakest): the frame's colour and sparkle; every card is offered as often as any other
-//   max    most copies one player can hold (0 = no limit)
-//   art    picture in Cards/Art/<art>.jpg or .png (defaults to the id)
-//   color  accent colour for the card frame
-//   text   what the card face says: [good]...[/] green, [bad]...[/] red, [note]...[/] grey
-//   stats  "x1.5" multiplies, "/1.6" divides, "+1" adds; "Opponent..." changes the other team instead
+//   id      unique, never change it once released
+//   tier    S (strongest) A B C D F (weakest): the frame's colour and sparkle; every card is offered as often as any other
+//   max     most copies one player can hold (0 = no limit)
+//   art     picture in Cards/Art/<art>.jpg or .png (defaults to the id)
+//   color   accent colour for the card frame
+//   flavor  short line under the title (above the coloured rule)
+//   face    rows under the rule: { "label", "value" } — label left, value right; value may use [good]/[bad]/[note]/[gold]
+//   text    optional footnote under the face rows (same markup)
+//   stats   "x1.5" multiplies, "/1.6" divides, "+1" adds; "Opponent..." changes the other team instead
 {
   "cards": [
     {
@@ -13,7 +15,10 @@
       "name": "Double Dash",
       "tier": "S",
       "color": "#4D8CF2",
-      "text": "[good]+1 Check[/]\nCheck twice in a row before you wait for a recharge.",
+      "flavor": "Like that game with the karts",
+      "face": [
+        { "label": "Number of Dashes", "value": "[good]+1[/]" }
+      ],
       "stats": { "ExtraDashes": "+1" }
     },
     {
@@ -21,7 +26,10 @@
       "name": "Speed Up",
       "tier": "A",
       "color": "#4DCC66",
-      "text": "[good]+15%[/] Move Speed\nWith or without the puck.",
+      "flavor": "Speedy",
+      "face": [
+        { "label": "Move Speed", "value": "[good]+15%[/]" }
+      ],
       "stats": { "MoveSpeed": "x1.15" }
     },
     {
@@ -29,7 +37,10 @@
       "name": "Power Shot",
       "tier": "S",
       "color": "#EB544D",
-      "text": "[good]+50%[/] Quick Shot Power\nTap shots fly much faster.\n[note]Charged shots are unchanged.[/]",
+      "flavor": "Why even charge up?",
+      "face": [
+        { "label": "Quick Shot Strength", "value": "[good]+50%[/]" },
+      ],
       "stats": { "QuickShotPower": "x1.5" }
     },
     {
@@ -38,7 +49,10 @@
       "tier": "A",
       "max": 3,
       "color": "#40CCD9",
-      "text": "Checks recharge [good]60% faster[/].",
+      "flavor": "DASH DASH DASH DASH",
+      "face": [
+        { "label": "Dash Cooldown", "value": "[good]-60%[/]" }
+      ],
       "stats": { "DashCooldown": "/1.6" }
     },
     {
@@ -47,7 +61,11 @@
       "tier": "B",
       "max": 3,
       "color": "#9E734D",
-      "text": "Your checks knock people [good]80% further[/], and theirs barely move you [good](-80%)[/]. Your hardest hits crackle with lightning.\n[note]13% bigger.[/]",
+      "flavor": "The bigger they are, the harder they hit.",
+      "face": [
+        { "label": "Weight", "value": "[good]+80%[/]" },
+        { "label": "Size", "value": "[gold]+13%[/]" }
+      ],
       "stats": { "KnockbackGiven": "x1.8", "KnockbackTaken": "x0.2", "Size": "x1.13" }
     },
     {
@@ -56,7 +74,13 @@
       "tier": "B",
       "max": 2,
       "color": "#F2CC4D",
-      "text": "[good]+25%[/] Move Speed [note](+10% with the puck)[/]\n[note]13% smaller.[/]\n[bad]Checks knock you 80% further[/], and [bad]yours barely move anyone[/].",
+      "flavor": "Just a little guy.",
+      "face": [
+        { "label": "Move Speed", "value": "[good]+25%[/]" },
+        { "label": "Move Speed With Puck", "value": "[good]+10%[/]" },
+        { "label": "Size", "value": "[note]-13%[/]" },
+        { "label": "Weight", "value": "[bad]-80%[/]" },
+      ],
       "stats": { "MoveSpeed": "x1.25", "MoveSpeedWithPuck": "x0.88", "Size": "x0.87", "KnockbackTaken": "x1.8", "KnockbackGiven": "x0.2" }
     },
     {
@@ -66,8 +90,12 @@
       "max": 4,
       "art": "ultrapuck.fastercharge",
       "color": "#F28C33",
-      "text": "[good]Charge twice as fast[/], and keep holding past full for [good]+50% shot power[/]. The meter turns orange past full (then blue, with more copies).",
-      "stats": { "ChargeSpeed": "x2", "OverCharge": "+0.5" }
+      "flavor": "And this is to go even further beyond",
+      "face": [
+        { "label": "Charge Speed", "value": "[good]+100%[/]" },
+        { "label": "Overcharge", "value": "[good]+50%[/]" }
+      ],
+      "stats": { "ChargeSpeed": "x1.4", "OverCharge": "+0.5" }
     },
     {
       "id": "ultrapuck.slowpoke",
@@ -75,7 +103,10 @@
       "tier": "F",
       "max": 3,
       "color": "#8C66CC",
-      "text": "Opponents move [good]10% slower[/].",
+      "flavor": "You're too slow!",
+      "face": [
+        { "label": "Enemy Speed", "value": "[good]-10%[/]" }
+      ],
       "stats": { "OpponentMoveSpeed": "x0.9" }
     },
     {
@@ -85,7 +116,11 @@
       "max": 3,
       "art": "ultrapuck.betterspawn",
       "color": "#66D9A6",
-      "text": "[good]Your team gets the puck at face-offs.[/]\n[note]The team with more copies gets it; a tie starts it in the middle.[/]",
+      "flavor": "Yoink",
+      "face": [
+        { "label": "Face-off Puck", "value": "[good]your team[/]" }
+      ],
+      "text": "[note]More copies win the tie; equal copies start in the middle.[/]",
       "stats": { "HeadStart": "+1" }
     },
     {
@@ -94,7 +129,10 @@
       "tier": "B",
       "max": 1,
       "color": "#59618C",
-      "text": "You start every face-off [good]on the other team's side[/].",
+      "flavor": "Under cover.",
+      "face": [
+        { "label": "Spawn", "value": "[good]their side[/]" }
+      ],
       "stats": { "DoubleAgent": "+1" }
     },
     {
@@ -103,7 +141,11 @@
       "tier": "F",
       "max": 2,
       "color": "#B3B8C2",
-      "text": "[good]+1 Pylon Goalie[/]: a heavy dummy in front of your net that blocks shots. It can be shoved aside, and it's back in place at every face-off.",
+      "flavor": "It's his first day, be kind.",
+      "face": [
+        { "label": "Pylon Goalie", "value": "[good]+1[/]" }
+      ],
+      "text": "[note]Can be shoved aside; back at every face-off.[/]",
       "stats": { "Pylons": "+1" }
     },
     {
@@ -112,7 +154,12 @@
       "tier": "S",
       "max": 1,
       "color": "#CC3340",
-      "text": "Without the puck, [good]brake to fire a shot[/]. The first player it hits is [good]stunned for 1.25 s[/], shoved hard, and drops the puck. [note]2 s cooldown.[/]",
+      "flavor": "Pew Pew",
+      "face": [
+        { "label": "Stun", "value": "[good].5 s[/]" },
+        { "label": "Cooldown", "value": "[note]5 s[/]" }
+      ],
+      "text": "Press {utility} to use.",
       "stats": { "PuckGun": "+1" }
     },
     {
@@ -121,7 +168,12 @@
       "tier": "A",
       "max": 1,
       "color": "#8CBFF2",
-      "text": "Utility: turn [good]invisible to opponents for 5 s[/]. [note]15 s cooldown.[/]",
+      "flavor": "Must have been the wind...",
+      "face": [
+        { "label": "Invisible", "value": "[good]5 s[/]" },
+        { "label": "Cooldown", "value": "[note]15 s[/]" }
+      ],
+      "text": "Press {utility} to use.",
       "stats": { "Invisibility": "+1" }
     },
     {
@@ -130,8 +182,12 @@
       "tier": "B",
       "max": 3,
       "color": "#8FD3F5",
-      "text": "Fully charged shots leave [good]a trail of ice[/] that slows opponents on it by [good]10%[/]. It lasts [good]3 s[/], then melts slowly from where you shot it.
-[note]Picking up the puck ends the trail there.[/]",
+      "flavor": "Friends call me Snow Miser",
+      "face": [
+        { "label": "Enemy on Ice", "value": "[good]-33%[/]" },
+        { "label": "Trail Life", "value": "[good]3 s[/]" }
+      ],
+      "text": "[note]Picking up the puck ends the trail there.[/]",
       "stats": { "IceTrail": "+1" }
     },
     {
@@ -141,7 +197,12 @@
       "max": 1,
       "minTeam": 2,
       "color": "#FF7359",
-      "text": "A teammate's check [good]launches you with +80% Move Speed for 2 s[/], and you keep the puck.",
+      "flavor": "Bob, throw me!",
+      "face": [
+        { "label": "Bumping your teammate speeds them up by:", "value": "[good]+80%[/]" },
+        { "label": "Duration", "value": "[good]3 s[/]" }
+      ],
+      "text": "[note]You keep the puck.[/]",
       "stats": { "FriendlyFire": "+1" }
     },
     {
@@ -150,8 +211,29 @@
       "tier": "A",
       "max": 3,
       "color": "#59A6FF",
-      "text": "Checking an opponent sends out a shockwave: [good]they and everyone near them are 45% slower for 2 s[/], and [good]the others are pushed away[/]. [note]7 s cooldown.[/]",
+      "flavor": "Woah Nelly!",
+      "face": [
+        { "label": "Shockwave Strength", "value": "[good]+1[/]" },
+        { "label": "Range", "value": "[good]5[/]" },
+        { "label": "Cooldown", "value": "[note]6 s[/]" }
+      ],
+      "text": "Press {utility} to use.",
       "stats": { "Shockwave": "+1" }
+    },
+    {
+      "id": "ultrapuck.swap",
+      "name": "Swap",
+      "tier": "A",
+      "max": 1,
+      "color": "#3D5CFF",
+      "flavor": "Boogie woogie.",
+      "face": [
+        { "label": "Throw", "value": "[good]a rock[/]" },
+        { "label": "Again", "value": "[good]swap places[/]" },
+        { "label": "Cooldown", "value": "[note]none[/]" }
+      ],
+      "text": "Press {utility} to use.",
+      "stats": { "Swap": "+1" }
     },
     {
       "id": "ultrapuck.teamplay",
@@ -160,7 +242,11 @@
       "max": 1,
       "minTeam": 2,
       "color": "#4DC78C",
-      "text": "Pass to a teammate to [good]refresh all your cooldowns[/].\n[note]Doesn't count if an opponent touches the puck first.[/]",
+      "flavor": "A clean pass resets your kit.",
+      "face": [
+        { "label": "On Pass", "value": "[good]your cooldowns[/]" }
+      ],
+      "text": "[note]Doesn't count if an opponent touches the puck first.[/]",
       "stats": { "PassRefresh": "+1" }
     },
     {
@@ -171,7 +257,11 @@
       "minTeam": 2,
       "requires": "ultrapuck.teamplay",
       "color": "#33D980",
-      "text": "Your passes [good]refresh the whole team's cooldowns[/].\n[note]Only offered once your team has Team Play.[/]",
+      "flavor": "Your passes reset everyone.",
+      "face": [
+        { "label": "On Pass", "value": "[good]team cooldowns[/]" }
+      ],
+      "text": "[note]Only offered once your team has Team Play.[/]",
       "stats": { "PassRefresh": "+1", "PassRefreshTeam": "+1" }
     }
   ]

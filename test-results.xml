@@ -1,0 +1,665 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="99" result="Passed" total="99" passed="94" failed="0" inconclusive="0" skipped="5" asserts="0" engine-version="3.5.0.0" clr-version="4.0.30319.42000" start-time="2026-11-21 01:57:54Z" end-time="2026-11-21 01:58:56Z" duration="61.8122685">
+  <test-suite type="TestSuite" id="1000" name="Ultra Puck" fullname="Ultra Puck" runstate="Runnable" testcasecount="99" result="Passed" start-time="2026-11-21 01:57:54Z" end-time="2026-11-21 01:58:56Z" duration="61.812269" total="99" passed="94" failed="0" inconclusive="0" skipped="5" asserts="0">
+    <properties>
+      <property name="platform" value="EditMode" />
+    </properties>
+    <test-suite type="Assembly" id="1111" name="UltraPuck.Tests.dll" fullname="C:/Users/Jay/Documents/GitHub/Ultra Puck (Game)/Library/ScriptAssemblies/UltraPuck.Tests.dll" runstate="Runnable" testcasecount="99" result="Passed" start-time="2026-11-21 01:57:54Z" end-time="2026-11-21 01:58:56Z" duration="61.799763" total="99" passed="94" failed="0" inconclusive="0" skipped="5" asserts="0">
+      <properties>
+        <property name="_PID" value="27036" />
+        <property name="_APPDOMAIN" value="Unity Child Domain" />
+        <property name="platform" value="EditMode" />
+        <property name="EditorOnly" value="True" />
+      </properties>
+      <test-suite type="TestSuite" id="1112" name="UltraPuck" fullname="UltraPuck" runstate="Runnable" testcasecount="99" result="Passed" start-time="2026-11-21 01:57:54Z" end-time="2026-11-21 01:58:56Z" duration="61.798186" total="99" passed="94" failed="0" inconclusive="0" skipped="5" asserts="0">
+        <properties />
+        <test-suite type="TestSuite" id="1113" name="Tests" fullname="UltraPuck.Tests" runstate="Runnable" testcasecount="99" result="Passed" start-time="2026-11-21 01:57:54Z" end-time="2026-11-21 01:58:56Z" duration="61.797040" total="99" passed="94" failed="0" inconclusive="0" skipped="5" asserts="0">
+          <properties />
+          <test-suite type="TestFixture" id="1001" name="CardMechanicsTests" fullname="UltraPuck.Tests.CardMechanicsTests" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" testcasecount="23" result="Passed" start-time="2026-11-21 01:57:54Z" end-time="2026-11-21 01:57:55Z" duration="0.527600" total="23" passed="23" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-case id="1024" name="AllCardsStayDeterministic" fullname="UltraPuck.Tests.CardMechanicsTests.AllCardsStayDeterministic" methodname="AllCardsStayDeterministic" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="268560576" result="Passed" start-time="2026-11-21 01:57:54Z" end-time="2026-11-21 01:57:55Z" duration="0.344999" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[shocks + refreshes 0, score 1-0, pylons 1
+]]></output>
+            </test-case>
+            <test-case id="1011" name="DoubleAgentStartsOnTheOtherSide" fullname="UltraPuck.Tests.CardMechanicsTests.DoubleAgentStartsOnTheOtherSide" methodname="DoubleAgentStartsOnTheOtherSide" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="2084640581" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.011528" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1017" name="FriendlyFireBoostsInsteadOfDazing" fullname="UltraPuck.Tests.CardMechanicsTests.FriendlyFireBoostsInsteadOfDazing" methodname="FriendlyFireBoostsInsteadOfDazing" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="797051075" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002911" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1010" name="HeadStartGivesTheTeamThePuck" fullname="UltraPuck.Tests.CardMechanicsTests.HeadStartGivesTheTeamThePuck" methodname="HeadStartGivesTheTeamThePuck" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1443184869" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001514" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1019" name="IceTrailSlowsOpponentsAndMelts" fullname="UltraPuck.Tests.CardMechanicsTests.IceTrailSlowsOpponentsAndMelts" methodname="IceTrailSlowsOpponentsAndMelts" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="387176232" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.050931" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1016" name="InvisibilityLastsFiveSecondsThenCoolsDown" fullname="UltraPuck.Tests.CardMechanicsTests.InvisibilityLastsFiveSecondsThenCoolsDown" methodname="InvisibilityLastsFiveSecondsThenCoolsDown" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="141141379" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.009879" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1020" name="PickingUpThePuckEndsTheIceTrail" fullname="UltraPuck.Tests.CardMechanicsTests.PickingUpThePuckEndsTheIceTrail" methodname="PickingUpThePuckEndsTheIceTrail" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1820506355" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.017240" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1014" name="PuckGunKnocksTheLoosePuck" fullname="UltraPuck.Tests.CardMechanicsTests.PuckGunKnocksTheLoosePuck" methodname="PuckGunKnocksTheLoosePuck" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="348124216" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002116" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1013" name="PuckGunStunsAndKnocksThePuckLoose" fullname="UltraPuck.Tests.CardMechanicsTests.PuckGunStunsAndKnocksThePuckLoose" methodname="PuckGunStunsAndKnocksThePuckLoose" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1935697025" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.007928" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1012" name="PylonGoaliesBlockShots" fullname="UltraPuck.Tests.CardMechanicsTests.PylonGoaliesBlockShots" methodname="PylonGoaliesBlockShots" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="948461480" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.005028" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1003" name="PylonGoaliesCanBePushed" fullname="UltraPuck.Tests.CardMechanicsTests.PylonGoaliesCanBePushed" methodname="PylonGoaliesCanBePushed" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="344142062" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.003491" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-suite type="ParameterizedMethod" id="1008" name="PylonGoaliesStandInFrontOfTheirNetOnEveryRink" fullname="UltraPuck.Tests.CardMechanicsTests.PylonGoaliesStandInFrontOfTheirNetOnEveryRink" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.015117" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1004" name="PylonGoaliesStandInFrontOfTheirNetOnEveryRink(&quot;test-rink.json&quot;)" fullname="UltraPuck.Tests.CardMechanicsTests.PylonGoaliesStandInFrontOfTheirNetOnEveryRink(&quot;test-rink.json&quot;)" methodname="PylonGoaliesStandInFrontOfTheirNetOnEveryRink" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1173518565" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.005677" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1005" name="PylonGoaliesStandInFrontOfTheirNetOnEveryRink(&quot;hockey-rink.json&quot;)" fullname="UltraPuck.Tests.CardMechanicsTests.PylonGoaliesStandInFrontOfTheirNetOnEveryRink(&quot;hockey-rink.json&quot;)" methodname="PylonGoaliesStandInFrontOfTheirNetOnEveryRink" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1948474489" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001977" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1006" name="PylonGoaliesStandInFrontOfTheirNetOnEveryRink(&quot;s-rink.json&quot;)" fullname="UltraPuck.Tests.CardMechanicsTests.PylonGoaliesStandInFrontOfTheirNetOnEveryRink(&quot;s-rink.json&quot;)" methodname="PylonGoaliesStandInFrontOfTheirNetOnEveryRink" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1221883319" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002807" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1007" name="PylonGoaliesStandInFrontOfTheirNetOnEveryRink(&quot;u-rink.json&quot;)" fullname="UltraPuck.Tests.CardMechanicsTests.PylonGoaliesStandInFrontOfTheirNetOnEveryRink(&quot;u-rink.json&quot;)" methodname="PylonGoaliesStandInFrontOfTheirNetOnEveryRink" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1232798849" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001880" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-case id="1018" name="ShockwavePushesEveryoneNearby" fullname="UltraPuck.Tests.CardMechanicsTests.ShockwavePushesEveryoneNearby" methodname="ShockwavePushesEveryoneNearby" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="2119061754" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002247" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1009" name="SwitchedOffCardsAreNeverOffered" fullname="UltraPuck.Tests.CardMechanicsTests.SwitchedOffCardsAreNeverOffered" methodname="SwitchedOffCardsAreNeverOffered" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1238856709" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.008066" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1025" name="TeamCardsNeedATeamAndTeamPlayTwoNeedsTeamPlay" fullname="UltraPuck.Tests.CardMechanicsTests.TeamCardsNeedATeamAndTeamPlayTwoNeedsTeamPlay" methodname="TeamCardsNeedATeamAndTeamPlayTwoNeedsTeamPlay" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1320601992" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.011430" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1022" name="TeamPlayDoesntCountIfAnOpponentTouchesIt" fullname="UltraPuck.Tests.CardMechanicsTests.TeamPlayDoesntCountIfAnOpponentTouchesIt" methodname="TeamPlayDoesntCountIfAnOpponentTouchesIt" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="297603606" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.005204" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1021" name="TeamPlayRestoresCooldownsAfterACleanPass" fullname="UltraPuck.Tests.CardMechanicsTests.TeamPlayRestoresCooldownsAfterACleanPass" methodname="TeamPlayRestoresCooldownsAfterACleanPass" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="23798090" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002692" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1023" name="TeamPlayTwoRestoresTheWholeTeam" fullname="UltraPuck.Tests.CardMechanicsTests.TeamPlayTwoRestoresTheWholeTeam" methodname="TeamPlayTwoRestoresTheWholeTeam" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="517290284" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001853" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1002" name="TeamVoteGivesTheWholeTeamTheWinningCard" fullname="UltraPuck.Tests.CardMechanicsTests.TeamVoteGivesTheWholeTeamTheWinningCard" methodname="TeamVoteGivesTheWholeTeamTheWinningCard" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="918074404" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002780" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1015" name="WithoutTheCardUtilityDoesNothing" fullname="UltraPuck.Tests.CardMechanicsTests.WithoutTheCardUtilityDoesNothing" methodname="WithoutTheCardUtilityDoesNothing" classname="UltraPuck.Tests.CardMechanicsTests" runstate="Runnable" seed="1664054704" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001302" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+          </test-suite>
+          <test-suite type="TestFixture" id="1026" name="CardTests" fullname="UltraPuck.Tests.CardTests" classname="UltraPuck.Tests.CardTests" runstate="Runnable" testcasecount="9" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.087766" total="9" passed="9" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-case id="1028" name="ATypoInACardFileIsAnError" fullname="UltraPuck.Tests.CardTests.ATypoInACardFileIsAnError" methodname="ATypoInACardFileIsAnError" classname="UltraPuck.Tests.CardTests" runstate="Runnable" seed="151721988" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001375" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1035" name="BotsPickTheirCards" fullname="UltraPuck.Tests.CardTests.BotsPickTheirCards" methodname="BotsPickTheirCards" classname="UltraPuck.Tests.CardTests" runstate="Runnable" seed="1676261333" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.005594" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1029" name="CardsChangeStats" fullname="UltraPuck.Tests.CardTests.CardsChangeStats" methodname="CardsChangeStats" classname="UltraPuck.Tests.CardTests" runstate="Runnable" seed="1048163290" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001667" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1027" name="CardsLoadWithArt" fullname="UltraPuck.Tests.CardTests.CardsLoadWithArt" methodname="CardsLoadWithArt" classname="UltraPuck.Tests.CardTests" runstate="Runnable" seed="1980153393" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002546" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1030" name="DoubleDashChecksTwiceBeforeRecharging" fullname="UltraPuck.Tests.CardTests.DoubleDashChecksTwiceBeforeRecharging" methodname="DoubleDashChecksTwiceBeforeRecharging" classname="UltraPuck.Tests.CardTests" runstate="Runnable" seed="433139035" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002218" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1034" name="EveryCardIsOfferedAsOftenAsAnyOther" fullname="UltraPuck.Tests.CardTests.EveryCardIsOfferedAsOftenAsAnyOther" methodname="EveryCardIsOfferedAsOftenAsAnyOther" classname="UltraPuck.Tests.CardTests" runstate="Runnable" seed="844093225" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.057906" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[17 cards on offer, seen between 5176 and 5387 times each
+]]></output>
+            </test-case>
+            <test-case id="1033" name="OffersRespectTheCopyLimit" fullname="UltraPuck.Tests.CardTests.OffersRespectTheCopyLimit" methodname="OffersRespectTheCopyLimit" classname="UltraPuck.Tests.CardTests" runstate="Runnable" seed="546705747" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002475" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1032" name="RunningOutOfTimePicksForYou" fullname="UltraPuck.Tests.CardTests.RunningOutOfTimePicksForYou" methodname="RunningOutOfTimePicksForYou" classname="UltraPuck.Tests.CardTests" runstate="Runnable" seed="1114125382" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.004967" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1031" name="TheTeamThatConcededPicksACard" fullname="UltraPuck.Tests.CardTests.TheTeamThatConcededPicksACard" methodname="TheTeamThatConcededPicksACard" classname="UltraPuck.Tests.CardTests" runstate="Runnable" seed="647009761" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.006937" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+          </test-suite>
+          <test-suite type="TestFixture" id="1036" name="CoreTests" fullname="UltraPuck.Tests.CoreTests" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" testcasecount="52" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:58:49Z" duration="54.502527" total="52" passed="52" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-case id="1052" name="ACheckFreezesBothPlayersForAMoment" fullname="UltraPuck.Tests.CoreTests.ACheckFreezesBothPlayersForAMoment" methodname="ACheckFreezesBothPlayersForAMoment" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="700702910" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.002471" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1069" name="AimStickOverridesWhereYouFace" fullname="UltraPuck.Tests.CoreTests.AimStickOverridesWhereYouFace" methodname="AimStickOverridesWhereYouFace" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1728059185" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001761" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1051" name="AnotherPlayersBodyCanPushTheCarriedPuckAway" fullname="UltraPuck.Tests.CoreTests.AnotherPlayersBodyCanPushTheCarriedPuckAway" methodname="AnotherPlayersBodyCanPushTheCarriedPuckAway" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="2072058113" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001572" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1065" name="APassCarriesTheTeammateOn" fullname="UltraPuck.Tests.CoreTests.APassCarriesTheTeammateOn" methodname="APassCarriesTheTeammateOn" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="626787078" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:57:55Z" duration="0.001958" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1088" name="BotMatchesAreFair" fullname="UltraPuck.Tests.CoreTests.BotMatchesAreFair" methodname="BotMatchesAreFair" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1128937762" result="Passed" start-time="2026-11-21 01:57:55Z" end-time="2026-11-21 01:58:12Z" duration="16.989726" asserts="0">
+              <properties>
+                <property name="Timeout" value="600000" />
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[lineup 0,1: wins orange 7 blue 5, goals orange 43 blue 37
+lineup 0,1,0,1: wins orange 4 blue 5, goals orange 10 blue 14
+lineup 1,0,1,0: wins orange 5 blue 5, goals orange 12 blue 10
+lineup 0,0,1,1: wins orange 3 blue 6, goals orange 7 blue 14
+total: wins orange 19 blue 21, goals orange 72 blue 75
+Ultra Puck fairness
+lineup 0,1: wins orange 7 blue 5, goals orange 43 blue 37
+lineup 0,1,0,1: wins orange 4 blue 5, goals orange 10 blue 14
+lineup 1,0,1,0: wins orange 5 blue 5, goals orange 12 blue 10
+lineup 0,0,1,1: wins orange 3 blue 6, goals orange 7 blue 14
+total: wins orange 19 blue 21, goals orange 72 blue 75
+]]></output>
+            </test-case>
+            <test-case id="1087" name="BotsFollowTheMatchSeed" fullname="UltraPuck.Tests.CoreTests.BotsFollowTheMatchSeed" methodname="BotsFollowTheMatchSeed" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="779174269" result="Passed" start-time="2026-11-21 01:58:12Z" end-time="2026-11-21 01:58:12Z" duration="0.204225" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1074" name="BotsPassToOpenTeammates" fullname="UltraPuck.Tests.CoreTests.BotsPassToOpenTeammates" methodname="BotsPassToOpenTeammates" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1529972132" result="Passed" start-time="2026-11-21 01:58:12Z" end-time="2026-11-21 01:58:12Z" duration="0.004321" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-suite type="ParameterizedMethod" id="1079" name="BotsScoreOnTheBentRinks" fullname="UltraPuck.Tests.CoreTests.BotsScoreOnTheBentRinks" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" testcasecount="2" result="Passed" start-time="2026-11-21 01:58:12Z" end-time="2026-11-21 01:58:30Z" duration="18.018391" total="2" passed="2" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1077" name="BotsScoreOnTheBentRinks(&quot;s-rink.json&quot;)" fullname="UltraPuck.Tests.CoreTests.BotsScoreOnTheBentRinks(&quot;s-rink.json&quot;)" methodname="BotsScoreOnTheBentRinks" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="584319143" result="Passed" start-time="2026-11-21 01:58:12Z" end-time="2026-11-21 01:58:29Z" duration="16.798803" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[s-rink.json: goals red 11, blue 8
+]]></output>
+              </test-case>
+              <test-case id="1078" name="BotsScoreOnTheBentRinks(&quot;u-rink.json&quot;)" fullname="UltraPuck.Tests.CoreTests.BotsScoreOnTheBentRinks(&quot;u-rink.json&quot;)" methodname="BotsScoreOnTheBentRinks" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="647262108" result="Passed" start-time="2026-11-21 01:58:29Z" end-time="2026-11-21 01:58:30Z" duration="1.218776" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+                <output><![CDATA[u-rink.json: goals red 19, blue 24
+]]></output>
+              </test-case>
+            </test-suite>
+            <test-case id="1076" name="BotsScoreOnTheHockeyRink" fullname="UltraPuck.Tests.CoreTests.BotsScoreOnTheHockeyRink" methodname="BotsScoreOnTheHockeyRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1960776378" result="Passed" start-time="2026-11-21 01:58:30Z" end-time="2026-11-21 01:58:37Z" duration="6.660349" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1049" name="CarryingIntoTheBoardsKeepsThePuckEvenInsideYou" fullname="UltraPuck.Tests.CoreTests.CarryingIntoTheBoardsKeepsThePuckEvenInsideYou" methodname="CarryingIntoTheBoardsKeepsThePuckEvenInsideYou" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1523275965" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.075667" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1063" name="CarryingIntoYourOwnNetIsSafeUntilYouLetGo" fullname="UltraPuck.Tests.CoreTests.CarryingIntoYourOwnNetIsSafeUntilYouLetGo" methodname="CarryingIntoYourOwnNetIsSafeUntilYouLetGo" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="92398396" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.003638" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1068" name="ChargeBrakeWithoutThePuckBrakes" fullname="UltraPuck.Tests.CoreTests.ChargeBrakeWithoutThePuckBrakes" methodname="ChargeBrakeWithoutThePuckBrakes" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1330347713" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.001765" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1058" name="ChargePowerFollowsHoldTime" fullname="UltraPuck.Tests.CoreTests.ChargePowerFollowsHoldTime" methodname="ChargePowerFollowsHoldTime" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="503905805" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.008755" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1056" name="ChargeShotFiresWhenLetGoAndIsFaster" fullname="UltraPuck.Tests.CoreTests.ChargeShotFiresWhenLetGoAndIsFaster" methodname="ChargeShotFiresWhenLetGoAndIsFaster" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1978360270" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.003076" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1054" name="CheckingIntoALoosePuckPicksItUp" fullname="UltraPuck.Tests.CoreTests.CheckingIntoALoosePuckPicksItUp" methodname="CheckingIntoALoosePuckPicksItUp" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="448785308" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.001446" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1047" name="CheckingTheCarrierKnocksThePuckLoose" fullname="UltraPuck.Tests.CoreTests.CheckingTheCarrierKnocksThePuckLoose" methodname="CheckingTheCarrierKnocksThePuckLoose" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1565222174" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.001951" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1067" name="EveryonePressingShootSkipsTheReplayAndBotsAgree" fullname="UltraPuck.Tests.CoreTests.EveryonePressingShootSkipsTheReplayAndBotsAgree" methodname="EveryonePressingShootSkipsTheReplayAndBotsAgree" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="624137345" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.005553" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1042" name="FirstToFiveWins" fullname="UltraPuck.Tests.CoreTests.FirstToFiveWins" methodname="FirstToFiveWins" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="169154066" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.005507" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1038" name="FixedPointMaths" fullname="UltraPuck.Tests.CoreTests.FixedPointMaths" methodname="FixedPointMaths" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1119498813" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.001066" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1044" name="FreePlayCallsThePuckBack" fullname="UltraPuck.Tests.CoreTests.FreePlayCallsThePuckBack" methodname="FreePlayCallsThePuckBack" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1399944475" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.002315" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1043" name="FreePlayGoalsNeverEndTheGame" fullname="UltraPuck.Tests.CoreTests.FreePlayGoalsNeverEndTheGame" methodname="FreePlayGoalsNeverEndTheGame" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="758431849" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.003193" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1070" name="HardBumpsAreRecorded" fullname="UltraPuck.Tests.CoreTests.HardBumpsAreRecorded" methodname="HardBumpsAreRecorded" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1867138239" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.002008" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1060" name="HoldingChargeWhenYouPickUpThePuckStartsCharging" fullname="UltraPuck.Tests.CoreTests.HoldingChargeWhenYouPickUpThePuckStartsCharging" methodname="HoldingChargeWhenYouPickUpThePuckStartsCharging" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="310347257" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.001111" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1050" name="HoldingShootAfterAQuickShotDoesNotDash" fullname="UltraPuck.Tests.CoreTests.HoldingShootAfterAQuickShotDoesNotDash" methodname="HoldingShootAfterAQuickShotDoesNotDash" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="821907327" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.001601" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1090" name="InsideTheRink" fullname="UltraPuck.Tests.CoreTests.InsideTheRink" methodname="InsideTheRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="145384584" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.000966" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1037" name="MapLoads" fullname="UltraPuck.Tests.CoreTests.MapLoads" methodname="MapLoads" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1546797459" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.003676" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1071" name="MirroredMatchesStayMirrored" fullname="UltraPuck.Tests.CoreTests.MirroredMatchesStayMirrored" methodname="MirroredMatchesStayMirrored" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1001311111" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.176562" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1072" name="MirroredMatchesStayMirroredOnTheHockeyRink" fullname="UltraPuck.Tests.CoreTests.MirroredMatchesStayMirroredOnTheHockeyRink" methodname="MirroredMatchesStayMirroredOnTheHockeyRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1016704465" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.155537" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1073" name="MirroredMatchesStayMirroredOnTheURink" fullname="UltraPuck.Tests.CoreTests.MirroredMatchesStayMirroredOnTheURink" methodname="MirroredMatchesStayMirroredOnTheURink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1477017557" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.147103" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1046" name="NothingGoesThroughWalls" fullname="UltraPuck.Tests.CoreTests.NothingGoesThroughWalls" methodname="NothingGoesThroughWalls" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1614191227" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.018106" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1059" name="OverChargeScalesPastAFullShot" fullname="UltraPuck.Tests.CoreTests.OverChargeScalesPastAFullShot" methodname="OverChargeScalesPastAFullShot" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="2042502558" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.007060" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1045" name="PlayersCanJoinAndLeaveMidGame" fullname="UltraPuck.Tests.CoreTests.PlayersCanJoinAndLeaveMidGame" methodname="PlayersCanJoinAndLeaveMidGame" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="560718625" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.002157" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1062" name="PlayersGetGoingQuicklyButKeepTheirTopSpeed" fullname="UltraPuck.Tests.CoreTests.PlayersGetGoingQuicklyButKeepTheirTopSpeed" methodname="PlayersGetGoingQuicklyButKeepTheirTopSpeed" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1937645350" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.002264" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1041" name="PuckInEachGoalScoresForTheOtherTeam" fullname="UltraPuck.Tests.CoreTests.PuckInEachGoalScoresForTheOtherTeam" methodname="PuckInEachGoalScoresForTheOtherTeam" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="907438217" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.009029" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1048" name="ReachingTheCarriedPuckWithYourWedgeStealsIt" fullname="UltraPuck.Tests.CoreTests.ReachingTheCarriedPuckWithYourWedgeStealsIt" methodname="ReachingTheCarriedPuckWithYourWedgeStealsIt" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1814743763" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.001341" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1040" name="RollbackReplaysExactly" fullname="UltraPuck.Tests.CoreTests.RollbackReplaysExactly" methodname="RollbackReplaysExactly" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="681517562" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:37Z" duration="0.004572" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1039" name="SameInputsSameResult" fullname="UltraPuck.Tests.CoreTests.SameInputsSameResult" methodname="SameInputsSameResult" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1112441164" result="Passed" start-time="2026-11-21 01:58:37Z" end-time="2026-11-21 01:58:38Z" duration="0.312556" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1055" name="ShootCheckWithThePuckShootsInsteadOfChecking" fullname="UltraPuck.Tests.CoreTests.ShootCheckWithThePuckShootsInsteadOfChecking" methodname="ShootCheckWithThePuckShootsInsteadOfChecking" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1249203634" result="Passed" start-time="2026-11-21 01:58:38Z" end-time="2026-11-21 01:58:38Z" duration="0.001057" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1057" name="ShotsAreCountedWithTheirStrength" fullname="UltraPuck.Tests.CoreTests.ShotsAreCountedWithTheirStrength" methodname="ShotsAreCountedWithTheirStrength" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1680565440" result="Passed" start-time="2026-11-21 01:58:38Z" end-time="2026-11-21 01:58:38Z" duration="0.006694" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1089" name="ShotsFromTheBoardsStayInTheRink" fullname="UltraPuck.Tests.CoreTests.ShotsFromTheBoardsStayInTheRink" methodname="ShotsFromTheBoardsStayInTheRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="681389141" result="Passed" start-time="2026-11-21 01:58:38Z" end-time="2026-11-21 01:58:49Z" duration="11.182460" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1085" name="TheBentRinksNetsStandOnTheIce" fullname="UltraPuck.Tests.CoreTests.TheBentRinksNetsStandOnTheIce" methodname="TheBentRinksNetsStandOnTheIce" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="962267629" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.004602" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1066" name="TheGoalCountsWhenThePuckTouchesTheGoalBox" fullname="UltraPuck.Tests.CoreTests.TheGoalCountsWhenThePuckTouchesTheGoalBox" methodname="TheGoalCountsWhenThePuckTouchesTheGoalBox" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1977048709" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.000887" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1086" name="TheHockeyNetsBlockShotsFromBehind" fullname="UltraPuck.Tests.CoreTests.TheHockeyNetsBlockShotsFromBehind" methodname="TheHockeyNetsBlockShotsFromBehind" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="314388234" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.001727" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-suite type="ParameterizedMethod" id="1084" name="TheNetsAreThirtyPercentBiggerOnEveryRink" fullname="UltraPuck.Tests.CoreTests.TheNetsAreThirtyPercentBiggerOnEveryRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.005327" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+              <test-case id="1080" name="TheNetsAreThirtyPercentBiggerOnEveryRink(&quot;test-rink.json&quot;)" fullname="UltraPuck.Tests.CoreTests.TheNetsAreThirtyPercentBiggerOnEveryRink(&quot;test-rink.json&quot;)" methodname="TheNetsAreThirtyPercentBiggerOnEveryRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1197485279" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.000972" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1081" name="TheNetsAreThirtyPercentBiggerOnEveryRink(&quot;hockey-rink.json&quot;)" fullname="UltraPuck.Tests.CoreTests.TheNetsAreThirtyPercentBiggerOnEveryRink(&quot;hockey-rink.json&quot;)" methodname="TheNetsAreThirtyPercentBiggerOnEveryRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1654041593" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.000629" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1082" name="TheNetsAreThirtyPercentBiggerOnEveryRink(&quot;s-rink.json&quot;)" fullname="UltraPuck.Tests.CoreTests.TheNetsAreThirtyPercentBiggerOnEveryRink(&quot;s-rink.json&quot;)" methodname="TheNetsAreThirtyPercentBiggerOnEveryRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1338445559" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.000928" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+              <test-case id="1083" name="TheNetsAreThirtyPercentBiggerOnEveryRink(&quot;u-rink.json&quot;)" fullname="UltraPuck.Tests.CoreTests.TheNetsAreThirtyPercentBiggerOnEveryRink(&quot;u-rink.json&quot;)" methodname="TheNetsAreThirtyPercentBiggerOnEveryRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="138447920" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.000622" asserts="0">
+                <properties>
+                  <property name="retryIteration" value="0" />
+                  <property name="repeatIteration" value="0" />
+                </properties>
+              </test-case>
+            </test-suite>
+            <test-case id="1061" name="ThePauseStopsEverything" fullname="UltraPuck.Tests.CoreTests.ThePauseStopsEverything" methodname="ThePauseStopsEverything" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="1661492449" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.001004" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1064" name="TheWedgePicksUpThePuck" fullname="UltraPuck.Tests.CoreTests.TheWedgePicksUpThePuck" methodname="TheWedgePicksUpThePuck" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="893703688" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.001224" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1053" name="TimedMatchesEndOnTheClockOrInOvertime" fullname="UltraPuck.Tests.CoreTests.TimedMatchesEndOnTheClockOrInOvertime" methodname="TimedMatchesEndOnTheClockOrInOvertime" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="631611272" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.012066" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1075" name="TurnedMatchesStayTurnedOnTheSRink" fullname="UltraPuck.Tests.CoreTests.TurnedMatchesStayTurnedOnTheSRink" methodname="TurnedMatchesStayTurnedOnTheSRink" classname="UltraPuck.Tests.CoreTests" runstate="Runnable" seed="300973482" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.428775" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+          </test-suite>
+          <test-suite type="TestFixture" id="1091" name="NetTests" fullname="UltraPuck.Tests.NetTests" classname="UltraPuck.Tests.NetTests" runstate="Runnable" testcasecount="4" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:55Z" duration="5.495134" total="4" passed="4" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-case id="1094" name="DifferentFilesCantJoin" fullname="UltraPuck.Tests.NetTests.DifferentFilesCantJoin" methodname="DifferentFilesCantJoin" classname="UltraPuck.Tests.NetTests" runstate="Runnable" seed="140229153" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:49Z" duration="0.008896" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1095" name="RealUdpOnThisPc" fullname="UltraPuck.Tests.NetTests.RealUdpOnThisPc" methodname="RealUdpOnThisPc" classname="UltraPuck.Tests.NetTests" runstate="Runnable" seed="248970000" result="Passed" start-time="2026-11-21 01:58:49Z" end-time="2026-11-21 01:58:54Z" duration="4.303372" asserts="0">
+              <properties>
+                <property name="Timeout" value="60000" />
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1093" name="ThreePcsThroughTheHost" fullname="UltraPuck.Tests.NetTests.ThreePcsThroughTheHost" methodname="ThreePcsThroughTheHost" classname="UltraPuck.Tests.NetTests" runstate="Runnable" seed="284744531" result="Passed" start-time="2026-11-21 01:58:54Z" end-time="2026-11-21 01:58:54Z" duration="0.650143" asserts="0">
+              <properties>
+                <property name="Timeout" value="300000" />
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1092" name="TwoPcsOverABadNetworkStayIdentical" fullname="UltraPuck.Tests.NetTests.TwoPcsOverABadNetworkStayIdentical" methodname="TwoPcsOverABadNetworkStayIdentical" classname="UltraPuck.Tests.NetTests" runstate="Runnable" seed="222483381" result="Passed" start-time="2026-11-21 01:58:54Z" end-time="2026-11-21 01:58:55Z" duration="0.528832" asserts="0">
+              <properties>
+                <property name="Timeout" value="300000" />
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[rewinds host 588 (longest 12), client 593 (longest 13), stalls 0, score 0-0, cards 0/0
+]]></output>
+            </test-case>
+          </test-suite>
+          <test-suite type="TestFixture" id="1096" name="PerfTests" fullname="UltraPuck.Tests.PerfTests" classname="UltraPuck.Tests.PerfTests" runstate="Explicit" testcasecount="5" result="Skipped" label="Explicit" site="SetUp" start-time="2026-11-21 01:58:55Z" end-time="2026-11-21 01:58:55Z" duration="0.003133" total="5" passed="0" failed="0" inconclusive="0" skipped="5" asserts="0">
+            <properties />
+            <test-suite type="ParameterizedMethod" id="1099" name="OneOnOneSlotsAreFair" fullname="UltraPuck.Tests.PerfTests.OneOnOneSlotsAreFair" classname="UltraPuck.Tests.PerfTests" runstate="Runnable" testcasecount="2" result="Skipped" label="Explicit" site="Parent" start-time="0001-01-01 00:00:00Z" end-time="0001-01-01 00:00:00Z" duration="0.000000" total="0" passed="0" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+            </test-suite>
+            <test-case id="1097" name="OneOnOneSlotsAreFair(&quot;test-rink.json&quot;)" fullname="UltraPuck.Tests.PerfTests.OneOnOneSlotsAreFair(&quot;test-rink.json&quot;)" methodname="OneOnOneSlotsAreFair" classname="UltraPuck.Tests.PerfTests" runstate="Runnable" seed="1335768946" result="Skipped" label="Explicit" site="Parent" start-time="0001-01-01 00:00:00Z" end-time="0001-01-01 00:00:00Z" duration="0.000000" asserts="0">
+              <properties />
+            </test-case>
+            <test-case id="1098" name="OneOnOneSlotsAreFair(&quot;hockey-rink.json&quot;)" fullname="UltraPuck.Tests.PerfTests.OneOnOneSlotsAreFair(&quot;hockey-rink.json&quot;)" methodname="OneOnOneSlotsAreFair" classname="UltraPuck.Tests.PerfTests" runstate="Runnable" seed="1185356258" result="Skipped" label="Explicit" site="Parent" start-time="0001-01-01 00:00:00Z" end-time="0001-01-01 00:00:00Z" duration="0.000000" asserts="0">
+              <properties />
+            </test-case>
+            <test-suite type="ParameterizedMethod" id="1103" name="TicksPerSecond" fullname="UltraPuck.Tests.PerfTests.TicksPerSecond" classname="UltraPuck.Tests.PerfTests" runstate="Runnable" testcasecount="3" result="Skipped" label="Explicit" site="Parent" start-time="0001-01-01 00:00:00Z" end-time="0001-01-01 00:00:00Z" duration="0.000000" total="0" passed="0" failed="0" inconclusive="0" skipped="0" asserts="0">
+              <properties />
+            </test-suite>
+            <test-case id="1100" name="TicksPerSecond(&quot;hockey-rink.json&quot;,6)" fullname="UltraPuck.Tests.PerfTests.TicksPerSecond(&quot;hockey-rink.json&quot;,6)" methodname="TicksPerSecond" classname="UltraPuck.Tests.PerfTests" runstate="Runnable" seed="2073203533" result="Skipped" label="Explicit" site="Parent" start-time="0001-01-01 00:00:00Z" end-time="0001-01-01 00:00:00Z" duration="0.000000" asserts="0">
+              <properties />
+            </test-case>
+            <test-case id="1101" name="TicksPerSecond(&quot;hockey-rink.json&quot;,8)" fullname="UltraPuck.Tests.PerfTests.TicksPerSecond(&quot;hockey-rink.json&quot;,8)" methodname="TicksPerSecond" classname="UltraPuck.Tests.PerfTests" runstate="Runnable" seed="408446181" result="Skipped" label="Explicit" site="Parent" start-time="0001-01-01 00:00:00Z" end-time="0001-01-01 00:00:00Z" duration="0.000000" asserts="0">
+              <properties />
+            </test-case>
+            <test-case id="1102" name="TicksPerSecond(&quot;s-rink.json&quot;,6)" fullname="UltraPuck.Tests.PerfTests.TicksPerSecond(&quot;s-rink.json&quot;,6)" methodname="TicksPerSecond" classname="UltraPuck.Tests.PerfTests" runstate="Runnable" seed="1177140750" result="Skipped" label="Explicit" site="Parent" start-time="0001-01-01 00:00:00Z" end-time="0001-01-01 00:00:00Z" duration="0.000000" asserts="0">
+              <properties />
+            </test-case>
+          </test-suite>
+          <test-suite type="TestFixture" id="1104" name="SoundTests" fullname="UltraPuck.Tests.SoundTests" classname="UltraPuck.Tests.SoundTests" runstate="Runnable" testcasecount="6" result="Passed" start-time="2026-11-21 01:58:55Z" end-time="2026-11-21 01:58:56Z" duration="1.177687" total="6" passed="6" failed="0" inconclusive="0" skipped="0" asserts="0">
+            <properties />
+            <test-case id="1108" name="EffectsAreTheSameEveryTime" fullname="UltraPuck.Tests.SoundTests.EffectsAreTheSameEveryTime" methodname="EffectsAreTheSameEveryTime" classname="UltraPuck.Tests.SoundTests" runstate="Runnable" seed="1718843759" result="Passed" start-time="2026-11-21 01:58:55Z" end-time="2026-11-21 01:58:55Z" duration="0.285334" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1110" name="EffectsCanBeSavedToListenTo" fullname="UltraPuck.Tests.SoundTests.EffectsCanBeSavedToListenTo" methodname="EffectsCanBeSavedToListenTo" classname="UltraPuck.Tests.SoundTests" runstate="Runnable" seed="480764474" result="Passed" start-time="2026-11-21 01:58:55Z" end-time="2026-11-21 01:58:55Z" duration="0.004001" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <reason>
+                <message><![CDATA[set ULTRAPUCK_SOUNDS to a folder to save the effects there]]></message>
+              </reason>
+            </test-case>
+            <test-case id="1106" name="EffectsStartAndEndWithoutAClick" fullname="UltraPuck.Tests.SoundTests.EffectsStartAndEndWithoutAClick" methodname="EffectsStartAndEndWithoutAClick" classname="UltraPuck.Tests.SoundTests" runstate="Runnable" seed="1452711957" result="Passed" start-time="2026-11-21 01:58:55Z" end-time="2026-11-21 01:58:55Z" duration="0.104409" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1105" name="EveryEffectHasSoundInItAndDoesNotDistort" fullname="UltraPuck.Tests.SoundTests.EveryEffectHasSoundInItAndDoesNotDistort" methodname="EveryEffectHasSoundInItAndDoesNotDistort" classname="UltraPuck.Tests.SoundTests" runstate="Runnable" seed="613694068" result="Passed" start-time="2026-11-21 01:58:55Z" end-time="2026-11-21 01:58:56Z" duration="0.568578" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1107" name="TheChargeHumJoinsUpWithItself" fullname="UltraPuck.Tests.SoundTests.TheChargeHumJoinsUpWithItself" methodname="TheChargeHumJoinsUpWithItself" classname="UltraPuck.Tests.SoundTests" runstate="Runnable" seed="1876499289" result="Passed" start-time="2026-11-21 01:58:56Z" end-time="2026-11-21 01:58:56Z" duration="0.034768" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+            </test-case>
+            <test-case id="1109" name="TheNextMatchSongIsRandomButNeverTheSameAgain" fullname="UltraPuck.Tests.SoundTests.TheNextMatchSongIsRandomButNeverTheSameAgain" methodname="TheNextMatchSongIsRandomButNeverTheSameAgain" classname="UltraPuck.Tests.SoundTests" runstate="Runnable" seed="772253593" result="Passed" start-time="2026-11-21 01:58:56Z" end-time="2026-11-21 01:58:56Z" duration="0.171636" asserts="0">
+              <properties>
+                <property name="retryIteration" value="0" />
+                <property name="repeatIteration" value="0" />
+              </properties>
+              <output><![CDATA[Saving results to: C:\Users\Jay\Documents\GitHub\Ultra Puck (Game)\test-results.xml
+]]></output>
+            </test-case>
+          </test-suite>
+        </test-suite>
+      </test-suite>
+    </test-suite>
+  </test-suite>
+</test-run>

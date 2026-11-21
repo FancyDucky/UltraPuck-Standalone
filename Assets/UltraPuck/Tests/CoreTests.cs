@@ -487,6 +487,23 @@ namespace UltraPuck.Tests
             }
         }
 
+        /// <summary>Over Charge past full scales a full shot: 1.5 → 1.5× Max, and the puck is allowed to go that fast.</summary>
+        [Test]
+        public void OverChargeScalesPastAFullShot()
+        {
+            var sim = new Simulation(LoadRink());
+            var s = Carrying(sim);
+            s.Players[0].Stats.OverCharge = Fix.Ratio(1, 2); // one Over Charge copy
+            // hold until the meter is past full (Over Charge lets it go to 1.5)
+            for (var t = 0; t < 3 * sim.T.TicksPerSecond; t++) sim.Step(s, new[] { Press(PlayerInput.ChargeBrake) });
+            Assert.AreEqual(1.5, s.Players[0].Charge.ToDouble(), 0.02, "meter fills past full");
+            sim.Step(s, new[] { default(PlayerInput) });
+            var expected = sim.T.ChargedShotMax.ToDouble() * 1.5;
+            expected *= 1.0 - sim.T.PuckDrag.ToDouble() / sim.T.TicksPerSecond;
+            Assert.AreEqual(expected, s.PuckVel.Length.ToDouble(), 0.2, "1.5× a full charge");
+            Assert.Less(s.PuckVel.Length.ToDouble(), sim.T.PuckMaxSpeed.ToDouble(), "under the puck speed cap");
+        }
+
         [Test]
         public void HoldingChargeWhenYouPickUpThePuckStartsCharging()
         {

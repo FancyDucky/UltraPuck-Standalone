@@ -26,6 +26,8 @@ namespace UltraPuck.Game
         public string MapName;
         /// <summary>A goal replay is on screen (and whether A skips it, and whether it's in slow motion right now).</summary>
         public bool Replay, ReplaySkippable, ReplaySlow;
+        /// <summary>Full-screen wipe into / out of a goal replay (drawn on top of the match).</summary>
+        public ReplayTransition Wipe;
         /// <summary>A player's name (for the corner card list).</summary>
         public System.Func<int, string> PlayerName;
         /// <summary>Draw a mouse reticle (keyboard players aiming with the mouse).</summary>
@@ -131,6 +133,7 @@ namespace UltraPuck.Game
                     Glyphs.Hint(new Rect(0, h * 0.28f + 90, w, 40), "{start} Play again      {back} Main menu", 18, Ui.TextDim);
                     break;
             }
+            if (Wipe != null && Wipe.Active) Wipe.Draw();
         }
 
         private void Lobby(float w, float h)

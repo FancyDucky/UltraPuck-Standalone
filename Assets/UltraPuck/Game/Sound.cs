@@ -12,6 +12,8 @@ namespace UltraPuck.Game
         /// <summary>A loop, played while someone charges a shot (higher as the charge grows).</summary>
         Charge,
         CardDeal, CardPick, CardAbsorb,
+        /// <summary>Swap utility: a sharp clap when you teleport with the rock.</summary>
+        Swap,
     }
 
     /// <summary>
@@ -170,6 +172,18 @@ namespace UltraPuck.Game
                     Noise(s, 0.3f, 0.6f, 0.15f, t => Glide(3500f, 500f, t, 0.2f), 200f, t => Pluck(t, 0.01f, 5.5f), 82u);
                     break;
 
+                case Sfx.Swap:
+                    // a human hand-clap in a rink: dry slap up front, then a short room reverb
+                    s = New(0.7f);
+                    Tone(s, 0f, 0.028f, 0.45f, Wave.Sine, t => Glide(220f, 85f, t, 0.014f), t => Mathf.Exp(-t * 95f));
+                    Noise(s, 0f, 0.012f, 0.85f, t => 9000f, 1200f, t => Mathf.Exp(-t * 220f), 91u); // attack transient
+                    Noise(s, 0f, 0.07f, 1f, t => Glide(5200f, 1600f, t, 0.045f), 700f, t => Mathf.Exp(-t * 42f), 92u);
+                    Noise(s, 0.004f, 0.06f, 0.55f, t => Glide(2800f, 900f, t, 0.04f), 350f, t => Mathf.Exp(-t * 38f), 93u);
+                    Tone(s, 0.002f, 0.045f, 0.12f, Wave.Sine, t => 1250f, t => Mathf.Exp(-t * 48f)); // hollow palm cavity
+                    Noise(s, 0.025f, 0.12f, 0.18f, t => Glide(3800f, 700f, t, 0.07f), 450f, t => Mathf.Exp(-t * 16f), 94u);
+                    Reverb(s, 0.48f);
+                    break;
+
                 default:
                     throw new ArgumentOutOfRangeException("id");
             }
@@ -299,6 +313,46 @@ namespace UltraPuck.Game
             var a = 1f - Mathf.Exp(-Tau * hz / Rate);
             var y = 0f;
             for (var i = 0; i < s.Length; i++) { y += a * (s[i] - y); s[i] = y; }
+        }
+
+        /// <summary>
+        /// A short rink-style reverb: a few comb echoes mixed over the dry sound. <paramref name="mix"/> is how much
+        /// wet (0 = dry only, 1 = all echo). Same input always gives the same output.
+        /// </summary>
+        private static void Reverb(float[] s, float mix)
+        {
+            mix = Mathf.Clamp01(mix);
+            if (mix <= 0f) return;
+            var wet = new float[s.Length];
+            // prime-ish delays (ms) so they don't pile up on one pitch
+            CombInto(s, wet, 0.029f, 0.78f);
+            CombInto(s, wet, 0.037f, 0.72f);
+            CombInto(s, wet, 0.053f, 0.65f);
+            CombInto(s, wet, 0.079f, 0.55f);
+            // early slap-backs (one-shot, no feedback)
+            EchoInto(s, wet, 0.018f, 0.35f);
+            EchoInto(s, wet, 0.041f, 0.22f);
+            Lowpass(wet, 4200f); // room eats the highs
+            var dry = 1f - mix;
+            for (var i = 0; i < s.Length; i++) s[i] = s[i] * dry + wet[i] * mix;
+        }
+
+        private static void CombInto(float[] dry, float[] wet, float delaySec, float feedback)
+        {
+            var d = Mathf.Max(1, Mathf.RoundToInt(delaySec * Rate));
+            var buf = new float[wet.Length];
+            for (var i = 0; i < dry.Length; i++)
+            {
+                var x = dry[i] + (i >= d ? buf[i - d] * feedback : 0f);
+                buf[i] = x;
+                wet[i] += x;
+            }
+        }
+
+        private static void EchoInto(float[] dry, float[] wet, float delaySec, float gain)
+        {
+            var d = Mathf.Max(1, Mathf.RoundToInt(delaySec * Rate));
+            for (var i = d; i < wet.Length; i++) wet[i] += dry[i - d] * gain;
         }
 
         /// <summary>Pushes the sound into soft clipping: louder, thicker, a little gritty.</summary>

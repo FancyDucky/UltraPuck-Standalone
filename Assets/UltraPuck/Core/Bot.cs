@@ -27,6 +27,8 @@ namespace UltraPuck.Core
 
             FixVec2 target, aim = FixVec2.Zero;
             byte b = 0;
+            var rockHeld = -1;
+            for (var k = 0; k < s.Rocks.Length; k++) if (s.Rocks[k].Carrier == i) { rockHeld = k; break; }
             if (s.Carrier == i)
             {
                 // aim somewhere in the goal mouth, not always dead centre (a net that says which way it opens: across its mouth)
@@ -90,6 +92,13 @@ namespace UltraPuck.Core
                     if (!ready && (me.Charge > Fix.Zero || (s.Tick & 1) == 0)) b |= PlayerInput.ChargeBrake;
                 }
             }
+            else if (rockHeld >= 0)
+            {
+                // carrying a Swap rock: skate toward the attack goal and shoot it (don't hold it forever)
+                target = attack;
+                aim = (attack - pos).Normalized;
+                if (FixVec2.Dot(me.Facing, aim) > Fix.Ratio(9, 10) && (s.Tick & 1) == 0) b |= PlayerInput.ShootCheck;
+            }
             else if (s.Carrier >= 0 && s.Players[s.Carrier].Team == me.Team)
             {
                 // a teammate has it: get open up the rink, one high and one low (on a bent rink: further along the ice)
@@ -113,8 +122,44 @@ namespace UltraPuck.Core
                     b |= PlayerInput.ShootCheck;
             }
 
-            // utility cards: go invisible with the puck; with the Puck Gun ready, aim at an opponent carrying it and fire once lined up
+            // utility cards: shockwave when foes are close; go invisible with the puck; Puck Gun aims at a carrier and fires
+            if (me.Stats.Shockwave > 0 && me.ShockCooldown <= Fix.Zero)
+            {
+                // fire when a foe is inside about one shockwave (player radius × ShockRange)
+                var reachSq = sim.T.PlayerRadius * sim.T.ShockRange;
+                reachSq *= reachSq;
+                var near = false;
+                foreach (var q in s.Players)
+                    if (q.Team != me.Team && (q.Pos - pos).SqrLength < reachSq) { near = true; break; }
+                if (near && (s.Tick & 1) == 0) b |= PlayerInput.Utility;
+            }
             if (s.Carrier == i && me.Stats.Invisibility > 0 && me.InvisCooldown <= Fix.Zero && (s.Tick & 1) == 0) b |= PlayerInput.Utility;
+            // Swap: bots wait SwapBotCooldown between uses. Throw when a foe is ahead; teleport when the rock is usefully far.
+            if (me.Stats.Swap > 0 && me.SwapCooldown <= Fix.Zero && rockHeld < 0)
+            {
+                var hasRock = false;
+                Rock rock = default(Rock);
+                foreach (var rk in s.Rocks) if (rk.Owner == i) { hasRock = true; rock = rk; break; }
+                if (!hasRock)
+                {
+                    var foeAhead = false;
+                    foreach (var q in s.Players)
+                    {
+                        if (q.Team == me.Team) continue;
+                        var to = q.Pos - pos;
+                        if (to.SqrLength < Fix.FromInt(100) && FixVec2.Dot(to.Normalized, me.Facing) > Fix.Half) { foeAhead = true; break; }
+                    }
+                    if (foeAhead && (s.Tick & 7) == 0) b |= PlayerInput.Utility;
+                }
+                else
+                {
+                    var d2 = (rock.Pos - pos).SqrLength;
+                    // swap when the rock is clearly away and closer to the attack goal than we are (or very far)
+                    if (d2 > Fix.FromInt(25) && (s.Tick & 7) == 0
+                        && ((rock.Pos - attack).SqrLength < (pos - attack).SqrLength || d2 > Fix.FromInt(64)))
+                        b |= PlayerInput.Utility;
+                }
+            }
             if (me.Stats.PuckGun > 0 && me.GunCooldown <= Fix.Zero && s.Carrier >= 0 && s.Players[s.Carrier].Team != me.Team)
             {
                 var to = s.Players[s.Carrier].Pos - pos;

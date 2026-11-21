@@ -1,5 +1,6 @@
 // Ultra Puck card surface: a rounded card shape with optional trading-card finishes that react to the card's tilt.
-//   _Foil     holographic rainbow foil (bands slide across as the card tilts)
+//   _Foil     holographic rainbow foil (bands slide across as the card tilts) — S tier
+//   _Pearl    soft mother-of-pearl sheen (pastel white/cream interference) — A tier
 //   _Glare    a soft light streak and hotspot that move opposite the tilt, like light on a glossy card
 //   _Sparkle  tiny glints that twinkle as the card moves
 //   _Sweep    a bright band of light crossing the card (its position; animated from C#), _SweepStrength how bright
@@ -17,6 +18,7 @@ Shader "UltraPuck/Card"
         _Border ("Border width", Float) = 0
         _BorderColor ("Border colour", Color) = (1,1,1,1)
         _Foil ("Holo foil", Range(0,1)) = 0
+        _Pearl ("Pearlescent", Range(0,1)) = 0
         _Glare ("Glare", Range(0,1)) = 0.35
         _Sparkle ("Sparkle", Range(0,1)) = 0
         _Tilt ("Tilt (x, y)", Vector) = (0,0,0,0)
@@ -45,7 +47,7 @@ Shader "UltraPuck/Card"
             sampler2D _MainTex; float4 _MainTex_ST;
             fixed4 _Color, _Color2, _BorderColor;
             float4 _Size, _Tilt;
-            float _Border, _Foil, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
+            float _Border, _Foil, _Pearl, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
 
@@ -89,11 +91,26 @@ Shader "UltraPuck/Card"
                 float2 t = _Tilt.xy;
                 float lum = dot(c.rgb, float3(0.299, 0.587, 0.114));
 
-                // holo foil: smooth rainbow bands that slide with the tilt, strongest in the mid-tones
+                // holo foil: smooth rainbow bands that slide with the tilt, strongest in the mid-tones (S tier)
                 float band = dot(i.uv, float2(0.85, 1.35)) * 1.8 + t.x * 1.1 + t.y * 0.7 + _Time.y * 0.02;
                 float3 rainbow = Hue(band);
                 float foilMask = 0.35 + 0.65 * smoothstep(0.05, 0.7, lum);
                 c.rgb = lerp(c.rgb, c.rgb * 0.55 + rainbow * 0.75, saturate(_Foil * foilMask * 0.7));
+
+                // pearlescent: soft mother-of-pearl — milky pastels and a shifting sheen (A tier; not rainbow holo)
+                if (_Pearl > 0.001)
+                {
+                    float ang = i.uv.x * 2.8 + i.uv.y * 2.0 + t.x * 2.2 + t.y * 1.6 + _Time.y * 0.12;
+                    float3 pA = Hue(ang * 0.18 + 0.05);
+                    float3 pB = Hue(ang * 0.18 + 0.42);
+                    float3 pearl = lerp(pA, pB, 0.5 + 0.5 * sin(ang * 2.8 + t.x * 2.4));
+                    pearl = lerp(float3(0.92, 0.94, 0.97), pearl, 0.4); // milky, soft pastel
+                    float pearlMask = 0.25 + 0.75 * smoothstep(0.05, 0.8, lum);
+                    float sheen = pow(saturate(0.5 + 0.5 * sin(dot(i.uv, float2(3.8, 5.8)) + t.x * 3.4 + t.y * 2.6)), 2.0);
+                    float broad = pow(saturate(1.0 - length((i.uv - 0.5 - t * 0.15) * float2(1.1, 0.85)) * 1.4), 1.6);
+                    float mixAmt = saturate(_Pearl * pearlMask * (0.35 + 0.4 * sheen + 0.45 * broad));
+                    c.rgb = lerp(c.rgb, c.rgb * 0.72 + pearl * 0.65 + sheen * 0.28 + broad * 0.12, mixAmt);
+                }
 
                 // shine sweep: a bright diagonal band passing across
                 float along = dot(i.uv - 0.5, normalize(float2(1.0, 0.65))) + 0.5;

@@ -20,7 +20,11 @@ so whoever works next knows what changed.
    Tests live in `Assets/UltraPuck/Tests/` (CoreTests, CardMechanicsTests, CardTests, NetTests, PerfTests,
    SoundTests). Set env var `ULTRAPUCK_SOUNDS=<folder>` while running them to save every sound effect there as a .wav.
 4. **Build** to check it compiles: `-batchmode -quit -projectPath . -executeMethod UltraPuck.Editor.BuildScript.BuildWindows`
-   (also `BuildLinux`). Close the Unity editor first if it has the project open.
+   (also `BuildLinux`). Close the Unity editor first if it has the project open. Owner shortcut: double-click
+   `Build Windows.bat` (or `powershell -File Tools/build-windows.ps1`) after editing cards/maps so the built game
+   picks up `StreamingAssets`. For face text / art / maps only, `Sync Cards.bat` copies StreamingAssets without a
+   Unity compile. Card `face` rows are display only — Shockwave slow/range/duration/cooldown in play come from
+   `Core/Tuning.cs` (must match the face, then full build).
 5. **Look at visual changes** with the built-in screenshot mode instead of guessing: run
    `Builds/Windows/UltraPuck.exe -screen-width 1280 -screen-height 720 -screen-fullscreen 0 -logFile <somewhere else>`
    with env vars `ULTRAPUCK_SHOTS=<folder>`, `ULTRAPUCK_NOSTEAM=1`, `ULTRAPUCK_NOUPDATE=1`, optional
@@ -71,9 +75,18 @@ so whoever works next knows what changed.
   `make_curved_rinks.py` (edit the script, regenerate; don't hand-edit). Cards: `StreamingAssets/Cards/ultrapuck.json`
   + art in `Cards/Art/<id>.jpg`. Every eligible card is offered as often as any other (tier is frame colour / bot
   preference only). S Rink nets stand on the ice; U Rink is upright (open at the top).
+- Button pictures: Kenney Input Prompts (CC0) in `StreamingAssets/InputPrompts/` (`Xbox`, `PlayStation`, `Switch`,
+  `Keyboard`, `Generic`). Hints (`Glyphs`) and utility card footnotes (`Press {utility} to activate`) load PNGs via
+  `InputIcons` for the last device used. Empty Kenney placeholder folders are not used — drop packs here.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.31 (Composer, 20 Nov 2026): **Swap card, one-utility rule, Shockwave remake, Kenney prompts.** New Swap
+  utility (throw rock / teleport with momentum + clap reverb; rocks pickable, shootable, bounce off puck). One
+  utility at a time (match setting for multiple; hover replace hint). Shockwave: push everyone, 2× shove, ring FX.
+  Kenney button icons; utility cards show Press {utility}. Free-play rink auto-applies; Sync Cards / Build Windows
+  bats. **NetSession.Version 34.** GitHub release v0.1.31.
+  Checked: 107 tests (102 pass, 5 skipped), Windows + Linux builds, release published.
 - 0.1.30 (Composer, 19 Nov 2026): **online mouse aim, reticle options, menu mouse, freeplay rink**. (1) Online
   mouse aim used the local slot index as the match player — wrong when you join someone; now uses
   `NetSession.PlayerOf`. (2) Settings > Camera: reticle style / size / colour. (3) System cursor shows on menus and

@@ -89,16 +89,14 @@ namespace UltraPuck.Core
             {
                 if (p.Offer.Length == 0) continue;
                 if (p.Picked < 0) p.Picked = p.Offer[(int)(s.NextRandom() % (uint)p.Offer.Length)];
-                var cards = new int[p.Cards.Length + 1];
-                Array.Copy(p.Cards, cards, p.Cards.Length);
-                cards[cards.Length - 1] = p.Picked;
-                p.Cards = cards;
+                GiveCard(s, p, p.Picked);
                 p.Offer = new int[0];
                 p.Picked = -1;
                 p.Hover = 0;
             }
             Cards.Recompute(s);
             PlacePylons(s);
+            PruneRocks(s);
             if (T.FreePlay) s.Phase = Phase.Play; // free play: carry on where everyone stands
             else FaceOff(s);
         }
@@ -172,7 +170,33 @@ namespace UltraPuck.Core
             s.Phase = Phase.Countdown;
             s.PhaseTime = T.CountdownTime;
             PlacePylons(s);
+            s.Rocks = new Rock[0];
             HeadStart(s);
+        }
+
+        /// <summary>
+        /// Add a card to a player. Unless MultiUtility is on, a new utility replaces any other utility they hold
+        /// (same utility again just stacks another copy).
+        /// </summary>
+        public void GiveCard(GameState s, PlayerState p, int card)
+        {
+            if (Cards == null || card < 0 || card >= Cards.Cards.Count) return;
+            if (!T.MultiUtility && Cards.IsUtilityIndex(card))
+                p.Cards = CardLibrary.WithoutOtherUtilities(Cards, p.Cards, card);
+            var cards = new int[p.Cards.Length + 1];
+            Array.Copy(p.Cards, cards, p.Cards.Length);
+            cards[cards.Length - 1] = card;
+            p.Cards = cards;
+        }
+
+        /// <summary>Drop rocks whose owner no longer has Swap.</summary>
+        private void PruneRocks(GameState s)
+        {
+            if (s.Rocks.Length == 0) return;
+            var keep = new System.Collections.Generic.List<Rock>();
+            foreach (var rk in s.Rocks)
+                if (rk.Owner >= 0 && rk.Owner < s.Players.Length && s.Players[rk.Owner].Stats.Swap > 0) keep.Add(rk);
+            if (keep.Count != s.Rocks.Length) s.Rocks = keep.ToArray();
         }
 
         /// <summary>Pylon goalies in a row in front of each net's mouth: one per Pylon Goalie card on that team, up to three.</summary>
@@ -340,10 +364,13 @@ namespace UltraPuck.Core
                     p.Pos += p.Vel * sub;
                     CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
                     PushPylons(s, p);
+                    PushRocks(s, p);
                 }
                 MovePylons(s, sub);
+                MoveRocks(s, sub);
                 Bumps(s);
                 MovePuck(s, sub);
+                BouncePuckAndRocks(s); // rock ↔ puck (after both have moved)
                 MoveShots(s, sub);
                 if (s.Phase == Phase.Play) CheckGoal(s);
             }
@@ -417,10 +444,14 @@ namespace UltraPuck.Core
             p.InvisCooldown = Fix.Max(Fix.Zero, p.InvisCooldown - dt);
             p.InvisibleTime = Fix.Max(Fix.Zero, p.InvisibleTime - dt);
             p.ShockCooldown = Fix.Max(Fix.Zero, p.ShockCooldown - dt);
+            p.SwapCooldown = Fix.Max(Fix.Zero, p.SwapCooldown - dt);
             p.SlowTime = Fix.Max(Fix.Zero, p.SlowTime - dt);
             p.BoostTime = Fix.Max(Fix.Zero, p.BoostTime - dt);
+            var rockHeld = RockCarriedBy(s, i);
+            var carryingRock = rockHeld >= 0;
+            var holding = carrying || carryingRock;
             var control = p.Stun > Fix.Zero ? T.StunControl : Fix.One;
-            var speed = p.Stats.MoveSpeed * (carrying ? p.Stats.MoveSpeedWithPuck : Fix.One);
+            var speed = p.Stats.MoveSpeed * (holding ? p.Stats.MoveSpeedWithPuck : Fix.One);
             if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave
             if (p.BoostTime > Fix.Zero) speed *= T.FriendlyBoost;           // Friendly Fire
             var push = T.MoveForce * speed * control;
@@ -434,7 +465,7 @@ namespace UltraPuck.Core
                 var short_ = Fix.Clamp01(Fix.One - along / top);
                 p.Vel += move * (push * T.Acceleration * short_ * dt);
             }
-            var braking = !carrying && input.Has(PlayerInput.ChargeBrake);
+            var braking = !holding && input.Has(PlayerInput.ChargeBrake);
             var drag = braking ? T.BrakeDrag : T.Drag;
             p.Vel -= p.Vel * Fix.Min(Fix.One, drag * dt);
 
@@ -447,18 +478,20 @@ namespace UltraPuck.Core
             // utility (Y / Triangle): every utility card you have that's ready
             if ((pressed & PlayerInput.Utility) != 0)
             {
+                if (p.Stats.Shockwave > 0 && p.ShockCooldown <= Fix.Zero) FireShockwave(s, i);
                 if (p.Stats.Invisibility > 0 && p.InvisCooldown <= Fix.Zero) { p.InvisibleTime = T.InvisTime; p.InvisCooldown = T.InvisCooldown; }
+                if (p.Stats.Swap > 0) UseSwap(s, i);
             }
 
-            if (!carrying)
+            if (!holding)
             {
                 p.Charge = Fix.Zero;
                 // after a quick shot: wait until Shoot/check is let go before a hold can check
                 if (!input.Has(PlayerInput.ShootCheck)) p.SuppressDash = false;
-                // Puck Gun: brake fires it (when you don't have the puck)
+                // Puck Gun: brake fires it (when you don't have the puck or a rock)
                 if ((pressed & PlayerInput.ChargeBrake) != 0 && p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero) FireGun(s, i);
-                // check: a dash that knocks people back. Not while carrying the puck, and not while dazed. Holding the
-                // button keeps dashing: the next one as soon as there's a dash ready and the last one has finished.
+                // check: a dash that knocks people back. Not while carrying the puck or a rock, and not while dazed.
+                // Holding the button keeps dashing: the next one as soon as there's a dash ready and the last one has finished.
                 var dashWanted = !p.SuppressDash
                     && ((pressed & PlayerInput.ShootCheck) != 0 || (input.Has(PlayerInput.ShootCheck) && p.DashTime <= Fix.Zero));
                 if (dashWanted && p.DashCharge >= Fix.One && p.Stun <= Fix.Zero)
@@ -470,13 +503,28 @@ namespace UltraPuck.Core
                 return;
             }
 
-            // with the puck: shoot/check fires now (with whatever charge there is); charge/brake charges until let go
-            if ((pressed & PlayerInput.ShootCheck) != 0) { Shoot(s, i, false); p.SuppressDash = true; return; }
+            // with the puck or a rock: shoot/check fires now; charge/brake charges until let go
+            if ((pressed & PlayerInput.ShootCheck) != 0)
+            {
+                if (carrying) Shoot(s, i, false); else ShootRock(s, i, rockHeld, false);
+                p.SuppressDash = true;
+                return;
+            }
             var step = dt * Fix.Clamp(p.Stats.ChargeSpeed, Fix.Ratio(1, 10), Fix.FromInt(10)) / T.ChargeTime;
             var full = Fix.One + Fix.Clamp(p.Stats.OverCharge, Fix.Zero, Fix.FromInt(5));
-            // holding charge/brake as you pick the puck up starts charging straight away
+            // holding charge/brake as you pick it up starts charging straight away
             if (input.Has(PlayerInput.ChargeBrake)) p.Charge = Fix.Min(full, p.Charge + step);
-            else if (p.Charge > Fix.Zero) Shoot(s, i, true);
+            else if (p.Charge > Fix.Zero)
+            {
+                if (carrying) Shoot(s, i, true); else ShootRock(s, i, rockHeld, true);
+            }
+        }
+
+        /// <summary>Index of the rock this player is carrying, or -1.</summary>
+        private static int RockCarriedBy(GameState s, int player)
+        {
+            for (var k = 0; k < s.Rocks.Length; k++) if (s.Rocks[k].Carrier == player) return k;
+            return -1;
         }
 
         private static void TurnTowards(PlayerState p, FixVec2 want, Fix share)
@@ -489,7 +537,10 @@ namespace UltraPuck.Core
         {
             var p = s.Players[i];
             // letting go of charge: the charge decides. Shoot/check: a quick shot, or the charge so far if that's harder.
-            var charged = T.ChargedShotMin + (T.ChargedShotMax - T.ChargedShotMin) * p.Charge;
+            // 0..1: tap → full (Min → Max). Above 1 (Over Charge): scales a full shot — 1.5 → 1.5× Max, 2 → 2×, …
+            var charged = p.Charge <= Fix.One
+                ? T.ChargedShotMin + (T.ChargedShotMax - T.ChargedShotMin) * p.Charge
+                : T.ChargedShotMax * p.Charge;
             var quick = T.ShotSpeed * p.Stats.QuickShotPower;
             var speed = (released ? charged : Fix.Max(quick, p.Charge > Fix.Zero ? charged : Fix.Zero)) * p.Stats.ShotPower;
             s.Carrier = -1;
@@ -691,6 +742,8 @@ namespace UltraPuck.Core
                     var p = s.Players[i];
                     var r = RadiusOf(p) + T.PuckRadius;
                     var d2 = (s.PuckPos - p.Pos).SqrLength;
+                    // already holding a Swap rock: can't pick the puck up until they shoot/drop it
+                    if (RockCarriedBy(s, i) >= 0) continue;
                     if (p.NoPickup > Fix.Zero || (d2 >= r * r && !(T.WedgePickup && OnWedge(p, s.PuckPos)))) continue;
                     if (best < 0 || d2 < bestD) { best = i; bestD = d2; ties = 1; }
                     else if (d2 == bestD && s.NextRandom() % (uint)(++ties) == 0) best = i; // fair among equals
@@ -823,6 +876,7 @@ namespace UltraPuck.Core
                     var v = FixVec2.Zero;
                     CollideWalls(ref pos, ref v, T.PuckRadius, Fix.Zero);
                     CollidePylons(s, ref pos, ref v, T.PuckRadius, Fix.Zero);
+                    CollideRocks(s, ref pos, ref v, T.PuckRadius, Fix.Zero);
                     var o = pos - c.Pos;
                     var od = o.Length;
                     if (od < reach - Fix.Ratio(1, 100))
@@ -836,6 +890,7 @@ namespace UltraPuck.Core
                         v = FixVec2.Zero;
                         CollideWalls(ref pos, ref v, T.PuckRadius, Fix.Zero);
                         CollidePylons(s, ref pos, ref v, T.PuckRadius, Fix.Zero);
+                        CollideRocks(s, ref pos, ref v, T.PuckRadius, Fix.Zero);
                     }
                 }
             }
@@ -1007,7 +1062,6 @@ namespace UltraPuck.Core
                 return;
             }
             // no daze from a check (only the Puck Gun stuns): the hit lag above is the pause
-            if (a.Team != b.Team) Shockwave(s, from, to);
             Hit(b, -n, power);
             Hit(a, n, power * Fix.Half);
             if (s.Carrier == to)
@@ -1182,34 +1236,311 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// Shockwave: <paramref name="from"/> checked <paramref name="to"/>. If they have the card and it's ready,
-        /// <paramref name="to"/> and every opponent near them is slowed, and the others are pushed away.
+        /// Swap (utility): throw a rock ahead like a quick shot, or swap places (and momentum) with your rock.
+        /// Players have no cooldown; bots wait <see cref="Tuning.SwapBotCooldown"/> between uses.
         /// </summary>
-        private void Shockwave(GameState s, int from, int to)
+        private void UseSwap(GameState s, int i)
         {
-            PlayerState a = s.Players[from], b = s.Players[to];
+            var a = s.Players[i];
+            if (a.Stats.Swap <= 0) return;
+            if (a.Bot && a.SwapCooldown > Fix.Zero) return;
+            for (var k = 0; k < s.Rocks.Length; k++)
+            {
+                if (s.Rocks[k].Owner != i) continue;
+                // swap places and momentum with the rock (drops it if someone was carrying it)
+                var rk = s.Rocks[k];
+                var from = a.Pos;
+                var to = rk.Pos;
+                var pVel = a.Vel;
+                var rVel = rk.Carrier >= 0 && rk.Carrier < s.Players.Length ? s.Players[rk.Carrier].Vel : rk.Vel;
+                a.Pos = to;
+                a.Vel = rVel;
+                rk.Pos = from;
+                rk.Vel = pVel;
+                rk.Carrier = -1;
+                CollideWalls(ref a.Pos, ref a.Vel, RadiusOf(a), T.WallBounce);
+                CollideWalls(ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
+                s.Rocks[k] = rk;
+                a.Swaps++; // clap + particle burst (throw does not count)
+                a.SwapFrom = from;
+                a.SwapTo = to;
+                if (a.Bot) a.SwapCooldown = T.SwapBotCooldown;
+                return;
+            }
+            // no rock yet: throw one out of the wedge like a quick shot
+            var start = a.Pos + a.Facing * (RadiusOf(a) + T.RockRadius + Fix.Ratio(1, 20));
+            var vel = a.Facing * T.RockSpeed + a.Vel * Fix.Half;
+            var rocks = new Rock[s.Rocks.Length + 1];
+            Array.Copy(s.Rocks, rocks, s.Rocks.Length);
+            rocks[rocks.Length - 1] = new Rock { Pos = start, Vel = vel, Owner = i, Carrier = -1 };
+            s.Rocks = rocks;
+            a.NoPickup = Fix.Max(a.NoPickup, T.ShotPickupDelay); // don't scoop your own throw back up
+            if (a.Bot) a.SwapCooldown = T.SwapBotCooldown;
+        }
+
+        /// <summary>Shoot a carried Swap rock the same way as the puck (quick or charged).</summary>
+        private void ShootRock(GameState s, int i, int rockIndex, bool released)
+        {
+            if (rockIndex < 0 || rockIndex >= s.Rocks.Length) return;
+            var p = s.Players[i];
+            var rk = s.Rocks[rockIndex];
+            if (rk.Carrier != i) return;
+            var charged = p.Charge <= Fix.One
+                ? T.ChargedShotMin + (T.ChargedShotMax - T.ChargedShotMin) * p.Charge
+                : T.ChargedShotMax * p.Charge;
+            var quick = T.ShotSpeed * p.Stats.QuickShotPower;
+            var speed = (released ? charged : Fix.Max(quick, p.Charge > Fix.Zero ? charged : Fix.Zero)) * p.Stats.ShotPower;
+            var reach = RadiusOf(p) + T.RockRadius + T.CarrySlack;
+            if ((rk.Pos - p.Pos).SqrLength > reach * reach) rk.Pos = RockCarrySpot(p);
+            rk.Vel = p.Facing * speed + p.Vel * Fix.Half;
+            rk.Carrier = -1;
+            s.Rocks[rockIndex] = rk;
+            p.ShotsFired++;
+            p.ShotStrength = Fix.Clamp01(speed / T.ChargedShotMax);
+            p.Charge = Fix.Zero;
+            p.NoPickup = T.ShotPickupDelay;
+        }
+
+        private FixVec2 RockCarrySpot(PlayerState p)
+        {
+            var reach = RadiusOf(p) + T.RockRadius + Fix.Ratio(1, 50);
+            if (RockFits(p.Pos, p.Pos + p.Facing * reach)) return p.Pos + p.Facing * reach;
+            Fix lo = Fix.Zero, hi = reach;
+            for (var k = 0; k < 12; k++)
+            {
+                var mid = (lo + hi) / 2;
+                if (RockFits(p.Pos, p.Pos + p.Facing * mid)) lo = mid; else hi = mid;
+            }
+            return p.Pos + p.Facing * lo;
+        }
+
+        private bool RockFits(FixVec2 from, FixVec2 at)
+        {
+            if (FirstWallHit(from, at) < Fix.One) return false;
+            var r = T.RockRadius + WallHalf;
+            var r2 = r * r;
+            foreach (var seg in Map.Segments) if (!seg.FarFrom(at, r) && (at - Closest(seg, at)).SqrLength < r2) return false;
+            return true;
+        }
+
+        private void MoveRocks(GameState s, Fix sub)
+        {
+            for (var k = 0; k < s.Rocks.Length; k++)
+            {
+                var rk = s.Rocks[k];
+                if (rk.Carrier >= 0)
+                {
+                    if (rk.Carrier >= s.Players.Length || s.Carrier == rk.Carrier)
+                    {
+                        // carrier gone, or they picked up the real puck: drop the rock
+                        rk.Carrier = -1;
+                        s.Rocks[k] = rk;
+                    }
+                    else
+                    {
+                        var c = s.Players[rk.Carrier];
+                        rk.Pos = RockCarrySpot(c);
+                        rk.Vel = c.Vel;
+                        s.Rocks[k] = rk;
+                        continue;
+                    }
+                }
+                if (rk.Vel.SqrLength.Raw == 0) { /* still may be picked up below */ }
+                else
+                {
+                    rk.Pos += rk.Vel * sub;
+                    rk.Vel -= rk.Vel * Fix.Min(Fix.One, T.RockDrag * sub);
+                    if (rk.Vel.SqrLength < Fix.Ratio(1, 400)) rk.Vel = FixVec2.Zero;
+                    CollideWalls(ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
+                    s.Rocks[k] = rk;
+                }
+            }
+
+            // pick-up: anyone not carrying the puck (or another rock) may take a loose rock into their wedge
+            if (s.Phase != Phase.Play) return;
+            for (var k = 0; k < s.Rocks.Length; k++)
+            {
+                var rk = s.Rocks[k];
+                if (rk.Carrier >= 0) continue;
+                int best = -1, ties = 0;
+                var bestD = Fix.Zero;
+                for (var i = 0; i < s.Players.Length; i++)
+                {
+                    if (s.Carrier == i || RockCarriedBy(s, i) >= 0) continue;
+                    var p = s.Players[i];
+                    var r = RadiusOf(p) + T.RockRadius;
+                    var d2 = (rk.Pos - p.Pos).SqrLength;
+                    if (p.NoPickup > Fix.Zero || (d2 >= r * r && !(T.WedgePickup && OnWedgeRock(p, rk.Pos)))) continue;
+                    if (best < 0 || d2 < bestD) { best = i; bestD = d2; ties = 1; }
+                    else if (d2 == bestD && s.NextRandom() % (uint)(++ties) == 0) best = i;
+                }
+                if (best < 0) continue;
+                rk.Carrier = best;
+                rk.Pos = RockCarrySpot(s.Players[best]);
+                rk.Vel = s.Players[best].Vel;
+                s.Players[best].Charge = Fix.Zero;
+                s.Rocks[k] = rk;
+            }
+        }
+
+        /// <summary>Same as <see cref="OnWedge"/> but sized for a Swap rock.</summary>
+        private bool OnWedgeRock(PlayerState p, FixVec2 rock)
+        {
+            var R = RadiusOf(p);
+            var pr = T.RockRadius;
+            var d = rock - p.Pos;
+            var x = FixVec2.Dot(d, p.Facing);
+            var tipX = R * T.WedgeTip;
+            var backX = R * T.WedgeBack;
+            if (x < backX - pr || x > tipX + pr) return false;
+            var y = Fix.Abs(FixVec2.Cross(p.Facing, d));
+            var halfW = R * T.WedgeHalfWidth;
+            if (y > halfW + pr) return false;
+            var span = tipX - backX;
+            if (x >= backX && y * span <= halfW * (tipX - x)) return true;
+            var q = new FixVec2(x, y);
+            var tip = new FixVec2(tipX, Fix.Zero);
+            var corner = new FixVec2(backX, halfW);
+            var e = corner - tip;
+            var t = Fix.Clamp(FixVec2.Dot(q - tip, e) / e.SqrLength, Fix.Zero, Fix.One);
+            if ((q - (tip + e * t)).SqrLength <= pr * pr) return true;
+            var onBack = new FixVec2(backX, Fix.Min(y, halfW));
+            return (q - onBack).SqrLength <= pr * pr;
+        }
+
+        /// <summary>Players knock loose Swap rocks around (lighter and glidier than pylons).</summary>
+        private void PushRocks(GameState s, PlayerState p)
+        {
+            var r = RadiusOf(p);
+            for (var k = 0; k < s.Rocks.Length; k++)
+            {
+                var rk = s.Rocks[k];
+                if (rk.Carrier >= 0) continue; // carried rocks sit in the wedge
+                var d = p.Pos - rk.Pos;
+                var min = r + T.RockRadius;
+                if (d.SqrLength >= min * min) continue;
+                var dist = d.Length;
+                var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
+                Fix wp = WeightOf(p), wy = T.RockWeight, sum = wp + wy;
+                var overlap = min - dist;
+                p.Pos += n * (overlap * wy / sum);
+                rk.Pos -= n * (overlap * wp / sum);
+                var rv = FixVec2.Dot(p.Vel - rk.Vel, n);
+                if (rv < Fix.Zero)
+                {
+                    var impulse = -(Fix.One + T.WallBounce) * rv * wp * wy / sum;
+                    p.Vel += n * (impulse / wp);
+                    rk.Vel -= n * (impulse / wy);
+                }
+                var v = rk.Vel;
+                CollideWalls(ref rk.Pos, ref v, T.RockRadius, T.WallBounce);
+                rk.Vel = v;
+                s.Rocks[k] = rk;
+            }
+        }
+
+        /// <summary>
+        /// Loose rock ↔ puck. Both bounce by weight when the puck is free; a carried puck is knocked loose and
+        /// shoved like a Puck Gun hit. Carried rocks are skipped (they sit in a wedge).
+        /// </summary>
+        private void BouncePuckAndRocks(GameState s)
+        {
+            for (var k = 0; k < s.Rocks.Length; k++)
+            {
+                var rk = s.Rocks[k];
+                if (rk.Carrier >= 0) continue;
+                var min = T.PuckRadius + T.RockRadius;
+                var d = s.PuckPos - rk.Pos;
+                if (d.SqrLength >= min * min) continue;
+                var dist = d.Length;
+                var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
+
+                if (s.Carrier >= 0)
+                {
+                    // like Puck Gun: knock it loose and shove the puck along the rock's way
+                    var dir = rk.Vel.SqrLength.Raw > 0 ? rk.Vel.Normalized : n;
+                    KnockLoose(s, s.Carrier, dir, -1);
+                    s.PuckVel += dir * T.GunPuckPush;
+                    s.PassFrom = -1;
+                    var into = FixVec2.Dot(rk.Vel, n);
+                    if (into > Fix.Zero) rk.Vel -= n * (into * (Fix.One + T.PuckWallBounce));
+                    rk.Pos = s.PuckPos - n * min;
+                    var v = rk.Vel;
+                    CollideWalls(ref rk.Pos, ref v, T.RockRadius, T.WallBounce);
+                    rk.Vel = v;
+                }
+                else
+                {
+                    // both loose: share the bounce (puck weighs 1, rock is lighter)
+                    Fix wp = Fix.One, wy = T.RockWeight, sum = wp + wy;
+                    var overlap = min - dist;
+                    s.PuckPos += n * (overlap * wy / sum);
+                    rk.Pos -= n * (overlap * wp / sum);
+                    var rv = FixVec2.Dot(s.PuckVel - rk.Vel, n);
+                    if (rv < Fix.Zero)
+                    {
+                        var impulse = -(Fix.One + T.PuckWallBounce) * rv * wp * wy / sum;
+                        s.PuckVel += n * (impulse / wp);
+                        rk.Vel -= n * (impulse / wy);
+                    }
+                    CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
+                    var v = rk.Vel;
+                    CollideWalls(ref rk.Pos, ref v, T.RockRadius, T.WallBounce);
+                    rk.Vel = v;
+                }
+                s.Rocks[k] = rk;
+            }
+        }
+
+        /// <summary>Push a circle out of any loose rock it overlaps (used when placing a carried puck).</summary>
+        private void CollideRocks(GameState s, ref FixVec2 pos, ref FixVec2 vel, Fix r, Fix bounce)
+        {
+            foreach (var rk in s.Rocks)
+            {
+                if (rk.Carrier >= 0) continue;
+                var d = pos - rk.Pos;
+                var min = r + T.RockRadius;
+                if (d.SqrLength >= min * min) continue;
+                var dist = d.Length;
+                var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
+                pos = rk.Pos + n * min;
+                var vn = FixVec2.Dot(vel, n);
+                if (vn < Fix.Zero) vel -= n * (vn * (Fix.One + bounce));
+            }
+        }
+
+        /// <summary>
+        /// Shockwave (utility): shove every other player away from you. Ready on Triangle / Y when the card is held.
+        /// </summary>
+        private void FireShockwave(GameState s, int i)
+        {
+            var a = s.Players[i];
             var copies = Math.Min(3, a.Stats.Shockwave);
             if (copies <= 0 || a.ShockCooldown > Fix.Zero) return;
             a.ShockCooldown = T.ShockCooldown;
-            var slow = T.ShockSlow + T.ShockSlowPerCopy * (copies - 1);
-            var time = T.ShockTime + T.ShockTimePerCopy * (copies - 1);
-            var radius = RadiusOf(b) * T.ShockRange * (Fix.One + Fix.Ratio(15, 100) * (copies - 1));
-            SlowDown(b, slow, time);
+            var radius = RadiusOf(a) * T.ShockRange * (Fix.One + Fix.Ratio(15, 100) * (copies - 1));
+            var push = T.DashKnockback * T.ShockPush * (Fix.One + Fix.Ratio(1, 10) * (copies - 1));
             for (var j = 0; j < s.Players.Length; j++)
             {
+                if (j == i) continue;
                 var q = s.Players[j];
-                if (j == to || q.Team == a.Team) continue;
-                var d = q.Pos - b.Pos;
+                var d = q.Pos - a.Pos;
                 var dist = d.Length;
                 if (dist > radius + RadiusOf(q)) continue;
-                var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
+                // on top of you: a fair diagonal shove (no favoured axis)
+                FixVec2 n;
+                if (dist.Raw > 0) n = d / dist;
+                else
+                {
+                    var bits = s.NextRandom();
+                    n = new FixVec2((bits & 1) == 0 ? Fix.One : -Fix.One, (bits & 2) == 0 ? Fix.One : -Fix.One).Normalized;
+                }
                 var falloff = Fix.One - Fix.Half * Fix.Clamp01(dist / radius);
-                q.Vel += n * (T.DashKnockback * T.ShockPush * falloff);
-                SlowDown(q, slow, time);
+                q.Vel += n * (push * falloff);
                 Hit(q, -n, Fix.Half);
             }
             a.Shocks++;
-            a.ShockAt = b.Pos;
+            a.ShockAt = a.Pos;
             a.ShockRadius = radius;
         }
 

@@ -131,11 +131,10 @@ namespace UltraPuck.Game
                         {
                             Label = "Rink",
                             Value = () => MapName != null ? MapName(_pendingMap) : "",
-                            Step = d => _pendingMap = (_pendingMap + d + MapCount()) % MapCount(),
-                            Press = () => _pendingMap = (_pendingMap + 1) % MapCount(),
-                            Hint = "Pick a rink, then Change rink to switch (starts the free play again).",
+                            Step = d => FreePlayRink(d),
+                            Press = () => FreePlayRink(1),
+                            Hint = "Switches rink right away (starts free play again on the new one).",
                         });
-                        _rows.Add(Button("Change rink", () => { var map = _pendingMap; Close(); if (OnRestart != null) OnRestart(map); }));
                     }
                     _rows.Add(Button("Cards", () => { Close(); if (OnGetCard != null) OnGetCard(); }));
                 }
@@ -287,6 +286,8 @@ namespace UltraPuck.Game
             for (var k = 0; k < times.Length; k++) times[k] = Settings.PickTimes[k] == 0 ? "No limit" : Settings.PickTimes[k] + " s";
             _rows.Add(Choice("Pick time", times, () => Mathf.Max(0, Array.IndexOf(Settings.PickTimes, Settings.PickTime)), v => Settings.PickTime = Settings.PickTimes[v],
                 "How long players have to pick. Anyone who hasn't picked in time gets a random card."));
+            _rows.Add(Switch("Multiple utilities", () => Settings.MultiUtility, v => Settings.MultiUtility = v,
+                "Off: you can only hold one utility card (Puck Gun, Invisibility, Shockwave, Swap). Taking another replaces the one you have. On: you can hold several."));
             _rows.Add(new Row { Label = "Toggle cards", Value = CardsOnText, Press = () => { _cardsFrom = Current; Current = Page.Cards; _focus = 0; _first = 0; _focusY = -1f; },
                 Hint = "Choose which cards can be offered. Online, the host's choices apply." });
         }
@@ -406,6 +407,16 @@ namespace UltraPuck.Game
             _focus = 0;
             _openedAt = Time.unscaledTime;
             _focusY = -1f;
+        }
+
+        /// <summary>Free play pause: cycle the rink and switch to it straight away (no Confirm button).</summary>
+        private void FreePlayRink(int delta)
+        {
+            if (MapCount == null || MapCount() <= 0) return;
+            _pendingMap = (_pendingMap + delta + MapCount()) % MapCount();
+            if (OnRestart != null) OnRestart(_pendingMap);
+            // keep the pause menu on the new rink (StartMatch doesn't close it)
+            _pendingMap = CurrentMap != null ? CurrentMap() : _pendingMap;
         }
 
         /// <summary>Which settings tab is showing (0 Graphics … 4 Controls, 5 Match).</summary>

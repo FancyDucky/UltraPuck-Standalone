@@ -563,6 +563,7 @@ namespace UltraPuck.Game
                 }
                 c.Step(tp, tr, ts, dt);
                 c.Apply(_stage == Stage.Leaving ? (k == _chosen ? 1000 : k * 10) : k == _focus ? 1000 : k * 10, _cam);
+                RefreshPrompt(c);
             }
         }
 
@@ -721,9 +722,34 @@ namespace UltraPuck.Game
             if (_teamVote && _stage == Stage.Choosing) DrawVoteCursors(a);
 
             if (_watching) { Ui.Label(new Rect(0f, Ui.H - 46f, Ui.W, 30f), _teamVote ? "Watching the other team vote" : "Watching the other team pick", Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a)); return; }
+
+            // hovering a different utility while you already have one: say it clearly replaces yours
+            var replace = UtilityReplaceHint();
+            if (replace != null)
+                Ui.Label(new Rect(0f, Ui.H - 72f, Ui.W, 26f), replace, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 0.85f, 0.45f, 0.95f * a));
+
             var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
             var hint = device is UnityEngine.InputSystem.Keyboard ? "{look} Look      {join} Take it  (or click)" : "{side} Look      {aim} Tilt      {confirm} Take it";
             Glyphs.Hint(new Rect(0f, Ui.H - 46f, Ui.W, 30f), hint, 17, new Color(1f, 1f, 1f, 0.6f * a), TextAnchor.MiddleCenter, device);
+        }
+
+        /// <summary>When the focused offer would replace the player's utility, a short plain-English line; else null.</summary>
+        private string UtilityReplaceHint()
+        {
+            if (Sim == null || Sim.T.MultiUtility || Sim.Cards == null || _state == null) return null;
+            if (_slot < 0 || _slot >= _state.Players.Length || _focus < 0 || _focus >= _cards.Count) return null;
+            if (_stage != Stage.Choosing) return null;
+            var p = _state.Players[_slot];
+            // which library card is under the focus (offer index → library index)
+            var offered = -1;
+            if (p.Offer != null && _focus < p.Offer.Length) offered = p.Offer[_focus];
+            else if (_teamVote && p.Offer != null && _focus < p.Offer.Length) offered = p.Offer[_focus];
+            if (offered < 0) return null;
+            if (!Sim.Cards.WouldReplaceUtility(p, offered)) return null;
+            var held = Sim.Cards.UtilityHeld(p);
+            var next = Sim.Cards.Cards[offered];
+            if (held == null || next == null) return null;
+            return "Replaces your " + held.Name + "  ·  you can only hold one utility";
         }
 
         /// <summary>Team Vote: each voter's name under the card their cursor is on (stacked if several share one).</summary>
@@ -914,6 +940,10 @@ namespace UltraPuck.Game
                 return;
             }
             if (d > 0) Sound.Select(); else Sound.Back();
+            // one utility at a time: adding a different utility clears the others for this player
+            if (d > 0 && _editSim != null && !_editSim.T.MultiUtility && _editSim.Cards.IsUtilityIndex(card))
+                for (var i = 0; i < counts.Length; i++)
+                    if (i != card && _editSim.Cards.IsUtilityIndex(i)) counts[i] = 0;
             if (d > 0)
             {
                 // a pop and a puff of sparks in its colour
@@ -1049,6 +1079,11 @@ namespace UltraPuck.Game
             public Material Glow, BodyMat, ArtMat;
             public Transform ArtT;
             public Vector3 ArtHome;
+            /// <summary>Kenney button picture on "Press … to activate" (utility cards); updated when the input device changes.</summary>
+            public MeshRenderer PromptIcon;
+            public Material PromptMat;
+            public string PromptAction;
+            public InputMode.Family PromptFamily = (InputMode.Family)(-1);
             public Color Accent;
             public bool Rare;
             public float SweepAt = -10f, NextSweep, GlowBoost, GlowTarget, MoteTimer;
@@ -1142,7 +1177,12 @@ namespace UltraPuck.Game
             body.SetColor("_Color2", new Color(0.075f, 0.075f, 0.085f));
             body.SetFloat("_Border", 0.075f);
             body.SetColor("_BorderColor", accent);
-            Finish(body, fx, tier == 0 ? 0.55f : tier == 1 ? 0.3f : 0f, 0.45f, tier == 0 ? 0.45f : 0f, tier <= 1 ? 0.7f : tier == 2 ? 0.25f : 0f);
+            // S: rainbow holo + sparkles. A: pearlescent (no holo). Lower tiers: soft glare only.
+            Finish(body, fx,
+                foil: tier == 0 ? 0.55f : 0f,
+                glare: tier == 1 ? 0.55f : 0.45f,
+                sparkle: tier == 0 ? 0.45f : 0f,
+                pearl: tier == 1 ? 1f : 0f);
             v.Finishes.Add(body);
             body.SetFloat("_Rim", fx ? (tier <= 1 ? 0.7f : 0.4f) : 0f);
             body.SetFloat("_SweepStrength", fx ? 1f : 0.5f);
@@ -1153,21 +1193,48 @@ namespace UltraPuck.Game
             art.SetTexture("_MainTex", Art(def.Art));
             art.SetFloat("_Border", 0.018f);
             art.SetColor("_BorderColor", new Color(0f, 0f, 0f, 1f));
-            Finish(art, fx, tier == 0 ? 0.75f : 0f, tier <= 1 ? 0.4f : 0.28f, tier == 0 ? 0.9f : tier == 1 ? 0.45f : 0f, 0f);
+            Finish(art, fx,
+                foil: tier == 0 ? 0.75f : 0f,
+                glare: tier == 1 ? 0.5f : tier == 0 ? 0.42f : 0.28f,
+                sparkle: tier == 0 ? 0.9f : 0f,
+                pearl: tier == 1 ? 1f : 0f);
             v.Finishes.Add(art);
             art.SetFloat("_SweepStrength", fx ? 0.9f : 0.4f);
             v.ArtMat = art;
             v.ArtT = v.Tilt.Find("Art");
             v.ArtHome = v.ArtT.localPosition;
 
-            // a thin line under the name
-            var rule = Part(v, "Rule", new Vector2(1.7f, 0.016f), new Vector3(0f, -0.87f, -0.003f), 1, 0f);
-            rule.SetColor("_Color", new Color(accent.r, accent.g, accent.b, 0.55f)); rule.SetColor("_Color2", new Color(accent.r, accent.g, accent.b, 0.55f));
+            // title, flavour, coloured rule, then face rows (label left / value right) and optional footnote
+            var hasFlavor = !string.IsNullOrEmpty(def.Flavor);
+            var hasFace = def.Face != null && def.Face.Count > 0;
+            Text(v, def.Name, new Vector3(0f, hasFlavor ? -0.54f : -0.66f, -0.006f), 170, 0.0158f, Color.white, FontStyle.Bold, TextAnchor.MiddleCenter, v.Texts);
+            if (hasFlavor)
+                Text(v, Markup(def.Flavor), new Vector3(0f, -0.76f, -0.006f), 110, 0.0094f, new Color(0.78f, 0.78f, 0.82f), FontStyle.Normal, TextAnchor.MiddleCenter, v.Texts);
+            var ruleY = hasFlavor ? -0.88f : -0.87f;
+            var rule = Part(v, "Rule", new Vector2(1.55f, 0.022f), new Vector3(0f, ruleY, -0.005f), 2, 0f);
+            rule.SetColor("_Color", new Color(accent.r, accent.g, accent.b, 0.85f));
+            rule.SetColor("_Color2", new Color(accent.r, accent.g, accent.b, 0.85f));
             rule.SetFloat("_Glare", 0f);
-
-
-            Text(v, def.Name, new Vector3(0f, -0.66f, -0.006f), 150, 0.0142f, Color.white, FontStyle.Bold, TextAnchor.MiddleCenter, v.Texts);
-            Text(v, Wrap(Markup(def.Text), 34), new Vector3(0f, -0.95f, -0.006f), 120, 0.0099f, new Color(0.88f, 0.88f, 0.9f), FontStyle.Normal, TextAnchor.UpperCenter, v.Texts);
+            if (hasFace)
+            {
+                var rows = def.Face.Count;
+                var step = rows >= 5 ? 0.125f : rows >= 4 ? 0.138f : 0.15f;
+                var y = ruleY - 0.12f;
+                const float xL = -0.78f, xR = 0.78f;
+                var font = rows >= 5 ? 100 : 112;
+                var ch = rows >= 5 ? 0.0084f : 0.0092f;
+                for (var i = 0; i < rows; i++)
+                {
+                    var row = def.Face[i];
+                    Text(v, row.Label ?? "", new Vector3(xL, y, -0.006f), font, ch, new Color(0.92f, 0.92f, 0.95f), FontStyle.Normal, TextAnchor.MiddleLeft, v.Texts);
+                    Text(v, Markup(row.Value), new Vector3(xR, y, -0.006f), font, ch, new Color(0.92f, 0.92f, 0.95f), FontStyle.Normal, TextAnchor.MiddleRight, v.Texts);
+                    y -= step;
+                }
+                if (!string.IsNullOrEmpty(def.Text))
+                    Footnote(v, def.Text, y - 0.02f, 95, 0.0078f, new Color(0.72f, 0.72f, 0.76f));
+            }
+            else if (!string.IsNullOrEmpty(def.Text))
+                Footnote(v, def.Text, -0.95f, 120, 0.0099f, new Color(0.88f, 0.88f, 0.9f));
 
             // the back: dark with the game's name
             var back = Part(v, "Back", new Vector2(2.5f, 3.5f), Vector3.zero, 1, 0.17f, true);
@@ -1175,16 +1242,17 @@ namespace UltraPuck.Game
             back.SetColor("_Color2", new Color(0.06f, 0.06f, 0.07f));
             back.SetFloat("_Border", 0.075f);
             back.SetColor("_BorderColor", new Color(0.3f, 0.3f, 0.33f));
-            Finish(back, fx, 0f, 0.35f, 0f, 1f);
+            Finish(back, fx, foil: 0f, glare: 0.35f, sparkle: 0f, pearl: 0f);
             v.Finishes.Add(back);
             var backText = Text(v, "ULTRA\nPUCK", new Vector3(0f, 0f, 0.006f), 160, 0.017f, new Color(1f, 1f, 1f, 0.3f), FontStyle.Bold, TextAnchor.MiddleCenter, v.BackTexts);
             backText.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             return v;
         }
 
-        private static void Finish(Material m, bool fx, float foil, float glare, float sparkle, float etch)
+        private static void Finish(Material m, bool fx, float foil, float glare, float sparkle, float pearl)
         {
             m.SetFloat("_Foil", fx ? foil : 0f);
+            m.SetFloat("_Pearl", fx ? pearl : 0f);
             m.SetFloat("_Glare", fx ? glare : 0.12f);
             m.SetFloat("_Sparkle", fx ? sparkle : 0f);
         }
@@ -1214,7 +1282,11 @@ namespace UltraPuck.Game
             tm.characterSize = charSize;
             tm.fontStyle = style;
             tm.anchor = anchor;
-            tm.alignment = TextAlignment.Center;
+            tm.alignment = anchor == TextAnchor.MiddleLeft || anchor == TextAnchor.UpperLeft || anchor == TextAnchor.LowerLeft
+                ? TextAlignment.Left
+                : anchor == TextAnchor.MiddleRight || anchor == TextAnchor.UpperRight || anchor == TextAnchor.LowerRight
+                    ? TextAlignment.Right
+                    : TextAlignment.Center;
             tm.richText = true;
             tm.color = c;
             tm.text = text;
@@ -1285,10 +1357,73 @@ namespace UltraPuck.Game
 
         // ------------------------------------------------------------------ text helpers
 
-        /// <summary>Card markup to colours: [good] green, [bad] red, [note] grey.</summary>
+        /// <summary>
+        /// Footnote under the face rows. If the text has {utility} (or another action), draws "Press [button] to activate"
+        /// with a Kenney icon that follows the device in use; any other words stay as normal text.
+        /// </summary>
+        private void Footnote(CardView v, string raw, float y, int fontSize, float charSize, Color colour)
+        {
+            var action = ActionIn(raw);
+            if (action == null)
+            {
+                Text(v, Wrap(Markup(raw), 34), new Vector3(0f, y, -0.006f), fontSize, charSize, colour, FontStyle.Normal, TextAnchor.UpperCenter, v.Texts);
+                return;
+            }
+            // "Press" [icon] "to use." — tight gaps so the glyph sits with the words
+            const float icon = 0.18f, gap = 0.02f;
+            var mid = y - 0.02f;
+            Text(v, "Press", new Vector3(-(icon * 0.5f + gap), mid, -0.006f), fontSize, charSize, colour, FontStyle.Normal, TextAnchor.MiddleRight, v.Texts);
+            var go = Quad("PromptIcon", v.Tilt, new Vector2(icon, icon));
+            go.transform.localPosition = new Vector3(0f, mid, -0.007f);
+            var r = go.GetComponent<MeshRenderer>();
+            r.sortingOrder = 6;
+            v.PromptMat = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Transparent"));
+            r.sharedMaterial = v.PromptMat;
+            v.PromptIcon = r;
+            v.PromptAction = action;
+            v.PromptFamily = (InputMode.Family)(-1);
+            v.Front.Add(r); // face-up only (same as body art), not in Texts so sorting stays above the words
+            v.FrontOrder.Add(6);
+            Text(v, "to use.", new Vector3(icon * 0.5f + gap, mid, -0.006f), fontSize, charSize, colour, FontStyle.Normal, TextAnchor.MiddleLeft, v.Texts);
+            RefreshPrompt(v);
+        }
+
+        private static string ActionIn(string raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return null;
+            var open = raw.IndexOf('{');
+            var close = open >= 0 ? raw.IndexOf('}', open) : -1;
+            if (open < 0 || close < 0) return null;
+            return raw.Substring(open + 1, close - open - 1);
+        }
+
+        private static void RefreshPrompt(CardView v)
+        {
+            if (v.PromptIcon == null || v.PromptMat == null || string.IsNullOrEmpty(v.PromptAction)) return;
+            InputMode.Update();
+            if (v.PromptFamily == InputMode.Current) return;
+            v.PromptFamily = InputMode.Current;
+            var tex = InputIcons.ForAction(v.PromptAction, InputMode.Current);
+            if (tex == null)
+            {
+                // no Kenney file: blank the quad (the word "Press … activate" still reads)
+                v.PromptMat.mainTexture = Texture2D.whiteTexture;
+                v.PromptMat.color = new Color(1f, 1f, 1f, 0.15f);
+                return;
+            }
+            v.PromptMat.mainTexture = tex;
+            v.PromptMat.color = Color.white;
+        }
+
+        /// <summary>Card markup to colours: [good] green, [bad] red, [note] grey, [gold] bright gold (big buffs).</summary>
         private static string Markup(string s)
         {
-            return (s ?? "").Replace("[good]", "<color=#7BE38A>").Replace("[bad]", "<color=#FF7A7A>").Replace("[note]", "<color=#A0A0A8>").Replace("[/]", "</color>");
+            return (s ?? "")
+                .Replace("[good]", "<color=#7BE38A>")
+                .Replace("[bad]", "<color=#FF7A7A>")
+                .Replace("[note]", "<color=#A0A0A8>")
+                .Replace("[gold]", "<color=#FFD24D>")
+                .Replace("[/]", "</color>");
         }
 
         /// <summary>Wraps text to about <paramref name="width"/> letters a line (colour tags don't count).</summary>
