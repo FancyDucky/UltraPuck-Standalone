@@ -75,6 +75,7 @@ namespace UltraPuck.Game
             public Func<bool> Enabled = () => true;
             public string Hint;
             public bool Text;                     // a text box (your name): press to type
+            public Func<string> GlyphText;        // Controls rebinds: the binding as button pictures (instead of Value)
         }
 
         // typing your name
@@ -263,6 +264,7 @@ namespace UltraPuck.Game
                 {
                     Label = Controls.Label(act),
                     Value = () => _listen == act ? "Press a key or button…" : Controls.BindingText(act),
+                    GlyphText = () => _listen == act ? null : Glyphs.BindingHint(act),
                     Press = () => { _listen = act; },
                     Hint = Controls.Hint(act) + "  Press this row, then the new key or button. Esc cancels.",
                 });
@@ -696,8 +698,10 @@ namespace UltraPuck.Game
             }
             else if (row.Value != null)
             {
-                // value + press (Controls rebinds): show the binding, click to rebind — no left/right arrows
-                Ui.Label(right, row.Value(), Ui.Font(17, focused, TextAnchor.MiddleRight), textCol);
+                // value + press (Controls rebinds): show the binding (as button pictures for the device in use), click to rebind
+                var glyph = row.GlyphText != null ? row.GlyphText() : null;
+                if (glyph != null) Glyphs.Hint(right, glyph, 22, textCol, TextAnchor.MiddleRight, null, focused);
+                else Ui.Label(right, row.Value(), Ui.Font(17, focused, TextAnchor.MiddleRight), textCol);
                 if (clicked && row.Press != null) { PressSound(row); row.Press(); }
             }
             else if (clicked && row.Press != null) { PressSound(row); row.Press(); }

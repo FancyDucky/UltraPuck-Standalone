@@ -214,16 +214,16 @@ namespace UltraPuck.Core
             if (keep.Count != s.Rocks.Length) s.Rocks = keep.ToArray();
         }
 
-        /// <summary>How big a team's pylon goalie is with <paramref name="cards"/> Pylon Goalie cards: 35% bigger per card after the first (up to 4).</summary>
+        /// <summary>How big a team's pylon goalie is with <paramref name="cards"/> Pylon Goalie cards: 55% bigger per card after the first (up to 4).</summary>
         public Fix PylonSize(int cards)
         {
             var r = T.PylonRadius;
-            for (var k = 1; k < Math.Min(4, cards); k++) r = r * Fix.Ratio(135, 100);
+            for (var k = 1; k < Math.Min(4, cards); k++) r = r * Fix.Ratio(155, 100);
             return r;
         }
 
         /// <summary>
-        /// One pylon goalie in front of each net's mouth whose team has the Pylon Goalie card: 35% bigger for every
+        /// One pylon goalie in front of each net's mouth whose team has the Pylon Goalie card: 55% bigger for every
         /// copy after the first. It never stands in a goal box (see <see cref="KeepPylonOut"/>).
         /// </summary>
         public void PlacePylons(GameState s)

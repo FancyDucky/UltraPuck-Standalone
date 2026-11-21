@@ -422,8 +422,17 @@ namespace UltraPuck.Game
                 yield return Shot("settings-sound");
                 // Controls: rebind keys and buttons
                 _menus.Tab = 4;
+                InputMode.ShotOverride = InputMode.Family.Keyboard;
                 yield return new WaitForSecondsRealtime(0.4f);
                 yield return Shot("settings-controls");
+                // the same with a controller in hand: only its buttons, as pictures
+                InputMode.ShotOverride = InputMode.Family.PlayStation;
+                yield return new WaitForSecondsRealtime(0.3f);
+                yield return Shot("settings-controls-ps");
+                InputMode.ShotOverride = InputMode.Family.Xbox;
+                yield return new WaitForSecondsRealtime(0.3f);
+                yield return Shot("settings-controls-xbox");
+                InputMode.ShotOverride = null;
                 _menus.Close();
                 // the same from the players screen, where there are six tabs across (Match as well)
                 _menus.OpenSettings(true);
@@ -510,7 +519,7 @@ namespace UltraPuck.Game
             if (want("carry"))
             {
                 // Friendly Fire: orange carrying a teammate who has the puck, then the throw; blue's pylon goalie with
-                // three cards (35% bigger each) in front of its net
+                // three cards (55% bigger each) in front of its net
                 _shotWholeRink = true;
                 _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
                 _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 2, Demo = true });

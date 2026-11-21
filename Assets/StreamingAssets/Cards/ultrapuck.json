@@ -143,7 +143,7 @@
       "color": "#B3B8C2",
       "flavor": "It's his first day, be kind.",
       "face": [
-        { "label": "Pylon Goalie Size", "value": "[good]+35%[/]" }
+        { "label": "Pylon Goalie Size", "value": "[good]+55%[/]" }
       ],
       "text": "[note]Can be shoved aside, but never into the net; back at every face-off.[/]",
       "stats": { "Pylons": "+1" }

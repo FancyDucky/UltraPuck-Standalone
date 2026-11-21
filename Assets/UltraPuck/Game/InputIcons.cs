@@ -75,6 +75,35 @@ namespace UltraPuck.Game
             return Get(InputMode.Family.Keyboard, file);
         }
 
+        private static readonly Dictionary<Texture2D, Rect> Bounds = new Dictionary<Texture2D, Rect>();
+
+        /// <summary>
+        /// The part of a picture that's drawn (its non-transparent box), as 0..1 texture coordinates. Kenney's wide
+        /// keys (Space, Shift) sit small in a square picture; drawing just this part keeps them readable.
+        /// </summary>
+        public static Rect Used(Texture2D tex)
+        {
+            if (tex == null) return new Rect(0f, 0f, 1f, 1f);
+            Rect r;
+            if (Bounds.TryGetValue(tex, out r)) return r;
+            r = new Rect(0f, 0f, 1f, 1f);
+            try
+            {
+                var px = tex.GetPixels32();
+                int w = tex.width, h = tex.height, x0 = w, y0 = h, x1 = -1, y1 = -1;
+                for (var y = 0; y < h; y++)
+                    for (var x = 0; x < w; x++)
+                    {
+                        if (px[y * w + x].a < 16) continue;
+                        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+                    }
+                if (x1 >= x0 && y1 >= y0) r = new Rect((float)x0 / w, (float)y0 / h, (float)(x1 - x0 + 1) / w, (float)(y1 - y0 + 1) / h);
+            }
+            catch { }
+            Bounds[tex] = r;
+            return r;
+        }
+
         private static Texture2D Get(InputMode.Family family, string file)
         {
             var sub = Subfolder(family);
@@ -122,6 +151,8 @@ namespace UltraPuck.Game
                     case Glyphs.PadButton.North: return "playstation_button_color_triangle.png";
                     case Glyphs.PadButton.LB: return "playstation_trigger_l1.png";
                     case Glyphs.PadButton.RB: return "playstation_trigger_r1.png";
+                    case Glyphs.PadButton.LT: return "playstation_trigger_l2.png";
+                    case Glyphs.PadButton.RT: return "playstation_trigger_r2.png";
                     case Glyphs.PadButton.Start: return InputMode.DualSense ? "playstation5_button_options.png" : "playstation4_button_options.png";
                     case Glyphs.PadButton.Select: return InputMode.DualSense ? "playstation5_button_create.png" : "playstation4_button_share.png";
                     case Glyphs.PadButton.LS: return "playstation_stick_l.png";
@@ -141,6 +172,8 @@ namespace UltraPuck.Game
                     case Glyphs.PadButton.North: return "switch_button_x.png";
                     case Glyphs.PadButton.LB: return "switch_button_l.png";
                     case Glyphs.PadButton.RB: return "switch_button_r.png";
+                    case Glyphs.PadButton.LT: return "switch_button_zl.png";
+                    case Glyphs.PadButton.RT: return "switch_button_zr.png";
                     case Glyphs.PadButton.Start: return "switch_button_plus.png";
                     case Glyphs.PadButton.Select: return "switch_button_minus.png";
                     case Glyphs.PadButton.LS: return "switch_stick_l.png";
@@ -158,6 +191,8 @@ namespace UltraPuck.Game
                 case Glyphs.PadButton.North: return "xbox_button_color_y.png";
                 case Glyphs.PadButton.LB: return "xbox_lb.png";
                 case Glyphs.PadButton.RB: return "xbox_rb.png";
+                case Glyphs.PadButton.LT: return "xbox_lt.png";
+                case Glyphs.PadButton.RT: return "xbox_rt.png";
                 case Glyphs.PadButton.Start: return "xbox_button_menu.png";
                 case Glyphs.PadButton.Select: return "xbox_button_view.png";
                 case Glyphs.PadButton.LS: return "xbox_stick_l.png";
@@ -203,8 +238,8 @@ namespace UltraPuck.Game
                 case Controls.Pad.North: return Glyphs.PadButton.North;
                 case Controls.Pad.LeftShoulder: return Glyphs.PadButton.LB;
                 case Controls.Pad.RightShoulder: return Glyphs.PadButton.RB;
-                case Controls.Pad.LeftTrigger: return Glyphs.PadButton.LB;
-                case Controls.Pad.RightTrigger: return Glyphs.PadButton.RB;
+                case Controls.Pad.LeftTrigger: return Glyphs.PadButton.LT;
+                case Controls.Pad.RightTrigger: return Glyphs.PadButton.RT;
                 case Controls.Pad.Select: return Glyphs.PadButton.Select;
                 case Controls.Pad.Start: return Glyphs.PadButton.Start;
                 case Controls.Pad.LeftStick: return Glyphs.PadButton.LS;

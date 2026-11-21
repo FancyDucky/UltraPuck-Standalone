@@ -245,7 +245,7 @@ namespace UltraPuck.Core
         /// <summary>Pushed pylons slide (and slow down quickly).</summary>
         public FixVec2 Vel;
         public int Team;
-        /// <summary>How big it is: every Pylon Goalie card on the team makes it 35% bigger.</summary>
+        /// <summary>How big it is: every Pylon Goalie card on the team makes it 55% bigger.</summary>
         public Fix Radius;
     }
 

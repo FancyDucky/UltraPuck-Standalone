@@ -82,6 +82,13 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.36 (Claude, 21 Nov 2026): **Controls tab button pictures; Pylon Goalie 55%.** Controls rebind rows show
+  only the device in use (InputMode.Current): Kenney key art on keyboard, that pad's buttons on a controller
+  (`Glyphs.BindingHint`, hint tokens {bindkey:N} / {bindpad:N} / {bindpad2:N}; move / aim rows show the sticks
+  on a pad). New PadButton LT / RT with Kenney trigger art. Key pictures are drawn cropped to their drawn part
+  (`InputIcons.Used`) so Space / Shift are readable (footer hints too). `InputMode.ShotOverride` for screenshots
+  (settings-controls, -ps, -xbox). Pylon Goalie 55% bigger per card (card json had lost its stats line: restored).
+  **NetSession.Version 42.** Checked: 119 tests (114 pass, 5 skipped), Windows + Linux builds, screenshots. GitHub release v0.1.36.
 - 0.1.35 (Claude, 21 Nov 2026, part 2): **pre-charge; dash where you move; back home for cards; one Team Play.**
   Holding charge/brake without the puck charges a shot (still brakes); puck/rock/teammate pickups keep the charge,
   so a pass can be one-timed by letting go. Controls tab (top row) "Dash direction" (Settings.DashWhereMoving, default

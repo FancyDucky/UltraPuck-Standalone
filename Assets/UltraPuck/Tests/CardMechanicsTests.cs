@@ -228,7 +228,7 @@ namespace UltraPuck.Tests
             Give(s, 1, "ultrapuck.pylongoalie", "ultrapuck.pylongoalie");
             _sim.FaceOff(s);
             Assert.AreEqual(1, s.Pylons.Length, "still one pylon");
-            Assert.AreEqual(small.ToDouble() * 1.35, s.Pylons[0].Radius.ToDouble(), 1e-3, "35% bigger for the second copy");
+            Assert.AreEqual(small.ToDouble() * 1.55, s.Pylons[0].Radius.ToDouble(), 1e-3, "55% bigger for the second copy");
         }
 
         /// <summary>A pylon goalie can't be pushed into a net: it stops at the goal box, so nobody can plug a net with it.</summary>

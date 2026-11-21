@@ -23,6 +23,9 @@ namespace UltraPuck.Game
 
         private static int _frame = -1;
 
+        /// <summary>Screenshots: show this device's pictures whatever was used last (null: normal).</summary>
+        internal static Family? ShotOverride;
+
         static InputMode()
         {
             // start with a connected controller's pictures if there is one and no keyboard has been touched yet
@@ -36,6 +39,7 @@ namespace UltraPuck.Game
             if (_frame == Time.frameCount) return;
             _frame = Time.frameCount;
             MouseUsed = false;
+            if (ShotOverride.HasValue) { Set(ShotOverride.Value); return; }
             if (LocalPlayers.Blocked) return;
             foreach (var g in Gamepad.all) if (Active(g)) { Use(g); return; }
             var kb = Keyboard.current;
@@ -117,7 +121,7 @@ namespace UltraPuck.Game
     internal static class Glyphs
     {
         /// <summary>Controller face / shoulder / stick / d-pad used by hints and <see cref="InputIcons"/>.</summary>
-        public enum PadButton { South, East, West, North, LB, RB, Start, Select, LS, RS, DPad, DPadLR }
+        public enum PadButton { South, East, West, North, LB, RB, Start, Select, LS, RS, DPad, DPadLR, LT, RT }
 
         /// <summary>Controller button(s) for an action (uses the player's rebinds for shoot / charge / utility / swap).</summary>
         public static PadButton[] PadButtons(string action) { return PadFor(action); }
@@ -128,6 +132,11 @@ namespace UltraPuck.Game
         /// <summary>Controller button(s) for an action.</summary>
         private static PadButton[] PadFor(string action)
         {
+            // a binding from the Controls tab: {bindpad:N} / {bindpad2:N} (N = Controls.Act)
+            Controls.Act act;
+            if (BindAct(action, "bindpad:", out act)) return new[] { InputIcons.FromControls(Controls.PadOf(act)) };
+            if (BindAct(action, "bindpad2:", out act)) return new[] { InputIcons.FromControls(Controls.Pad2Of(act)) };
+            if (BindAct(action, "bindkey:", out act)) return new PadButton[0];
             switch (action)
             {
                 case "confirm": case "join": return new[] { PadButton.South };
@@ -153,6 +162,8 @@ namespace UltraPuck.Game
         /// <summary>Keyboard key(s) for an action.</summary>
         private static string[] KeysFor(string action)
         {
+            Controls.Act act;
+            if (BindAct(action, "bindkey:", out act)) return new[] { Controls.KeyName(Controls.KeyOf(act)) };
             switch (action)
             {
                 case "confirm": return new[] { "Enter" };
@@ -176,6 +187,31 @@ namespace UltraPuck.Game
                 case "nav": return new[] { "↑", "↓" };
                 default: return new[] { action };
             }
+        }
+
+        private static bool BindAct(string action, string prefix, out Controls.Act act)
+        {
+            act = default(Controls.Act);
+            int n;
+            if (!action.StartsWith(prefix) || !int.TryParse(action.Substring(prefix.Length), out n)) return false;
+            if (!System.Enum.IsDefined(typeof(Controls.Act), n)) return false;
+            act = (Controls.Act)n;
+            return true;
+        }
+
+        /// <summary>
+        /// A binding as hint text with button pictures, for the device in use only: the key on a keyboard, the
+        /// button(s) on a controller (move / aim keys: the stick, which isn't rebindable on a controller).
+        /// </summary>
+        public static string BindingHint(Controls.Act a)
+        {
+            InputMode.Update();
+            var n = (int)a;
+            if (!InputMode.Pad) return "{bindkey:" + n + "}";
+            if (Controls.KeyboardOnly(a)) return a >= Controls.Act.AimLeft ? "{aim}" : "{move}"; // the sticks (not rebindable on a controller)
+            var p1 = Controls.PadOf(a);
+            var p2 = Controls.Pad2Of(a);
+            return p1 == p2 ? "{bindpad:" + n + "}" : "{bindpad:" + n + "}  or  {bindpad2:" + n + "}";
         }
 
         // ------------------------------------------------------------------ drawing a hint line
@@ -264,7 +300,13 @@ namespace UltraPuck.Game
 
         private static float KeyWidth(string key, float h, int size)
         {
-            if (InputIcons.ForKeyLabel(key) != null) return h; // Kenney key art is square
+            var art = InputIcons.ForKeyLabel(key);
+            if (art != null)
+            {
+                // just the key's drawn part, as tall as the line: wide keys (Space, Shift) come out wide
+                var u = InputIcons.Used(art);
+                return h * 0.8f * Mathf.Clamp(u.width * art.width / Mathf.Max(1f, u.height * art.height), 0.6f, 3f);
+            }
             var w = Ui.Font(Mathf.RoundToInt(size * 0.8f), true).CalcSize(new GUIContent(key)).x + size * 0.7f;
             return Mathf.Max(w, h * 0.95f);
         }
@@ -274,11 +316,12 @@ namespace UltraPuck.Game
             var kenney = InputIcons.ForKeyLabel(key);
             if (kenney != null && Event.current.type == EventType.Repaint)
             {
-                var d = r.height * 0.95f;
-                var box = new Rect(r.center.x - d / 2f, r.center.y - d / 2f, d, d);
+                var u = InputIcons.Used(kenney);
+                var kh = r.height * 0.8f;
+                var box = new Rect(r.center.x - r.width / 2f, r.center.y - kh / 2f, r.width, kh);
                 var old = GUI.color;
                 GUI.color = new Color(1f, 1f, 1f, alpha);
-                GUI.DrawTexture(box, kenney, ScaleMode.ScaleToFit, true);
+                GUI.DrawTextureWithTexCoords(box, kenney, u, true);
                 GUI.color = old;
                 return;
             }
@@ -298,7 +341,7 @@ namespace UltraPuck.Game
             if (tex != null) return h;
             switch (b)
             {
-                case PadButton.LB: case PadButton.RB: return h * 1.5f;
+                case PadButton.LB: case PadButton.RB: case PadButton.LT: case PadButton.RT: return h * 1.5f;
                 case PadButton.Start: case PadButton.Select:
                     var label = PillLabel(b);
                     return label.Length <= 1 ? h : Ui.Font(Mathf.RoundToInt(size * 0.72f), true).CalcSize(new GUIContent(label)).x + size * 0.9f;
@@ -313,6 +356,8 @@ namespace UltraPuck.Game
             {
                 case PadButton.LB: return f == InputMode.Family.PlayStation ? "L1" : f == InputMode.Family.Switch ? "L" : "LB";
                 case PadButton.RB: return f == InputMode.Family.PlayStation ? "R1" : f == InputMode.Family.Switch ? "R" : "RB";
+                case PadButton.LT: return f == InputMode.Family.PlayStation ? "L2" : f == InputMode.Family.Switch ? "ZL" : "LT";
+                case PadButton.RT: return f == InputMode.Family.PlayStation ? "R2" : f == InputMode.Family.Switch ? "ZR" : "RT";
                 case PadButton.Start: return f == InputMode.Family.PlayStation ? "OPTIONS" : f == InputMode.Family.Switch ? "+" : f == InputMode.Family.Xbox ? "MENU" : "START";
                 case PadButton.Select: return f == InputMode.Family.PlayStation ? (InputMode.DualSense ? "CREATE" : "SHARE") : f == InputMode.Family.Switch ? "−" : f == InputMode.Family.Xbox ? "VIEW" : "SELECT";
                 default: return "";
@@ -350,7 +395,7 @@ namespace UltraPuck.Game
                         Ui.Label(circle, letter, Ui.Font(Mathf.RoundToInt(size * 0.85f), true, TextAnchor.MiddleCenter), WithAlpha(col, alpha), false);
                     }
                     break;
-                case PadButton.LB: case PadButton.RB: case PadButton.Start: case PadButton.Select:
+                case PadButton.LB: case PadButton.RB: case PadButton.LT: case PadButton.RT: case PadButton.Start: case PadButton.Select:
                     var pill = new Rect(r.x, r.y + r.height * 0.14f, r.width, r.height * 0.72f);
                     Ui.Box(new Rect(pill.x, pill.y + 1.5f, pill.width, pill.height), new Color(0f, 0f, 0f, 0.4f * alpha), pill.height / 2f);
                     Ui.Box(pill, WithAlpha(Body, 0.95f * alpha), pill.height / 2f);
