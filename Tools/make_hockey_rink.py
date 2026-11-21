@@ -1,11 +1,15 @@
 # Writes the Hockey Rink map: a rounded rink like the Test Rink, but the goals stand out on the ice in front of
 # each end, inside a little net (a wall on three sides, open towards the middle). You can skate and pass behind them.
+# Usage: make_hockey_rink.py out.json            the Hockey Rink
+#        make_hockey_rink.py out.json --big      the Big Rink: the same, 70% bigger every way (for 4v4); nets the same size
 import json, math, sys
 
+BIG = "--big" in sys.argv
+SIZE = 1.7 if BIG else 1.0     # the Big Rink: 70% bigger (length, width, corners, where things stand)
 STRETCH = 1.35                 # 35% longer than the Test Rink, end to end
-W, H, R = 24.0 * STRETCH, 13.5, 6.0      # half width, half height, corner radius
-ARC = 10                       # segments per corner
-NET_X = 18.5 * STRETCH         # where the back of each net stands (from the middle)
+W, H, R = 24.0 * STRETCH * SIZE, 13.5 * SIZE, 6.0 * SIZE      # half width, half height, corner radius
+ARC = 14 if BIG else 10        # segments per corner
+NET_X = 18.5 * STRETCH * SIZE  # where the back of each net stands (from the middle)
 NET_SCALE = 0.6                # the nets were made 40% smaller than they first were...
 GROW = 1.3                     # ...and then 30% bigger again: the opening and the depth, measured inside the walls
 WALL = 0.68                    # wall thickness (the game's Tuning.WallThickness): the goal area stops at the walls' inner edge
@@ -41,11 +45,11 @@ def net(side):
 spawns = []
 for team, sx in ((0, -1), (1, 1)):
     for x, y in ((8, 0), (11, 5), (11, -5), (14.5, 0)):
-        spawns.append({"team": team, "pos": [r3(sx * x * STRETCH), y], "facing": [-sx, 0]})
+        spawns.append({"team": team, "pos": [r3(sx * x * STRETCH * SIZE), r3(y * SIZE)], "facing": [-sx, 0]})
 
 mouth_x = NET_X - DEPTH  # front of the goal box at the net opening
 m = {
-    "name": "Hockey Rink",
+    "name": "Big Rink" if BIG else "Hockey Rink",
     "author": "Ultra Puck",
     "walls": [
         {"closed": True, "points": clean},
@@ -73,5 +77,8 @@ def fmt(o, ind=0):
 
 head = ("// Hockey Rink: the goals stand out on the ice inside little nets, open towards the middle, so you can go behind\n"
         "// them. Team 0 defends the left net, team 1 the right. 64.8 x 27, made by a script (make_hockey_rink.py).\n")
+if BIG:
+    head = ("// Big Rink: the Hockey Rink 70%% bigger every way (the nets the same size), room for 4 against 4.\n"
+            "// Team 0 defends the left net, team 1 the right. %.1f x %.1f, made by a script (make_hockey_rink.py --big).\n" % (W * 2, H * 2))
 open(sys.argv[1], "w", encoding="utf-8", newline="\n").write(head + fmt(m) + "\n")
 print(len(clean), "outline points")

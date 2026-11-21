@@ -44,7 +44,7 @@ namespace UltraPuck.Game
             {
                 var pts = new List<Vector2>();
                 foreach (var p in map.WallLines[w]) pts.Add(V.Of(p));
-                Draw.Make("Wall" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], wallThickness, Palette.Wall, !map.WallClosed[w]), 4);
+                Draw.Make("Wall" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], wallThickness, Palette.Wall), 4);
             }
         }
 

@@ -165,12 +165,12 @@ namespace UltraPuck.Game
                 }
                 return Build(v, t, c);
             }
-            // round joints
+            // round joints and ends (the nets' posts too: the walls are round there for the puck and players as well)
             foreach (var p in pts)
             {
                 var centre = v.Count;
                 v.Add(p);
-                const int seg = 10;
+                const int seg = 20;
                 for (var k = 0; k <= seg; k++)
                 {
                     var a = k * Mathf.PI * 2f / seg;

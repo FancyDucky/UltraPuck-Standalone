@@ -82,6 +82,12 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.39 (Claude, 21 Nov 2026): **round posts; Big Rink.** Open walls (the nets' posts) are
+  drawn with round joints and ends like the outer walls (`Draw.Line` no longer gets `square` for them; 20-segment
+  caps), matching the round collision they always had. New map `big-rink.json` ("Big Rink"): the Hockey Rink 70%
+  bigger every way (110.2 x 45.9), nets the same size, four spawns a side; made by `Tools/make_hockey_rink.py out --big`
+  (without `--big` the script still makes the Hockey Rink exactly). No rule change (the map fingerprint covers online).
+  Checked: 130 tests (125 pass, 5 skipped), Windows build, `maps` screenshots.
 - 0.1.38 (Claude, 21 Nov 2026): **Resolution setting; Friendly Fire text; bots throw
   teammates; Swap spam fix.** Graphics tab "Resolution" (`Settings.Resolution`, PlayerPrefs res_w / res_h, 0 = the
   monitor's own; `Settings.Resolutions()` lists the monitor's sizes). Friendly Fire card: plain text "Allows you to pick
