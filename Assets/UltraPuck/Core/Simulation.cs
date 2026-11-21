@@ -39,7 +39,11 @@ namespace UltraPuck.Core
             if (Cards == null || Cards.Cards.Count == 0) return;
             var any = false;
             var teamOffer = new int[2][];
-            foreach (var i in pickers)
+            // people draw first, so a Team Vote offer can hold cards bots aren't offered
+            var order = new System.Collections.Generic.List<int>();
+            foreach (var i in pickers) if (i >= 0 && i < s.Players.Length && !s.Players[i].Bot) order.Add(i);
+            foreach (var i in pickers) if (i >= 0 && i < s.Players.Length && s.Players[i].Bot) order.Add(i);
+            foreach (var i in order)
             {
                 if (i < 0 || i >= s.Players.Length) continue;
                 var p = s.Players[i];
@@ -98,7 +102,11 @@ namespace UltraPuck.Core
             PlacePylons(s);
             PruneRocks(s);
             if (T.FreePlay) s.Phase = Phase.Play; // free play: carry on where everyone stands
-            else FaceOff(s);
+            else
+            {
+                FaceOff(s);
+                s.PhaseTime += T.PickOutroTime; // the countdown waits for the cards to leave the screen
+            }
         }
 
         private static void TeamVoteResult(GameState s, int team)
@@ -341,7 +349,7 @@ namespace UltraPuck.Core
             if (all) s.PhaseTime = Fix.Min(s.PhaseTime, dt);
         }
 
-        public int AddPlayer(GameState s, int team)
+        public int AddPlayer(GameState s, int team, bool bot = false)
         {
             team &= 1;
             var n = 0;
@@ -349,7 +357,7 @@ namespace UltraPuck.Core
             var sp = Map.SpawnFor(team, n);
             var players = new PlayerState[s.Players.Length + 1];
             Array.Copy(s.Players, players, s.Players.Length);
-            players[players.Length - 1] = new PlayerState { Team = team, Pos = sp.Pos, Facing = sp.Facing };
+            players[players.Length - 1] = new PlayerState { Team = team, Pos = sp.Pos, Facing = sp.Facing, Bot = bot };
             s.Players = players;
             return players.Length - 1;
         }
@@ -368,6 +376,8 @@ namespace UltraPuck.Core
             {
                 if (p.HeldBy == index) { p.HeldBy = -1; p.HeldTime = Fix.Zero; }
                 else if (p.HeldBy > index) p.HeldBy--;
+                if (p.Pilot == index) p.Pilot = -1;
+                else if (p.Pilot > index) p.Pilot--;
             }
         }
 
@@ -380,6 +390,14 @@ namespace UltraPuck.Core
         {
             var dt = T.Dt;
             s.Tick++;
+
+            // the host's match-settings commands, sent as a Pick outside the card screen (even paused): add a bot,
+            // back to the kick-off, fix the score
+            for (int i = 0, n = s.Players.Length; i < n; i++)
+            {
+                if (s.Phase == Phase.Picking) break;
+                HostCommand(s, InputOf(inputs, i).Pick);
+            }
 
             // the host's pause: everything stands still (presses made meanwhile don't count afterwards)
             s.Paused = false;
@@ -436,6 +454,7 @@ namespace UltraPuck.Core
                 BouncePuckAndRocks(s); // rock ↔ puck (after both have moved)
                 MoveShots(s, sub);
                 if (s.Phase == Phase.Play) CheckGoal(s);
+                NoteTouch(s);
             }
 
             // shots run out
@@ -471,6 +490,116 @@ namespace UltraPuck.Core
                     }
                 }
             }
+        }
+
+        /// <summary>A match-settings command from the host (see <see cref="PlayerInput.AddBotRed"/> and the rest); anything else is ignored.</summary>
+        public void HostCommand(GameState s, byte cmd)
+        {
+            switch (cmd)
+            {
+                case PlayerInput.AddBotRed:
+                case PlayerInput.AddBotBlue:
+                    if (s.Players.Length >= 8) return;
+                    AddPlayer(s, cmd == PlayerInput.AddBotBlue ? 1 : 0, true);
+                    if (Cards != null) Cards.Recompute(s);
+                    return;
+                case PlayerInput.KickOff:
+                    if (s.Phase == Phase.GameOver || s.Phase == Phase.Picking) return;
+                    FaceOff(s);
+                    return;
+                case PlayerInput.RedUp: s.Score[0]++; return;
+                case PlayerInput.RedDown: s.Score[0] = Math.Max(0, s.Score[0] - 1); return;
+                case PlayerInput.BlueUp: s.Score[1]++; return;
+                case PlayerInput.BlueDown: s.Score[1] = Math.Max(0, s.Score[1] - 1); return;
+            }
+        }
+
+        // ------------------------------------------------------------------ who steers whom
+
+        /// <summary>
+        /// The controls each player gets this tick, from each person's own controls (<paramref name="raw"/>, by
+        /// player; bots' entries are ignored). People can swap onto bot teammates (<see cref="PlayerInput.Swap"/>)
+        /// and are handed to a bot teammate that picks up the puck (unless they turned that off); whoever nobody
+        /// steers is played by the bot. On the card screen everyone is back on their own player. Changes who steers
+        /// whom in <paramref name="s"/>, so call it once per tick, just before <see cref="Step"/>.
+        /// </summary>
+        public PlayerInput[] Route(GameState s, PlayerInput[] raw)
+        {
+            var n = s.Players.Length;
+            if (s.Phase == Phase.Picking || s.Phase == Phase.GameOver)
+                foreach (var p in s.Players) p.Pilot = -1;
+            else
+            {
+                for (var h = 0; h < n; h++)
+                {
+                    var p = s.Players[h];
+                    if (p.Bot) continue;
+                    var held = (InputOf(raw, h).Buttons & PlayerInput.Swap) != 0;
+                    if (held && !p.SwapHeld) SwapToNext(s, h);
+                    p.SwapHeld = held;
+                }
+                // a bot-run player just got the puck: hand them to a person on that team (one at random)
+                var c = s.Carrier;
+                if (c >= 0 && c < n && c != s.AutoCarrier && DriverOf(s, c) < 0)
+                {
+                    var people = new System.Collections.Generic.List<int>();
+                    for (var h = 0; h < n; h++)
+                        if (!s.Players[h].Bot && s.Players[h].Team == s.Players[c].Team && (InputOf(raw, h).Buttons & PlayerInput.NoAutoSwap) == 0) people.Add(h);
+                    if (people.Count > 0)
+                    {
+                        var who = people.Count == 1 ? people[0] : people[(int)(s.NextRandom() % (uint)people.Count)];
+                        s.Players[who].Pilot = who == c ? -1 : c;
+                    }
+                }
+            }
+            s.AutoCarrier = s.Carrier;
+            var inputs = new PlayerInput[n];
+            for (var i = 0; i < n; i++)
+            {
+                var d = DriverOf(s, i);
+                if (d < 0) { inputs[i] = Bot.Think(this, s, i); continue; }
+                var x = InputOf(raw, d);
+                x.Buttons &= unchecked((byte)~(PlayerInput.Swap | PlayerInput.NoAutoSwap));
+                inputs[i] = x;
+            }
+            return inputs;
+        }
+
+        /// <summary>The person steering player <paramref name="i"/> (themself, or someone swapped onto them), or -1 when the bot plays them.</summary>
+        public static int DriverOf(GameState s, int i)
+        {
+            if (s == null) return -1;
+            for (var h = 0; h < s.Players.Length; h++)
+            {
+                var p = s.Players[h];
+                if (!p.Bot && (p.Pilot >= 0 ? p.Pilot : h) == i) return h;
+            }
+            return -1;
+        }
+
+        /// <summary>The player person <paramref name="h"/> is steering (their own, or a bot teammate), or -1 for a bot.</summary>
+        public static int Steers(GameState s, int h)
+        {
+            if (s == null || h < 0 || h >= s.Players.Length || s.Players[h].Bot) return -1;
+            var p = s.Players[h].Pilot;
+            return p >= 0 && p < s.Players.Length ? p : h;
+        }
+
+        /// <summary>Person <paramref name="h"/> takes over the next bot-run teammate (by player number, wrapping round; their own player counts).</summary>
+        private static void SwapToNext(GameState s, int h)
+        {
+            var me = s.Players[h];
+            var cur = Steers(s, h);
+            int first = -1, next = -1;
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                if (i == cur || s.Players[i].Team != me.Team || DriverOf(s, i) >= 0) continue;
+                if (first < 0) first = i;
+                if (next < 0 && i > cur) next = i;
+            }
+            var pick = next >= 0 ? next : first;
+            if (pick < 0) return;
+            me.Pilot = pick == h ? -1 : pick;
         }
 
         private static PlayerInput InputOf(PlayerInput[] inputs, int i)
@@ -527,6 +656,7 @@ namespace UltraPuck.Core
             var control = p.Stun > Fix.Zero ? T.StunControl : Fix.One;
             var speed = p.Stats.MoveSpeed * (holding ? p.Stats.MoveSpeedWithPuck : Fix.One);
             if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave
+            if (holding && input.Has(PlayerInput.ChargeBrake)) speed *= T.ChargeMoveSpeed; // charging a shot: slower
             var push = flying ? Fix.Zero : T.MoveForce * speed * control;
             p.Vel += move * (push * dt);
             // getting going: an extra push, the further below top speed (along the stick) the stronger
@@ -832,6 +962,7 @@ namespace UltraPuck.Core
                 if (best >= 0)
                 {
                     var p = s.Players[best];
+                    if (IsSave(s, best)) s.Players[Credit(s, best)].Saves++;
                     if (s.PassFrom >= 0 && s.PassFrom != best && s.PassFrom < s.Players.Length && s.Players[s.PassFrom].Team == p.Team)
                     {
                         Passed(s, s.PassFrom);
@@ -1062,6 +1193,24 @@ namespace UltraPuck.Core
                 s.Score[scorer]++;
                 s.LastScorer = scorer;
                 s.LastGoalPlayer = WhoScored(s, scorer);
+                // stats: the goal is the shooter's (or carrier's) on the scoring team; an own goal is nobody's. The
+                // assist is the teammate who had it just before them.
+                NoteTouch(s);
+                var credit = Shooter(s, scorer);
+                s.LastAssist = -1;
+                s.LastGoalBy = -1;
+                if (credit >= 0)
+                {
+                    s.LastGoalBy = Credit(s, credit);
+                    s.Players[s.LastGoalBy].Goals++;
+                    if (s.Touch1 == credit && s.Touch2 >= 0 && s.Touch2 != credit && s.Touch2 < s.Players.Length && s.Players[s.Touch2].Team == scorer)
+                    {
+                        s.LastAssist = Credit(s, s.Touch2);
+                        if (s.LastAssist != s.LastGoalBy) s.Players[s.LastAssist].Assists++;
+                        else s.LastAssist = -1;
+                    }
+                }
+                s.Touch1 = -1; s.Touch2 = -1;
                 var blastAt = s.PuckPos;
                 if (s.Carrier >= 0) { s.PuckVel = s.Players[s.Carrier].Vel; s.Carrier = -1; }
                 s.Phase = Phase.Scored;
@@ -1071,6 +1220,47 @@ namespace UltraPuck.Core
                 BlastFrom(s, blastAt, T.GoalBlastRange, T.DashKnockback * T.GoalBlastPush, -1, true, false, true);
                 return;
             }
+        }
+
+        /// <summary>The scoring team's player who put it in (the last shooter, else the carrier), or -1 (an own goal).</summary>
+        private static int Shooter(GameState s, int team)
+        {
+            if (s.PassFrom >= 0 && s.PassFrom < s.Players.Length && s.Players[s.PassFrom].Team == team) return s.PassFrom;
+            if (s.Carrier >= 0 && s.Carrier < s.Players.Length && s.Players[s.Carrier].Team == team) return s.Carrier;
+            return -1;
+        }
+
+        /// <summary>Who a stat goes to: the person steering player <paramref name="i"/> (swapped onto a bot, it's theirs), else the player.</summary>
+        private static int Credit(GameState s, int i)
+        {
+            var d = DriverOf(s, i);
+            return d >= 0 ? d : i;
+        }
+
+        /// <summary>Keep the last two players to hold the puck (for assists).</summary>
+        private static void NoteTouch(GameState s)
+        {
+            if (s.Carrier < 0 || s.Carrier == s.Touch1) return;
+            s.Touch2 = s.Touch1;
+            s.Touch1 = s.Carrier;
+        }
+
+        /// <summary>
+        /// A save: a player picking up a shot from the other team that was on its way into their own net (heading
+        /// at it, and due there within about a second and a half).
+        /// </summary>
+        private bool IsSave(GameState s, int picker)
+        {
+            if (s.PassFrom < 0 || s.PassFrom >= s.Players.Length) return false;
+            var p = s.Players[picker];
+            if (s.Players[s.PassFrom].Team == p.Team) return false;
+            var speed = s.PuckVel.Length;
+            if (speed < Fix.FromInt(6)) return false;
+            var to = Bot.GoalCentre(Map, p.Team) - s.PuckPos;
+            var dist = to.Length;
+            if (dist.Raw <= 0) return true;
+            if (FixVec2.Dot(s.PuckVel, to) < speed * dist * Fix.Ratio(85, 100)) return false;
+            return dist < speed * Fix.Ratio(3, 2);
         }
 
         /// <summary>Player to celebrate: the last passer/shooter on the scoring team, else whoever on that team is nearest the puck.</summary>
@@ -1237,6 +1427,7 @@ namespace UltraPuck.Core
                 return;
             }
             // a real check frees a carried teammate, and makes a carrier drop the one they hold
+            s.Players[Credit(s, from)].Bumps++;
             b.HeldBy = -1; b.HeldTime = Fix.Zero;
             DropMate(s, to);
             // no daze from a check (only the Puck Gun stuns): the hit lag above is the pause
@@ -1418,7 +1609,7 @@ namespace UltraPuck.Core
             s.Shots = shots;
         }
 
-        /// <summary>Shots fly straight; the first player they touch (not the shooter) is stunned and drops the puck; walls and pylons stop them.</summary>
+        /// <summary>Shots fly straight; the first player they touch (not the shooter) is knocked back like a check (lighter players further) and drops the puck; walls and pylons stop them.</summary>
         private void MoveShots(GameState s, Fix sub)
         {
             if (s.Shots.Length == 0) return;
@@ -1453,9 +1644,14 @@ namespace UltraPuck.Core
                         var q = s.Players[j];
                         var r = RadiusOf(q) + T.ShotRadius;
                         if ((sh.Pos - q.Pos).SqrLength >= r * r) continue;
-                        q.Stun = Fix.Max(q.Stun, T.GunStun);
-                        q.Vel = q.Vel * Fix.Ratio(3, 10) + sh.Vel.Normalized * T.GunKnockback;
-                        Hit(q, (sh.Pos - q.Pos).Normalized, Fix.Ratio(4, 5));
+                        // a shootable check: no daze, a knockback that scales with how heavy they are (and Knockback Taken)
+                        if (sh.Owner >= 0 && sh.Owner < s.Players.Length && s.Players[sh.Owner].Team != q.Team) s.Players[Credit(s, sh.Owner)].Bumps++;
+                        var light = Fix.One / WeightOf(q) * Fix.Clamp(q.Stats.KnockbackTaken, Fix.Ratio(1, 20), Fix.FromInt(10));
+                        q.Vel += sh.Vel.Normalized * (T.DashKnockback * light);
+                        q.HitLag = Fix.Max(q.HitLag, T.HitLagMax * Fix.Ratio(3, 5));
+                        Hit(q, (sh.Pos - q.Pos).Normalized, Fix.Ratio(3, 5));
+                        q.HeldBy = -1; q.HeldTime = Fix.Zero;
+                        DropMate(s, j);
                         if (s.Carrier == j)
                         {
                             s.Carrier = -1;

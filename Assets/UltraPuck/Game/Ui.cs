@@ -137,8 +137,12 @@ namespace UltraPuck.Game
 
         // ------------------------------------------------------------------ text
 
+        /// <summary>While set (the players screens): every label is bold and has no drop shadow.</summary>
+        public static bool Flat;
+
         public static GUIStyle Font(int size, bool bold = false, TextAnchor align = TextAnchor.MiddleLeft)
         {
+            if (Flat) bold = true;
             var key = size * 4 + (bold ? 1 : 0);
             foreach (var f in _fonts) if (f.fontSize == size && (f.fontStyle == FontStyle.Bold) == bold) { f.alignment = align; return f; }
             var s = new GUIStyle(GUI.skin.label) { fontSize = size, fontStyle = bold ? FontStyle.Bold : FontStyle.Normal, alignment = align, wordWrap = false, richText = true, clipping = TextClipping.Overflow };
@@ -152,7 +156,7 @@ namespace UltraPuck.Game
         public static void Label(Rect r, string text, GUIStyle style, Color c, bool shadow = true)
         {
             var old = style.normal.textColor;
-            if (shadow)
+            if (shadow && !Flat)
             {
                 style.normal.textColor = new Color(0f, 0f, 0f, 0.6f * c.a);
                 GUI.Label(new Rect(r.x + 1.5f, r.y + 2f, r.width, r.height), StripColors(text), style);

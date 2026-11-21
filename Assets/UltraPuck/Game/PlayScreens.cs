@@ -218,7 +218,7 @@ namespace UltraPuck.Game
             var appear = Ui.EaseOut((Time.unscaledTime - _openedAt) / 0.3f);
             switch (Current)
             {
-                case Page.Join: DrawJoin(w, h, appear); break;
+                case Page.Join: Ui.Flat = true; try { DrawJoin(w, h, appear); } finally { Ui.Flat = false; } break;
                 case Page.Map: DrawMap(w, h, appear); break;
                 case Page.Rules: DrawRules(w, h, appear); break;
             }
@@ -409,7 +409,7 @@ namespace UltraPuck.Game
         public static bool Chip(Rect r, string text, bool on, bool main, bool clickable)
         {
             var hover = on && r.Contains(Ui.Mouse);
-            var lit = main && on;
+            var lit = false; // ready or not, the main button stays the same grey as the others (no white)
             var bg = lit ? new Color(1f, 1f, 1f, hover ? 1f : 0.9f) : new Color(1f, 1f, 1f, hover ? 0.2f : on ? 0.12f : 0.05f);
             Ui.Box(r, bg, 14f);
             // on the white button: dark bold text, no shadow (a shadow smudges dark text)

@@ -260,7 +260,7 @@ namespace UltraPuck.Tests
         }
 
         [Test]
-        public void PuckGunStunsAndKnocksThePuckLoose()
+        public void PuckGunKnocksBackAndKnocksThePuckLoose()
         {
             var s = Game(0, 1);
             Give(s, 0, "ultrapuck.puckgun");
@@ -271,16 +271,158 @@ namespace UltraPuck.Tests
             _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
             Assert.AreEqual(1, s.Shots.Length, "fired");
             Run(s, 60, default(PlayerInput), default(PlayerInput));
-            Assert.Greater(s.Players[1].Stun.ToDouble(), 0.0, "stunned");
+            Assert.AreEqual(0.0, s.Players[1].Stun.ToDouble(), "no stun: a knockback, like a check");
             Assert.AreNotEqual(1, s.Carrier, "dropped the puck");
+            Assert.AreEqual(1, s.Players[0].Bumps, "counts as a check landed");
             Assert.AreEqual(0, s.Shots.Length);
             // a second shot has to wait for the cooldown
             _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
             _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
             Assert.AreEqual(0, s.Shots.Length, "still cooling down");
-            Run(s, 2 * _sim.T.TicksPerSecond, default(PlayerInput), default(PlayerInput));
+            Run(s, _sim.T.TicksPerSecond, default(PlayerInput), default(PlayerInput));
             _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
-            Assert.AreEqual(1, s.Shots.Length, "ready again");
+            Assert.AreEqual(1, s.Shots.Length, "ready again after a second");
+        }
+
+        /// <summary>A Puck Gun hit shoves a light player further than a heavy one (like a check).</summary>
+        [Test]
+        public void PuckGunKnockbackScalesWithWeight()
+        {
+            System.Func<string, double> shove = card =>
+            {
+                Make();
+                var s = Game(0, 1);
+                Give(s, 0, "ultrapuck.puckgun");
+                if (card != null) Give(s, 1, card);
+                Play(s);
+                s.Players[0].Pos = At(-4, 0); s.Players[0].Facing = FixVec2.Right;
+                s.Players[1].Pos = At(1, 0);
+                s.PuckPos = At(10, 8);
+                _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
+                var best = 0.0;
+                for (var t = 0; t < 30; t++) { _sim.Step(s, new PlayerInput[2]); best = System.Math.Max(best, s.Players[1].Vel.X.ToDouble()); }
+                return best;
+            };
+            var normal = shove(null);
+            var heavy = shove("ultrapuck.heavyweight"); // (Knockback Taken x0.2)
+            Assert.Greater(normal, 3.0, "knocked back");
+            Assert.Less(heavy, normal * 0.8, "a heavier player moves less");
+        }
+
+        [Test]
+        public void BotsAreNeverOfferedThePuckGun()
+        {
+            var s = _sim.NewGame(new[] { 0, 1 }, 1u, new[] { false, true });
+            var gun = _lib.ById("ultrapuck.puckgun").Index;
+            var seen = false;
+            for (var k = 0; k < 400; k++)
+            {
+                CollectionAssert.DoesNotContain(_lib.DrawOffer(s, 1, 3), gun, "bot");
+                seen |= System.Array.IndexOf(_lib.DrawOffer(s, 0, 3), gun) >= 0;
+            }
+            Assert.IsTrue(seen, "people still get it");
+        }
+
+        /// <summary>Charging a shot with the puck: 30% slower.</summary>
+        [Test]
+        public void ChargingWithThePuckIsSlower()
+        {
+            System.Func<bool, double> speed = charge =>
+            {
+                var s = Game(0, 1);
+                Play(s);
+                s.Players[1].Pos = At(10, 8);
+                s.Players[0].Pos = At(-8, -3);
+                s.Carrier = 0;
+                var input = new PlayerInput { MoveX = 127, Buttons = charge ? PlayerInput.ChargeBrake : (byte)0 };
+                for (var t = 0; t < 120; t++) _sim.Step(s, new[] { input, default(PlayerInput) });
+                return s.Players[0].Vel.Length.ToDouble();
+            };
+            var plain = speed(false);
+            var charging = speed(true);
+            Assert.AreEqual(plain * 0.7, charging, plain * 0.05, "30% slower while charging");
+        }
+
+        // ------------------------------------------------------------------ swapping onto bots (Simulation.Route)
+
+        [Test]
+        public void SwapTakesOverTheNextBotTeammateAndBack()
+        {
+            var s = _sim.NewGame(new[] { 0, 0, 0, 1 }, 1u, new[] { false, true, true, true });
+            Play(s);
+            var swap = new PlayerInput { Buttons = PlayerInput.Swap };
+            _sim.Step(s, _sim.Route(s, new[] { swap, default(PlayerInput), default(PlayerInput), default(PlayerInput) }));
+            Assert.AreEqual(1, Simulation.Steers(s, 0), "onto the first bot teammate");
+            Assert.AreEqual(-1, Simulation.DriverOf(s, 0), "their own player is the bot's now");
+            // held: still one swap
+            _sim.Step(s, _sim.Route(s, new[] { swap, default(PlayerInput), default(PlayerInput), default(PlayerInput) }));
+            Assert.AreEqual(1, Simulation.Steers(s, 0));
+            _sim.Step(s, _sim.Route(s, new PlayerInput[4]));
+            _sim.Step(s, _sim.Route(s, new[] { swap, default(PlayerInput), default(PlayerInput), default(PlayerInput) }));
+            Assert.AreEqual(2, Simulation.Steers(s, 0), "the next one");
+            _sim.Step(s, _sim.Route(s, new PlayerInput[4]));
+            _sim.Step(s, _sim.Route(s, new[] { swap, default(PlayerInput), default(PlayerInput), default(PlayerInput) }));
+            Assert.AreEqual(0, Simulation.Steers(s, 0), "round to their own player");
+            // the controls go to whoever they steer
+            _sim.Step(s, _sim.Route(s, new PlayerInput[4]));
+            _sim.Step(s, _sim.Route(s, new[] { swap, default(PlayerInput), default(PlayerInput), default(PlayerInput) }));
+            var routed = _sim.Route(s, new[] { new PlayerInput { MoveX = 100 }, default(PlayerInput), default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(100, routed[1].MoveX, "the bot they took over gets their stick");
+        }
+
+        [Test]
+        public void ABotTeammateWithThePuckIsHandedOverUnlessTurnedOff()
+        {
+            foreach (var off in new[] { false, true })
+            {
+                var s = _sim.NewGame(new[] { 0, 0, 1 }, 1u, new[] { false, true, true });
+                Play(s);
+                var mine = new PlayerInput { Buttons = off ? PlayerInput.NoAutoSwap : (byte)0 };
+                _sim.Step(s, _sim.Route(s, new[] { mine, default(PlayerInput), default(PlayerInput) }));
+                s.Carrier = 1;
+                _sim.Route(s, new[] { mine, default(PlayerInput), default(PlayerInput) });
+                Assert.AreEqual(off ? 0 : 1, Simulation.Steers(s, 0), off ? "turned off: stays put" : "handed the bot with the puck");
+                // the card screen: back on their own player
+                s.Phase = Phase.Picking;
+                _sim.Route(s, new[] { mine, default(PlayerInput), default(PlayerInput) });
+                Assert.AreEqual(0, Simulation.Steers(s, 0));
+            }
+        }
+
+        [Test]
+        public void TheHostCanAddABotMidMatch()
+        {
+            var s = Game(0, 1);
+            Play(s);
+            _sim.Step(s, new[] { new PlayerInput { Pick = PlayerInput.AddBotBlue }, default(PlayerInput) });
+            Assert.AreEqual(3, s.Players.Length);
+            Assert.AreEqual(1, s.Players[2].Team);
+            Assert.IsTrue(s.Players[2].Bot);
+            _sim.Step(s, _sim.Route(s, new PlayerInput[3]));
+            Assert.AreEqual(3, s.Players.Length, "once");
+        }
+
+        [Test]
+        public void GoalsAndAssistsAreCounted()
+        {
+            var s = Game(0, 0, 1);
+            Play(s);
+            s.Players[2].Pos = At(-12, 8);
+            var net = _sim.Map.Goals.Find(g => g.Team == 1);
+            var toward = net.Min.X > Fix.Zero ? 1 : -1;
+            // player 1 has it, then player 0 (the pass), then 0 shoots it in
+            s.Players[0].Pos = At(toward * 3, 0); s.Players[1].Pos = At(0, 5);
+            s.Carrier = 1; _sim.Step(s, new PlayerInput[3]);
+            s.Carrier = 0; _sim.Step(s, new PlayerInput[3]);
+            s.PassFrom = 0; s.Carrier = -1;
+            var mid = new FixVec2((net.Min.X + net.Max.X) / 2, (net.Min.Y + net.Max.Y) / 2);
+            s.PuckPos = mid; s.PuckVel = FixVec2.Zero;
+            _sim.Step(s, new PlayerInput[3]);
+            Assert.AreEqual(Phase.Scored, s.Phase);
+            Assert.AreEqual(1, s.Players[0].Goals);
+            Assert.AreEqual(1, s.Players[1].Assists);
+            Assert.AreEqual(0, s.LastGoalBy);
+            Assert.AreEqual(1, s.LastAssist);
         }
 
         [Test]

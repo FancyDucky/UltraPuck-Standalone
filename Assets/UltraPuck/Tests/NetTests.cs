@@ -99,7 +99,7 @@ namespace UltraPuck.Tests
                 " (longest " + client.Match.LongestRewind + "), stalls " + stalls + ", score " + a.Score[0] + "-" + a.Score[1] + ", cards " + a.Players[0].Cards.Length + "/" + a.Players[1].Cards.Length);
         }
 
-        /// <summary>Three PCs (two through the host), and someone leaving puts everyone back in the lobby.</summary>
+        /// <summary>Three PCs (two through the host); someone leaves and the match goes on, then they come back to their seats.</summary>
         [Test, Timeout(300000)]
         public void ThreePcsThroughTheHost()
         {
@@ -143,12 +143,84 @@ namespace UltraPuck.Tests
             Assert.AreEqual(h, c2.Match.SavedAt(settle).Checksum(), "client 2 (whose controls go through the host) matches too");
             foreach (var s in all) Assert.AreEqual(-1, s.DesyncTick, s.Problem);
 
-            // client 2 leaves: the host and client 1 go back to the lobby
+            // client 2 leaves: the match goes on, bots play their two seats
             c2.Dispose();
-            for (var k = 0; k < 120; k++) { now += dt; net.Advance(dt); host.Update(now); c1.Update(now); }
-            Assert.AreEqual(NetSession.Stage.Lobby, host.Current);
-            Assert.AreEqual(NetSession.Stage.Lobby, c1.Current);
-            Assert.AreEqual(2, host.Seats.Count);
+            for (var k = 0; k < 12 * 120; k++)
+            {
+                now += dt; net.Advance(dt); host.Update(now); c1.Update(now);
+                host.Step(new[] { Person(10, host.Match.LocalInputTick) });
+                c1.Step(new[] { Person(11, c1.Match.LocalInputTick) });
+            }
+            Assert.AreEqual(NetSession.Stage.Playing, host.Current, "still playing");
+            Assert.AreEqual(NetSession.Stage.Playing, c1.Current);
+            Assert.IsTrue(host.Seats[2].Away && host.Seats[3].Away, "their seats wait for them");
+            Assert.IsTrue(c1.Seats[2].Away, "client 1 was told");
+            Assert.Greater(host.Match.Tick, settle + 1000, "the game kept going without them");
+
+            // and comes back: handed the game as it is, on their old seats (cards and all)
+            var c3 = NetSession.Join(net.Add(), make, 1u);
+            c3.SetLocalPlayers(new[] { new KeyValuePair<string, int>("B", 0), new KeyValuePair<string, int>("C", 1) });
+            var three = new[] { host, c1, c3 };
+            System.Action tick3 = () => { now += dt; net.Advance(dt); foreach (var s in three) s.Update(now); };
+            for (var k = 0; k < 1200 && c3.Current != NetSession.Stage.Playing; k++)
+            {
+                tick3();
+                host.Step(new[] { Person(10, host.Match.LocalInputTick) });
+                c1.Step(new[] { Person(11, c1.Match.LocalInputTick) });
+            }
+            Assert.AreEqual(NetSession.Stage.Playing, c3.Current, "back in the match");
+            Assert.AreEqual(2, c3.PlayerOf(0), "on their old seat");
+            Assert.IsFalse(host.Seats[2].Away);
+            for (var k = 0; k < 10 * 120; k++)
+            {
+                tick3();
+                host.Step(new[] { Person(10, host.Match.LocalInputTick) });
+                c1.Step(new[] { Person(11, c1.Match.LocalInputTick) });
+                c3.Step(new[] { Person(12, c3.Match.LocalInputTick), Person(13, c3.Match.LocalInputTick) });
+            }
+            Assert.Greater(c3.Match.Tick, 0);
+            settle = host.Match.Tick;
+            for (var k = 0; k < 3000; k++)
+            {
+                var done = true;
+                foreach (var s in three) done &= s.Match.Confirmed >= settle;
+                if (done) break;
+                tick3();
+                foreach (var s in three) s.Step(new[] { default(PlayerInput), default(PlayerInput) });
+            }
+            for (var k = 0; k <= Rollback.RewindEvery; k++) { tick3(); foreach (var s in three) s.Step(new[] { default(PlayerInput), default(PlayerInput) }); }
+            h = host.Match.SavedAt(settle).Checksum();
+            Assert.AreEqual(h, c1.Match.SavedAt(settle).Checksum(), "client 1 still matches");
+            Assert.AreEqual(h, c3.Match.SavedAt(settle).Checksum(), "the one who came back matches too");
+            Assert.IsFalse(host.Match.State.Players[2].Bot, "a person again");
+            foreach (var s in three) Assert.AreEqual(-1, s.DesyncTick, s.Problem);
+        }
+
+        /// <summary>The whole game state survives being turned into bytes and back (for rejoining).</summary>
+        [Test]
+        public void StateCodecRoundTrips()
+        {
+            var sim = new Simulation(Rink(), null, Cards());
+            var s = sim.NewGame(new[] { 0, 1, 0 }, 9u, new[] { false, true, true });
+            for (var t = 0; t < 900; t++) sim.Step(s, sim.Route(s, new[] { Person(1, t), default(PlayerInput), default(PlayerInput) }));
+            s.Players[0].Cards = new[] { 1, 2, 2 };
+            var copy = StateCodec.Read(StateCodec.Write(s));
+            Assert.AreEqual(s.Checksum(), copy.Checksum());
+            Assert.AreEqual(3, copy.Players[0].Cards.Length);
+        }
+
+        /// <summary>After a card pick, the countdown waits for the cards to leave before 3, 2, 1.</summary>
+        [Test]
+        public void CountdownWaitsForTheCardsToLeave()
+        {
+            var sim = new Simulation(Rink(), null, Cards());
+            var s = sim.NewGame(new[] { 0, 1 }, 3u);
+            s.Phase = Phase.Play;
+            sim.StartPicking(s, new[] { 0, 1 });
+            Assert.AreEqual(Phase.Picking, s.Phase);
+            sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 } });
+            Assert.AreEqual(Phase.Countdown, s.Phase);
+            Assert.AreEqual((sim.T.CountdownTime + sim.T.PickOutroTime).ToDouble(), s.PhaseTime.ToDouble(), 0.02);
         }
 
         [Test]

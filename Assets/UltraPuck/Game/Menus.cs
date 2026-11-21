@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using PlayerInput = UltraPuck.Core.PlayerInput;
 
 namespace UltraPuck.Game
 {
@@ -45,6 +46,14 @@ namespace UltraPuck.Game
         public bool FreePlay;
         /// <summary>The pause menu offers the match settings (the host online, anyone in a match on this PC).</summary>
         public Func<bool> CanEditMatch;
+        /// <summary>Match settings: add a bot to a team now (0 red, 1 blue), and whether there's room for one.</summary>
+        public Action<int> AddBotNow;
+        public Func<bool> CanAddBot;
+        public Func<int, int> TeamCount;
+        public Func<int, string> TeamName;
+        /// <summary>Match settings: send a host command (kick-off, score fix), and the score as it stands.</summary>
+        public Action<byte> HostCommand;
+        public Func<int, int> Score;
         public Func<int> MapCount, CurrentMap;
         public Func<int, string> MapName;
         /// <summary>Restart the match with the match settings as they are now, on this rink.</summary>
@@ -148,6 +157,27 @@ namespace UltraPuck.Game
             {
                 _rows.Add(new Row { Label = "Restart match with these settings", Press = () => { var map = _pendingMap; Close(); if (OnRestart != null) OnRestart(map); },
                     Hint = "Starts the match again from 0 : 0 with the settings below. Online, for everyone." });
+                if (HostCommand != null)
+                {
+                    _rows.Add(new Row { Label = "Restart from the kick-off", Press = () => { Sound.Select(); HostCommand(PlayerInput.KickOff); Close(); },
+                        Hint = "Everyone back to their spots and the puck to the middle, then the countdown. The score and cards stay." });
+                    for (var t = 0; t < 2; t++)
+                    {
+                        var team = t;
+                        _rows.Add(new Row
+                        {
+                            Label = (TeamName != null ? TeamName(team) : team == 0 ? "Red" : "Blue") + " score",
+                            Value = () => Score != null ? Score(team).ToString() : "",
+                            Step = d =>
+                            {
+                                if (d < 0 && Score != null && Score(team) <= 0) return;
+                                HostCommand(team == 0 ? (d > 0 ? PlayerInput.RedUp : PlayerInput.RedDown) : (d > 0 ? PlayerInput.BlueUp : PlayerInput.BlueDown));
+                            },
+                            Press = () => HostCommand(team == 0 ? PlayerInput.RedUp : PlayerInput.BlueUp),
+                            Hint = "Fix the score if something went wrong (left / right). Changes straight away.",
+                        });
+                    }
+                }
                 if (MapCount != null && MapCount() > 0)
                     _rows.Add(new Row
                     {
@@ -157,6 +187,18 @@ namespace UltraPuck.Game
                         Hint = "Changes when the match restarts.",
                     });
                 _rows.Add(new Row { Label = "Match", Value = () => Settings.MatchText, Step = Settings.StepMatch, Press = () => Settings.StepMatch(1), Hint = "First to so many goals, or a time limit." });
+                if (AddBotNow != null && CanAddBot != null)
+                    for (var t = 0; t < 2; t++)
+                    {
+                        var team = t;
+                        _rows.Add(new Row
+                        {
+                            Label = "Add a bot to " + (TeamName != null ? TeamName(team) : team == 0 ? "Red" : "Blue"),
+                            Value = () => CanAddBot() ? (TeamCount != null ? TeamCount(team) + " on the team" : "") : "Match is full",
+                            Press = () => { if (CanAddBot()) { Sound.Select(); AddBotNow(team); } else Sound.Deny(); },
+                            Hint = "Joins the match straight away, at the next face-off spot on that side.",
+                        });
+                    }
                 MatchRows();
                 _rows.Add(Button("Back", () => { Current = Page.Pause; _focus = 0; _first = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }));
                 return;
@@ -207,7 +249,7 @@ namespace UltraPuck.Game
                     _rows.Add(Switch("Hit effects", () => Settings.HitEffects, v => Settings.HitEffects = v, "Squash, flash and impact rings when players collide."));
                     _rows.Add(Choice("Check bar", new[] { "While recharging", "Always" }, () => Settings.DashBarAlways ? 1 : 0, v => Settings.DashBarAlways = v == 1));
                     _rows.Add(Choice("Corner card list", new[] { "Shown", "Hidden" }, () => Settings.CornerCards ? 0 : 1, v => Settings.CornerCards = v == 0,
-                        "Everyone's cards in the lower-left corner during a match. Tab / View in a match hides or shows it."));
+                        "Everyone's cards in the lower-left corner during a match. Hold Tab / View in a match for the full scoreboard."));
                     _rows.Add(Switch("Auto-update", () => Settings.AutoUpdate, v => Settings.AutoUpdate = v, "Check for a new version when the game starts, and install it."));
                     break;
                 case 2:
@@ -255,6 +297,8 @@ namespace UltraPuck.Game
 
         private void ControlsRows()
         {
+            _rows.Add(Switch("Auto swap to bots", () => Settings.AutoSwapBots, v => Settings.AutoSwapBots = v,
+                "When a bot on your team picks up the puck, you take over that bot."));
             _rows.Add(Choice("Dash direction", new[] { "Where you move", "Where you look" }, () => Settings.DashWhereMoving ? 0 : 1, v => Settings.DashWhereMoving = v == 0,
                 "Which way a check dashes. Where you move: along the move stick (where you look if it's still)."));
             foreach (Controls.Act a in Enum.GetValues(typeof(Controls.Act)))
@@ -304,7 +348,7 @@ namespace UltraPuck.Game
         /// <summary>Open the match settings page (for the screenshots).</summary>
         public void ShowMatchSettings() { OpenMatch(); }
 
-        private void OpenMatch()
+        public void OpenMatch()
         {
             Current = Page.Match;
             _pendingMap = CurrentMap != null ? CurrentMap() : 0;

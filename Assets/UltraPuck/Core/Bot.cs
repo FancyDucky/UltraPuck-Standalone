@@ -38,8 +38,17 @@ namespace UltraPuck.Core
             {
                 // aim somewhere in the goal mouth, not always dead centre (a net that says which way it opens: across its mouth)
                 var net = AttackGoal(sim.Map, me.Team);
-                var spot = attack + new FixVec2(Fix.Zero, wobble * Fix.Ratio(3, 2));
-                if (net != null && net.HasFacing) spot = attack + Across(sim.Map, net, attack) * (wobble * Fix.Ratio(3, 2));
+                var across0 = net != null && net.HasFacing ? Across(sim.Map, net, attack) : new FixVec2(Fix.Zero, Fix.One);
+                var spot = attack + across0 * (wobble * Fix.Ratio(3, 2));
+                // is the net covered? Try the spot, then either side of the mouth: the first with no opponent (or their
+                // pylon) in the way is where we shoot. All blocked: the net is covered, look for a pass.
+                var lane = sim.T.PlayerRadius + sim.T.PuckRadius;
+                var covered = true;
+                for (var k = 0; k < 3 && covered; k++)
+                {
+                    var tryAt = k == 0 ? spot : attack + across0 * (k == 1 ? Fix.Ratio(6, 5) : -Fix.Ratio(6, 5));
+                    if (LaneClear(s, pos, tryAt, me.Team, lane)) { spot = tryAt; covered = false; }
+                }
                 target = spot;
                 var toGoal = spot - pos;
                 aim = toGoal.Normalized;
@@ -47,10 +56,11 @@ namespace UltraPuck.Core
                 var range = Fix.FromInt(12) + wobble * Fix.Two;
                 var shooting = true;
                 // a wall between us and the goal, or a teammate who's open further ahead: pass instead of forcing a shot
-                var mate = PassTo(sim, s, i, attack, defend);
+                var mate = PassTo(sim, s, i, attack, defend, covered);
                 var blocked = sim.Map.Route.Count > 1 && sim.Map.Blocked(pos, spot);
                 var pressured = OpponentNear(s, i, Fix.FromInt(4));
-                if (mate >= 0 && (blocked || pressured || (roll % 5u) == 0u))
+                // pass when the net is covered and a teammate is open (or a wall's in the way, or we're under pressure)
+                if (mate >= 0 && (blocked || covered || pressured || (roll % 5u) == 0u))
                 {
                     var to = s.Players[mate].Pos - pos;
                     aim = to.Normalized;
@@ -106,10 +116,10 @@ namespace UltraPuck.Core
             }
             else if (s.Carrier >= 0 && s.Players[s.Carrier].Team == me.Team)
             {
-                // a teammate has it: get open up the rink, one high and one low (on a bent rink: further along the ice)
-                var y = Fix.FromInt(TeamRank(s, i) % 2 == 0 ? 5 : -5);
-                target = new FixVec2(dir * Fix.FromInt(7), y);
-                if (sim.Map.Route.Count > 1) target = RoutePart(sim.Map, s.Players[s.Carrier].Pos, me.Team == 0 ? sim.Map.Route.Count - 1 : 0, Fix.Ratio(1, 2) + wobble * Fix.Ratio(1, 10));
+                // a teammate has it: get open for a pass, up by the net they're attacking (one each side of it), on
+                // whichever side has fewer opponents near and a clear lane from the carrier (on a bent rink: further along the ice)
+                target = OpenSpot(sim, s, i, attack, dir, wobble);
+                if (sim.Map.Route.Count > 1) target = RoutePart(sim.Map, s.Players[s.Carrier].Pos, me.Team == 0 ? sim.Map.Route.Count - 1 : 0, Fix.Ratio(3, 5) + wobble * Fix.Ratio(1, 10));
             }
             else if (NearestToPuck(s, i))
             {
@@ -117,10 +127,16 @@ namespace UltraPuck.Core
                 var close = (s.PuckPos - pos).SqrLength < Fix.FromInt(9);
                 if (s.Carrier >= 0 && close && me.DashCharge >= Fix.One) b |= PlayerInput.ShootCheck;
             }
+            else if (s.Carrier < 0 && SupportRank(s, i) == 0 && sim.Map.Route.Count <= 1
+                     && FixVec2.Dot(s.PuckPos - (attack + defend) * Fix.Half, attack - defend) > Fix.Zero)
+            {
+                // a loose puck up in their half and a teammate going for it: push up ready for the pass, not back
+                target = OpenSpot(sim, s, i, attack, dir, wobble);
+            }
             else
             {
                 // hang back between the puck and our goal (on a bent rink: along the ice, not through the walls)
-                target = defend + (s.PuckPos - defend) * (Fix.Ratio(2, 5) + wobble * Fix.Ratio(1, 10));
+                target = defend + (s.PuckPos - defend) * (Fix.Ratio(1, 2) + wobble * Fix.Ratio(1, 10));
                 if (sim.Map.Route.Count > 1) target = RoutePart(sim.Map, s.PuckPos, me.Team == 0 ? 0 : sim.Map.Route.Count - 1, Fix.Ratio(3, 5) + wobble * Fix.Ratio(1, 10));
                 if (s.Carrier >= 0 && s.Players[s.Carrier].Team != me.Team
                     && (s.Players[s.Carrier].Pos - pos).SqrLength < Fix.FromInt(4) && me.DashCharge >= Fix.One)
@@ -251,26 +267,106 @@ namespace UltraPuck.Core
         /// A teammate further towards the goal than us, with a clear line and no opponent sitting on them: pass to
         /// them. -1 if nobody's open.
         /// </summary>
-        private static int PassTo(Simulation sim, GameState s, int i, FixVec2 attack, FixVec2 defend)
+        /// <summary>
+        /// An open teammate to pass to, or -1: a clear lane to them, nobody marking them, within a pass's reach.
+        /// Normally only someone further up the ice; with the net <paramref name="covered"/>, anyone who has a clear
+        /// shot of their own (that's the point of the pass). A teammate with a clear shot is preferred.
+        /// </summary>
+        private static int PassTo(Simulation sim, GameState s, int i, FixVec2 attack, FixVec2 defend, bool covered = false)
         {
             var me = s.Players[i];
             var myProg = FixVec2.Dot(me.Pos - defend, attack - defend);
+            var lane = sim.T.PlayerRadius + sim.T.PuckRadius;
             var best = -1;
-            var bestProg = Fix.Zero;
+            var bestScore = Fix.Zero;
             for (var j = 0; j < s.Players.Length; j++)
             {
                 if (j == i || s.Players[j].Team != me.Team) continue;
                 var them = s.Players[j];
+                if (them.HeldBy >= 0 || them.TossTime > Fix.Zero) continue;
                 var prog = FixVec2.Dot(them.Pos - defend, attack - defend);
-                if (prog <= myProg + Fix.FromInt(2)) continue; // not ahead of us
+                var shot = LaneClear(s, them.Pos, attack, me.Team, lane);
+                if (covered ? !shot || prog <= myProg - Fix.FromInt(4) : prog <= myProg + Fix.FromInt(2)) continue; // not ahead of us / no shot either
                 if (sim.Map.Blocked(me.Pos, them.Pos)) continue; // a wall in the way
                 if ((them.Pos - me.Pos).SqrLength < Fix.FromInt(4)) continue; // too close
                 if ((them.Pos - me.Pos).SqrLength > Fix.FromInt(225)) continue; // too far for a pass
+                if (!LaneClear(s, me.Pos, them.Pos, me.Team, lane)) continue; // it would be picked off
                 // an opponent nearer them than we are: not open
                 if (OpponentNearerThan(s, them.Pos, me.Team, me.Pos)) continue;
-                if (best < 0 || prog > bestProg) { best = j; bestProg = prog; }
+                var score = prog + (shot ? Fix.FromInt(20) : Fix.Zero);
+                if (best < 0 || score > bestScore) { best = j; bestScore = score; }
             }
             return best;
+        }
+
+        /// <summary>
+        /// No opponent (or opponent's pylon) within <paramref name="width"/> of the straight line from
+        /// <paramref name="from"/> to <paramref name="to"/> — a shot or pass along it would get through.
+        /// </summary>
+        private static bool LaneClear(GameState s, FixVec2 from, FixVec2 to, int team, Fix width)
+        {
+            var d = to - from;
+            var len2 = d.SqrLength;
+            if (len2.Raw <= 0) return true;
+            for (var j = 0; j < s.Players.Length; j++)
+            {
+                var q = s.Players[j];
+                if (q.Team == team) continue;
+                if (Near(from, d, len2, q.Pos, width)) return false;
+            }
+            foreach (var py in s.Pylons)
+                if (py.Team != team && Near(from, d, len2, py.Pos, width + py.Radius)) return false;
+            return true;
+        }
+
+        private static bool Near(FixVec2 from, FixVec2 d, Fix len2, FixVec2 at, Fix width)
+        {
+            var t = FixVec2.Dot(at - from, d) / len2;
+            if (t <= Fix.Zero || t >= Fix.One) return false;
+            return (at - (from + d * t)).SqrLength < width * width;
+        }
+
+        /// <summary>
+        /// Where to get open for a pass: beside the net we're attacking (high or low), on the side with the most room
+        /// and a clear lane from the puck. A second teammate takes the other side, so they spread out.
+        /// </summary>
+        private static FixVec2 OpenSpot(Simulation sim, GameState s, int i, FixVec2 attack, Fix dir, Fix wobble)
+        {
+            var me = s.Players[i];
+            var from = s.Carrier >= 0 ? s.Players[s.Carrier].Pos : s.PuckPos;
+            var lane = sim.T.PlayerRadius + sim.T.PuckRadius;
+            var spots = new FixVec2[2];
+            var room = new Fix[2];
+            for (var k = 0; k < 2; k++)
+            {
+                var side = k == 0 ? Fix.One : -Fix.One;
+                spots[k] = new FixVec2(attack.X - dir * (Fix.FromInt(5) + wobble), attack.Y + side * Fix.FromInt(4));
+                if (!sim.Map.Inside(spots[k])) spots[k] = new FixVec2(attack.X - dir * Fix.FromInt(6), attack.Y + side * Fix.FromInt(2));
+                // room: distance to the nearest opponent (squared, capped), less if the lane from the puck is blocked
+                var near = Fix.FromInt(100);
+                foreach (var q in s.Players) if (q.Team != me.Team) near = Fix.Min(near, (q.Pos - spots[k]).SqrLength);
+                room[k] = near - (LaneClear(s, from, spots[k], me.Team, lane) ? Fix.Zero : Fix.FromInt(50));
+            }
+            var pick = room[0] >= room[1] ? 0 : 1;
+            // the other supporting teammate takes the other side
+            if (OffPuckRank(s, i) % 2 == 1) pick = 1 - pick;
+            return spots[pick];
+        }
+
+        /// <summary>0 for the first teammate of <paramref name="i"/> who isn't the one going for the puck, 1 for the next, …</summary>
+        private static int SupportRank(GameState s, int i)
+        {
+            var r = 0;
+            for (var j = 0; j < i; j++) if (s.Players[j].Team == s.Players[i].Team && !NearestToPuck(s, j)) r++;
+            return r;
+        }
+
+        /// <summary>0 for the first teammate of <paramref name="i"/> who doesn't have the puck, 1 for the next, …</summary>
+        private static int OffPuckRank(GameState s, int i)
+        {
+            var r = 0;
+            for (var j = 0; j < i; j++) if (s.Players[j].Team == s.Players[i].Team && j != s.Carrier) r++;
+            return r;
         }
 
         /// <summary>Is any opponent of <paramref name="i"/> within <paramref name="reach"/> of them?</summary>

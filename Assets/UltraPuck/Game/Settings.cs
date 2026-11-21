@@ -189,6 +189,13 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("shared_controls", value ? 1 : 0); }
         }
 
+        /// <summary>A bot teammate that picks up the puck hands you over to them (true, the default).</summary>
+        public static bool AutoSwapBots
+        {
+            get { return PlayerPrefs.GetInt("auto_swap_bots", 1) != 0; }
+            set { PlayerPrefs.SetInt("auto_swap_bots", value ? 1 : 0); }
+        }
+
         /// <summary>A check dashes the way you're moving when the move stick is pushed (true, the default), or always the way you face.</summary>
         public static bool DashWhereMoving
         {

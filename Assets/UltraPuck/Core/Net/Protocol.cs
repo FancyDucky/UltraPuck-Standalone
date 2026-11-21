@@ -18,6 +18,8 @@ namespace UltraPuck.Core.Net
         Ping = 9,
         Pong = 10,
         Leave = 11,     // I'm going
+        Away = 12,      // host to everyone: who's away (the bot plays them) from which tick until which
+        Rejoin = 13,    // host to someone coming back mid-match: the game as it is, and the seats
     }
 
     /// <summary>Writes a message into bytes (little-endian, compact).</summary>
@@ -39,6 +41,15 @@ namespace UltraPuck.Core.Net
             var bytes = Encoding.UTF8.GetBytes(s ?? "");
             var n = Math.Min(bytes.Length, 255);
             _b.Add((byte)n);
+            for (var k = 0; k < n; k++) _b.Add(bytes[k]);
+            return this;
+        }
+
+        /// <summary>Any number of raw bytes (a whole game state), with a 4-byte length first.</summary>
+        public Writer BigBytes(byte[] bytes)
+        {
+            var n = bytes == null ? 0 : bytes.Length;
+            I32(n);
             for (var k = 0; k < n; k++) _b.Add(bytes[k]);
             return this;
         }
@@ -78,6 +89,7 @@ namespace UltraPuck.Core.Net
 
         public int U8() { Need(1); return _b[_i++]; }
         public sbyte S8() { Need(1); return (sbyte)_b[_i++]; }
+        public byte[] BigBytes() { var n = I32(); if (n < 0) throw new FormatException("bad length"); Need(n); var b = new byte[n]; Array.Copy(_b, _i, b, 0, n); _i += n; return b; }
         public byte[] Bytes() { var n = U8(); Need(n); var b = new byte[n]; Array.Copy(_b, _i, b, 0, n); _i += n; return b; }
         public int I32() { Need(4); var v = _b[_i] | (_b[_i + 1] << 8) | (_b[_i + 2] << 16) | (_b[_i + 3] << 24); _i += 4; return v; }
         public uint U32() { return (uint)I32(); }

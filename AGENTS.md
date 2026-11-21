@@ -82,6 +82,37 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.37 part 2 (Claude, 21 Nov 2026): **countdown sounds + START, leave/rejoin mid-match,
+  host kick-off / score, hold-for-scoreboard.** Countdown beeps (Sfx.CountBeep / CountGo) and a START! banner; after a
+  card pick the countdown waits `Tuning.PickOutroTime` (1.5 s, in the sim) so the cards finish leaving before 3.
+  Online leave: the host marks the seat Away and `Rollback.SetAway(p, from, until)` has the bot play it from the first
+  tick without their controls (`Msg.Away` keeps everyone told). Coming back: Hello is accepted mid-match when a seat is
+  away; the host gives the seat back (same name first) and sends `Msg.Rejoin` with the game at a settled tick
+  (`StateCodec`: reflection over every GameState field) and the away spans; the new `Rollback` starts at that tick.
+  Cards and stats stay with the seat. NetTests.ThreePcsThroughTheHost now checks leave, bots, rejoin and identical
+  games. Host commands in Pick 203-207 (kick-off, red/blue score up/down) from Match settings. View/Tab held: a
+  scoreboard (score, cards, stats); no longer toggles the corner list. Replay goal banner sized to the text; the
+  "Replaces your …" line sits under the pick timer; the players-screen Continue chip stays grey.
+  **NetSession.Version 44.** Checked: 128 tests (123 pass, 5 skipped), Windows build, screenshots (countdown, start,
+  scoreboard, match-settings, replay, players). Not checked: online with real PCs, Linux build.
+- 0.1.37 part 1 (Claude, 21 Nov 2026): **online freeze fix, swapping in the sim, mid-match bots, match stats.**
+  Freeze: a controller that dropped out and came back left its slot holding a dead InputDevice; reading it threw every
+  frame and stopped `OnlineUpdate` before `s.Step`, so that PC never sent controls and everyone else sat on "Waiting for
+  the other players" (the user's Player.log: 291k such exceptions, 434 MB). Now `LocalPlayers.Live()` guards every read,
+  `DeviceAdded` hands a returning pad back to its slot, and the online sample is wrapped in try/catch. Net: lobby
+  messages older than the newest are ignored and an old "in the lobby" can't knock a PC out of a newer match; the host
+  resends Start to everyone once a second while playing. Swapping onto bots is now part of the game:
+  `Simulation.Route` (call before Step) uses `PlayerState.Pilot`, input bits `Swap = 64` / `NoAutoSwap = 128`; auto-swap
+  to a bot that picks up the puck (Controls "Auto swap to bots"); back home on the card screen; works online. The old
+  slot-swapping in LocalPlayers is gone. Host adds bots mid-match from Match settings (online via the host's
+  `Pick = AddBotRed/AddBotBlue` outside picking). Stats: Goals / Assists / Saves / Bumps per player, `LastGoalBy` /
+  `LastAssist`; game-over table with MVP and "Useless player"; goal and assist on the goal / replay screen. Puck Gun:
+  check-like knockback by weight, no stun, 1 s, `noBots` card flag (Team Vote: people draw first). Charging with the
+  puck 30% slower; puck drag 7/11 (10% more glide). Bots: shoot at an open part of the net, pass when it's covered and a
+  mate is open with a clear lane, get open beside the net, push up for loose pucks. Swap rock line only for its owner.
+  Players screens bold without shadows (`Ui.Flat`), leaving bar top left, `Toasts` (top right) for leave messages.
+  **NetSession.Version 43.** Checked: 126 tests (121 pass, 5 skipped), Windows build, screenshots (gameover,
+  match-settings, toast-leaving, replay, players). Not checked: online with real PCs, a real controller reconnect, Linux build.
 - 0.1.36 (Claude, 21 Nov 2026): **Controls tab button pictures; Pylon Goalie 55%.** Controls rebind rows show
   only the device in use (InputMode.Current): Kenney key art on keyboard, that pad's buttons on a controller
   (`Glyphs.BindingHint`, hint tokens {bindkey:N} / {bindpad:N} / {bindpad2:N}; move / aim rows show the sticks

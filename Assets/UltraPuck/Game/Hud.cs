@@ -30,8 +30,14 @@ namespace UltraPuck.Game
         public ReplayTransition Wipe;
         /// <summary>A player's name (for the corner card list).</summary>
         public System.Func<int, string> PlayerName;
+        /// <summary>The name of a player's own seat (the person, even while they steer a bot): for goals and stats.</summary>
+        public System.Func<int, string> SeatName;
         /// <summary>Draw a mouse reticle (keyboard players aiming with the mouse).</summary>
         public bool Reticle;
+        /// <summary>When play last began after a countdown (for the START banner).</summary>
+        public float StartAt = -10f;
+        /// <summary>View / Tab is held in a match: the scoreboard (everyone's cards and stats) is up.</summary>
+        public bool Board;
 
         private float _fpsTimer;
         private int _fpsFrames, _fpsShown;
@@ -69,6 +75,7 @@ namespace UltraPuck.Game
             if (Reticle) DrawReticle();
             if (_state == null || _covered) return;
             NameTags();
+            if (Board && _state.Phase != Phase.GameOver) { Scoreboard(w, h); return; }
             CornerCards(h);
 
             // score: team name, symbol and colour, so it reads without relying on colour
@@ -112,7 +119,8 @@ namespace UltraPuck.Game
             switch (_state.Phase)
             {
                 case Phase.Countdown:
-                    if (!_free)
+                    // after a card pick the countdown waits while the cards leave: nothing shown until it starts
+                    if (!_free && (_sim == null || _state.PhaseTime <= _sim.T.CountdownTime))
                     {
                         // 3, 2, 1: each number pops in big and shrinks back as its second runs out
                         var left = _state.PhaseTime.ToFloat();
@@ -122,6 +130,16 @@ namespace UltraPuck.Game
                         var a = 1f - Mathf.Clamp01((part - 0.8f) / 0.2f) * 0.6f;
                         Ui.Label(new Rect(0, h * 0.28f - 40f, w, 140), n.ToString(), Ui.Font(size, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
                         Ui.Label(new Rect(0, h * 0.28f + 96f, w, 40), _state.Score[0] + _state.Score[1] == 0 ? "Get ready" : "Face-off", Ui.Font(24, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.75f));
+                    }
+                    break;
+                case Phase.Play:
+                    if (!_free && Time.unscaledTime - StartAt < 0.9f)
+                    {
+                        // START: pops in big and fades out
+                        var age = Time.unscaledTime - StartAt;
+                        var size = Mathf.RoundToInt(Mathf.Lerp(130f, 96f, Ui.EaseOut(age / 0.3f)));
+                        var a = 1f - Mathf.Clamp01((age - 0.55f) / 0.35f);
+                        Ui.Label(new Rect(0, h * 0.28f - 40f, w, 140), "START!", Ui.Font(size, true, TextAnchor.MiddleCenter), new Color(1f, 0.85f, 0.25f, a));
                     }
                     break;
                 case Phase.Scored:
@@ -134,6 +152,17 @@ namespace UltraPuck.Game
                         Ui.Box(new Rect(24, 80, 150, 40), new Color(0.85f, 0.15f, 0.15f, 0.9f * pulse), 8f);
                         Ui.Label(new Rect(24, 80, 150, 40), "REPLAY", Ui.Font(22, true, TextAnchor.MiddleCenter), Color.white);
                         if (ReplaySlow) Ui.Label(new Rect(184, 80, 300, 40), "slow motion", Ui.Font(17, false), new Color(1f, 1f, 1f, 0.7f));
+                        // who scored, and who set it up
+                        var line = GoalLine();
+                        if (line != null)
+                        {
+                            // a backdrop just big enough for the names
+                            var style = Ui.Font(16, true);
+                            var tw = style.CalcSize(new GUIContent(line)).x;
+                            Ui.Box(new Rect(24, 128, tw + 30f, 30), new Color(0f, 0f, 0f, 0.55f), 7f);
+                            Ui.Box(new Rect(24, 128, 5, 30), Palette.Team(_state.LastScorer), 2.5f);
+                            Ui.Label(new Rect(38, 128, tw + 10f, 30), line, style, Color.white);
+                        }
                         if (ReplaySkippable)
                         {
                             // everyone has to want to skip it (bots always do)
@@ -142,12 +171,15 @@ namespace UltraPuck.Game
                             Glyphs.Hint(new Rect(24, h - 50, 500, 28), "{shoot} Skip" + (people > 1 ? "   " + votes + " / " + people : votes > 0 ? "   skipping" : ""), 16, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleLeft);
                         }
                     }
-                    else Ui.Label(new Rect(0, h * 0.28f, w, 70), "GOAL!  " + Palette.TeamName(_state.LastScorer) + " scores", big, Palette.Team(_state.LastScorer));
+                    else
+                    {
+                        Ui.Label(new Rect(0, h * 0.28f, w, 70), "GOAL!  " + Palette.TeamName(_state.LastScorer) + " scores", big, Palette.Team(_state.LastScorer));
+                        var line = GoalLine();
+                        if (line != null) Ui.Label(new Rect(0, h * 0.28f + 66f, w, 34), line, Ui.Font(20, true, TextAnchor.MiddleCenter), Color.white);
+                    }
                     break;
                 case Phase.GameOver:
-                    Ui.Box(new Rect(w / 2 - 330, h * 0.28f, 660, 150), Ui.Panel, 20f);
-                    Ui.Label(new Rect(0, h * 0.28f + 14, w, 70), Palette.TeamName(_state.LastScorer) + " wins!", big, Palette.Team(_state.LastScorer));
-                    Glyphs.Hint(new Rect(0, h * 0.28f + 90, w, 40), "{start} Play again      {back} Main menu", 18, Ui.TextDim);
+                    MatchStats(w, h, big);
                     break;
             }
             if (Wipe != null && Wipe.Active) Wipe.Draw();
@@ -187,16 +219,157 @@ namespace UltraPuck.Game
             return Settings.PlayerName;
         }
 
-        /// <summary>A bar that fills while B / Escape is held to leave.</summary>
+        /// <summary>"Goal: Sam  ·  Assist: Alex" for the last goal, or null (an own goal).</summary>
+        private string GoalLine()
+        {
+            if (_state == null || SeatName == null) return null;
+            var by = _state.LastGoalBy;
+            if (by < 0 || by >= _state.Players.Length) return null;
+            var line = "Goal: " + SeatName(by);
+            var a = _state.LastAssist;
+            if (a >= 0 && a < _state.Players.Length) line += "   ·   Assist: " + SeatName(a);
+            return line;
+        }
+
+        /// <summary>How much a player did, for MVP (and the least useful player): goals count most.</summary>
+        private static int Rating(PlayerState p) { return p.Goals * 3 + p.Assists * 2 + p.Saves * 2 + p.Bumps; }
+
+        /// <summary>After the match: who won, then everyone's goals, assists, saves and checks, the MVP and the least useful player.</summary>
+        private void MatchStats(float w, float h, GUIStyle big)
+        {
+            var n = _state.Players.Length;
+            const float rowH = 34f;
+            var pw = Mathf.Min(760f, w - 40f);
+            var ph = 190f + n * rowH;
+            var x = w / 2f - pw / 2f;
+            var y = Mathf.Max(70f, h / 2f - ph / 2f);
+            Ui.Box(new Rect(x, y, pw, ph), Ui.Panel, 20f);
+            Ui.Label(new Rect(x, y + 10f, pw, 64f), Palette.TeamName(_state.LastScorer) + " wins!", big, Palette.Team(_state.LastScorer));
+            Ui.Label(new Rect(x, y + 66f, pw, 26f), _state.Score[0] + "  :  " + _state.Score[1], Ui.Font(20, true, TextAnchor.MiddleCenter), Ui.TextDim);
+
+            // MVP: the best rating (more goals breaks a tie); the least useful: the lowest, if it isn't the MVP
+            int mvp = -1, worst = -1;
+            for (var i = 0; i < n; i++)
+            {
+                var p = _state.Players[i];
+                if (mvp < 0 || Rating(p) > Rating(_state.Players[mvp]) || (Rating(p) == Rating(_state.Players[mvp]) && p.Goals > _state.Players[mvp].Goals)) mvp = i;
+                if (worst < 0 || Rating(p) < Rating(_state.Players[worst])) worst = i;
+            }
+            if (worst == mvp || n < 2) worst = -1;
+
+            // the table: the winners first, then the others
+            string[] heads = { "Goals", "Assists", "Saves", "Bumps" };
+            var colW = 82f;
+            var cols = x + pw - 30f - colW * heads.Length;
+            var ty = y + 104f;
+            var head = Ui.Font(14, true, TextAnchor.MiddleCenter);
+            for (var c = 0; c < heads.Length; c++) Ui.Label(new Rect(cols + c * colW, ty, colW, 24f), heads[c], head, Ui.TextDim);
+            ty += 28f;
+            var order = new System.Collections.Generic.List<int>();
+            var win = _state.LastScorer < 0 ? 0 : _state.LastScorer;
+            for (var pass = 0; pass < 2; pass++)
+                for (var i = 0; i < n; i++) if ((_state.Players[i].Team == win) == (pass == 0)) order.Add(i);
+            var cell = Ui.Font(18, true, TextAnchor.MiddleCenter);
+            foreach (var i in order)
+            {
+                var p = _state.Players[i];
+                var r = new Rect(x + 20f, ty, pw - 40f, rowH - 4f);
+                Ui.Box(r, new Color(1f, 1f, 1f, 0.05f), 8f);
+                Ui.Box(new Rect(r.x, r.y, 6f, r.height), Palette.Team(p.Team), 3f);
+                var name = SeatName != null ? SeatName(i) : "P" + (i + 1);
+                Ui.Label(new Rect(r.x + 18f, r.y, 220f, r.height), name, Ui.Font(18, true), Color.white);
+                if (i == mvp) Badge(new Rect(r.x + 240f, r.y + 4f, 64f, r.height - 8f), "MVP", new Color(0.95f, 0.75f, 0.2f), new Color(0.15f, 0.1f, 0f));
+                else if (i == worst) Badge(new Rect(r.x + 240f, r.y + 4f, 130f, r.height - 8f), "Useless player", new Color(0.45f, 0.47f, 0.52f), Color.white);
+                int[] v = { p.Goals, p.Assists, p.Saves, p.Bumps };
+                for (var c = 0; c < v.Length; c++) Ui.Label(new Rect(cols + c * colW, r.y, colW, r.height), v[c].ToString(), cell, v[c] > 0 ? Color.white : new Color(1f, 1f, 1f, 0.35f));
+                ty += rowH;
+            }
+            Glyphs.Hint(new Rect(x, y + ph - 46f, pw, 34f), "{start} Play again      {back} Main menu", 18, Ui.TextDim);
+        }
+
+        private static void Badge(Rect r, string text, Color bg, Color fg)
+        {
+            Ui.Box(r, bg, r.height / 2f);
+            Ui.Label(r, text, Ui.Font(13, true, TextAnchor.MiddleCenter), fg, false);
+        }
+
+        /// <summary>A bar that fills while B / Escape is held to leave: always in the top-left corner (only its size comes from <paramref name="r"/>).</summary>
+        /// <summary>Screenshots only: show the leaving bar this full.</summary>
+        public static float ShotLeaving;
+
         public static void LeavingBar(Rect r, float t, string what)
         {
+            t = Mathf.Max(t, ShotLeaving);
             if (t <= 0.02f) return;
+            r = new Rect(20f, 20f, r.width, r.height);
             Ui.Box(r, new Color(0f, 0f, 0f, 0.6f), r.height / 2f);
             Ui.Box(new Rect(r.x, r.y, r.width * Mathf.Clamp01(t), r.height), new Color(0.9f, 0.3f, 0.3f, 0.8f), r.height / 2f);
             Ui.Label(r, what + "...", Ui.Font(14, true, TextAnchor.MiddleCenter), Color.white);
         }
 
-        /// <summary>Everyone's cards, small, in the lower-left corner (Settings > Gameplay, or View / Tab in a match).</summary>
+        /// <summary>"Speed Up x2,  Puck Gun" — a player's cards, the same card counted.</summary>
+        private string CardList(PlayerState p)
+        {
+            if (_sim == null || _sim.Cards == null) return "";
+            var names = new System.Text.StringBuilder();
+            var seen = new System.Collections.Generic.List<int>();
+            foreach (var c in p.Cards)
+            {
+                if (seen.Contains(c) || c < 0 || c >= _sim.Cards.Cards.Count) continue;
+                seen.Add(c);
+                var n = 0;
+                foreach (var d in p.Cards) if (d == c) n++;
+                if (names.Length > 0) names.Append(",  ");
+                names.Append(_sim.Cards.Cards[c].Name);
+                if (n > 1) names.Append(" x" + n);
+            }
+            return names.ToString();
+        }
+
+        /// <summary>While View / Tab is held: the score, and everyone's cards and stats so far, team by team.</summary>
+        private void Scoreboard(float w, float h)
+        {
+            var n = _state.Players.Length;
+            const float rowH = 50f;
+            var pw = Mathf.Min(860f, w - 40f);
+            var ph = 120f + n * rowH + 8f;
+            var x = w / 2f - pw / 2f;
+            var y = Mathf.Max(76f, h / 2f - ph / 2f);
+            Ui.Box(new Rect(x, y, pw, ph), new Color(0.07f, 0.075f, 0.09f, 0.94f), 18f);
+            // the score, in the teams' colours
+            var big = Ui.Font(34, true, TextAnchor.MiddleCenter);
+            Ui.Label(new Rect(x, y + 12f, pw / 2f - 40f, 50f), Palette.TeamName(0) + "  " + _state.Score[0], new GUIStyle(big) { alignment = TextAnchor.MiddleRight }, Palette.Team(0));
+            Ui.Label(new Rect(x + pw / 2f - 40f, y + 12f, 80f, 50f), ":", big, Color.white);
+            Ui.Label(new Rect(x + pw / 2f + 40f, y + 12f, pw / 2f - 40f, 50f), _state.Score[1] + "  " + Palette.TeamName(1), new GUIStyle(big) { alignment = TextAnchor.MiddleLeft }, Palette.Team(1));
+
+            string[] heads = { "Goals", "Assists", "Saves", "Bumps" };
+            const float colW = 74f;
+            var cols = x + pw - 26f - colW * heads.Length;
+            var ty = y + 74f;
+            var head = Ui.Font(13, true, TextAnchor.MiddleCenter);
+            for (var c = 0; c < heads.Length; c++) Ui.Label(new Rect(cols + c * colW, ty, colW, 22f), heads[c], head, Ui.TextDim);
+            ty += 26f;
+            var cell = Ui.Font(18, true, TextAnchor.MiddleCenter);
+            var small = new GUIStyle(Ui.Font(12)) { clipping = TextClipping.Clip };
+            for (var team = 0; team < 2; team++)
+                for (var i = 0; i < n; i++)
+                {
+                    var p = _state.Players[i];
+                    if (p.Team != team) continue;
+                    var r = new Rect(x + 18f, ty, pw - 36f, rowH - 6f);
+                    Ui.Box(r, new Color(1f, 1f, 1f, 0.05f), 8f);
+                    Ui.Box(new Rect(r.x, r.y, 5f, r.height), Palette.Team(p.Team), 2.5f);
+                    var name = SeatName != null ? SeatName(i) : "P" + (i + 1);
+                    Ui.Label(new Rect(r.x + 16f, r.y + 2f, cols - r.x - 24f, 24f), name, Ui.Font(17, true), Color.white);
+                    var cards = CardList(p);
+                    Ui.Label(new Rect(r.x + 16f, r.y + 24f, cols - r.x - 24f, 18f), cards.Length > 0 ? cards : "No cards yet", small, new Color(1f, 1f, 1f, cards.Length > 0 ? 0.7f : 0.35f), false);
+                    int[] v = { p.Goals, p.Assists, p.Saves, p.Bumps };
+                    for (var c = 0; c < v.Length; c++) Ui.Label(new Rect(cols + c * colW, r.y, colW, r.height), v[c].ToString(), cell, v[c] > 0 ? Color.white : new Color(1f, 1f, 1f, 0.35f));
+                    ty += rowH;
+                }
+        }
+
+        /// <summary>Everyone's cards, small, in the lower-left corner (Settings > Gameplay).</summary>
         private void CornerCards(float h)
         {
             if (!Settings.CornerCards || _sim == null || _sim.Cards == null) return;

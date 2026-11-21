@@ -42,6 +42,8 @@ namespace UltraPuck.Core
         public string Requires;
         /// <summary>Only offered on teams at least this big (team cards are no use alone).</summary>
         public int MinTeam;
+        /// <summary>Never offered to bots.</summary>
+        public bool NoBots;
         /// <summary>Stat rows under the rule (label left, value right). Empty = use <see cref="Text"/> as a free block.</summary>
         public readonly List<FaceStat> Face = new List<FaceStat>();
         public readonly List<StatMod> Mods = new List<StatMod>();
@@ -97,6 +99,7 @@ namespace UltraPuck.Core
                     MaxPerPlayer = Json.Get(o, "max") != null ? Json.Int(Json.Get(o, "max"), what + ".max") : 0,
                     Requires = Json.Str(Json.Get(o, "requires"), null),
                     MinTeam = Json.Get(o, "minTeam") != null ? Json.Int(Json.Get(o, "minTeam"), what + ".minTeam") : 0,
+                    NoBots = Json.Get(o, "noBots") is bool && (bool)Json.Get(o, "noBots"),
                 };
                 if (string.IsNullOrEmpty(c.Id)) throw new FormatException(what + ": needs an id");
                 if (_byId.ContainsKey(c.Id)) throw new FormatException(what + ": a card with the id \"" + c.Id + "\" already exists");
@@ -271,6 +274,7 @@ namespace UltraPuck.Core
             {
                 if (off != null && Array.IndexOf(off, c.Index) >= 0) continue;
                 if (c.MinTeam > 0 && teamSize < c.MinTeam) continue;
+                if (c.NoBots && p.Bot) continue;
                 if (c.Requires != null && !TeamHas(s, p.Team, c.Requires)) continue;
                 if (c.MaxPerPlayer > 0)
                 {

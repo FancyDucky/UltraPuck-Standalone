@@ -17,7 +17,7 @@ namespace UltraPuck.Core.Net
     /// </summary>
     public sealed class NetSession : IDisposable
     {
-        public const int Version = 42;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card
+        public const int Version = 44;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card. 43: swapping onto bots is part of the game (input bits 64/128, Pilot), mid-match bots (Pick 201/202), match stats, Puck Gun knockback (no stun, 1 s), 30% slower while charging, puck drag 7/11, bot pass/positioning, Team Vote people draw first, lobby/start messages ordered. 44: countdown waits 1.5 s after picks, leave/rejoin mid-match (Away / Rejoin messages, state hand-over), host kick-off and score commands (Pick 203-207)
         public const int MaxPlayers = 8;
         /// <summary>Your own controls take effect this many ticks later (25 ms at 120 a second), which hides a little lag for free.</summary>
         public const int InputDelay = 3;
@@ -34,6 +34,8 @@ namespace UltraPuck.Core.Net
             /// <summary>The team colour this player picked (0..7, the game's colour list) and their symbol (0..7).</summary>
             public int Colour, Symbol;
             public bool Bot;
+            /// <summary>Left mid-match: the bot plays them until they come back (their seat and cards wait for them).</summary>
+            public bool Away;
             /// <summary>The player has readied up in the lobby (bots always have).</summary>
             public bool Ready;
             public string Name = "";
@@ -55,6 +57,8 @@ namespace UltraPuck.Core.Net
         public Stage Current { get; private set; }
         /// <summary>Why the session closed (or a warning, like a desync), for the screen.</summary>
         public string Problem { get; private set; }
+        /// <summary>Short news for a pop-up ("Sam left the game."), set as it happens; the game takes it and clears it.</summary>
+        public string Notice;
         public int MyPeer { get; private set; }
         /// <summary>Who's in the game, in player order. Kept by the host; clients get copies.</summary>
         public readonly List<Seat> Seats = new List<Seat>();
@@ -67,8 +71,12 @@ namespace UltraPuck.Core.Net
         private readonly ITransport _t;
         private readonly Func<Simulation> _makeSim;
         private readonly uint _fingerprint;
-        private double _now, _lastHello, _lastLobby, _started;
+        private double _now, _lastHello, _lastLobby, _started, _lastStartToAll;
+        /// <summary>Client: the newest lobby message seen (older ones arriving late are ignored).</summary>
+        private int _theirLobby = int.MinValue;
         private int _nextPeer = 1, _lobbyVersion, _seenLobbyVersion = -1;
+        /// <summary>Host: someone has come back this match (keep telling everyone when they're back from).</summary>
+        private bool _anyBack;
         /// <summary>Host: the bots' looks (colour and symbol, see <see cref="Look"/>), in order.</summary>
         private readonly List<int> _bots = new List<int>();
 
@@ -79,6 +87,11 @@ namespace UltraPuck.Core.Net
             public float Rtt = 0.1f;
             public int RemoteTick;
             public bool StartAcked;
+            /// <summary>Host: this PC joined while a match was on (it gets the game handed over, not a Start).</summary>
+            public bool MidMatch;
+            /// <summary>Host: the seats this PC took back mid-match, and when the last hand-over was sent.</summary>
+            public readonly List<int> Rejoined = new List<int>();
+            public double RejoinSent = -10;
             public readonly int[] Acked = new int[8];
             public readonly List<KeyValuePair<string, int>> Players = new List<KeyValuePair<string, int>>();
             public Link() { for (var k = 0; k < Acked.Length; k++) Acked[k] = -1; }
@@ -166,6 +179,18 @@ namespace UltraPuck.Core.Net
             RebuildSeats();
         }
 
+        /// <summary>
+        /// Host: a bot joined the match on <paramref name="team"/> (the game adds it from the host's controls); it
+        /// stays for the next match. The seats aren't rebuilt until then (they're fixed while a match is on).
+        /// </summary>
+        public void BotJoinedMatch(int team)
+        {
+            if (!IsHost) return;
+            var colour = team & 1;
+            foreach (var s in Seats) if (s.Team == (team & 1)) { colour = s.Colour; break; }
+            _bots.Add(Look(colour, (NewBotLook() >> 3) & 7));
+        }
+
         /// <summary>Host: take a bot out.</summary>
         public void RemoveBot(int i)
         {
@@ -214,10 +239,14 @@ namespace UltraPuck.Core.Net
         public void StartMatch(uint seed)
         {
             if (!IsHost || Seats.Count == 0) return;
+            foreach (var l in _links.Values) { l.MidMatch = false; l.Rejoined.Clear(); }
+            _anyBack = false;
+            RebuildSeats(); // (bots added during the last match get their seats; anyone away is dropped)
             MatchId++;
             Seed = seed == 0 ? 1u : seed;
             foreach (var l in _links.Values) { l.StartAcked = false; for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = -1; }
             Begin();
+            _lobbyVersion++;
             SendStartToAll();
         }
 
@@ -227,6 +256,9 @@ namespace UltraPuck.Core.Net
             if (!IsHost) return;
             Match = null;
             Current = Stage.Lobby;
+            foreach (var l in _links.Values) { l.MidMatch = false; l.Rejoined.Clear(); }
+            _anyBack = false;
+            RebuildSeats();
             _lobbyVersion++;
             _lastLobby = -1;
         }
@@ -334,7 +366,13 @@ namespace UltraPuck.Core.Net
             if (IsHost && Current != Stage.Closed)
             {
                 if (_now - _lastLobby >= LobbyEvery || _seenLobbyVersion != _lobbyVersion) { _lastLobby = _now; _seenLobbyVersion = _lobbyVersion; SendLobby(); }
-                if (Current == Stage.Playing && _now - _lastHello >= 0.25) { _lastHello = _now; SendStartToAll(); }
+                if (Current == Stage.Playing && _now - _lastHello >= 0.25)
+                {
+                    _lastHello = _now;
+                    SendStartToAll(_now - _lastStartToAll >= 1.0);
+                    if (AnyAway() || _anyBack) SendAway();
+                    foreach (var l in _links.Values) if (l.MidMatch && l.Rejoined.Count > 0 && !l.StartAcked && _now - l.RejoinSent >= 0.5) SendRejoin(l);
+                }
             }
             if (!IsHost && Current == Stage.Lobby && _now - _lastHello >= 1.0) { _lastHello = _now; SendPlayers(); }
 
@@ -360,12 +398,12 @@ namespace UltraPuck.Core.Net
                     string why = null;
                     if (version != Version) why = "The host is running a different version of the game.";
                     else if (fp != _fingerprint) why = "The host has different maps or cards. Make sure you both have the same game files and mods.";
-                    else if (Current == Stage.Playing) why = "That game has already started. Ask the host to go back to the lobby.";
+                    else if (Current == Stage.Playing && !AnyAway()) why = "That game has already started. Ask the host to go back to the lobby.";
                     else if (Seats.Count >= MaxPlayers) why = "That game is full.";
                     if (why != null) { _t.Send(conn, new Writer(Msg.Refuse).Str(why).ToArray()); _t.Drop(conn); return; }
-                    l = new Link { Conn = conn, Peer = _nextPeer++, LastHeard = _now };
+                    l = new Link { Conn = conn, Peer = _nextPeer++, LastHeard = _now, MidMatch = Current == Stage.Playing };
                     _links[conn] = l;
-                    RebuildSeats();
+                    if (!l.MidMatch) RebuildSeats(); // (mid-match the seats stay put: they take back an empty one)
                 }
                 _t.Send(conn, new Writer(Msg.Welcome).U8(l.Peer).ToArray());
                 return;
@@ -387,7 +425,8 @@ namespace UltraPuck.Core.Net
                     var n = r.U8();
                     l.Players.Clear();
                     for (var k = 0; k < n && k < MaxPlayers; k++) { var name = r.Str(); l.Players.Add(new KeyValuePair<string, int>(name, r.U8() & 127)); }
-                    RebuildSeats();
+                    if (Current == Stage.Playing && l.MidMatch) TakeBackSeats(l);
+                    else if (Current != Stage.Playing) RebuildSeats();
                     break;
                 case Msg.Lobby:
                     if (IsHost) return;
@@ -405,6 +444,14 @@ namespace UltraPuck.Core.Net
                     break;
                 case Msg.Inputs:
                     ReadInputs(l, r);
+                    break;
+                case Msg.Away:
+                    if (IsHost) return;
+                    ReadAway(r);
+                    break;
+                case Msg.Rejoin:
+                    if (IsHost) return;
+                    ReadRejoin(r);
                     break;
                 case Msg.Checksum:
                     if (r.I32() != MatchId) return;
@@ -433,15 +480,27 @@ namespace UltraPuck.Core.Net
             _t.Drop(l.Conn);
             if (!IsHost) { Close("The host " + why + "."); return; }
             var name = "A player";
-            foreach (var s in Seats) if (s.Peer == l.Peer && !s.Bot) { name = s.Name; break; }
-            RebuildSeats();
-            if (Current == Stage.Playing)
+            foreach (var s in Seats) if (s.Peer == l.Peer && !s.Bot && !s.Away) { name = s.Name; break; }
+            if (Current == Stage.Playing && Match != null)
             {
-                // their controls stop arriving, so the match can't go on without them
-                Problem = name + " " + why + ". Back to the lobby.";
-                BackToLobby();
+                // the match goes on: a bot plays them from the first tick we don't have their controls for, and their
+                // seat (and cards) wait in case they come back
+                var any = false;
+                for (var p = 0; p < Seats.Count && p < Match.Players; p++)
+                {
+                    var s = Seats[p];
+                    if (s.Bot || s.Away || s.Peer != l.Peer) continue;
+                    s.Away = true;
+                    Match.SetAway(p, Match.KnownUpTo(p) + 1, int.MaxValue);
+                    any = true;
+                }
+                if (any) { Notice = name + " " + why + ". A bot plays for them until they're back."; SendAway(); }
             }
-            else Problem = name + " " + why + ".";
+            else
+            {
+                RebuildSeats();
+                Notice = name + " " + why + ".";
+            }
         }
 
         private void Close(string why)
@@ -496,28 +555,36 @@ namespace UltraPuck.Core.Net
 
         private void ReadLobby(Reader r)
         {
-            r.I32();
+            var version = r.I32();
             var playing = r.U8() != 0;
-            r.I32();
-            if (Current == Stage.Playing && !playing) { Match = null; Current = Stage.Lobby; } // the host went back to the lobby
+            var match = r.I32();
+            // messages can arrive late and out of order: an old one mustn't undo a newer one (an old "in the lobby"
+            // landing after the start used to drop this PC out of the match while everyone else waited for it)
+            if (version < _theirLobby) return;
+            _theirLobby = version;
+            if (Current == Stage.Playing && !playing && match >= MatchId) { Match = null; Current = Stage.Lobby; } // the host went back to the lobby
             if (Current == Stage.Playing) return; // the seats are fixed for the match
             ReadSeats(r);
             _map = r.U8();
         }
 
-        private void SendStartToAll()
+        /// <param name="everyone">Also to PCs that already said they started (once a second): one that missed the
+        /// start, or was knocked back to the lobby by a late message, gets back in instead of everyone waiting on it.</param>
+        private void SendStartToAll(bool everyone = false)
         {
+            if (everyone) _lastStartToAll = _now;
             var w = new Writer(Msg.Start).I32(MatchId).U32(Seed);
             WriteSeats(w);
             w.U8(_map);
             w.Bytes(Rules);
             var bytes = w.ToArray();
-            foreach (var l in _links.Values) if (l.Peer > 0 && !l.StartAcked) _t.Send(l.Conn, bytes);
+            foreach (var l in _links.Values) if (l.Peer > 0 && !l.MidMatch && (everyone || !l.StartAcked)) _t.Send(l.Conn, bytes);
         }
 
         /// <summary>Which players' controls <paramref name="l"/> needs from us.</summary>
         private bool SendsTo(Link l, int p)
         {
+            if (p >= Seats.Count) return false;
             var s = Seats[p];
             if (s.Bot) return false;
             return IsHost ? s.Peer != l.Peer : s.Peer == MyPeer;
@@ -555,7 +622,6 @@ namespace UltraPuck.Core.Net
         {
             if (r.I32() != MatchId || Match == null) return;
             l.RemoteTick = r.I32();
-            if (IsHost) l.StartAcked = true;
             var blocks = r.U8();
             for (var b = 0; b < blocks; b++)
             {
@@ -566,12 +632,138 @@ namespace UltraPuck.Core.Net
                 {
                     var input = r.Input();
                     // only accept a player's controls from the PC that owns them (or the host passing them on)
-                    if (p < Match.Players && !Seats[p].Bot && Seats[p].Peer != MyPeer && (IsHost ? Seats[p].Peer == l.Peer : true))
+                    if (p < Match.Players && p < Seats.Count && !Seats[p].Bot && Seats[p].Peer != MyPeer && (IsHost ? Seats[p].Peer == l.Peer : true))
                         Match.SetInput(p, from + k, input);
                 }
             }
             var acks = r.U8();
-            for (var p = 0; p < acks && p < l.Acked.Length; p++) l.Acked[p] = Math.Max(l.Acked[p], r.I32());
+            var first = IsHost && l.MidMatch && !l.StartAcked;
+            for (var p = 0; p < acks && p < l.Acked.Length; p++) { var a = r.I32(); l.Acked[p] = first ? a : Math.Max(l.Acked[p], a); }
+            if (IsHost) l.StartAcked = true;
+        }
+
+        // ------------------------------------------------------------------ leaving and coming back mid-match
+
+        private bool AnyAway()
+        {
+            foreach (var s in Seats) if (s.Away) return true;
+            return false;
+        }
+
+        /// <summary>Host: someone joined mid-match: give them back seats left empty (their own name first) and hand them the game.</summary>
+        private void TakeBackSeats(Link l)
+        {
+            if (Match == null) return;
+            if (l.Rejoined.Count == 0)
+            {
+                // back on the tick a moment from now, so their controls have time to reach everyone
+                var back = Match.Tick + 60;
+                for (var k = 0; k < l.Players.Count; k++)
+                {
+                    var want = l.Players[k].Key;
+                    var seat = -1;
+                    for (var p = 0; p < Seats.Count && p < Match.Players; p++) if (Seats[p].Away && Seats[p].Name == want) { seat = p; break; }
+                    if (seat < 0) for (var p = 0; p < Seats.Count && p < Match.Players; p++) if (Seats[p].Away) { seat = p; break; }
+                    if (seat < 0) break;
+                    var s = Seats[seat];
+                    s.Away = false; s.Peer = l.Peer; s.Local = k; s.Name = want;
+                    Match.SetAway(seat, Match.AwayFrom(seat), back);
+                    l.Rejoined.Add(seat);
+                }
+                if (l.Rejoined.Count == 0)
+                {
+                    _t.Send(l.Conn, new Writer(Msg.Refuse).Str("That game has already started and every seat is taken. Ask the host to go back to the lobby.").ToArray());
+                    _links.Remove(l.Conn);
+                    _t.Drop(l.Conn);
+                    return;
+                }
+                Notice = Seats[l.Rejoined[0]].Name + " is back.";
+                _anyBack = true;
+                SendAway();
+            }
+            SendRejoin(l);
+        }
+
+        /// <summary>Host: the game as it is now (a settled tick), to someone coming back. Sent until their controls arrive.</summary>
+        private void SendRejoin(Link l)
+        {
+            if (l.StartAcked || Match == null) return;
+            var at = Math.Min(Match.Confirmed + 1, Match.Tick - 1);
+            var state = Match.SavedAt(at);
+            if (state == null) return; // not settled yet: next time
+            l.RejoinSent = _now;
+            var w = new Writer(Msg.Rejoin).I32(MatchId).U32(Seed);
+            WriteSeats(w);
+            w.U8(_map);
+            w.Bytes(Rules);
+            w.I32(at);
+            WriteAway(w);
+            w.BigBytes(StateCodec.Write(state));
+            // their copy of everyone's controls starts from that tick
+            for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = at - 1;
+            _t.Send(l.Conn, w.ToArray());
+        }
+
+        private void WriteAway(Writer w)
+        {
+            w.U8(Match.Players);
+            for (var p = 0; p < Match.Players; p++) w.I32(Match.AwayFrom(p)).I32(Match.AwayUntil(p)).U8(Seats[p].Away ? 1 : 0);
+        }
+
+        private void SendAway()
+        {
+            if (Match == null) return;
+            var w = new Writer(Msg.Away).I32(MatchId);
+            WriteAway(w);
+            var bytes = w.ToArray();
+            foreach (var l in _links.Values) if (l.Peer > 0 && (!l.MidMatch || l.StartAcked)) _t.Send(l.Conn, bytes);
+        }
+
+        private void ReadAway(Reader r)
+        {
+            if (r.I32() != MatchId || Match == null) return;
+            ReadAwayList(r);
+        }
+
+        private void ReadAwayList(Reader r)
+        {
+            var n = r.U8();
+            for (var p = 0; p < n; p++)
+            {
+                int from = r.I32(), until = r.I32();
+                var away = r.U8() != 0;
+                if (Match != null) Match.SetAway(p, from, until);
+                if (p < Seats.Count) Seats[p].Away = away;
+            }
+        }
+
+        /// <summary>Client: back in a match that was going on: start from the game the host handed over.</summary>
+        private void ReadRejoin(Reader r)
+        {
+            var id = r.I32();
+            var seed = r.U32();
+            if (id == MatchId && Match != null) return; // already back in
+            ReadSeats(r);
+            _map = r.U8();
+            Rules = r.Bytes();
+            var at = r.I32();
+            // the away list needs the match first: read it into a buffer, then the state
+            var n = r.U8();
+            var spans = new int[n, 3];
+            for (var p = 0; p < n; p++) { spans[p, 0] = r.I32(); spans[p, 1] = r.I32(); spans[p, 2] = r.U8(); }
+            var state = StateCodec.Read(r.BigBytes());
+            MatchId = id; Seed = seed;
+            var sim = _makeSim();
+            var local = new bool[Seats.Count];
+            var bots = new bool[Seats.Count];
+            for (var k = 0; k < Seats.Count; k++) { bots[k] = Seats[k].Bot; local[k] = !Seats[k].Bot && Seats[k].Peer == MyPeer; }
+            Match = new Rollback(sim, state, local, bots, InputDelay, at);
+            for (var p = 0; p < n; p++) { Match.SetAway(p, spans[p, 0], spans[p, 1]); if (p < Seats.Count) Seats[p].Away = spans[p, 2] != 0; }
+            foreach (var l in _links.Values) for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = -1;
+            _myChecks.Clear(); _theirChecks.Clear(); _lastChecked = at;
+            DesyncTick = -1;
+            Current = Stage.Playing;
+            _started = _now;
         }
 
         // ------------------------------------------------------------------ desync check

@@ -77,6 +77,7 @@ namespace UltraPuck.Game
             _play.Runner = this;
             _play.Local = _local;
             gameObject.AddComponent<Updater>();
+            gameObject.AddComponent<Toasts>();
             _mainMenu.Runner = this;
             _mainMenu.Local = _local;
             LoadMaps();
@@ -92,6 +93,7 @@ namespace UltraPuck.Game
             UnityEngine.InputSystem.InputSystem.onDeviceChange += (d, change) =>
             {
                 Debug.Log("Ultra Puck: input device " + change + ": " + d.displayName + " (" + d.layout + ")");
+                if (change == UnityEngine.InputSystem.InputDeviceChange.Added || change == UnityEngine.InputSystem.InputDeviceChange.Reconnected) _local.DeviceAdded(d);
                 // Steam Input grabs controllers a moment after Steam starts (while we run as Steam's test app): say what to do
                 if (d is UnityEngine.InputSystem.Gamepad && change == UnityEngine.InputSystem.InputDeviceChange.Removed && SteamNet.Ready && Time.realtimeSinceStartup - SteamNet.StartedAt < 10f)
                     _mainMenu.Message = "Steam took over your " + d.displayName + ". In Steam: Settings > Controller, turn off Steam Input for this kind of controller, then restart Ultra Puck. (Needed until the game has its own Steam page.)";
@@ -121,6 +123,13 @@ namespace UltraPuck.Game
             _menus.OnGetCard = EditCards;
             // the pause menu's match settings: the host online, anyone in a match here
             _menus.CanEditMatch = () => _mode == Mode.Online ? _session != null && _session.IsHost : _mode == Mode.Match && !_free;
+            _menus.CanAddBot = () => _state != null && _state.Players.Length < LocalPlayers.MaxPlayers && _state.Phase != Phase.Picking
+                && (_mode != Mode.Online || (_session != null && _session.IsHost && _local.Slots.Count > 0));
+            _menus.HostCommand = HostCommand;
+            _menus.Score = t => _state != null ? _state.Score[t & 1] + PendingScore(t) : 0;
+            _menus.AddBotNow = AddBotNow;
+            _menus.TeamCount = t => { var n = 0; if (_state != null) foreach (var p in _state.Players) if (p.Team == t) n++; return n; };
+            _menus.TeamName = t => Palette.TeamName(t);
             _menus.MapCount = () => _maps.Count;
             _menus.MapName = MapName;
             _menus.CurrentMap = () => _mapIndex;
@@ -132,6 +141,7 @@ namespace UltraPuck.Game
             };
             _menus.Cards = _cards;
             _hud.PlayerName = NameOf;
+            _hud.SeatName = SeatName;
 
             _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat());
             _entities = new GameObject("Entities").transform;
@@ -296,6 +306,7 @@ namespace UltraPuck.Game
                 // a goal in a match with replays on, during the replay (the skip votes in the corner)
                 _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
                 _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Demo = true });
                 _local.AssignTeams();
                 _mainMenu.Show(MainMenu.Page.None);
                 StartMatch(false);
@@ -306,10 +317,79 @@ namespace UltraPuck.Game
                 _state.PuckPos = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
                 _state.PuckVel = FixVec2.Zero;
                 _state.Carrier = -1;
+                _state.PassFrom = 0; _state.Touch1 = 0; _state.Touch2 = 2; // P1 shot it, set up by the bot teammate
                 yield return new WaitForSecondsRealtime(1.2f); // GOAL! then the wipe in
                 yield return Shot("replay-wipe");
-                yield return new WaitForSecondsRealtime(2.5f); // into the replay
+                yield return new WaitForSecondsRealtime(4f); // into the replay
                 yield return Shot("replay");
+                GoMainMenu();
+            }
+
+            if (want("countdown"))
+            {
+                // the countdown (3), START as play begins, then the scoreboard (View / Tab held)
+                _local.Slots.Clear();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                _shotNoInput = true;
+                yield return new WaitForSecondsRealtime(0.25f);
+                yield return Shot("countdown");
+                while (_state != null && _state.Phase == Phase.Countdown) yield return null;
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield return Shot("start");
+                _state.Players[0].Cards = new[] { 0, 1, 1 };
+                _state.Players[2].Cards = new[] { 2 };
+                _state.Players[0].Goals = 2; _state.Players[1].Assists = 1; _state.Players[2].Saves = 3; _state.Players[2].Bumps = 2;
+                _state.Score[0] = 2; _state.Score[1] = 1;
+                _shotBoard = true;
+                yield return new WaitForSecondsRealtime(0.3f);
+                yield return Shot("scoreboard");
+                _shotBoard = false;
+                _shotNoInput = false;
+                GoMainMenu();
+            }
+
+            if (want("gameover"))
+            {
+                // after the match: everyone's stats, the MVP and the least useful player
+                _local.Slots.Clear();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(1f);
+                int[,] st = { { 3, 1, 0, 4 }, { 1, 2, 1, 2 }, { 2, 0, 3, 1 }, { 0, 0, 0, 0 } };
+                for (var i = 0; i < 4 && i < _state.Players.Length; i++)
+                {
+                    var p = _state.Players[i];
+                    p.Goals = st[i, 0]; p.Assists = st[i, 1]; p.Saves = st[i, 2]; p.Bumps = st[i, 3];
+                }
+                _state.Score[0] = 4; _state.Score[1] = 2;
+                _state.LastScorer = 0;
+                _state.Phase = Phase.GameOver;
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("gameover");
+                // the pause menu's match settings: add a bot to either team
+                _menus.OpenPause("Match");
+                _menus.OpenMatch();
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("match-settings");
+                _menus.Close();
+                GoMainMenu();
+                // the players screen: the leaving bar (top left) and a "left the game" pop-up (top right)
+                GoLocalLobby();
+                Hud.ShotLeaving = 0.6f;
+                Toasts.Show("Sam left the game. Back to the lobby.");
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("toast-leaving");
+                Hud.ShotLeaving = 0f;
                 GoMainMenu();
             }
 
@@ -798,6 +878,8 @@ namespace UltraPuck.Game
             Sound.QuietMusic = _menus.IsOpen; // pause menu (and settings from it): music at half volume
             Sound.HearingMusic = _menus.HearingMusic; // unless you're on the Music slider
             _hud.Show(false, _free, _local, _state, _sim, _error, _menus.IsOpen || _cardScreen.Showing || !playing);
+            // hold View / Tab in a match: the scoreboard (cards and stats)
+            _hud.Board = InMatch && !_free && !_menus.IsOpen && !_cardScreen.Showing && !Menus.Typing && (_local.SettingsHeld() || _shotBoard);
             _hud.Banner = _mode == Mode.Online && _session != null && OnlinePlaying ? OnlineBanner() : null;
         }
 
@@ -828,6 +910,8 @@ namespace UltraPuck.Game
                     if (p < 0) return Vector2.zero;
                 }
                 if (_state == null || p < 0 || p >= _state.Players.Length) return Vector2.zero;
+                var steer = Simulation.Steers(_state, p); // swapped onto a bot teammate: aim from them
+                if (steer >= 0) p = steer;
                 return V.Of(_state.Players[p].Pos);
             };
             // reticle in a match (KBM); system cursor for menus and the card pick
@@ -1096,12 +1180,14 @@ namespace UltraPuck.Game
         }
 
         private int _onlineMatchId = -1;
+        private bool _sampleFailed;
         private float _onlineAcc;
 
         private void OnlineUpdate()
         {
             var s = _session;
             s.Update(Time.realtimeSinceStartupAsDouble);
+            if (s.Notice != null) { Toasts.Show(s.Notice); s.Notice = null; }
             if (s.Current == NetSession.Stage.Closed) { LeaveOnline(s.Problem ?? "The game ended."); return; }
             SteamNet.Describe(s.Seats.Count, s.Current == NetSession.Stage.Playing);
 
@@ -1164,8 +1250,14 @@ namespace UltraPuck.Game
             var simClock = System.Diagnostics.Stopwatch.StartNew();
             while (_onlineAcc >= dt && steps < 12)
             {
-                var inputs = _menus.IsOpen ? new PlayerInput[_local.Slots.Count] : _local.Sample(_sim, _state);
+                PlayerInput[] inputs;
+                // never let reading the controls stop the match: if it fails, this PC plays no input for the tick
+                // (everyone else would otherwise sit waiting for this PC)
+                try { inputs = _menus.IsOpen ? new PlayerInput[_local.Slots.Count] : _local.Sample(_sim, _state); }
+                catch (System.Exception ex) { inputs = new PlayerInput[_local.Slots.Count]; if (!_sampleFailed) { _sampleFailed = true; Debug.LogException(ex); } }
                 if (s.IsHost && _menus.IsOpen && inputs.Length > 0) inputs[0].Buttons |= PlayerInput.Pause; // the host's menu pauses everyone
+                var sendCmd = _pendingCmds.Count > 0 && inputs.Length > 0 && _state.Phase != Phase.Picking;
+                if (sendCmd) inputs[0].Pick = _pendingCmds.Peek();
                 if (!s.Step(inputs))
                 {
                     // waiting for the others: keep the time owed (up to a quarter of a second) so we catch up when their
@@ -1174,6 +1266,7 @@ namespace UltraPuck.Game
                     _netStalls++;
                     break;
                 }
+                if (sendCmd) _pendingCmds.Dequeue();
                 _onlineAcc -= dt;
                 steps++;
             }
@@ -1398,11 +1491,58 @@ namespace UltraPuck.Game
             _prev = _state.Clone(); // nothing to slide between
         }
 
+        // online: a bot the host asked for, sent with the host's controls on the next tick (so every PC adds it on the same tick)
+        private readonly Queue<byte> _pendingCmds = new Queue<byte>();
+        private bool _shotBoard; // screenshots: the scoreboard as if View were held
+
+        /// <summary>Match settings (the host): kick-off or a score fix. Online it goes with the host's controls, one a tick.</summary>
+        private void HostCommand(byte cmd)
+        {
+            if (_state == null) return;
+            if (_mode == Mode.Online)
+            {
+                if (_session == null || !_session.IsHost) return;
+                _pendingCmds.Enqueue(cmd);
+                return;
+            }
+            _sim.HostCommand(_state, cmd);
+            if (cmd == PlayerInput.KickOff) { _seenCarrier = -1; _prev = _state.Clone(); }
+        }
+
+        /// <summary>Score changes queued but not sent yet (so the menu shows the score it will be).</summary>
+        private int PendingScore(int team)
+        {
+            var d = 0;
+            foreach (var c in _pendingCmds)
+            {
+                if (team == 0) d += c == PlayerInput.RedUp ? 1 : c == PlayerInput.RedDown ? -1 : 0;
+                else d += c == PlayerInput.BlueUp ? 1 : c == PlayerInput.BlueDown ? -1 : 0;
+            }
+            return d;
+        }
+
+        /// <summary>Match settings: a bot joins <paramref name="team"/> mid-match.</summary>
+        private void AddBotNow(int team)
+        {
+            if (_state == null) return;
+            if (_mode == Mode.Online)
+            {
+                if (_session == null || !_session.IsHost) return;
+                _pendingCmds.Enqueue(team == 1 ? PlayerInput.AddBotBlue : PlayerInput.AddBotRed);
+                _session.BotJoinedMatch(team);
+                return;
+            }
+            if (!_local.AddBotTo(team)) return;
+            _sim.AddPlayer(_state, team & 1, true);
+            if (_cards != null) _cards.Recompute(_state);
+            _prev = _state.Clone();
+        }
+
         /// <summary>Free play: add or remove computer players until there are <paramref name="want"/>.</summary>
         private void SetBots(int want)
         {
             want = Mathf.Clamp(want, 0, LocalPlayers.MaxPlayers - _local.HumanCount);
-            while (_local.BotCount < want && _local.AddBot()) _sim.AddPlayer(_state, _local.Slots[_local.Slots.Count - 1].Team);
+            while (_local.BotCount < want && _local.AddBot()) _sim.AddPlayer(_state, _local.Slots[_local.Slots.Count - 1].Team, true);
             while (_local.BotCount > want)
             {
                 var i = _local.LastBot();
@@ -1455,7 +1595,6 @@ namespace UltraPuck.Game
                 return;
             }
             if (_free) FreePlayJoins();
-            else if (_local.SettingsPressed()) Settings.CornerCards = !Settings.CornerCards; // View / Tab: hide or show the card list
 
             _local.LatchPresses();
             var dt = 1f / _sim.T.TicksPerSecond;
@@ -1463,12 +1602,9 @@ namespace UltraPuck.Game
             while (_acc >= dt)
             {
                 _prev = _state.Clone();
-                // the card screen: anyone driving a bot teammate goes back to their own player first
-                if (_state.Phase == Phase.Picking) _local.ReturnHome();
-                _sim.Step(_state, _shotNoInput ? new PlayerInput[_state.Players.Length] : _local.Sample(_sim, _state));
-                // a bot teammate just got the puck: hand a random human on that team over to them
-                if (_state.Carrier >= 0 && _state.Carrier != _seenCarrier)
-                    _local.AutoSwapToCarrier(_state.Carrier, _state);
+                // who steers whom (swaps onto bot teammates, being handed a bot that gets the puck) is worked out in
+                // Route, part of the game, so it plays the same here and online
+                _sim.Step(_state, _shotNoInput ? new PlayerInput[_state.Players.Length] : _sim.Route(_state, _local.Sample(_sim, _state)));
                 _seenCarrier = _state.Carrier;
                 Recorder.Record(_state);
                 _acc -= dt;
@@ -1620,8 +1756,11 @@ namespace UltraPuck.Game
         private bool IsLocalPerson(int i)
         {
             if (i < 0) return false;
-            if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count && !_session.Seats[i].Bot && _session.Seats[i].Peer == _session.MyPeer;
-            return _mode == Mode.Match && i < _local.Slots.Count && !_local.Slots[i].Demo;
+            // swapped onto a bot teammate: that's the one you play now
+            var d = _state != null && i < _state.Players.Length ? Simulation.DriverOf(_state, i) : i;
+            if (d < 0) return false;
+            if (_mode == Mode.Online && _session != null) return d < _session.Seats.Count && !_session.Seats[d].Bot && _session.Seats[d].Peer == _session.MyPeer;
+            return _mode == Mode.Match && d < _local.Slots.Count && !_local.Slots[d].Demo;
         }
 
         // ------------------------------------------------------------------ sounds
@@ -1632,6 +1771,7 @@ namespace UltraPuck.Game
         // what the match looked like the last time its sounds were worked out
         private int _heardTick = int.MinValue;
         private Phase _heardPhase;
+        private int _heardCount;
         private float _heardMovingAt;
         private readonly List<int> _heardHits = new List<int>(), _heardShots = new List<int>(), _heardSwaps = new List<int>();
         private readonly List<float> _heardDashes = new List<float>();
@@ -1687,6 +1827,16 @@ namespace UltraPuck.Game
                 else if (hit > 0.1f) Sound.Play(Sfx.Hit, Mathf.Lerp(0.25f, 0.85f, hit / 0.75f), Mathf.Lerp(1.2f, 0.92f, hit / 0.75f) * Random.Range(0.96f, 1.04f), Pan(hitAt));
                 if (s.Phase == Phase.Scored && _heardPhase != Phase.Scored) Sound.Play(Sfx.Goal, 0.55f, 1f, Pan(V.Of(s.PuckPos))); // it's a long, thick sound: at full level it drowned everything else
             }
+
+            // the countdown: a beep on each number, a brighter one (and START on screen) as play begins
+            var count = s.Phase == Phase.Countdown && _sim != null && s.PhaseTime <= _sim.T.CountdownTime ? Mathf.CeilToInt(s.PhaseTime.ToFloat() - 0.001f) : 0;
+            if (count > 0 && count != _heardCount && !_hud.Replay) Sound.Play(Sfx.CountBeep, 0.6f, 1f, 0f);
+            if (s.Phase == Phase.Play && _heardPhase == Phase.Countdown && !_free && !jump)
+            {
+                Sound.Play(Sfx.CountGo, 0.7f, 1f, 0f);
+                _hud.StartAt = Time.unscaledTime;
+            }
+            _heardCount = count;
 
             // charging a shot hums while the game is actually running (not paused, not waiting for other players)
             var c = s.Carrier;
@@ -1761,8 +1911,8 @@ namespace UltraPuck.Game
         /// <summary>Player <paramref name="i"/>'s symbol: their online seat's, or their slot's on this PC.</summary>
         private int SymbolOf(int i)
         {
-            if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count ? _session.Seats[i].Symbol : 0;
-            return i < _local.Slots.Count ? _local.Slots[i].Symbol : 0;
+            if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count ? _session.Seats[i].Symbol : i & 7;
+            return i < _local.Slots.Count ? _local.Slots[i].Symbol : i & 7;
         }
 
         /// <summary>Online: the teams' colours are the ones their players picked.</summary>
@@ -1788,7 +1938,20 @@ namespace UltraPuck.Game
         /// <summary>The name over player <paramref name="i"/>: their online name, yours (then P2, P3...) on this PC, or Bot.</summary>
         private string NameOf(int i)
         {
-            if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count ? _session.Seats[i].Name : "";
+            // the name goes with the person: over the bot teammate they swapped onto, and "Bot" over their own player meanwhile
+            if (_state != null && i >= 0 && i < _state.Players.Length && _state.Phase != Phase.Picking)
+            {
+                var d = Simulation.DriverOf(_state, i);
+                if (d < 0) return "Bot";
+                i = d;
+            }
+            return SeatName(i);
+        }
+
+        /// <summary>The name of player <paramref name="i"/>'s own seat.</summary>
+        private string SeatName(int i)
+        {
+            if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count ? _session.Seats[i].Name : "Bot";
             if (i >= _local.Slots.Count) return "";
             var s = _local.Slots[i];
             if (!string.IsNullOrEmpty(s.Name)) return s.Name;
@@ -1853,7 +2016,7 @@ namespace UltraPuck.Game
             }
             _shots.Show(b, _sim.T.ShotRadius.ToFloat());
             _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
-            _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team));
+            _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team), IsLocalPerson);
             _ice.Show(b, _sim.T.IceRadius.ToFloat());
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);

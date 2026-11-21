@@ -39,6 +39,9 @@ namespace UltraPuck.Core.Net
         private readonly int[] _known;                           // every input up to here has arrived, per player
         private readonly PlayerInput[] _last;                    // the newest input we have, for guessing
         private int _tick;                                       // the next tick to simulate
+        // a person who left mid-match: the bot plays them from _awayFrom until _awayUntil (when they're back), per player
+        private readonly int[] _awayFrom, _awayUntil;
+        private readonly int _startTick;
         private int _rewindTo = int.MaxValue;
 
         /// <summary>Rewinds done so far and the longest one (ticks), for the network stats.</summary>
@@ -46,7 +49,10 @@ namespace UltraPuck.Core.Net
 
         /// <param name="local">Players controlled on this PC.</param>
         /// <param name="bots">Players run by the bot on every PC.</param>
-        public Rollback(Simulation sim, GameState start, bool[] local, bool[] bots, int inputDelay)
+        public Rollback(Simulation sim, GameState start, bool[] local, bool[] bots, int inputDelay) : this(sim, start, local, bots, inputDelay, 0) { }
+
+        /// <param name="startTick">The tick <paramref name="start"/> is at (a player rejoining a match is handed the game part-way).</param>
+        public Rollback(Simulation sim, GameState start, bool[] local, bool[] bots, int inputDelay, int startTick)
         {
             Sim = sim;
             Players = start.Players.Length;
@@ -57,12 +63,20 @@ namespace UltraPuck.Core.Net
             _prev = start.Clone();
             _known = new int[Players];
             _last = new PlayerInput[Players];
+            _awayFrom = new int[Players];
+            _awayUntil = new int[Players];
+            for (var p = 0; p < Players; p++) { _awayFrom[p] = int.MaxValue; _awayUntil[p] = int.MaxValue; }
+            _tick = startTick;
+            _startTick = startTick;
+            _lastRewind = startTick - RewindEvery;
             for (var k = 0; k < Ring; k++) for (var p = 0; p < 8; p++) _inputTick[k, p] = -1;
             // the first few ticks (before anyone's delayed input lands) are "no input" for everyone
             for (var p = 0; p < Players; p++)
             {
-                for (var t = 0; t < inputDelay; t++) Store(p, t, default(PlayerInput));
-                _known[p] = inputDelay - 1;
+                // joining part-way, the others' controls for these ticks come from the network (they already exist)
+                if (startTick > 0 && !local[p]) { _known[p] = startTick - 1; continue; }
+                for (var t = startTick; t < startTick + inputDelay; t++) Store(p, t, default(PlayerInput));
+                _known[p] = startTick + inputDelay - 1;
             }
         }
 
@@ -77,12 +91,46 @@ namespace UltraPuck.Core.Net
             get
             {
                 var c = int.MaxValue;
-                for (var p = 0; p < Players; p++) if (!_bot[p]) c = Math.Min(c, _known[p]);
+                for (var p = 0; p < Players; p++)
+                {
+                    if (_bot[p]) continue;
+                    var k = _known[p];
+                    // away (the bot plays them): nothing to wait for until they're back
+                    if (k + 1 >= _awayFrom[p] && k + 1 < _awayUntil[p]) k = _awayUntil[p] == int.MaxValue ? int.MaxValue : _awayUntil[p] - 1;
+                    c = Math.Min(c, k);
+                }
                 return c == int.MaxValue ? _tick - 1 : c;
             }
         }
 
         public bool IsLocal(int p) { return _local[p]; }
+
+        /// <summary>
+        /// Player <paramref name="p"/> is away from tick <paramref name="from"/> until <paramref name="until"/>
+        /// (int.MaxValue: not back yet): the bot plays them meanwhile. Every PC must be told the same ticks; if this
+        /// changes ticks already played, they're played again.
+        /// </summary>
+        public void SetAway(int p, int from, int until)
+        {
+            if (p < 0 || p >= Players || _bot[p]) return;
+            if (from == _awayFrom[p] && until == _awayUntil[p]) return;
+            var changed = Math.Min(from == _awayFrom[p] ? int.MaxValue : Math.Min(from, _awayFrom[p]), until == _awayUntil[p] ? int.MaxValue : Math.Min(until, _awayUntil[p]));
+            _awayFrom[p] = from;
+            _awayUntil[p] = until;
+            // back at `until`: their controls before then aren't needed
+            if (until != int.MaxValue && _known[p] < until - 1)
+            {
+                _known[p] = until - 1;
+                while (_inputTick[(_known[p] + 1) & (Ring - 1), p] == _known[p] + 1) _known[p]++;
+            }
+            if (changed < _tick) _rewindTo = Math.Min(_rewindTo, changed);
+        }
+
+        public int AwayFrom(int p) { return p >= 0 && p < Players ? _awayFrom[p] : int.MaxValue; }
+        public int AwayUntil(int p) { return p >= 0 && p < Players ? _awayUntil[p] : int.MaxValue; }
+
+        /// <summary>The bot is playing person <paramref name="p"/> at tick <paramref name="t"/> (they left).</summary>
+        public bool AwayAt(int p, int t) { return p >= 0 && p < Players && t >= _awayFrom[p] && t < _awayUntil[p]; }
         public bool IsBot(int p) { return _bot[p]; }
         public int KnownUpTo(int p) { return _known[p]; }
 
@@ -125,10 +173,11 @@ namespace UltraPuck.Core.Net
         public void Advance()
         {
             // gather corrections: rewind now only if it's been a few ticks, or the mistake is getting old
+            if (_rewindTo <= _startTick && _tick <= _startTick) _rewindTo = int.MaxValue; // nothing played yet to replay
             if (_rewindTo < _tick && (_tick - _lastRewind >= RewindEvery || _tick - _rewindTo >= Ring / 2))
             {
                 _lastRewind = _tick;
-                var from = Math.Max(_rewindTo, _tick - Ring + 1);
+                var from = Math.Max(Math.Max(_rewindTo, _tick - Ring + 1), _startTick); // (nothing before the tick we started from)
                 Rewinds++;
                 LongestRewind = Math.Max(LongestRewind, _tick - from);
                 _state = _saved[from & (Ring - 1)].Clone();
@@ -146,17 +195,19 @@ namespace UltraPuck.Core.Net
         {
             var k = t & (Ring - 1);
             _saved[k] = _state.Clone();
-            var inputs = new PlayerInput[Players];
+            var raw = new PlayerInput[Players];
             for (var p = 0; p < Players; p++)
             {
                 PlayerInput i;
-                if (_bot[p]) i = Bot.Think(Sim, _state, p);
+                // away: the bot plays them (part of the game, so the same on every PC that knows the same ticks)
+                if (!_bot[p] && p < _state.Players.Length) _state.Players[p].Bot = AwayAt(p, t);
+                if (_bot[p] || AwayAt(p, t)) i = default(PlayerInput); // the bots (and anyone a person isn't steering) are thought for in Route
                 else if (_inputTick[k, p] == t) i = _input[k, p];
                 else i = Guess(p, t);
-                inputs[p] = i;
+                raw[p] = i;
                 _used[k, p] = i;
             }
-            Sim.Step(_state, inputs);
+            Sim.Step(_state, Sim.Route(_state, raw));
         }
 
         /// <summary>No input yet: assume they're still holding what they last held (sticks and buttons, but not a fresh card pick).</summary>

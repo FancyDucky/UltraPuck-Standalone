@@ -21,6 +21,14 @@ namespace UltraPuck.Core
         public const byte Pause = 16;
         /// <summary>Not a button: the player's "dash where you move" setting (a dash goes along the move stick when it's pushed).</summary>
         public const byte DashMove = 32;
+        /// <summary>Swap to a bot teammate (a press): take over the next one on your team, cycling back to your own player.</summary>
+        public const byte Swap = 64;
+        /// <summary>Not a button: the player turned off being handed to a bot teammate that picks up the puck.</summary>
+        public const byte NoAutoSwap = 128;
+        /// <summary>A <see cref="Pick"/> outside the card screen: the host adds a bot to red / blue mid-match.</summary>
+        public const byte AddBotRed = 201, AddBotBlue = 202;
+        /// <summary>Host commands the same way: back to the kick-off, and fix the score (red / blue, up / down).</summary>
+        public const byte KickOff = 203, RedUp = 204, RedDown = 205, BlueUp = 206, BlueDown = 207;
 
         public sbyte MoveX, MoveY;   // -127..127, the left stick
         /// <summary>The right stick: when pushed, you face where it points (twin-stick aiming).</summary>
@@ -200,6 +208,15 @@ namespace UltraPuck.Core
         public Fix SwapCooldown;
         /// <summary>Counts Team Play cooldown refreshes (for the drawing side's flash).</summary>
         public int Refreshes;
+        /// <summary>
+        /// A person steering a bot teammate: the player their controls drive (-1 = their own). Their own player is
+        /// run by the bot meanwhile. Part of the game, so it's the same on every PC online.
+        /// </summary>
+        public int Pilot = -1;
+        /// <summary>The swap button was held last tick (so a press swaps once).</summary>
+        public bool SwapHeld;
+        /// <summary>Match stats (for the screen after the match): goals, assists, saves and checks landed.</summary>
+        public int Goals, Assists, Saves, Bumps;
 
         public PlayerState Clone()
         {
@@ -293,6 +310,14 @@ namespace UltraPuck.Core
         public int LastScorer = -1;
         /// <summary>Player who scored last (-1 = nobody yet). Used to zoom the camera on them after a goal.</summary>
         public int LastGoalPlayer = -1;
+        /// <summary>Who set up the last goal (the teammate who passed it to the scorer), or -1.</summary>
+        public int LastAssist = -1;
+        /// <summary>Who the last goal counts for (the person who put it in; -1 for an own goal).</summary>
+        public int LastGoalBy = -1;
+        /// <summary>The last two players to have held the puck (newest first), for assists.</summary>
+        public int Touch1 = -1, Touch2 = -1;
+        /// <summary>The carrier the last time bots were handed to people (so a new carrier is noticed once).</summary>
+        public int AutoCarrier = -1;
         /// <summary>A timed match: time left on the clock (counts down only while the puck is in play).</summary>
         public Fix Clock;
         /// <summary>A timed match ended level: the next goal wins.</summary>
@@ -345,7 +370,7 @@ namespace UltraPuck.Core
         {
             ulong h = 14695981039346656037UL;
             Mix(ref h, Clock); Mix(ref h, Overtime ? 1 : 0); Mix(ref h, Paused ? 1 : 0);
-            Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, LastGoalPlayer); Mix(ref h, (long)Rng);
+            Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, LastGoalPlayer); Mix(ref h, LastAssist); Mix(ref h, LastGoalBy); Mix(ref h, Touch1); Mix(ref h, Touch2); Mix(ref h, AutoCarrier); Mix(ref h, (long)Rng);
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); Mix(ref h, py.Radius); }
@@ -366,6 +391,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);
+                Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps);
             }
             return h;
         }

@@ -1123,7 +1123,7 @@ namespace UltraPuck.Game
 
         public RockViews(Transform parent) { _parent = parent; }
 
-        public void Show(GameState s, float radius, System.Func<int, int> symbolOf, System.Func<int, Color> colourOf)
+        public void Show(GameState s, float radius, System.Func<int, int> symbolOf, System.Func<int, Color> colourOf, System.Func<int, bool> mine = null)
         {
             for (var k = 0; k < s.Rocks.Length; k++)
             {
@@ -1152,7 +1152,7 @@ namespace UltraPuck.Game
             }
             for (var k = s.Rocks.Length; k < _pool.Count; k++) if (_pool[k] != null && _pool[k].activeSelf) _pool[k].SetActive(false);
 
-            // optional dotted line from each Swap-capable owner to their rock (one reused mesh each — no Destroy)
+            // optional dotted line from the Swap owner to their rock, only for the person who owns it (one reused mesh each — no Destroy)
             var lineN = 0;
             if (Settings.RockLine)
             {
@@ -1160,7 +1160,7 @@ namespace UltraPuck.Game
                 {
                     var rk = s.Rocks[k];
                     var o = rk.Owner;
-                    if (o < 0 || o >= s.Players.Length || s.Players[o].Stats.Swap <= 0) continue;
+                    if (o < 0 || o >= s.Players.Length || s.Players[o].Stats.Swap <= 0 || mine == null || !mine(o)) continue;
                     var from = V.Of(s.Players[o].Pos);
                     var to = V.Of(rk.Pos);
                     var col = colourOf(o);

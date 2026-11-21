@@ -14,6 +14,8 @@ namespace UltraPuck.Game
         CardDeal, CardPick, CardAbsorb,
         /// <summary>Swap utility: a sharp clap when you teleport with the rock.</summary>
         Swap,
+        /// <summary>The countdown: a beep for 3, 2 and 1, and a brighter one for START.</summary>
+        CountBeep, CountGo,
     }
 
     /// <summary>
@@ -58,6 +60,21 @@ namespace UltraPuck.Game
                     s = New(0.18f);
                     Tone(s, 0f, 0.07f, 0.7f, Wave.Triangle, t => 880f, t => Pluck(t, 0.002f, 30f));
                     Tone(s, 0.06f, 0.12f, 0.8f, Wave.Triangle, t => 587f, t => Pluck(t, 0.002f, 26f));
+                    break;
+
+                case Sfx.CountBeep:
+                    // a short clean beep
+                    s = New(0.22f);
+                    Tone(s, 0f, 0.2f, 0.8f, Wave.Triangle, t => 784f, t => Pluck(t, 0.003f, 9f));
+                    Tone(s, 0f, 0.2f, 0.18f, Wave.Square, t => 784f, t => Pluck(t, 0.003f, 14f));
+                    break;
+
+                case Sfx.CountGo:
+                    // an octave up, held longer, with a fifth on top
+                    s = New(0.65f);
+                    Tone(s, 0f, 0.6f, 0.8f, Wave.Triangle, t => 1568f, t => Pluck(t, 0.003f, 4f));
+                    Tone(s, 0f, 0.6f, 0.4f, Wave.Triangle, t => 2349f, t => Pluck(t, 0.003f, 5f));
+                    Tone(s, 0f, 0.6f, 0.15f, Wave.Square, t => 784f, t => Pluck(t, 0.003f, 6f));
                     break;
 
                 case Sfx.UiDeny:

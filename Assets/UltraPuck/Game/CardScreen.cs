@@ -750,7 +750,7 @@ namespace UltraPuck.Game
             // hovering a different utility while you already have one: say it clearly replaces yours
             var replace = UtilityReplaceHint();
             if (replace != null)
-                Ui.Label(new Rect(0f, Ui.H - 72f, Ui.W, 26f), replace, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 0.85f, 0.45f, 0.95f * a));
+                Ui.Label(new Rect(0f, y + 110f, Ui.W, 26f), replace, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 0.85f, 0.45f, 0.95f * a)); // above the cards, under the timer line
 
             var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
             var hint = device is UnityEngine.InputSystem.Keyboard ? "{look} Look      {join} Take it  (or click)" : "{side} Look      {aim} Tilt      {confirm} Take it";

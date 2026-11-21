@@ -154,10 +154,11 @@
       "tier": "S",
       "max": 1,
       "color": "#CC3340",
+      "noBots": true,
       "flavor": "Pew Pew",
       "face": [
-        { "label": "Stun", "value": "[good].5 s[/]" },
-        { "label": "Cooldown", "value": "[note]5 s[/]" }
+        { "label": "Hit", "value": "[good]a check's knockback[/]" },
+        { "label": "Cooldown", "value": "[note]1 s[/]" }
       ],
       "text": "Press {utility} to use.",
       "stats": { "PuckGun": "+1" }

@@ -263,7 +263,7 @@ namespace UltraPuck.Game
 
             // the main page shows the live match behind; the other pages a plain backdrop (it's too busy there)
             if (Current != Page.Main) Ui.Box(new Rect(0f, 0f, Ui.W, Ui.H), Palette.Background, 0f);
-            if (Current == Page.OnlineLobby) { Lobby(t); return; }
+            if (Current == Page.OnlineLobby) { Ui.Flat = true; try { Lobby(t); } finally { Ui.Flat = false; } return; }
             // straight from the title screen: the panel slides in from the left while the name flies up to its place
             var leave = (Time.unscaledTime - _leftTitleAt) / TitleScreen.LeaveTime;
             var arriving = Current == Page.Main && leave < 1f;

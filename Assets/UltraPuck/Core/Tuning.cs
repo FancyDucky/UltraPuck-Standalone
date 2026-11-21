@@ -26,6 +26,8 @@ namespace UltraPuck.Core
         public Fix MoveForce = Fix.FromInt(24);
         public Fix Drag = Fix.FromInt(3);
         public Fix BrakeDrag = Fix.FromInt(9);
+        /// <summary>Move speed while charging a shot with the puck (or a rock / teammate): 30% slower.</summary>
+        public Fix ChargeMoveSpeed = Fix.Ratio(7, 10);
         /// <summary>
         /// Extra push when getting going: this share of <see cref="MoveForce"/> on top, full from a standstill and
         /// fading to nothing at top speed (along the stick). Quicker off the mark, same top speed, same glide.
@@ -63,7 +65,8 @@ namespace UltraPuck.Core
         public Fix WallBounce = Fix.Ratio(1, 2);
 
         // the puck
-        public Fix PuckDrag = Fix.Ratio(7, 10);
+        /// <summary>The puck's drag: 0.7 / 1.1, so it glides 10% further.</summary>
+        public Fix PuckDrag = Fix.Ratio(7, 11);
         public Fix PuckWallBounce = Fix.Ratio(4, 5);
         /// <summary>
         /// Hard cap on puck speed. Sized so Over Charge can land: a full charge is <see cref="ChargedShotMax"/> (~52),
@@ -108,7 +111,7 @@ namespace UltraPuck.Core
 
         // card mechanics
         /// <summary>Puck Gun: shot speed, how long a shot flies, cooldown, stun, and the shot's size.</summary>
-        public Fix GunSpeed = Fix.FromInt(38), GunLife = Fix.One, GunCooldown = Fix.FromInt(2), GunStun = Fix.Ratio(5, 4), ShotRadius = Fix.Ratio(6, 25);
+        public Fix GunSpeed = Fix.FromInt(38), GunLife = Fix.One, GunCooldown = Fix.One, GunStun = Fix.Ratio(5, 4), ShotRadius = Fix.Ratio(6, 25);
         /// <summary>Invisibility: how long, and the cooldown.</summary>
         public Fix InvisTime = Fix.FromInt(5), InvisCooldown = Fix.FromInt(15);
         /// <summary>Shockwave (utility): cooldown; reach in player radii; push (share of a check's knockback) — shoves every other player, the loose puck, and loose Swap rocks away.</summary>
@@ -165,6 +168,8 @@ namespace UltraPuck.Core
         public Fix PickTime = Fix.FromInt(30);
         /// <summary>The count before a face-off: 3, 2, 1, go.</summary>
         public Fix CountdownTime = Fix.FromInt(3);
+        /// <summary>After a card pick: this long before the countdown starts, so the cards finish flying off first.</summary>
+        public Fix PickOutroTime = Fix.Ratio(3, 2);
         public Fix CelebrateTime = Fix.FromInt(2);
         /// <summary>A timed match: seconds on the clock (0 = play to <see cref="GoalsToWin"/> instead). Level at the end: next goal wins.</summary>
         public Fix TimeLimit = Fix.Zero;

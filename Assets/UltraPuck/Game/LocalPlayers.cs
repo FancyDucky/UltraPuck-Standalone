@@ -59,8 +59,6 @@ namespace UltraPuck.Game
             public bool PrevLeft, PrevRight, PrevUp, PrevDown;
             /// <summary>A computer player (free play bots, or the ULTRAPUCK_DEMO players).</summary>
             public bool Demo;
-            /// <summary>While a human steers a bot teammate: the slot that's really theirs (-1: they're at home).</summary>
-            public int Home = -1;
             /// <summary>How long B / Escape has been held (holding it long enough leaves).</summary>
             public float BackHeld;
             /// <summary>Readied up on the players screen: from then on their controls work the bots instead.</summary>
@@ -118,9 +116,9 @@ namespace UltraPuck.Game
 
         private static bool One(InputDevice d, System.Func<Gamepad, bool> pad, System.Func<Keyboard, bool> keys)
         {
-            var g = d as Gamepad;
+            var g = Live(d) as Gamepad;
             if (g != null) return pad(g);
-            var k = d as Keyboard;
+            var k = Live(d) as Keyboard;
             return k != null && keys(k);
         }
 
@@ -173,6 +171,31 @@ namespace UltraPuck.Game
         }
 
         private static bool Plugged(InputDevice d) { return d != null && d.added; }
+
+        /// <summary>
+        /// The device if it's still in the input system, else null. A controller that drops out and comes back can
+        /// leave a slot holding the old, dead device: reading it throws every frame, which used to stop the frame
+        /// before the game stepped (online, everyone else then waited on this PC).
+        /// </summary>
+        private static InputDevice Live(InputDevice d) { return d != null && d.added ? d : null; }
+
+        /// <summary>
+        /// A controller came (back): a slot still holding a dead controller takes this one (the same kind first), so
+        /// a dropped-out controller keeps playing its player.
+        /// </summary>
+        public void DeviceAdded(InputDevice d)
+        {
+            if (!(d is Gamepad) || Find(d) != null) return;
+            Slot pick = null;
+            foreach (var s in Slots)
+            {
+                if (s.Demo || !(s.Device is Gamepad) || s.Device.added) continue;
+                if (pick == null || (s.Device.layout == d.layout && pick.Device.layout != d.layout)) pick = s;
+            }
+            if (pick == null) return;
+            Debug.Log("Ultra Puck: " + d.displayName + " takes back its player");
+            pick.Device = d;
+        }
 
         // ------------------------------------------------------------------ lobby
 
@@ -485,6 +508,15 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Lobby: View (Select) / Tab on any controller or the keyboard opens the settings.</summary>
+        /// <summary>View / Select on any controller, or Tab, held right now.</summary>
+        public bool SettingsHeld()
+        {
+            if (Blocked) return false;
+            foreach (var g in Gamepad.all) if (g.added && g.selectButton.isPressed) return true;
+            var kb = Keyboard.current;
+            return kb != null && kb.tabKey.isPressed;
+        }
+
         public bool SettingsPressed()
         {
             if (Blocked) return false;
@@ -514,6 +546,17 @@ namespace UltraPuck.Game
             if (Slots.Count >= MaxPlayers) return false;
             Slots.Add(new Slot { Demo = true, Colour = ColourForNewcomer(), Symbol = FreeSymbol(), Name = "Bot" });
             AssignTeams();
+            return true;
+        }
+
+        /// <summary>A bot on <paramref name="team"/> (mid-match, from Match settings). False when the match is full.</summary>
+        public bool AddBotTo(int team)
+        {
+            if (Slots.Count >= MaxPlayers) return false;
+            // the colour another player on that team already has (so it lands on that team)
+            var colour = team & 1;
+            foreach (var s in Slots) if ((s.Team & 1) == (team & 1)) { colour = s.Colour; break; }
+            Slots.Add(new Slot { Demo = true, Colour = colour, Symbol = FreeSymbol(), Name = "Bot", Team = team & 1 });
             return true;
         }
 
@@ -593,8 +636,8 @@ namespace UltraPuck.Game
             var m = new MenuInput();
             if (Blocked) return m;
             var v = Stick(d);
-            var g = d as Gamepad;
-            var kb = d as Keyboard;
+            var g = Live(d) as Gamepad;
+            var kb = Live(d) as Keyboard;
             if (kb != null) v += Aim(kb);
             // one direction at a time; a push steps once, holding it repeats after a moment
             var dir = v.y > 0.6f ? 1 : v.y < -0.6f ? 2 : v.x < -0.6f ? 3 : v.x > 0.6f ? 4 : 0;
@@ -655,106 +698,6 @@ namespace UltraPuck.Game
         }
 
         /// <summary>
-        /// Square (PlayStation) / X (Xbox), or the rebound Swap control: take over the next bot teammate.
-        /// Cycles round the bots on your team. Returns true if a swap happened.
-        /// </summary>
-        public bool SwapToBotTeammate(int human, GameState state = null)
-        {
-            if (human < 0 || human >= Slots.Count || Slots[human].Demo) return false;
-            var team = TeamOf(human, state);
-            var bots = new List<int>();
-            var n = SlotCount(state);
-            for (var i = 0; i < n; i++)
-            {
-                if (i >= Slots.Count || !Slots[i].Demo) continue;
-                if (TeamOf(i, state) != team) continue;
-                bots.Add(i);
-            }
-            if (bots.Count == 0)
-            {
-                Debug.Log("Ultra Puck: swap: no bot teammates on " + Palette.TeamName(team) + " (you are player " + (human + 1) + ")");
-                return false;
-            }
-            // next bot after this human's index, wrapping
-            var pick = bots[0];
-            foreach (var b in bots) if (b > human) { pick = b; break; }
-            SwapControl(human, pick);
-            return true;
-        }
-
-        private int SlotCount(GameState state) { return state != null ? state.Players.Length : Slots.Count; }
-
-        private int TeamOf(int i, GameState state)
-        {
-            if (state != null && i >= 0 && i < state.Players.Length) return state.Players[i].Team & 1;
-            return i >= 0 && i < Slots.Count ? Slots[i].Team & 1 : 0;
-        }
-
-        private bool IsBot(int i, GameState state)
-        {
-            if (i < 0 || i >= Slots.Count) return false;
-            return Slots[i].Demo;
-        }
-
-        /// <summary>
-        /// Hand the human's device to a bot slot (and make the old slot a bot). The look (colour, symbol, team) stays
-        /// with each player on the ice; only who steers them changes.
-        /// </summary>
-        public void SwapControl(int human, int bot)
-        {
-            if (human < 0 || bot < 0 || human >= Slots.Count || bot >= Slots.Count) return;
-            if (Slots[human].Demo || !Slots[bot].Demo) return;
-            var h = Slots[human];
-            var b = Slots[bot];
-            var device = h.Device; var extra = h.Extra; var name = h.Name; var latched = h.Latched;
-            var home = h.Home >= 0 ? h.Home : human;
-            h.Device = null; h.Extra = null; h.Demo = true; h.Name = "Bot"; h.Latched = 0; h.WantSwap = false; h.Home = -1;
-            b.Device = device; b.Extra = extra; b.Demo = false; b.Name = name; b.Latched = latched; b.WantSwap = false;
-            b.Home = home == bot ? -1 : home;
-            Debug.Log("Ultra Puck: " + (string.IsNullOrEmpty(name) ? "a player" : name) + " now steers player " + (bot + 1));
-        }
-
-        /// <summary>
-        /// Everyone steering a bot teammate goes back to their own player (for the card screen, so each person picks
-        /// for themselves and the match knows who's a person). Returns true if anyone moved.
-        /// </summary>
-        public bool ReturnHome()
-        {
-            var moved = false;
-            for (var i = 0; i < Slots.Count; i++)
-            {
-                var s = Slots[i];
-                if (s.Demo || s.Home < 0 || s.Home == i || s.Home >= Slots.Count) continue;
-                if (!Slots[s.Home].Demo) { s.Home = -1; continue; } // (someone else is there now: stay)
-                SwapControl(i, s.Home);
-                moved = true;
-            }
-            return moved;
-        }
-
-        /// <summary>
-        /// A bot on <paramref name="team"/> just got the puck: hand a random human on that team over to them (so you
-        /// always drive whoever has it when you're the only person, or one of you at random when there are several).
-        /// </summary>
-        public bool AutoSwapToCarrier(int carrier, GameState state)
-        {
-            if (state == null || carrier < 0 || carrier >= Slots.Count || carrier >= state.Players.Length) return false;
-            if (!Slots[carrier].Demo) return false;
-            var team = state.Players[carrier].Team & 1;
-            var humans = new List<int>();
-            for (var i = 0; i < Math.Min(Slots.Count, state.Players.Length); i++)
-            {
-                if (Slots[i].Demo) continue;
-                if ((state.Players[i].Team & 1) != team) continue;
-                humans.Add(i);
-            }
-            if (humans.Count == 0) return false;
-            var who = humans[UnityEngine.Random.Range(0, humans.Count)];
-            SwapControl(who, carrier);
-            return true;
-        }
-
-        /// <summary>
         /// Swap-to-bot binding, plus Square / X and F as a fallback so teammate swap still works if the rebind was
         /// cleared or shared with another action.
         /// </summary>
@@ -766,7 +709,7 @@ namespace UltraPuck.Game
         private static bool SwapOn(InputDevice d, bool pressedThisFrame)
         {
             if (d == null) return false;
-            var g = d as Gamepad;
+            var g = Live(d) as Gamepad;
             if (g != null)
             {
                 if (pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Swap) : Controls.PadHeld(g, Controls.Act.Swap)) return true;
@@ -774,7 +717,7 @@ namespace UltraPuck.Game
                 var west = g.buttonWest;
                 return west != null && (pressedThisFrame ? west.wasPressedThisFrame : west.isPressed);
             }
-            var kb = d as Keyboard;
+            var kb = Live(d) as Keyboard;
             if (kb == null) return false;
             if (pressedThisFrame ? Controls.KeyPressed(kb, Controls.Act.Swap) : Controls.KeyHeld(kb, Controls.Act.Swap)) return true;
             var f = kb.fKey;
@@ -784,24 +727,17 @@ namespace UltraPuck.Game
         /// <summary>Once per tick: everyone's controls, in slot order. <paramref name="state"/> is only read by computer players.</summary>
         public PlayerInput[] Sample(Simulation sim, GameState state)
         {
-            // swap onto a bot teammate before reading sticks (WantSwap is latched every frame so a short tap counts;
-            // only the latch is used here, so the same press can't swap twice after the device moves)
-            if (!Blocked)
-            {
-                for (var i = 0; i < Slots.Count; i++)
-                {
-                    var s = Slots[i];
-                    if (!s.Demo && s.WantSwap) SwapToBotTeammate(i, state);
-                    s.WantSwap = false;
-                }
-            }
-
+            // swapping onto a bot teammate is part of the game (Simulation.Route): a press here is the Swap bit for
+            // one tick (latched every frame so a short tap counts). Bots' entries stay empty: Route thinks for them.
             var inputs = new PlayerInput[Slots.Count];
             for (var i = 0; i < Slots.Count; i++)
             {
                 var s = Slots[i];
-                if (s.Demo) { inputs[i] = Bot.Think(sim, state, i); continue; }
-                if (!(Plugged(s.Device) || Plugged(s.Extra)) || Blocked) continue; // unplugged, or the Steam overlay is open: stands still
+                var swap = s.WantSwap && !Blocked;
+                s.WantSwap = false;
+                if (s.Demo) continue;
+                var setting = (byte)((Settings.DashWhereMoving ? PlayerInput.DashMove : 0) | (Settings.AutoSwapBots ? 0 : PlayerInput.NoAutoSwap));
+                if (!(Plugged(s.Device) || Plugged(s.Extra)) || Blocked) { inputs[i].Buttons = setting; continue; } // unplugged, or the Steam overlay is open: stands still
                 var m = StickOf(s);
                 var a = AimOfSlot(s, i);
                 inputs[i] = new PlayerInput
@@ -811,7 +747,7 @@ namespace UltraPuck.Game
                     AimX = PlayerInput.Axis(a.x),
                     AimY = PlayerInput.Axis(a.y),
                     Buttons = (byte)(Buttons(s.Device, false) | Buttons(s.Extra, false) | (HasKeyboard(s) ? MouseButtons(false) : 0) | s.Latched
-                        | (Settings.DashWhereMoving ? PlayerInput.DashMove : 0)),
+                        | setting | (swap ? PlayerInput.Swap : 0)),
                     Pick = state != null && state.Phase == Phase.Picking && PickFor != null ? PickFor(i) : (byte)0,
                     Hover = state != null && state.Phase == Phase.Picking && HoverFor != null ? HoverFor(i) : (byte)0,
                 };
@@ -836,14 +772,14 @@ namespace UltraPuck.Game
         /// <summary>The move stick: left stick (or d-pad) on a controller, move keys on the keyboard.</summary>
         private static Vector2 Stick(InputDevice d)
         {
-            var g = d as Gamepad;
+            var g = Live(d) as Gamepad;
             if (g != null)
             {
                 var v = g.leftStick.ReadValue();
                 if (v.sqrMagnitude < 0.01f) v = g.dpad.ReadValue();
                 return Vector2.ClampMagnitude(v, 1f);
             }
-            var kb = d as Keyboard;
+            var kb = Live(d) as Keyboard;
             if (kb == null) return Vector2.zero;
             var x = (Controls.KeyHeld(kb, Controls.Act.MoveRight) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.MoveLeft) ? 1f : 0f);
             var y = (Controls.KeyHeld(kb, Controls.Act.MoveUp) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.MoveDown) ? 1f : 0f);
@@ -853,14 +789,14 @@ namespace UltraPuck.Game
         /// <summary>Right stick on a controller only (keyboard aim is keys or mouse).</summary>
         private static Vector2 AimPad(InputDevice d)
         {
-            var g = d as Gamepad;
+            var g = Live(d) as Gamepad;
             return g != null ? Vector2.ClampMagnitude(g.rightStick.ReadValue(), 1f) : Vector2.zero;
         }
 
         /// <summary>Aim keys on the keyboard. Zero when not pushed.</summary>
         private static Vector2 AimKeys(InputDevice d)
         {
-            var kb = d as Keyboard;
+            var kb = Live(d) as Keyboard;
             if (kb == null) return Vector2.zero;
             var x = (Controls.KeyHeld(kb, Controls.Act.AimRight) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.AimLeft) ? 1f : 0f);
             var y = (Controls.KeyHeld(kb, Controls.Act.AimUp) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.AimDown) ? 1f : 0f);
@@ -878,7 +814,7 @@ namespace UltraPuck.Game
         private static byte Buttons(InputDevice d, bool pressedThisFrame)
         {
             byte b = 0;
-            var g = d as Gamepad;
+            var g = Live(d) as Gamepad;
             if (g != null)
             {
                 if (pressedThisFrame ? Controls.PadPressed(g, Controls.Act.Shoot) : Controls.PadHeld(g, Controls.Act.Shoot)) b |= PlayerInput.ShootCheck;
@@ -887,7 +823,7 @@ namespace UltraPuck.Game
                 if (pressedThisFrame ? Controls.PadPressed(g, Controls.Act.ResetPuck) : Controls.PadHeld(g, Controls.Act.ResetPuck)) b |= PlayerInput.ResetPuck;
                 return b;
             }
-            var kb = d as Keyboard;
+            var kb = Live(d) as Keyboard;
             if (kb == null) return 0;
             if (pressedThisFrame ? Controls.KeyPressed(kb, Controls.Act.Shoot) : Controls.KeyHeld(kb, Controls.Act.Shoot)) b |= PlayerInput.ShootCheck;
             if (pressedThisFrame ? Controls.KeyPressed(kb, Controls.Act.Charge) : Controls.KeyHeld(kb, Controls.Act.Charge)) b |= PlayerInput.ChargeBrake;
