@@ -776,7 +776,7 @@ namespace UltraPuck.Tests
             s.Players[1].Pos = At(1.5, -6); s.Players[1].Facing = FixVec2.Right;
             s.Carrier = 1; s.PuckTeam = 1;
             s.PuckPos = At(2.3, -6);
-            for (var t = 0; t < 120; t++) { s.Players[1].Pos = At(1.5, -6); _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) }); }
+            for (var t = 0; t < 240; t++) { s.Players[1].Pos = At(1.5, -6); _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) }); }
             Assert.AreEqual(0, s.Players[0].Shocks, "held: not yet");
             _sim.Step(s, new PlayerInput[2]); // let go
             Assert.AreEqual(1, s.Players[0].Shocks);
@@ -793,15 +793,16 @@ namespace UltraPuck.Tests
             s.Players[0].Pos = At(0, -6);
             s.Players[1].Pos = At(1.0, -6);   // foe
             s.Players[2].Pos = At(-1.0, -6);  // teammate
-            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput), default(PlayerInput) });
-            _sim.Step(s, new PlayerInput[3]); // a tap: let go straight away
+            for (var t = 0; t < 120; t++) { s.Players[1].Pos = At(1.0, -6); s.Players[2].Pos = At(-1.0, -6); s.Players[1].Vel = s.Players[2].Vel = FixVec2.Zero; _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput), default(PlayerInput) }); }
+            _sim.Step(s, new PlayerInput[3]); // let go after a second: 1 unit
             Assert.AreEqual(1, s.Players[0].Shocks, "a shockwave went out");
             Assert.Greater(s.Players[1].Vel.X.ToDouble(), 0.5, "foe shoved away");
             Assert.Less(s.Players[2].Vel.X.ToDouble(), -0.5, "teammate shoved away too");
             Assert.AreEqual(Fix.Zero, s.Players[1].SlowTime, "no slow — push only");
-            Assert.AreEqual(1.5, s.Players[0].ShockRadius.ToDouble(), 0.05, "a tap: the smallest one");
+            Assert.AreEqual(1.0, s.Players[0].ShockRadius.ToDouble(), 0.02, "held a second: 1 unit (it grows from nothing)");
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput), default(PlayerInput) });
             _sim.Step(s, new PlayerInput[3]);
+            Assert.Less(s.Players[0].ShockRadius.ToDouble(), 0.05, "a tap: next to nothing");
             Assert.AreEqual(2, s.Players[0].Shocks, "no cooldown: another straight away");
             for (var t = 0; t < 120 * 7; t++) _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput), default(PlayerInput) });
             _sim.Step(s, new PlayerInput[3]);
@@ -821,8 +822,10 @@ namespace UltraPuck.Tests
             s.PuckPos = At(0, -4.8); // beside them, off the wedge (they'd scoop it up)
             s.PuckVel = FixVec2.Zero;
             s.Rocks = new[] { new Rock { Pos = At(-1.2, -6), Vel = new FixVec2(Fix.Zero, -Fix.One), Owner = 0, Carrier = -1 } };
-            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
-            _sim.Step(s, new PlayerInput[2]);
+            for (var t = 0; t < 180; t++) _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            s.PuckPos = At(0, -4.8); s.PuckVel = FixVec2.Zero;
+            s.Rocks[0].Pos = At(-1.2, -6); s.Rocks[0].Vel = new FixVec2(Fix.Zero, -Fix.One);
+            _sim.Step(s, new PlayerInput[2]); // let go: 1.5 units
             Assert.AreEqual(1, s.Players[0].Shocks);
             Assert.Greater(s.PuckVel.Y.ToDouble(), 0.5, "puck shoved away");
             Assert.Less(s.Rocks[0].Vel.X.ToDouble(), -0.5, "rock shoved away");

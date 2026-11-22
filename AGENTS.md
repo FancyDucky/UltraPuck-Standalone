@@ -82,6 +82,8 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.45 (Claude, 21 Nov 2026): **Shockwave grows from nothing.** `ShockMin` 0 (was 1.5): it
+  grows from the player out to 6 units over 6 s (it reaches anyone whose edge is inside it). **Version 57.**
 - 0.1.44 (Claude, 21 Nov 2026): **Shockwave held to grow; Stone Wall goes on after
   bounces; Heavyweight bigger.** Shockwave has no cooldown: holding the utility button grows it (`PlayerState.ShockHold`)
   and letting go fires it, radius `ShockMin` 1.5 to `ShockMax` 6 units over `ShockChargeTime` 6 s

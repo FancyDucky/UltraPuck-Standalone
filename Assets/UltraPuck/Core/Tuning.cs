@@ -133,7 +133,7 @@ namespace UltraPuck.Core
         /// (<see cref="ShockCooldown"/> / <see cref="ShockRange"/> are from before, kept for old tuning files.)
         /// </summary>
         public Fix ShockCooldown = Fix.FromInt(6), ShockRange = Fix.FromInt(5), ShockPush = Fix.Two;
-        public Fix ShockMin = Fix.Ratio(3, 2), ShockMax = Fix.FromInt(6), ShockChargeTime = Fix.FromInt(6);
+        public Fix ShockMin = Fix.Zero, ShockMax = Fix.FromInt(6), ShockChargeTime = Fix.FromInt(6);
         /// <summary>Goal explosion: shove everyone (and loose rocks) away from the puck; reach in world units, push as a share of a check's knockback.</summary>
         public Fix GoalBlastRange = Fix.FromInt(12), GoalBlastPush = Fix.FromInt(3);
         /// <summary>
