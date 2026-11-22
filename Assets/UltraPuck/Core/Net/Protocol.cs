@@ -20,6 +20,7 @@ namespace UltraPuck.Core.Net
         Leave = 11,     // I'm going
         Away = 12,      // host to everyone: who's away (the bot plays them) from which tick until which
         Rejoin = 13,    // host to someone coming back mid-match: the game as it is, and the seats
+        Recolour = 14,  // client to host: please change my side's colour (from, to)
     }
 
     /// <summary>Writes a message into bytes (little-endian, compact).</summary>

@@ -82,6 +82,21 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.46 (Claude, 21 Nov 2026): **anyone recolours their side; Shockwave looks.** Players
+  screen: D-pad up / down (arrow keys on a keyboard; never the stick) steps your side to the next colour of all 8
+  (skipping the other side's), for everyone on it, bots too (`LocalPlayers.RecolourSide`); left / right now moves you
+  to the other side's colour instead of stepping red / blue. Online anyone can: a client sends `Msg.Recolour` (14), the
+  host's `NetSession.RecolourSide` changes its own players, every client's players and the bots, and every lobby
+  message carries the side colours plus a `Recolours` count; on a new count each PC puts its players in their seat's
+  side colour (GameRunner), so a lost message can't leave anyone behind. Shockwave: held, a see-through solid blue disc
+  grows round you; it goes off as a red ring. **Version 59.** The D-pad colour change didn't work for the owner in a
+  real lobby, so it's switched off (`LocalPlayers.TeamColourButtons` = false, hint hidden); the online plumbing stays.
+- 0.1.46 (Claude, 21 Nov 2026): **rock lasts 10 s; easier Team Play passes; brighter
+  arrows.** Swap rock: `Rock.Life` = `RockLife` 10 s from the throw (held or not), then it's gone; it no longer vanishes
+  when it stops. In the last `RockFlash` 3 s it flashes dark (a black cover, `RockViews.FlashDim`: ~1.5 a second rising
+  to 8). Passes (Team Play, goal credit) no longer end when an opponent merely comes near the puck: only an opponent
+  picking it up ends one. Speed-up arrows: bigger (0.3 radius), solid white most of their drift, thin dark edge.
+  **Version 58.**
 - 0.1.45 (Claude, 21 Nov 2026): **Shockwave grows from nothing.** `ShockMin` 0 (was 1.5): it
   grows from the player out to 6 units over 6 s (it reaches anyone whose edge is inside it). **Version 57.**
 - 0.1.44 (Claude, 21 Nov 2026): **Shockwave held to grow; Stone Wall goes on after

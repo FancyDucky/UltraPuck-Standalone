@@ -288,9 +288,14 @@ namespace UltraPuck.Game
                 var symbol = Any(s, g => g.buttonWest.wasPressedThisFrame, k => k.mKey.wasPressedThisFrame);
                 var less = Any(s, g => g.leftShoulder.wasPressedThisFrame, k => k.minusKey.wasPressedThisFrame);
                 var more = Any(s, g => g.rightShoulder.wasPressedThisFrame, k => k.equalsKey.wasPressedThisFrame);
+                // D-pad up / down (arrow keys): a new colour for your whole side (not the stick, so it's never by accident)
+                var colourUp = Any(s, g => g.dpad.up.wasPressedThisFrame, k => k.upArrowKey.wasPressedThisFrame);
+                var colourDown = Any(s, g => g.dpad.down.wasPressedThisFrame, k => k.downArrowKey.wasPressedThisFrame);
                 if (!s.Ready)
                 {
-                    if (nav.x != 0) { s.Colour = ((s.Colour + nav.x) % Palette.Choosable + Palette.Choosable) % Palette.Choosable; AssignTeams(); Sound.Step(nav.x); }
+                    // left / right: over to the other side (in its colour)
+                    if (nav.x != 0) { var sides = SideColours(); s.Colour = s.Colour == sides[0] ? sides[1] : sides[0]; AssignTeams(); Sound.Step(nav.x); }
+                    if (TeamColourButtons && (colourUp || colourDown)) RecolourSide(s, colourUp ? 1 : -1);
                     if (symbol) { s.Symbol = (s.Symbol + 1) % Symbols.Count; Sound.Move(); }
                     if (confirm) { s.Ready = true; s.Cursor = 0; Sound.Select(); }
                     continue;
@@ -369,6 +374,40 @@ namespace UltraPuck.Game
         }
 
         // ------------------------------------------------------------------ colours, teams, symbols
+
+        /// <summary>D-pad up / down changes your side's colour. Off for now: it isn't working right yet (to look at again).</summary>
+        public const bool TeamColourButtons = false;
+
+        /// <summary>Online: the two sides' colours come from the game (set by GameRunner); here, from the players.</summary>
+        public System.Func<int[]> OnlineSides;
+        /// <summary>Online: asking for a side's new colour goes to the game (from, to); here it's done straight away.</summary>
+        public System.Action<int, int> OnlineRecolour;
+
+        /// <summary>The colours of side 0 and side 1.</summary>
+        public int[] SideColours()
+        {
+            if (OnlineSides != null) return OnlineSides();
+            var colours = Colours();
+            var a = colours.Count > 0 ? colours[0] : 0;
+            var b = colours.Count > 1 ? colours[1] : a == 1 ? 0 : 1;
+            return new[] { a, b };
+        }
+
+        /// <summary>Step <paramref name="s"/>'s side to the next colour (skipping the other side's), for everyone on it.</summary>
+        private void RecolourSide(Slot s, int dir)
+        {
+            var sides = SideColours();
+            var from = s.Colour;
+            var other = from == sides[0] ? sides[1] : sides[0];
+            var n = Palette.Colours.Length;
+            var to = from;
+            do to = ((to + dir) % n + n) % n; while (to == other && to != from);
+            if (to == from) return;
+            Sound.Step(dir);
+            if (OnlineRecolour != null) { OnlineRecolour(from, to); return; }
+            foreach (var x in Slots) if (x.Colour == from) x.Colour = to;
+            AssignTeams();
+        }
 
         /// <summary>The first colour picked (in slot order) is team 0, the second team 1. Returns how many colours there are.</summary>
         public int AssignTeams()

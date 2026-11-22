@@ -154,7 +154,7 @@ namespace UltraPuck.Game
                 case "move": return new[] { PadButton.LS };
                 case "aim": case "look": return new[] { PadButton.RS };
                 case "side": return new[] { PadButton.DPadLR };
-                case "nav": return new[] { PadButton.DPad };
+                case "nav": case "updown": return new[] { PadButton.DPad };
                 default: return new PadButton[0];
             }
         }
@@ -184,7 +184,7 @@ namespace UltraPuck.Game
                 case "move": return new[] { "WASD" };
                 case "aim": return new[] { "Arrows" };
                 case "look": case "side": return new[] { "←", "→" };
-                case "nav": return new[] { "↑", "↓" };
+                case "nav": case "updown": return new[] { "↑", "↓" };
                 default: return new[] { action };
             }
         }

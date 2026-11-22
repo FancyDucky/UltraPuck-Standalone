@@ -17,7 +17,7 @@ namespace UltraPuck.Core.Net
     /// </summary>
     public sealed class NetSession : IDisposable
     {
-        public const int Version = 57;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card. 43: swapping onto bots is part of the game (input bits 64/128, Pilot), mid-match bots (Pick 201/202), match stats, Puck Gun knockback (no stun, 1 s), 30% slower while charging, puck drag 7/11, bot pass/positioning, Team Vote people draw first, lobby/start messages ordered. 44: countdown waits 1.5 s after picks, leave/rejoin mid-match (Away / Rejoin messages, state hand-over), host kick-off and score commands (Pick 203-207). 45: bot-run players wait between Swap uses, bots throw a carried teammate at the puck. 46: Power Shot = full charge quick shot (QuickShotFull), Invisible Quick Shot (PuckHidden), Cannon Ball (CannonTeam). 47: Cannon Ball shoves the catcher along the shot (Shoved), no hit lag. 48: Swap rock gone once stopped / no swap to a held rock, Ice Trail on every shot (teammates +, 3x longer), Team Play = pass speed boost (Fast), Cannon Ball shove into your own net scores (ShovedBy), Stone Wall (Stones). 49: Same Draw picking (rules bit 16), Stone Wall up to 30 long / 3 s. 50: Swap rock glides 35% less (RockDrag 0.277), Ice Trail 15 s, teammates +60% (IceBoost), RockDrag 0.326, swapping gives you the rock's momentum and the rock keeps its own. 51: Friendly Fire grabs only while holding charge/brake, throws like a shot (MateTossDrag, TossEndSpeed), +15% speed 4 s after. 52: Invisible Shot 0.5 s. 53: host takes a bot out mid-match (Pick 208 + player). 54: Stone Wall stands 6 s. 55: no charging slow-down while carrying a teammate. 56: Shockwave held to grow (ShockHold, 1.5-6 units over 6 s, no cooldown), Stone Wall goes on after bounces and stands 5.5 s, Heavyweight size x1.16. 57: Shockwave grows from 0
+        public const int Version = 59;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card. 43: swapping onto bots is part of the game (input bits 64/128, Pilot), mid-match bots (Pick 201/202), match stats, Puck Gun knockback (no stun, 1 s), 30% slower while charging, puck drag 7/11, bot pass/positioning, Team Vote people draw first, lobby/start messages ordered. 44: countdown waits 1.5 s after picks, leave/rejoin mid-match (Away / Rejoin messages, state hand-over), host kick-off and score commands (Pick 203-207). 45: bot-run players wait between Swap uses, bots throw a carried teammate at the puck. 46: Power Shot = full charge quick shot (QuickShotFull), Invisible Quick Shot (PuckHidden), Cannon Ball (CannonTeam). 47: Cannon Ball shoves the catcher along the shot (Shoved), no hit lag. 48: Swap rock gone once stopped / no swap to a held rock, Ice Trail on every shot (teammates +, 3x longer), Team Play = pass speed boost (Fast), Cannon Ball shove into your own net scores (ShovedBy), Stone Wall (Stones). 49: Same Draw picking (rules bit 16), Stone Wall up to 30 long / 3 s. 50: Swap rock glides 35% less (RockDrag 0.277), Ice Trail 15 s, teammates +60% (IceBoost), RockDrag 0.326, swapping gives you the rock's momentum and the rock keeps its own. 51: Friendly Fire grabs only while holding charge/brake, throws like a shot (MateTossDrag, TossEndSpeed), +15% speed 4 s after. 52: Invisible Shot 0.5 s. 53: host takes a bot out mid-match (Pick 208 + player). 54: Stone Wall stands 6 s. 55: no charging slow-down while carrying a teammate. 56: Shockwave held to grow (ShockHold, 1.5-6 units over 6 s, no cooldown), Stone Wall goes on after bounces and stands 5.5 s, Heavyweight size x1.16. 57: Shockwave grows from 0. 58: Swap rock lasts 10 s (Rock.Life), passes only end when an opponent takes the puck. 59: side colours in the lobby message, Recolour message
         public const int MaxPlayers = 8;
         /// <summary>Your own controls take effect this many ticks later (25 ms at 120 a second), which hides a little lag for free.</summary>
         public const int InputDelay = 3;
@@ -71,6 +71,43 @@ namespace UltraPuck.Core.Net
         /// <summary>Short news for a pop-up ("Sam left the game."), set as it happens; the game takes it and clears it.</summary>
         public string Notice;
         public int MyPeer { get; private set; }
+
+        /// <summary>
+        /// The colours of the two sides (indexes into the game's colour list), from the seats. <see cref="Recolours"/>
+        /// goes up whenever a side is given a new colour: each PC then puts its own players in their side's colour.
+        /// </summary>
+        public readonly int[] TeamColours = { 0, 1 };
+        public int Recolours { get; private set; }
+        /// <summary>Host: every recolour so far (from, to), so a PC that sends its players before it's heard of one is put right.</summary>
+        private readonly List<KeyValuePair<int, int>> _remaps = new List<KeyValuePair<int, int>>();
+
+        /// <summary>
+        /// Give the side that's <paramref name="from"/> the colour <paramref name="to"/>: everyone on it, people (on any
+        /// PC) and bots. Anyone may ask; the host does it and tells everyone.
+        /// </summary>
+        public void RequestRecolour(int from, int to)
+        {
+            if (Current != Stage.Lobby) return;
+            if (IsHost) RecolourSide(from, to);
+            else Send(0, new Writer(Msg.Recolour).U8(from).U8(to).ToArray());
+        }
+
+        private void RecolourSide(int from, int to)
+        {
+            from &= 7; to &= 7;
+            if (from == to || (TeamColours[0] != from && TeamColours[1] != from)) return;
+            var other = TeamColours[0] == from ? TeamColours[1] : TeamColours[0];
+            if (to == other) return; // that's the other side's colour
+            for (var k = 0; k < _localPlayers.Count; k++)
+                if ((_localPlayers[k].Value & 7) == from) _localPlayers[k] = new KeyValuePair<string, int>(_localPlayers[k].Key, (_localPlayers[k].Value & ~7) | to);
+            foreach (var l in _links.Values)
+                for (var k = 0; k < l.Players.Count; k++)
+                    if ((l.Players[k].Value & 7) == from) l.Players[k] = new KeyValuePair<string, int>(l.Players[k].Key, (l.Players[k].Value & ~7) | to);
+            for (var b = 0; b < _bots.Count; b++) if ((_bots[b] & 7) == from) _bots[b] = (_bots[b] & ~7) | to;
+            _remaps.Add(new KeyValuePair<int, int>(from, to));
+            Recolours++;
+            RebuildSeats();
+        }
         /// <summary>Who's in the game, in player order. Kept by the host; clients get copies.</summary>
         public readonly List<Seat> Seats = new List<Seat>();
         public Rollback Match { get; private set; }
@@ -268,6 +305,7 @@ namespace UltraPuck.Core.Net
             if (colours.Count == 0) colours.Add(0);
             if (colours.Count == 1) colours.Add(colours[0] == 1 ? 0 : 1); // nobody on the other side yet: red, or blue
             foreach (var s in Seats) { var i = colours.IndexOf(s.Colour); s.Team = i < 0 ? 0 : i & 1; }
+            TeamColours[0] = colours[0]; TeamColours[1] = colours[1];
             _lobbyVersion++;
             _lastLobby = -1;
         }
@@ -467,12 +505,21 @@ namespace UltraPuck.Core.Net
                     var n = r.U8();
                     l.Players.Clear();
                     for (var k = 0; k < n && k < MaxPlayers; k++) { var name = r.Str(); l.Players.Add(new KeyValuePair<string, int>(name, r.U8() & 127)); }
+                    // sent before it heard of the latest recolours: put its players right
+                    for (var v = Math.Max(0, r.I32()); v < _remaps.Count; v++)
+                        for (var k = 0; k < l.Players.Count; k++)
+                            if ((l.Players[k].Value & 7) == _remaps[v].Key) l.Players[k] = new KeyValuePair<string, int>(l.Players[k].Key, (l.Players[k].Value & ~7) | _remaps[v].Value);
                     if (Current == Stage.Playing && l.MidMatch) TakeBackSeats(l);
                     else if (Current != Stage.Playing) RebuildSeats();
                     break;
                 case Msg.Lobby:
                     if (IsHost) return;
                     ReadLobby(r);
+                    break;
+                case Msg.Recolour:
+                    if (!IsHost || l == null || l.Peer < 0 || Current != Stage.Lobby) return;
+                    var from = r.U8();
+                    RecolourSide(from, r.U8());
                     break;
                 case Msg.Start:
                     if (IsHost) return;
@@ -560,6 +607,7 @@ namespace UltraPuck.Core.Net
             if (MyPeer < 0) return;
             var w = new Writer(Msg.Players).U8(_localPlayers.Count);
             foreach (var p in _localPlayers) w.Str(p.Key).U8(p.Value);
+            w.I32(Recolours); // the recolours this PC has heard of
             Send(0, w.ToArray());
         }
 
@@ -591,6 +639,7 @@ namespace UltraPuck.Core.Net
             var w = new Writer(Msg.Lobby).I32(_lobbyVersion).U8(Current == Stage.Playing ? 1 : 0).I32(MatchId);
             WriteSeats(w);
             w.U8(_map);
+            w.U8(TeamColours[0]).U8(TeamColours[1]).I32(Recolours);
             var bytes = w.ToArray();
             foreach (var l in _links.Values) if (l.Peer > 0) Send(l.Conn, bytes);
         }
@@ -608,6 +657,21 @@ namespace UltraPuck.Core.Net
             if (Current == Stage.Playing) return; // the seats are fixed for the match
             ReadSeats(r);
             _map = r.U8();
+            TeamColours[0] = r.U8() & 7; TeamColours[1] = r.U8() & 7;
+            var recolours = r.I32();
+            if (recolours > Recolours)
+            {
+                // a side got a new colour: our players go in their side's colour (and tell the host)
+                Recolours = recolours;
+                for (var k = 0; k < _localPlayers.Count; k++)
+                    foreach (var seat in Seats)
+                        if (!seat.Bot && seat.Peer == MyPeer && seat.Local == k)
+                        {
+                            _localPlayers[k] = new KeyValuePair<string, int>(_localPlayers[k].Key, (_localPlayers[k].Value & ~7) | TeamColours[seat.Team & 1]);
+                            break;
+                        }
+                SendPlayers();
+            }
         }
 
         /// <param name="everyone">Also to PCs that already said they started (once a second): one that missed the

@@ -299,6 +299,37 @@ namespace UltraPuck.Tests
             Assert.AreEqual(1, host.Bots, "the lobby has one bot left");
         }
 
+        /// <summary>A client asks for their side's colour to change: the host recolours the whole side (bots too) and tells everyone.</summary>
+        [Test]
+        public void AnyoneCanRecolourTheirSide()
+        {
+            var map = Rink();
+            var cards = Cards();
+            System.Func<Simulation> make = () => new Simulation(map, null, cards);
+            var net = new FakeNetwork(5) { Latency = 0.03, Loss = 0 };
+            var host = NetSession.Host(net.Add(), make, 3u);
+            var client = NetSession.Join(net.Add(), make, 3u);
+            host.SetLocalPlayers(new[] { new KeyValuePair<string, int>("Host", NetSession.Look(0, 0)) });
+            client.SetLocalPlayers(new[] { new KeyValuePair<string, int>("Guest", NetSession.Look(1, 1)) });
+            host.Bots = 1;
+            host.SetBot(0, 1, 2); // a bot on the guest's (blue) side
+            const double dt = 1.0 / 120.0;
+            var now = 0.0;
+            System.Action tick = () => { now += dt; net.Advance(dt); host.Update(now); client.Update(now); };
+            for (var k = 0; k < 600 && client.Seats.Count != 3; k++) tick();
+            Assert.AreEqual(3, client.Seats.Count);
+            client.RequestRecolour(1, 3); // blue to green
+            for (var k = 0; k < 240; k++) tick();
+            Assert.AreEqual(3, host.TeamColours[1], "the host recoloured that side");
+            Assert.AreEqual(0, host.TeamColours[0], "not the other one");
+            foreach (var s in host.Seats) Assert.AreEqual(s.Team == 1 ? 3 : 0, s.Colour, s.Name + " in their side's colour (bots too)");
+            Assert.AreEqual(1, client.Recolours, "the client was told");
+            Assert.AreEqual(3, client.TeamColours[1]);
+            client.RequestRecolour(3, 0); // not to the other side's colour
+            for (var k = 0; k < 120; k++) tick();
+            Assert.AreEqual(3, host.TeamColours[1], "refused");
+        }
+
         /// <summary>The whole game state survives being turned into bytes and back (for rejoining).</summary>
         [Test]
         public void StateCodecRoundTrips()

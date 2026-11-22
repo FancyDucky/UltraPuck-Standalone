@@ -821,7 +821,7 @@ namespace UltraPuck.Tests
             s.Players[0].Facing = FixVec2.Right;
             s.PuckPos = At(0, -4.8); // beside them, off the wedge (they'd scoop it up)
             s.PuckVel = FixVec2.Zero;
-            s.Rocks = new[] { new Rock { Pos = At(-1.2, -6), Vel = new FixVec2(Fix.Zero, -Fix.One), Owner = 0, Carrier = -1 } };
+            s.Rocks = new[] { new Rock { Pos = At(-1.2, -6), Vel = new FixVec2(Fix.Zero, -Fix.One), Owner = 0, Carrier = -1, Life = Fix.FromInt(10) } };
             for (var t = 0; t < 180; t++) _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             s.PuckPos = At(0, -4.8); s.PuckVel = FixVec2.Zero;
             s.Rocks[0].Pos = At(-1.2, -6); s.Rocks[0].Vel = new FixVec2(Fix.Zero, -Fix.One);
@@ -869,7 +869,7 @@ namespace UltraPuck.Tests
             s.PuckPos = At(0.5, -6);
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(0, s.Rocks.Length, "no rock while carrying the puck");
-            s.Rocks = new[] { new Rock { Pos = At(4, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1 } };
+            s.Rocks = new[] { new Rock { Pos = At(4, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1, Life = Fix.FromInt(10) } };
             var at = s.Players[0].Pos;
             _sim.Step(s, new PlayerInput[2]);
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
@@ -892,14 +892,14 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0, s.Rocks[0].Owner);
             Assert.Greater(s.Rocks[0].Pos.X.ToDouble(), s.Players[0].Pos.X.ToDouble(), "rock ahead of the player");
             // park the rock somewhere known with momentum, then swap (let go of Utility first — it's a press edge)
-            s.Rocks[0] = new Rock { Pos = At(4, -6), Vel = new FixVec2(Fix.FromInt(2), Fix.Zero), Owner = 0, Carrier = -1 };
+            s.Rocks[0] = new Rock { Pos = At(4, -6), Vel = new FixVec2(Fix.FromInt(2), Fix.Zero), Owner = 0, Carrier = -1, Life = Fix.FromInt(10) };
             s.Players[0].Pos = At(0, -6);
             _sim.Step(s, new PlayerInput[2]);
             var before = s.Players[0].Pos;
             var playerVel = new FixVec2(Fix.FromInt(3), Fix.Zero);
             var rockVel = new FixVec2(Fix.FromInt(-5), Fix.Zero);
             s.Players[0].Vel = playerVel;
-            s.Rocks[0] = new Rock { Pos = At(4, -6), Vel = rockVel, Owner = 0, Carrier = -1 };
+            s.Rocks[0] = new Rock { Pos = At(4, -6), Vel = rockVel, Owner = 0, Carrier = -1, Life = Fix.FromInt(10) };
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(1, s.Players[0].Swaps, "teleport claps");
             Assert.AreEqual(At(4, -6), s.Players[0].SwapTo, "swapped to the rock's spot");
@@ -921,7 +921,7 @@ namespace UltraPuck.Tests
             s.Players[0].Facing = FixVec2.Right;
             s.Players[0].Vel = FixVec2.Zero;
             s.Players[0].NoPickup = Fix.Zero;
-            s.Rocks = new[] { new Rock { Pos = At(0.9, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1 } };
+            s.Rocks = new[] { new Rock { Pos = At(0.9, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1, Life = Fix.FromInt(10) } };
             _sim.Step(s, new PlayerInput[2]);
             Assert.AreEqual(0, s.Rocks[0].Carrier, "picked up the rock");
             _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput) });
@@ -938,7 +938,7 @@ namespace UltraPuck.Tests
             s.Carrier = -1;
             s.PuckPos = At(0, -6);
             s.PuckVel = new FixVec2(Fix.FromInt(12), Fix.Zero);
-            s.Rocks = new[] { new Rock { Pos = At(1.2, -6), Vel = new FixVec2(Fix.Zero, Fix.One), Owner = 0, Carrier = -1 } }; // (a still one would be gone)
+            s.Rocks = new[] { new Rock { Pos = At(1.2, -6), Vel = new FixVec2(Fix.Zero, Fix.One), Owner = 0, Carrier = -1, Life = Fix.FromInt(10) } }; // (a still one would be gone)
             for (var t = 0; t < 20; t++) _sim.Step(s, new PlayerInput[2]);
             Assert.Less(s.PuckVel.X.ToDouble(), 12.0, "puck lost speed into the rock");
             Assert.Greater(s.Rocks[0].Vel.X.ToDouble(), 1.0, "rock was shoved");
@@ -956,7 +956,7 @@ namespace UltraPuck.Tests
             s.PuckPos = At(0.8, -6);
             s.PuckVel = FixVec2.Zero;
             // already overlapping the carried puck, flying left (like a Puck Gun bolt)
-            s.Rocks = new[] { new Rock { Pos = At(1.0, -6), Vel = new FixVec2(Fix.FromInt(-14), Fix.Zero), Owner = 1, Carrier = -1 } };
+            s.Rocks = new[] { new Rock { Pos = At(1.0, -6), Vel = new FixVec2(Fix.FromInt(-14), Fix.Zero), Owner = 1, Carrier = -1, Life = Fix.FromInt(10) } };
             _sim.Step(s, new PlayerInput[2]);
             Assert.AreEqual(-1, s.Carrier, "puck was knocked loose");
             Assert.Greater(s.Players[0].NoPickup.ToDouble(), 0.0, "carrier can't scoop it straight back");
@@ -975,7 +975,7 @@ namespace UltraPuck.Tests
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(1, s.Rocks.Length);
             Assert.Greater(s.Players[0].SwapCooldown.ToDouble(), 2.9, "bot cooling down after throw");
-            s.Rocks[0] = new Rock { Pos = At(8, -6), Vel = new FixVec2(Fix.Zero, Fix.One), Owner = 0, Carrier = -1 }; // (a still one would be gone)
+            s.Rocks[0] = new Rock { Pos = At(8, -6), Vel = new FixVec2(Fix.Zero, Fix.One), Owner = 0, Carrier = -1, Life = Fix.FromInt(10) }; // (a still one would be gone)
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(0, s.Players[0].Swaps, "still cooling: no teleport");
             s.Players[0].SwapCooldown = Fix.Zero;
@@ -1001,7 +1001,7 @@ namespace UltraPuck.Tests
             for (var t = 0; t < 120; t++) _sim.Step(s, new PlayerInput[2]);
             Assert.Greater(s.Rocks[0].Vel.Length.ToDouble(), thrown * 0.35, "still gliding");
             // a light bump from the side should shove it a lot (low weight)
-            s.Rocks[0] = new Rock { Pos = At(2, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1 };
+            s.Rocks[0] = new Rock { Pos = At(2, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1, Life = Fix.FromInt(10) };
             s.Players[1].Pos = At(1.2, -6);
             s.Players[1].Vel = new FixVec2(Fix.FromInt(8), Fix.Zero);
             s.Players[1].NoPickup = Fix.FromInt(1); // bump it, don't pick it up
@@ -1129,24 +1129,20 @@ namespace UltraPuck.Tests
         }
 
         [Test]
-        public void ASwapRockIsGoneOnceItStops()
+        public void ASwapRockIsGoneTenSecondsAfterItsThrown()
         {
             var s = Game(0, 1);
             Give(s, 0, "ultrapuck.swap");
             Play(s);
             s.PuckPos = At(14, 0);
-            s.Players[0].Pos = At(-6, -6); s.Players[1].Pos = At(10, 8);
-            s.Rocks = new[] { new Rock { Pos = At(0, -6), Vel = new FixVec2(Fix.FromInt(4), Fix.Zero), Owner = 0, Carrier = -1 } };
-            _sim.Step(s, new PlayerInput[2]);
-            Assert.AreEqual(1, s.Rocks.Length, "still going");
-            s.Rocks[0].Vel = new FixVec2(Fix.Ratio(1, 5), Fix.Zero);
-            _sim.Step(s, new PlayerInput[2]);
-            Assert.AreEqual(0, s.Rocks.Length, "stopped: gone");
-            // a held rock stays, even standing still
-            s.Players[0].NoPickup = Fix.Zero; s.Players[0].Facing = FixVec2.Right; s.Players[0].Vel = FixVec2.Zero;
-            s.Rocks = new[] { new Rock { Pos = At(-5.1, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = 0 } };
-            for (var t = 0; t < 120; t++) _sim.Step(s, new PlayerInput[2]);
-            Assert.AreEqual(1, s.Rocks.Length, "held: stays");
+            s.Players[0].Pos = At(-6, -6); s.Players[0].Facing = FixVec2.Right; s.Players[1].Pos = At(10, 8);
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.AreEqual(1, s.Rocks.Length, "thrown");
+            for (var t = 0; t < 120 * 9; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(1, s.Rocks.Length, "still there after 9 s, even once it's stopped");
+            Assert.Less(s.Rocks[0].Life.ToDouble(), 1.1);
+            for (var t = 0; t < 130; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(0, s.Rocks.Length, "gone after 10 s");
         }
 
         [Test]
@@ -1158,7 +1154,7 @@ namespace UltraPuck.Tests
             s.PuckPos = At(14, 0);
             s.Players[0].Pos = At(-6, -6);
             s.Players[1].Pos = At(4, -6); s.Players[1].Facing = FixVec2.Right;
-            s.Rocks = new[] { new Rock { Pos = At(4.9, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = 1 } };
+            s.Rocks = new[] { new Rock { Pos = At(4.9, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = 1, Life = Fix.FromInt(10) } };
             var at = s.Players[0].Pos;
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(0, s.Players[0].Swaps, "no swap");
@@ -1326,11 +1322,11 @@ namespace UltraPuck.Tests
         }
 
         [Test]
-        public void TeamPlayDoesntCountIfAnOpponentTouchesIt()
+        public void TeamPlayStillCountsIfThePassBrushesPastAnOpponent()
         {
-            // close enough to the puck's path to touch it, too far to pick it up
+            // close enough to the puck's path to touch it, too far to pick it up: still a pass
             var s = Pass("ultrapuck.teamplay", At(-3, -4.05));
-            Assert.AreEqual(0, s.Players[0].Refreshes);
+            Assert.AreEqual(0.8, s.Players[1].Fast.ToDouble(), 1e-3, "the teammate got the boost");
         }
 
         /// <summary>

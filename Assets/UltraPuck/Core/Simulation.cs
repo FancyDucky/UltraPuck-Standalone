@@ -1095,17 +1095,8 @@ namespace UltraPuck.Core
             }
             KeepPuckIn(s, before);
 
-            // a pass doesn't count once an opponent of the passer has touched (or nearly touched) the puck
-            if (s.PassFrom >= 0 && s.PassFrom < s.Players.Length)
-            {
-                var passer = s.Players[s.PassFrom].Team;
-                foreach (var q in s.Players)
-                {
-                    if (q.Team == passer) continue;
-                    var reach = RadiusOf(q) + T.PuckRadius + T.PassTouch;
-                    if ((s.PuckPos - q.Pos).SqrLength < reach * reach) { s.PassFrom = -1; break; }
-                }
-            }
+            // (a pass still counts if it brushes past an opponent or bounces off them: only an opponent taking the puck
+            // ends it, at the pick-up below)
 
             // pick-up: of everyone touching the puck who may pick it up, the closest gets it. An exact tie (two players
             // reaching a still puck on the same tick, as at a face-off) is settled by the match's random numbers,
@@ -1978,7 +1969,7 @@ namespace UltraPuck.Core
             var vel = a.Facing * T.RockSpeed + a.Vel * Fix.Half;
             var rocks = new Rock[s.Rocks.Length + 1];
             Array.Copy(s.Rocks, rocks, s.Rocks.Length);
-            rocks[rocks.Length - 1] = new Rock { Pos = start, Vel = vel, Owner = i, Carrier = -1 };
+            rocks[rocks.Length - 1] = new Rock { Pos = start, Vel = vel, Owner = i, Carrier = -1, Life = T.RockLife };
             s.Rocks = rocks;
             a.NoPickup = Fix.Max(a.NoPickup, T.ShotPickupDelay); // don't scoop your own throw back up
             if (botRun) a.SwapCooldown = T.SwapBotCooldown;
@@ -2087,14 +2078,20 @@ namespace UltraPuck.Core
                 s.Rocks[k] = rk;
             }
 
-            // a loose rock that has (all but) stopped is gone: throw a new one. One being carried stays, moving or not.
-            var stopped = 0;
-            foreach (var rk in s.Rocks) if (rk.Carrier < 0 && rk.Vel.SqrLength < T.RockStopSpeed * T.RockStopSpeed) stopped++;
-            if (stopped > 0)
+            // a rock runs out RockLife after it was thrown (held or not): then it's gone and a new one can be thrown
+            var gone = 0;
+            for (var k = 0; k < s.Rocks.Length; k++)
             {
-                var keep = new Rock[s.Rocks.Length - stopped];
+                var rk = s.Rocks[k];
+                rk.Life -= sub;
+                s.Rocks[k] = rk;
+                if (rk.Life <= Fix.Zero) gone++;
+            }
+            if (gone > 0)
+            {
+                var keep = new Rock[s.Rocks.Length - gone];
                 var j = 0;
-                foreach (var rk in s.Rocks) if (rk.Carrier >= 0 || rk.Vel.SqrLength >= T.RockStopSpeed * T.RockStopSpeed) keep[j++] = rk;
+                foreach (var rk in s.Rocks) if (rk.Life > Fix.Zero) keep[j++] = rk;
                 s.Rocks = keep;
             }
         }

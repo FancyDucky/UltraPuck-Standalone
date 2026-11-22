@@ -120,7 +120,7 @@ namespace UltraPuck.Game
         private readonly Transform[] _slowArrows = new Transform[3];
         private readonly Mesh[] _slowMesh = new Mesh[3], _slowOutline = new Mesh[3];
         private float _slowAlpha;
-        // a Shockwave being held: a thin ring at the size it'll go off at
+        // a Shockwave being held: a see-through blue disc at the size it'll go off at
         private GameObject _shockRing;
         // sped up: the same arrows, pointing up, white, drifting up
         private readonly Transform _fastRoot;
@@ -160,7 +160,7 @@ namespace UltraPuck.Game
             _shadow = Draw.Make("Shadow", Root.transform, Draw.Disc(radius * 1.04f, Palette.Shadow), 7).gameObject;
             _shadow.transform.localPosition = new Vector3(radius * 0.18f, -radius * 0.32f, 0f);
             _boostRing = Draw.Make("Boosted", Root.transform, Draw.Ring(radius * 1.55f, radius * 1.72f, 1f, new Color(1f, 0.62f, 0.3f, 0.85f)), 9).gameObject;
-            _shockRing = Draw.Make("ShockCharge", Root.transform, Draw.Ring(0.975f, 1f, 1f, new Color(0.55f, 0.85f, 1f, 0.45f), null, 72), 9).gameObject;
+            _shockRing = Draw.Make("ShockCharge", Root.transform, Draw.Disc(1f, new Color(0.3f, 0.6f, 1f, 0.22f), 72), 6).gameObject;
             _shockRing.SetActive(false);
 
             _slowRoot = new GameObject("Slowed").transform;
@@ -189,8 +189,8 @@ namespace UltraPuck.Game
             _fastRoot.SetParent(Root.transform, false);
             for (var k = 0; k < 3; k++)
             {
-                // an up arrow: the slow arrow turned over
-                var w = radius * 0.22f;
+                // an up arrow: the slow arrow turned over, a bit bigger so it stands out
+                var w = radius * 0.3f;
                 var pts = new List<Vector2>
                 {
                     new Vector2(-w * 0.45f, -w * 1.4f), new Vector2(-w * 0.45f, 0f), new Vector2(-w * 1.1f, 0f), new Vector2(0f, w * 1.1f),
@@ -200,9 +200,9 @@ namespace UltraPuck.Game
                 _fastArrows[k] = Draw.Make("Arrow" + k, _fastRoot, _fastMesh[k], 25).transform;
                 var centre = new Vector2(0f, -w * 0.15f);
                 var outline = new List<Vector2>();
-                foreach (var p in pts) outline.Add(centre + (p - centre) * 1.45f);
+                foreach (var p in pts) outline.Add(centre + (p - centre) * 1.3f);
                 _fastOutline[k] = Draw.Polygon(outline, new Color(0f, 0f, 0f, 0f));
-                Draw.Make("Outline", _fastArrows[k], _fastOutline[k], 24);
+                Draw.Make("Edge", _fastArrows[k], _fastOutline[k], 24);
             }
             _fastRoot.gameObject.SetActive(false);
 
@@ -451,9 +451,9 @@ namespace UltraPuck.Game
                     var phase = (t * 1.3f + k / 3f) % 1f;
                     var x = (k - 1) * _r * 0.75f;
                     _fastArrows[k].localPosition = new Vector3(x, _r * (-0.9f + 1.6f * phase), 0f);
-                    var a = Mathf.Sin(phase * Mathf.PI) * 0.95f * _fastAlpha;
+                    var a = Mathf.Min(1f, 0.3f + 1.4f * Mathf.Sin(phase * Mathf.PI)) * _fastAlpha; // solid most of the way
                     Draw.Recolor(_fastMesh[k], new Color(1f, 1f, 1f, a));
-                    Draw.Recolor(_fastOutline[k], new Color(0f, 0f, 0f, a));
+                    Draw.Recolor(_fastOutline[k], new Color(0f, 0f, 0f, 0.7f * a));
                 }
 
             // stunned: stars circling
@@ -1296,7 +1296,25 @@ namespace UltraPuck.Game
 
         public RockViews(Transform parent) { _parent = parent; }
 
-        public void Show(GameState s, float radius, System.Func<int, int> symbolOf, System.Func<int, Color> colourOf, System.Func<int, bool> mine = null)
+        private readonly List<Mesh> _dims = new List<Mesh>();
+
+        /// <summary>
+        /// How dark a rock is while it's running out: nothing until <paramref name="from"/> seconds are left, then flashing
+        /// dim, about 1.5 times a second at first and 8 at the end.
+        /// </summary>
+        private static float FlashDim(float left, float from)
+        {
+            if (left >= from || from <= 0f) return 0f;
+            left = Mathf.Max(0f, left);
+            // flashes so far: the rate goes from 1.5 to 8 a second as the time runs out (its integral, so it speeds up smoothly)
+            float hi = 8f, lo = 1.5f;
+            var gone = from - left;
+            var turns = hi * gone - (hi - lo) / (2f * from) * (from * from - left * left);
+            var on = 0.5f - 0.5f * Mathf.Cos(turns * Mathf.PI * 2f);
+            return 0.65f * on;
+        }
+
+        public void Show(GameState s, float radius, System.Func<int, int> symbolOf, System.Func<int, Color> colourOf, System.Func<int, bool> mine = null, float flashFrom = 3f)
         {
             for (var k = 0; k < s.Rocks.Length; k++)
             {
@@ -1317,11 +1335,15 @@ namespace UltraPuck.Game
                     Draw.Make("Rim", go.transform, Draw.Disc(radius, rim), 11);
                     Draw.Make("Body", go.transform, Draw.Disc(radius * 0.82f, body), 12);
                     Draw.Make("Symbol", go.transform, Symbols.Mesh(symbol, radius * 0.95f, Color.white), 13);
+                    while (_dims.Count <= k) _dims.Add(null);
+                    _dims[k] = Draw.Disc(radius * 1.02f, new Color(0f, 0f, 0f, 0f));
+                    Draw.Make("Dim", go.transform, _dims[k], 14);
                     _pool[k] = go;
                     _keys[k] = key;
                 }
                 _pool[k].SetActive(true);
                 _pool[k].transform.localPosition = new Vector3(rk.Pos.X.ToFloat(), rk.Pos.Y.ToFloat(), 0f);
+                if (k < _dims.Count && _dims[k] != null) Draw.Recolor(_dims[k], new Color(0f, 0f, 0f, FlashDim(rk.Life.ToFloat(), flashFrom)));
             }
             for (var k = s.Rocks.Length; k < _pool.Count; k++) if (_pool[k] != null && _pool[k].activeSelf) _pool[k].SetActive(false);
 

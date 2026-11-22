@@ -312,7 +312,7 @@ namespace UltraPuck.Game
             var anyNot = false;
             foreach (var s in local.Slots) { if (s.Demo) continue; if (s.Ready) anyReady = true; else anyNot = true; }
             if (local.HumanCount == 0) return "{join} Join      Hold {leave} Leave      {settings} " + "Options";
-            var notReady = "{join} Ready      {side} Switch team      {shape} Symbol      {leave} Leave seat";
+            var notReady = "{join} Ready      {side} Switch team" + (LocalPlayers.TeamColourButtons ? "      {updown} Team colour" : "") + "      {shape} Symbol      {leave} Leave seat";
             var ready = canEditBots && local.Bots != null
                 ? "{nav} Pick a bot      {side} Its team      {shape} Its symbol      {bots} Remove / add bot      {leave} Not ready"
                 : "{leave} Not ready";

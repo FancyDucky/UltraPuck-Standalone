@@ -1211,6 +1211,9 @@ namespace UltraPuck.Game
             _mode = Mode.Online;
             // the host's people work on the host's bots; on someone else's game there are none to change
             _local.Bots = session.IsHost ? new SessionBots(session) : null;
+            _local.OnlineSides = () => session.TeamColours;
+            _local.OnlineRecolour = session.RequestRecolour;
+            _seenRecolours = 0;
             _mainMenu.Show(MainMenu.Page.OnlineLobby);
             _onlineMatchId = -1;
             OnlineCardPicks();
@@ -1231,6 +1234,7 @@ namespace UltraPuck.Game
             _mainMenu.Session = null;
             _local.Slots.Clear();
             _local.Bots = new LocalPlayers.SlotBots(_local);
+            _local.OnlineSides = null; _local.OnlineRecolour = null;
             LocalCardPicks();
             _menus.Close();
             _mode = Mode.Menu;
@@ -1252,6 +1256,7 @@ namespace UltraPuck.Game
         }
 
         private int _onlineMatchId = -1;
+        private int _seenRecolours;
         private bool _sampleFailed;
         private float _onlineAcc;
 
@@ -1276,6 +1281,14 @@ namespace UltraPuck.Game
                 {
                     _local.LobbyUpdate();
                     if (_local.LeaveLobbyHeld()) { Sound.Back(); LeaveOnline(null); return; }
+                }
+                // a side got a new colour (anyone may ask): put this PC's players in their side's colour
+                if (s.Recolours != _seenRecolours)
+                {
+                    _seenRecolours = s.Recolours;
+                    for (var k = 0; k < _local.Slots.Count; k++)
+                        foreach (var seat in s.Seats)
+                            if (!seat.Bot && seat.Peer == s.MyPeer && seat.Local == k) { _local.Slots[k].Colour = s.TeamColours[seat.Team & 1]; break; }
                 }
                 var mine = new List<KeyValuePair<string, int>>();
                 for (var k = 0; k < _local.Slots.Count; k++)
@@ -2032,7 +2045,7 @@ namespace UltraPuck.Game
             if (_seenShocks[i] >= 0 && p.Shocks > _seenShocks[i] && Settings.HitEffects)
             {
                 // thin expanding ring stuck to the caster, sized to the real hit radius
-                _effects.Shockwave(_players[i].Root.transform, p.ShockRadius.ToFloat(), new Color(0.55f, 0.85f, 1f), 0.35f);
+                _effects.Shockwave(_players[i].Root.transform, p.ShockRadius.ToFloat(), new Color(1f, 0.25f, 0.22f), 0.35f);
                 _shake = Mathf.Max(_shake, 0.22f);
             }
             if (_seenSwaps[i] >= 0 && p.Swaps > _seenSwaps[i] && Settings.HitEffects)
@@ -2160,7 +2173,7 @@ namespace UltraPuck.Game
             }
             _shots.Show(b, _sim.T.ShotRadius.ToFloat());
             _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
-            _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team), IsLocalPerson);
+            _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team), IsLocalPerson, _sim.T.RockFlash.ToFloat());
             _ice.Show(b, _sim.T.IceRadius.ToFloat());
             _stones.Show(b, _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.StoneLife.ToFloat());
             // a puck that just jumped (face-off) shouldn't slide across the rink

@@ -174,8 +174,9 @@ namespace UltraPuck.Core
         public Fix RockRadius = Fix.Ratio(2, 5), RockWeight = Fix.Ratio(12, 100), RockDrag = Fix.Ratio(326, 1000), RockSpeed = Fix.Ratio(69, 4);
         /// <summary>Bots wait this long between Swap uses so they don't spam throw/teleport.</summary>
         public Fix SwapBotCooldown = Fix.FromInt(3);
-        /// <summary>A loose Swap rock slower than this has stopped: it's gone (so it can't be left as a safe spot to swap back to).</summary>
-        public Fix RockStopSpeed = Fix.Half;
+        /// <summary>A Swap rock disappears this long after it's thrown (flashing for the last <see cref="RockFlash"/>), so it
+        /// can't be left as a safe spot to swap back to. (<see cref="RockStopSpeed"/> is from before, unused.)</summary>
+        public Fix RockLife = Fix.FromInt(10), RockFlash = Fix.FromInt(3), RockStopSpeed = Fix.Half;
 
         // cards
         /// <summary>After every goal, the team that conceded picks a card (needs a card library).</summary>
