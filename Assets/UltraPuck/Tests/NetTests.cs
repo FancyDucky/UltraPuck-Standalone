@@ -99,6 +99,64 @@ namespace UltraPuck.Tests
                 " (longest " + client.Match.LongestRewind + "), stalls " + stalls + ", score " + a.Score[0] + "-" + a.Score[1] + ", cards " + a.Players[0].Cards.Length + "/" + a.Players[1].Cards.Length);
         }
 
+        /// <summary>
+        /// Six PCs drawing about 600 frames a second over a laggy network: controls still go out at the fixed rate
+        /// (not once a frame), the messages stay small, nobody waits much, and everyone ends with the same game.
+        /// </summary>
+        [Test, Timeout(300000)]
+        public void SixPcsAtAHighFrameRateSendAtTheFixedRate()
+        {
+            var map = Rink();
+            var cards = Cards();
+            System.Func<Simulation> make = () => new Simulation(map, null, cards);
+            var net = new FakeNetwork(66) { Latency = 0.08, Jitter = 0.03, Loss = 0.05 };
+            var pcs = new List<NetSession> { NetSession.Host(net.Add(), make, 5u) };
+            for (var k = 1; k < 6; k++) pcs.Add(NetSession.Join(net.Add(), make, 5u));
+            for (var k = 0; k < 6; k++) pcs[k].SetLocalPlayers(new[] { new KeyValuePair<string, int>("P" + k, k & 1) });
+            var host = pcs[0];
+
+            const int frames = 5; // updates a tick: 600 fps
+            const double dt = 1.0 / 120.0 / frames;
+            var now = 0.0;
+            System.Action frame = () => { now += dt; net.Advance(dt); foreach (var s in pcs) s.Update(now); };
+            for (var k = 0; k < 600 * frames && pcs.Exists(s => s.Current != NetSession.Stage.Lobby || s.Seats.Count != 6); k++) frame();
+            Assert.IsFalse(pcs.Exists(s => s.Seats.Count != 6), "everyone got in");
+            host.StartMatch(4u);
+            for (var k = 0; k < 600 * frames && pcs.Exists(s => s.Current != NetSession.Stage.Playing); k++) frame();
+            Assert.IsFalse(pcs.Exists(s => s.Current != NetSession.Stage.Playing), "everyone started");
+
+            long msgs = host.MessagesSent, bytes = host.BytesSent;
+            var stalls = 0;
+            const int seconds = 10;
+            for (var k = 0; k < seconds * 120 * frames; k++)
+            {
+                frame();
+                if (k % frames != frames - 1) continue;
+                for (var i = 0; i < pcs.Count; i++)
+                    if (!pcs[i].Step(new[] { Person(20 + i, pcs[i].Match.LocalInputTick) })) stalls++;
+            }
+            var perLink = (host.MessagesSent - msgs) / (double)seconds / 5;
+            var kbPerLink = (host.BytesSent - bytes) / (double)seconds / 5 / 1024;
+            TestContext.WriteLine("host: " + perLink.ToString("0") + " messages a second per PC, " + kbPerLink.ToString("0.0") + " KB/s per PC, stalls " + stalls);
+            Assert.Less(perLink, NetSession.SendRate * 1.2, "a fixed rate, not once a frame");
+            Assert.Less(kbPerLink, 100, "small messages");
+            Assert.Less(stalls, seconds * 120 * 6 / 10, "hardly any waiting");
+
+            var settle = host.Match.Tick;
+            for (var k = 0; k < 3000 * frames && pcs.Exists(s => s.Match.Confirmed < settle); k++)
+            {
+                frame();
+                if (k % frames == frames - 1) foreach (var s in pcs) s.Step(new[] { default(PlayerInput) });
+            }
+            for (var k = 0; k <= Rollback.RewindEvery; k++) { for (var f = 0; f < frames; f++) frame(); foreach (var s in pcs) s.Step(new[] { default(PlayerInput) }); }
+            var h = host.Match.SavedAt(settle).Checksum();
+            foreach (var s in pcs)
+            {
+                Assert.AreEqual(h, s.Match.SavedAt(settle).Checksum(), "everyone has the same game");
+                Assert.AreEqual(-1, s.DesyncTick, s.Problem);
+            }
+        }
+
         /// <summary>Three PCs (two through the host); someone leaves and the match goes on, then they come back to their seats.</summary>
         [Test, Timeout(300000)]
         public void ThreePcsThroughTheHost()

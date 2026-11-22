@@ -213,10 +213,11 @@
       "color": "#8FD3F5",
       "flavor": "Friends call me Snow Miser",
       "face": [
-        { "label": "Enemy on Ice", "value": "[good]-33%[/]" },
-        { "label": "Trail Life", "value": "[good]3 s[/]" }
+        { "label": "Teammates on Ice", "value": "[good]+10%[/]" },
+        { "label": "Enemies on Ice", "value": "[good]-10%[/]" },
+        { "label": "Trail Life", "value": "[good]9 s[/]" }
       ],
-      "text": "[note]Picking up the puck ends the trail there.[/]",
+      "text": "[note]Every shot lays it. Picking up the puck ends the trail there.[/]",
       "stats": { "IceTrail": "+1" }
     },
     {
@@ -267,12 +268,27 @@
       "max": 1,
       "minTeam": 2,
       "color": "#4DC78C",
-      "flavor": "Your passes reset everyone.",
+      "flavor": "Pass it on, speed it up.",
       "face": [
-        { "label": "On Pass", "value": "[good]team cooldowns[/]" }
+        { "label": "Speed on Pass", "value": "[good]+80%[/]" },
+        { "label": "Lasts", "value": "[good]3 s[/]" }
       ],
-      "text": "[note]Doesn't count if an opponent touches the puck first.[/]",
-      "stats": { "PassRefresh": "+1", "PassRefreshTeam": "+1" }
+      "text": "[note]For you and the teammate you passed to. Not if an opponent touches the puck first.[/]",
+      "stats": { "PassSpeed": "+1" }
+    },
+    {
+      "id": "ultrapuck.stonewall",
+      "name": "Stone Wall",
+      "tier": "A",
+      "max": 1,
+      "color": "#9A9AA6",
+      "flavor": "Nobody's getting through.",
+      "face": [
+        { "label": "Full Charge", "value": "[good]wall behind the puck[/]" },
+        { "label": "Lasts", "value": "[good]4 s[/]" }
+      ],
+      "text": "[note]Everyone bumps into it, even the puck.[/]",
+      "stats": { "StoneWall": "+1" }
     }
   ]
 }

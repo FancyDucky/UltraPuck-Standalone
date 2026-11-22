@@ -19,8 +19,16 @@ namespace UltraPuck.Game
         private string _error;
 
         /// <summary>A name floating over a player (filled in by GameRunner each frame).</summary>
-        public struct Tag { public Vector3 World; public string Name; public int Team; }
+        public struct Tag { public Vector3 World; public string Name; public int Team; public int Owner; }
         public readonly System.Collections.Generic.List<Tag> Tags = new System.Collections.Generic.List<Tag>();
+        /// <summary>
+        /// What a name tag shouldn't hide: each player (x, y, radius, player number) and the puck (player number -1),
+        /// in the world. A tag over any of them (but its own player) fades out.
+        /// </summary>
+        public readonly System.Collections.Generic.List<Vector4> Under = new System.Collections.Generic.List<Vector4>();
+        private readonly System.Collections.Generic.Dictionary<int, float> _tagAlpha = new System.Collections.Generic.Dictionary<int, float>();
+        private float _tagsAt;
+        private const float TagFaded = 0.22f, TagFull = 0.85f, TagFadeSpeed = 8f;
         public Camera Cam;
         /// <summary>The local lobby: the rink being played on (null when there's only one).</summary>
         public string MapName;
@@ -472,13 +480,39 @@ namespace UltraPuck.Game
             var k = Screen.height / 720f * Settings.UiScale;
             // small, plain text just above the check and cooldown bars (no box: it shouldn't cover anything)
             var style = Ui.Font(12, true, TextAnchor.LowerCenter);
+            var dt = Mathf.Clamp(Time.unscaledTime - _tagsAt, 0f, 0.1f);
+            _tagsAt = Time.unscaledTime;
             foreach (var t in Tags)
             {
                 if (string.IsNullOrEmpty(t.Name)) continue;
                 var sp = Cam.WorldToScreenPoint(t.World);
                 var p = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
-                Ui.Label(new Rect(p.x - 100f, p.y - 18f, 200f, 18f), t.Name, style, new Color(1f, 1f, 1f, 0.85f));
+                // fade while another player or the puck is under the text (so a crowd round the puck stays readable)
+                var w = style.CalcSize(new GUIContent(t.Name)).x;
+                var box = new Rect(p.x - w * 0.5f - 2f, p.y - 16f, w + 4f, 16f);
+                var target = Covers(box, t.Owner, k) ? TagFaded : TagFull;
+                float a;
+                if (!_tagAlpha.TryGetValue(t.Owner, out a)) a = target;
+                a = Mathf.MoveTowards(a, target, TagFadeSpeed * dt);
+                _tagAlpha[t.Owner] = a;
+                Ui.Label(new Rect(p.x - 100f, p.y - 18f, 200f, 18f), t.Name, style, new Color(1f, 1f, 1f, a));
             }
+        }
+
+        /// <summary>A name tag's box (UI units) is over a player other than <paramref name="owner"/>, or the puck.</summary>
+        private bool Covers(Rect box, int owner, float k)
+        {
+            foreach (var u in Under)
+            {
+                if ((int)u.w == owner && owner >= 0) continue;
+                var c = Cam.WorldToScreenPoint(new Vector3(u.x, u.y, 0f));
+                var edge = Cam.WorldToScreenPoint(new Vector3(u.x + u.z, u.y, 0f));
+                var centre = new Vector2(c.x / k, (Screen.height - c.y) / k);
+                var r = Mathf.Abs(edge.x - c.x) / k;
+                var near = new Vector2(Mathf.Clamp(centre.x, box.xMin, box.xMax), Mathf.Clamp(centre.y, box.yMin, box.yMax));
+                if ((centre - near).sqrMagnitude <= r * r) return true;
+            }
+            return false;
         }
     }
 }

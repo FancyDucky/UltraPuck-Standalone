@@ -123,6 +123,10 @@ namespace UltraPuck.Core
         public int GhostShot;
         /// <summary>Cannon Ball: a full charge keeps going through whoever on the other team catches it.</summary>
         public int CannonBall;
+        /// <summary>Team Play: a clean pass to a teammate speeds you both up.</summary>
+        public int PassSpeed;
+        /// <summary>Stone Wall: a full charge raises a wall along the puck's path.</summary>
+        public int StoneWall;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
@@ -136,6 +140,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
             GameState.Mix(ref h, Swap); GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
+            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall);
         }
     }
 
@@ -226,6 +231,10 @@ namespace UltraPuck.Core
         public int Goals, Assists, Saves, Bumps;
         /// <summary>Cannon Ball: seconds left of being carried off by a caught shot (little control, little drag).</summary>
         public Fix Shoved;
+        /// <summary>Cannon Ball: who shot the ball that's carrying this player off (-1 = nobody).</summary>
+        public int ShovedBy = -1;
+        /// <summary>Sped up (a Team Play pass, your team's Ice Trail): for how long, and by how much (0.8 = 80% faster).</summary>
+        public Fix FastTime, Fast;
 
         public PlayerState Clone()
         {
@@ -261,6 +270,18 @@ namespace UltraPuck.Core
         public Fix Melt;
         /// <summary>Still being laid behind the puck (not melting yet).</summary>
         public bool Laying;
+    }
+
+    /// <summary>
+    /// A piece of a Stone Wall: a short straight wall (as thick as the rink's) that everything bumps into, until
+    /// <see cref="Life"/> runs out and it crumbles. Pieces of one wall share <see cref="Wall"/>, oldest first.
+    /// </summary>
+    [Serializable]
+    public struct Stone
+    {
+        public FixVec2 A, B;
+        public Fix Life;
+        public int Wall;
     }
 
     /// <summary>A pylon goalie: a solid dummy in front of a net.</summary>
@@ -332,6 +353,8 @@ namespace UltraPuck.Core
         public int PuckHiddenTeam = -1;
         /// <summary>Cannon Ball: the team whose full-charge shot this is (-1: none); an opponent catching it is knocked back.</summary>
         public int CannonTeam = -1;
+        /// <summary>Cannon Ball: the player who shot it.</summary>
+        public int CannonFrom = -1;
         /// <summary>A timed match: time left on the clock (counts down only while the puck is in play).</summary>
         public Fix Clock;
         /// <summary>A timed match ended level: the next goal wins.</summary>
@@ -354,6 +377,11 @@ namespace UltraPuck.Core
         public Fix IceAge;
         /// <summary>Ice Trail: number of the newest trail.</summary>
         public int IceTrails;
+        /// <summary>Stone Wall: the walls standing, and the one being raised behind the puck (time and length left, its end, its way).</summary>
+        public Stone[] Stones = new Stone[0];
+        public Fix StoneLaying, StoneLeft;
+        public FixVec2 StoneTip, StoneDir;
+        public int StoneWalls;
         /// <summary>Team Play: who last let go of the puck, while it hasn't been touched by an opponent since (-1 = no pass going).</summary>
         public int PassFrom = -1;
 
@@ -367,6 +395,7 @@ namespace UltraPuck.Core
             s.Pylons = (Pylon[])Pylons.Clone();
             s.Rocks = (Rock[])Rocks.Clone();
             s.Ice = (IcePoint[])Ice.Clone();
+            s.Stones = (Stone[])Stones.Clone();
             return s;
         }
 
@@ -390,6 +419,8 @@ namespace UltraPuck.Core
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); Mix(ref h, py.Radius); }
             foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); }
             Mix(ref h, IceLaying); Mix(ref h, IceAge); Mix(ref h, IceTrails);
+            Mix(ref h, CannonFrom); Mix(ref h, StoneLaying); Mix(ref h, StoneLeft); Mix(ref h, StoneTip); Mix(ref h, StoneDir); Mix(ref h, StoneWalls);
+            foreach (var st in Stones) { Mix(ref h, st.A); Mix(ref h, st.B); Mix(ref h, st.Life); Mix(ref h, st.Wall); }
             foreach (var ice in Ice) { Mix(ref h, ice.Pos); Mix(ref h, ice.Trail); Mix(ref h, ice.Team); Mix(ref h, ice.Slow); Mix(ref h, ice.Melt); Mix(ref h, ice.Laying ? 1 : 0); }
             foreach (var sc in Score) Mix(ref h, sc);
             foreach (var p in Players)
@@ -406,6 +437,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);
                 Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps); Mix(ref h, p.Shoved);
+                Mix(ref h, p.ShovedBy); Mix(ref h, p.FastTime); Mix(ref h, p.Fast);
             }
             return h;
         }

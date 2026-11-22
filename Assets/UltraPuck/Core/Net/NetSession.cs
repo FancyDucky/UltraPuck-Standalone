@@ -17,12 +17,23 @@ namespace UltraPuck.Core.Net
     /// </summary>
     public sealed class NetSession : IDisposable
     {
-        public const int Version = 47;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card. 43: swapping onto bots is part of the game (input bits 64/128, Pilot), mid-match bots (Pick 201/202), match stats, Puck Gun knockback (no stun, 1 s), 30% slower while charging, puck drag 7/11, bot pass/positioning, Team Vote people draw first, lobby/start messages ordered. 44: countdown waits 1.5 s after picks, leave/rejoin mid-match (Away / Rejoin messages, state hand-over), host kick-off and score commands (Pick 203-207). 45: bot-run players wait between Swap uses, bots throw a carried teammate at the puck. 46: Power Shot = full charge quick shot (QuickShotFull), Invisible Quick Shot (PuckHidden), Cannon Ball (CannonTeam). 47: Cannon Ball shoves the catcher along the shot (Shoved), no hit lag
+        public const int Version = 49;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card. 43: swapping onto bots is part of the game (input bits 64/128, Pilot), mid-match bots (Pick 201/202), match stats, Puck Gun knockback (no stun, 1 s), 30% slower while charging, puck drag 7/11, bot pass/positioning, Team Vote people draw first, lobby/start messages ordered. 44: countdown waits 1.5 s after picks, leave/rejoin mid-match (Away / Rejoin messages, state hand-over), host kick-off and score commands (Pick 203-207). 45: bot-run players wait between Swap uses, bots throw a carried teammate at the puck. 46: Power Shot = full charge quick shot (QuickShotFull), Invisible Quick Shot (PuckHidden), Cannon Ball (CannonTeam). 47: Cannon Ball shoves the catcher along the shot (Shoved), no hit lag. 48: Swap rock gone once stopped / no swap to a held rock, Ice Trail on every shot (teammates +, 3x longer), Team Play = pass speed boost (Fast), Cannon Ball shove into your own net scores (ShovedBy), Stone Wall (Stones). 49: Same Draw picking (rules bit 16), Stone Wall up to 30 long / 3 s
         public const int MaxPlayers = 8;
         /// <summary>Your own controls take effect this many ticks later (25 ms at 120 a second), which hides a little lag for free.</summary>
         public const int InputDelay = 3;
         private const double HelloEvery = 0.5, LobbyEvery = 0.5, PingEvery = 0.5, Timeout = 8, ConnectTimeout = 10;
         private const int ChecksumEvery = 120, MaxSendTicks = 60;
+        /// <summary>
+        /// Controls go out this many times a second, whatever the frame rate (they only change 120 times a second).
+        /// Sending every frame swamped the connections at high frame rates with many players.
+        /// </summary>
+        public const int SendRate = 120;
+        /// <summary>
+        /// Each message carries a player's newest controls back this many ticks, in case some messages get lost.
+        /// Older ones still not confirmed (a long gap) are sent again now and then (<see cref="RepairEvery"/>).
+        /// </summary>
+        public const int ResendTicks = 16;
+        private const double RepairEvery = 0.2;
 
         public enum Stage { Connecting, Lobby, Playing, Closed }
 
@@ -71,7 +82,18 @@ namespace UltraPuck.Core.Net
         private readonly ITransport _t;
         private readonly Func<Simulation> _makeSim;
         private readonly uint _fingerprint;
-        private double _now, _lastHello, _lastLobby, _started, _lastStartToAll;
+        private double _now, _lastHello, _lastLobby, _started, _lastStartToAll, _nextSend;
+
+        /// <summary>Everything this PC has sent: messages and bytes (for the network line in the log).</summary>
+        public long MessagesSent { get; private set; }
+        public long BytesSent { get; private set; }
+
+        private void Send(int conn, byte[] data)
+        {
+            MessagesSent++;
+            BytesSent += data.Length;
+            _t.Send(conn, data);
+        }
         /// <summary>Client: the newest lobby message seen (older ones arriving late are ignored).</summary>
         private int _theirLobby = int.MinValue;
         private int _nextPeer = 1, _lobbyVersion, _seenLobbyVersion = -1;
@@ -93,6 +115,7 @@ namespace UltraPuck.Core.Net
             public readonly List<int> Rejoined = new List<int>();
             public double RejoinSent = -10;
             public readonly int[] Acked = new int[8];
+            public double LastRepair;
             public readonly List<KeyValuePair<string, int>> Players = new List<KeyValuePair<string, int>>();
             public Link() { for (var k = 0; k < Acked.Length; k++) Acked[k] = -1; }
         }
@@ -345,7 +368,7 @@ namespace UltraPuck.Core.Net
                 if (_now - _lastHello >= HelloEvery)
                 {
                     _lastHello = _now;
-                    _t.Send(0, new Writer(Msg.Hello).I32(Version).U32(_fingerprint).ToArray());
+                    Send(0, new Writer(Msg.Hello).I32(Version).U32(_fingerprint).ToArray());
                 }
                 if (_started == 0) _started = _now;
                 if (_now - _started > ConnectTimeout) Close("No answer from the host. Check the address, and that the host's firewall lets the game through.");
@@ -359,7 +382,7 @@ namespace UltraPuck.Core.Net
                 if (l.Peer < 0) continue;
                 if (l.LastHeard == 0) l.LastHeard = _now;
                 if (_now - l.LastHeard > Timeout) { gone.Add(l); continue; }
-                if (_now - l.LastPing >= PingEvery) { l.LastPing = _now; _t.Send(l.Conn, new Writer(Msg.Ping).F32((float)_now).ToArray()); }
+                if (_now - l.LastPing >= PingEvery) { l.LastPing = _now; Send(l.Conn, new Writer(Msg.Ping).F32((float)_now).ToArray()); }
             }
             foreach (var l in gone) Lost(l, "lost connection");
 
@@ -378,7 +401,12 @@ namespace UltraPuck.Core.Net
 
             if (Current == Stage.Playing && Match != null)
             {
-                foreach (var l in _links.Values) if (l.Peer >= 0) SendInputs(l);
+                // a fixed rate, not every frame (catching up after a slow frame, but never more than one at once)
+                if (_now >= _nextSend - 0.25 / SendRate)
+                {
+                    _nextSend = Math.Max(_nextSend + 1.0 / SendRate, _now - 1.0 / SendRate);
+                    foreach (var l in _links.Values) if (l.Peer >= 0) SendInputs(l);
+                }
                 Checksums();
             }
         }
@@ -400,12 +428,12 @@ namespace UltraPuck.Core.Net
                     else if (fp != _fingerprint) why = "The host has different maps or cards. Make sure you both have the same game files and mods.";
                     else if (Current == Stage.Playing && !AnyAway()) why = "That game has already started. Ask the host to go back to the lobby.";
                     else if (Seats.Count >= MaxPlayers) why = "That game is full.";
-                    if (why != null) { _t.Send(conn, new Writer(Msg.Refuse).Str(why).ToArray()); _t.Drop(conn); return; }
+                    if (why != null) { Send(conn, new Writer(Msg.Refuse).Str(why).ToArray()); _t.Drop(conn); return; }
                     l = new Link { Conn = conn, Peer = _nextPeer++, LastHeard = _now, MidMatch = Current == Stage.Playing };
                     _links[conn] = l;
                     if (!l.MidMatch) RebuildSeats(); // (mid-match the seats stay put: they take back an empty one)
                 }
-                _t.Send(conn, new Writer(Msg.Welcome).U8(l.Peer).ToArray());
+                Send(conn, new Writer(Msg.Welcome).U8(l.Peer).ToArray());
                 return;
             }
             if (l == null) return;
@@ -461,7 +489,7 @@ namespace UltraPuck.Core.Net
                     Compare(tick);
                     break;
                 case Msg.Ping:
-                    _t.Send(conn, new Writer(Msg.Pong).F32(r.F32()).ToArray());
+                    Send(conn, new Writer(Msg.Pong).F32(r.F32()).ToArray());
                     break;
                 case Msg.Pong:
                     var sent = r.F32();
@@ -518,7 +546,7 @@ namespace UltraPuck.Core.Net
             if (MyPeer < 0) return;
             var w = new Writer(Msg.Players).U8(_localPlayers.Count);
             foreach (var p in _localPlayers) w.Str(p.Key).U8(p.Value);
-            _t.Send(0, w.ToArray());
+            Send(0, w.ToArray());
         }
 
         private void WriteSeats(Writer w)
@@ -550,7 +578,7 @@ namespace UltraPuck.Core.Net
             WriteSeats(w);
             w.U8(_map);
             var bytes = w.ToArray();
-            foreach (var l in _links.Values) if (l.Peer > 0) _t.Send(l.Conn, bytes);
+            foreach (var l in _links.Values) if (l.Peer > 0) Send(l.Conn, bytes);
         }
 
         private void ReadLobby(Reader r)
@@ -578,7 +606,7 @@ namespace UltraPuck.Core.Net
             w.U8(_map);
             w.Bytes(Rules);
             var bytes = w.ToArray();
-            foreach (var l in _links.Values) if (l.Peer > 0 && !l.MidMatch && (everyone || !l.StartAcked)) _t.Send(l.Conn, bytes);
+            foreach (var l in _links.Values) if (l.Peer > 0 && !l.MidMatch && (everyone || !l.StartAcked)) Send(l.Conn, bytes);
         }
 
         /// <summary>Which players' controls <paramref name="l"/> needs from us.</summary>
@@ -596,15 +624,27 @@ namespace UltraPuck.Core.Net
             var blocks = 0;
             var players = Match.Players;
             var body = new List<int>();
+            var repair = _now - l.LastRepair >= RepairEvery;
+            var repaired = false;
             for (var p = 0; p < players; p++)
             {
                 if (!SendsTo(l, p)) continue;
-                var from = Math.Max(l.Acked[p] + 1, Match.Tick - Rollback.Ring / 2);
-                var to = Math.Min(Match.KnownUpTo(p), from + MaxSendTicks - 1);
-                if (to < from) continue;
+                var oldest = Math.Max(l.Acked[p] + 1, Match.Tick - Rollback.Ring / 2);
+                var to = Match.KnownUpTo(p);
+                if (to < oldest) continue;
+                // the newest few: every message (so a lost message or two costs nothing)
+                var from = Math.Max(oldest, to - ResendTicks + 1);
                 body.Add(p); body.Add(from); body.Add(to);
                 blocks++;
+                // older ones they haven't confirmed: now and then (usually the confirmation is just still on its way)
+                if (from > oldest && repair)
+                {
+                    body.Add(p); body.Add(oldest); body.Add(Math.Min(from - 1, oldest + MaxSendTicks - 1));
+                    blocks++;
+                    repaired = true;
+                }
             }
+            if (repaired) l.LastRepair = _now;
             w.U8(blocks);
             for (var b = 0; b < blocks; b++)
             {
@@ -615,7 +655,7 @@ namespace UltraPuck.Core.Net
             // acks: how far we have each player's controls
             w.U8(players);
             for (var p = 0; p < players; p++) w.I32(Match.KnownUpTo(p));
-            _t.Send(l.Conn, w.ToArray());
+            Send(l.Conn, w.ToArray());
         }
 
         private void ReadInputs(Link l, Reader r)
@@ -672,7 +712,7 @@ namespace UltraPuck.Core.Net
                 }
                 if (l.Rejoined.Count == 0)
                 {
-                    _t.Send(l.Conn, new Writer(Msg.Refuse).Str("That game has already started and every seat is taken. Ask the host to go back to the lobby.").ToArray());
+                    Send(l.Conn, new Writer(Msg.Refuse).Str("That game has already started and every seat is taken. Ask the host to go back to the lobby.").ToArray());
                     _links.Remove(l.Conn);
                     _t.Drop(l.Conn);
                     return;
@@ -701,7 +741,7 @@ namespace UltraPuck.Core.Net
             w.BigBytes(StateCodec.Write(state));
             // their copy of everyone's controls starts from that tick
             for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = at - 1;
-            _t.Send(l.Conn, w.ToArray());
+            Send(l.Conn, w.ToArray());
         }
 
         private void WriteAway(Writer w)
@@ -716,7 +756,7 @@ namespace UltraPuck.Core.Net
             var w = new Writer(Msg.Away).I32(MatchId);
             WriteAway(w);
             var bytes = w.ToArray();
-            foreach (var l in _links.Values) if (l.Peer > 0 && (!l.MidMatch || l.StartAcked)) _t.Send(l.Conn, bytes);
+            foreach (var l in _links.Values) if (l.Peer > 0 && (!l.MidMatch || l.StartAcked)) Send(l.Conn, bytes);
         }
 
         private void ReadAway(Reader r)
@@ -780,7 +820,7 @@ namespace UltraPuck.Core.Net
                 var hash = s.Checksum();
                 _myChecks[t] = hash;
                 var bytes = new Writer(Msg.Checksum).I32(MatchId).I32(t).U64(hash).ToArray();
-                foreach (var l in _links.Values) if (l.Peer >= 0) _t.Send(l.Conn, bytes);
+                foreach (var l in _links.Values) if (l.Peer >= 0) Send(l.Conn, bytes);
                 Compare(t);
             }
             // forget old ones
@@ -800,7 +840,7 @@ namespace UltraPuck.Core.Net
 
         public void Dispose()
         {
-            foreach (var l in _links.Values) if (l.Peer >= 0) _t.Send(l.Conn, new Writer(Msg.Leave).ToArray());
+            foreach (var l in _links.Values) if (l.Peer >= 0) Send(l.Conn, new Writer(Msg.Leave).ToArray());
             _t.Dispose();
             Current = Stage.Closed;
         }

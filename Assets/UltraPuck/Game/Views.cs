@@ -1095,6 +1095,103 @@ namespace UltraPuck.Game
         }
     }
 
+    /// <summary>
+    /// Stone Walls: a row of chunky grey stones along each piece of wall. A piece pops up as it's raised, and shakes,
+    /// sinks and bursts into grit as it crumbles.
+    /// </summary>
+    internal sealed class StoneViews
+    {
+        private readonly Transform _parent;
+        private readonly Effects _effects;
+        private readonly Dictionary<long, GameObject> _drawn = new Dictionary<long, GameObject>();
+        private readonly Dictionary<long, Vector2> _mid = new Dictionary<long, Vector2>();
+        private readonly Dictionary<long, float> _life = new Dictionary<long, float>();
+        private readonly HashSet<long> _seen = new HashSet<long>();
+        private readonly List<long> _gone = new List<long>();
+        private const float Rise = 0.12f, Crumble = 0.4f;
+
+        public StoneViews(Transform parent, Effects effects) { _parent = parent; _effects = effects; }
+
+        public void Show(GameState s, float halfWidth, float lifeTime)
+        {
+            _seen.Clear();
+            foreach (var st in s.Stones)
+            {
+                var key = st.A.X.Raw * 73856093L ^ st.A.Y.Raw * 19349663L ^ (long)st.Wall * 83492791L;
+                _seen.Add(key);
+                GameObject go;
+                if (!_drawn.TryGetValue(key, out go))
+                {
+                    var a = V.Of(st.A);
+                    var b = V.Of(st.B);
+                    go = Build(a, b, halfWidth, key);
+                    _drawn[key] = go;
+                    _mid[key] = (a + b) * 0.5f;
+                }
+                var life = st.Life.ToFloat();
+                _life[key] = life;
+                var age = lifeTime - life;
+                var up = Mathf.Clamp01(age / Rise);
+                up = 1f - (1f - up) * (1f - up);
+                var crumbling = 1f - Mathf.Clamp01(life / Crumble);
+                var size = Mathf.Min(up, 1f - 0.45f * crumbling);
+                var shake = crumbling > 0f ? Random.insideUnitCircle * 0.06f * crumbling : Vector2.zero;
+                go.transform.localPosition = (Vector3)(_mid[key] + shake);
+                go.transform.localScale = new Vector3(size, size, 1f);
+            }
+            _gone.Clear();
+            foreach (var key in _drawn.Keys) if (!_seen.Contains(key)) _gone.Add(key);
+            foreach (var key in _gone)
+            {
+                // crumbled (not just undone by a rewind): grit flies off it
+                float last;
+                if (_life.TryGetValue(key, out last) && last < 0.15f) _effects.Sparks(_mid[key], 0.55f, new Color(0.62f, 0.62f, 0.66f), 9);
+                Object.Destroy(_drawn[key]);
+                _drawn.Remove(key);
+                _mid.Remove(key);
+                _life.Remove(key);
+            }
+        }
+
+        private GameObject Build(Vector2 a, Vector2 b, float halfWidth, long key)
+        {
+            var go = new GameObject("Stone");
+            go.transform.SetParent(_parent, false);
+            var mid = (a + b) * 0.5f;
+            var la = a - mid;
+            var lb = b - mid;
+            var rng = new System.Random((int)(key ^ (key >> 32)));
+            Draw.Make("Shadow", go.transform, Draw.Line(new[] { la, lb }, false, halfWidth * 2.3f, Palette.Shadow), 7)
+                .transform.localPosition = new Vector3(0.1f, -0.16f, 0f);
+            Draw.Make("Base", go.transform, Draw.Line(new[] { la, lb }, false, halfWidth * 2f, new Color(0.2f, 0.2f, 0.23f)), 8);
+            var len = (lb - la).magnitude;
+            var count = Mathf.Max(1, Mathf.RoundToInt(len / (halfWidth * 1.9f)));
+            for (var k = 0; k < count; k++)
+            {
+                var at = Vector2.Lerp(la, lb, (k + 0.5f) / count);
+                var r = halfWidth * (1.3f + 0.25f * (float)rng.NextDouble());
+                var turn = (float)rng.NextDouble() * Mathf.PI * 2f;
+                var shade = 0.44f + 0.14f * (float)rng.NextDouble();
+                var pts = new List<Vector2>();
+                var sides = 5 + rng.Next(3);
+                for (var j = 0; j < sides; j++)
+                {
+                    var ang = turn + j * Mathf.PI * 2f / sides + ((float)rng.NextDouble() - 0.5f) * 0.5f;
+                    var rr = r * (0.82f + 0.18f * (float)rng.NextDouble());
+                    pts.Add(at + new Vector2(Mathf.Cos(ang), Mathf.Sin(ang)) * rr);
+                }
+                Draw.Make("Stone", go.transform, Draw.Polygon(pts, new Color(shade, shade, shade + 0.04f)), 9);
+                Draw.Make("Edge", go.transform, Draw.Line(pts, true, 0.06f, new Color(0.13f, 0.13f, 0.15f)), 10);
+                // a lighter top face, up and to the left
+                var top = new List<Vector2>();
+                foreach (var p in pts) top.Add(at + (p - at) * 0.55f + new Vector2(-0.05f, 0.06f));
+                var hi = shade + 0.16f;
+                Draw.Make("Top", go.transform, Draw.Polygon(top, new Color(hi, hi, hi + 0.04f)), 11);
+            }
+            return go;
+        }
+    }
+
     /// <summary>Pylon goalies: dark dummies with a ring in their team's colour.</summary>
     internal sealed class PylonViews
     {

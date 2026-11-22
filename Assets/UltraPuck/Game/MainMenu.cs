@@ -31,6 +31,8 @@ namespace UltraPuck.Game
         private sealed class Row
         {
             public string Label, Detail;
+            /// <summary>A label that changes (shown instead of <see cref="Label"/>).</summary>
+            public Func<string> LabelNow;
             public Action Press;
             public Action<int> Step;
             public Func<string> Value;            // a choice's current value, shown as  ‹ value ›
@@ -146,8 +148,27 @@ namespace UltraPuck.Game
                     if (s.IsHost)
                     {
                         if (SteamNet.InLobby) _rows.Add(new Row { Label = "Invite Steam friends", Press = InviteFriends });
-                        _rows.Add(new Row { Label = "Match", Value = () => Settings.MatchText, Step = Settings.StepMatch, Press = () => Settings.StepMatch(1) });
+                        _rows.Add(Cycle("Match mode", new[] { "Score", "Time" }, () => Settings.MatchMode, v => Settings.MatchMode = v));
+                        _rows.Add(new Row
+                        {
+                            LabelNow = () => Settings.MatchMode == 1 ? "Time" : "Score to win",
+                            Value = () => Settings.MatchMode == 1 ? Mathf.Min(Settings.MatchMinutes, 10) + ":00" : Mathf.Min(Settings.GoalsToWin, 10).ToString(),
+                            Step = StepLength,
+                            Press = () => StepLength(1),
+                        });
                         if (Runner.MapCount > 1) _rows.Add(new Row { Label = "Rink", Value = () => Runner.MapName(Runner.MapIndex), Step = d => Runner.StepMap(d), Press = () => Runner.StepMap(1) });
+                        _rows.Add(Cycle("Rounds mode", new[] { "Off", "On" }, () => Settings.Rounds ? 1 : 0, v => Settings.Rounds = v == 1));
+                        _rows.Add(Cycle("Goal replays", new[] { "Off", "On" }, () => Settings.Replays ? 1 : 0, v => Settings.Replays = v == 1));
+                        var picking = Cycle("Picking", Settings.PickModes, () => Settings.PickMode, v => Settings.PickMode = v);
+                        picking.Enabled = () => Settings.Rounds;
+                        _rows.Add(picking);
+                        var offered = new string[Settings.OfferCounts.Length];
+                        for (var k = 0; k < offered.Length; k++) offered[k] = Settings.OfferCounts[k].ToString();
+                        _rows.Add(Cycle("Cards offered", offered, () => Mathf.Max(0, Array.IndexOf(Settings.OfferCounts, Settings.CardsOffered)), v => Settings.CardsOffered = Settings.OfferCounts[v]));
+                        var times = new string[Settings.PickTimes.Length];
+                        for (var k = 0; k < times.Length; k++) times[k] = Settings.PickTimes[k] == 0 ? "No limit" : Settings.PickTimes[k] + " s";
+                        _rows.Add(Cycle("Pick time", times, () => Mathf.Max(0, Array.IndexOf(Settings.PickTimes, Settings.PickTime)), v => Settings.PickTime = Settings.PickTimes[v]));
+                        _rows.Add(Cycle("Multiple utilities", new[] { "Off", "On" }, () => Settings.MultiUtility ? 1 : 0, v => Settings.MultiUtility = v == 1));
                         _rows.Add(new Row { Label = "Bots", Value = () => s.Bots.ToString(), Step = d => s.Bots = Mathf.Clamp(s.Bots + d, 0, NetSession.MaxPlayers), Press = () => s.Bots = s.Bots >= NetSession.MaxPlayers - 1 ? 0 : s.Bots + 1 });
                     }
                     else if (SteamNet.InLobby) _rows.Add(new Row { Label = "Invite Steam friends", Press = InviteFriends });
@@ -171,6 +192,20 @@ namespace UltraPuck.Game
                     _rows.Add(new Row { Label = "Back", Press = () => Show(Page.OnlineLobby) });
                     break;
             }
+        }
+
+        /// <summary>A row that steps through a few named values (left / right, or press for the next).</summary>
+        private static Row Cycle(string label, string[] names, Func<int> get, Action<int> set)
+        {
+            Action<int> step = d => set((get() + d + names.Length) % names.Length);
+            return new Row { Label = label, Value = () => names[Mathf.Clamp(get(), 0, names.Length - 1)], Step = step, Press = () => step(1) };
+        }
+
+        /// <summary>The match's length: 1 to 10 goals, or 1:00 to 10:00 (wrapping round).</summary>
+        private static void StepLength(int d)
+        {
+            if (Settings.MatchMode == 1) Settings.MatchMinutes = (Mathf.Clamp(Settings.MatchMinutes, 1, 10) - 1 + d + 10) % 10 + 1;
+            else Settings.GoalsToWin = (Mathf.Clamp(Settings.GoalsToWin, 1, 10) - 1 + d + 10) % 10 + 1;
         }
 
         private UnityEngine.InputSystem.InputDevice _lastDevice;
@@ -357,12 +392,17 @@ namespace UltraPuck.Game
         {
             var a = Ui.EaseOut((Time.unscaledTime - _optionsAt) / 0.2f);
             Ui.Box(new Rect(0f, 0f, w, h), new Color(0f, 0f, 0f, 0.6f * a), 0f);
-            const float rowH = 52f, gap = 8f, pw = 480f;
-            var ph = 96f + _rows.Count * (rowH + gap) + 40f;
+            const float rowH = 46f, gap = 6f, pw = 520f;
+            var ph = Mathf.Min(96f + _rows.Count * (rowH + gap) + 40f, h - 60f);
             var p = new Rect(w / 2f - pw / 2f, h / 2f - ph / 2f + (1f - a) * 24f, pw, ph);
             Ui.Box(p, new Color(0.09f, 0.11f, 0.15f, 0.97f), 20f);
             Ui.Label(new Rect(p.x + 30f, p.y + 18f, pw - 60f, 44f), "Options", Ui.Font(28, true), Color.white);
-            Rows(p.x + 20f, p.y + 76f, pw - 40f, rowH, gap, 20, Time.unscaledTime - _optionsAt);
+            if (Event.current.type == EventType.ScrollWheel && _rows.Count > 0)
+            {
+                _focus = Mathf.Clamp(_focus + (Event.current.delta.y > 0 ? 1 : -1), 0, _rows.Count - 1);
+                Event.current.Use();
+            }
+            Rows(p.x + 20f, p.y + 76f, pw - 64f, rowH, gap, 19, Time.unscaledTime - _optionsAt, p.yMax - 44f);
             Glyphs.Hint(new Rect(p.x, p.yMax - 40f, pw, 28f), "{confirm} Choose      {side} Change      {back} Close", 14, new Color(1f, 1f, 1f, 0.55f));
             if (!p.Contains(Ui.Mouse) && Ui.TakeClick()) { Sound.Back(); OpenOptions(false); }
         }
@@ -417,7 +457,7 @@ namespace UltraPuck.Game
                 var col = on ? (i == _focus ? Color.white : new Color(1f, 1f, 1f, 0.82f)) : new Color(1f, 1f, 1f, 0.3f);
                 col.a *= appear;
                 if (row.TextField) { AddressField(r, i == _focus); continue; }
-                var label = row.Label;
+                var label = row.LabelNow != null ? row.LabelNow() : row.Label;
                 if (row.Value != null) label += ":   ‹  " + row.Value() + "  ›";
                 var detail = row.Detail != null && rowH >= 60f;
                 var pad = rowH >= 60f ? 26f : 16f;

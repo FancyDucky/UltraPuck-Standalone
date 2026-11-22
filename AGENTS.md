@@ -82,6 +82,40 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.42 (Claude, 21 Nov 2026): **online match options, Same Draw, everyone's cursors.**
+  The online lobby's Options (host) has every match setting: Match mode (Score / Time), Score to win 1-10 or Time
+  1:00-10:00 (`MainMenu.Row.LabelNow`), Rink, Rounds, Replays, Picking, Cards offered, Pick time, Multiple
+  utilities, Bots; the panel is capped to the screen and scrolls with a scroll bar (mouse wheel too). The settings /
+  pause Match settings pages draw a scroll bar when rows don't fit. Picking is now `Settings.PickMode` (0 Each player,
+  1 Same draw, 2 Team vote; old `team_vote` pref migrates); rules byte 0 bit 16 = `Tuning.SameDraw`: a team shares one
+  draw (like Team Vote) but each takes their own card. The card screen treats Same Draw like Team Vote: cursors for
+  everyone on the team with the same cards (local, online, bots; `FollowTeammates`), held until the whole team has
+  chosen, a green border round a locked cursor; the other team watches all their cursors. Free play's card editor
+  scrolls one row further on the last row (`EditMaxTop`). Stone Wall: up to 30 long / 3 s (was 10 / 1 s). New shot
+  scene `samedraw`. **NetSession.Version 49.** Checked: 143 tests (138 pass, 5 skipped), Windows build, online /
+  samedraw / pausemenu shots.
+- 0.1.42 (Claude, 21 Nov 2026): **name tags fade; Swap rock, Ice Trail, Team Play, Cannon
+  Ball changes; Stone Wall card.** Name tags fade to 0.22 while another player or the puck is under them (`Hud.Under`;
+  a hidden Invisible Shot puck doesn't count). Swap rock: a loose rock slower than `RockStopSpeed` (0.5) is removed
+  (after pick-ups, so a still rock can still be scooped up); no swapping to a rock someone holds. Ice Trail: every shot
+  lays it; teammates on it are sped up as much as opponents are slowed (`PlayerState.Fast`/`FastTime`, the orange
+  boost ring); `IceLife` 9, `IceMeltPace` 4 (3x longer). The card face said -33% but the code was and is 10% a copy.
+  Team Play is now `PassSpeed`: a clean pass gives passer and receiver +80% speed for 3 s (old PassRefresh stats
+  still work for mods). Cannon Ball: `ShovedBy` / `CannonFrom`; a carrier still being shoved (`Shoved` > 0) whose
+  puck or body touches their own goal box scores for the shooter (`Goal()` split out of `CheckGoal`). Stone Wall
+  (`ultrapuck.stonewall`, art from the owner): a full charge raises `GameState.Stones` pieces 0.9 behind the puck
+  along its path (max 10 long / 1 s, stops when the puck turns, is caught, or would cross a wall); each piece stands
+  4 s; players, puck and rocks bump it (`CollideStones`); `StoneViews` draws chunky stones and grit when it crumbles.
+  New shot scene `stone`. **NetSession.Version 48.** Checked: 142 tests (137 pass, 5 skipped), Windows build,
+  stone / cards shots.
+- 0.1.42 (Claude, 21 Nov 2026): **online sends at a fixed rate, not every frame.** With 6
+  players at ~590 fps the host sent ~590 input messages a second to each PC (each up to 60 ticks per player), Steam
+  queued it (2.2 s ping, confirmed stuck 49 ticks back) and everyone saw "Waiting for the other players" in slow
+  motion; capping fps at 120 fixed it. Now `NetSession.SendRate` = 120 a second whatever the frame rate; each message
+  carries a player's newest `ResendTicks` (16) ticks, and older unconfirmed ones go again every `RepairEvery` (0.2 s).
+  Steam SendRateMin/Max raised to 256 KB/s / 1 MB/s. The 10 s net log line adds messages a second and KB/s sent.
+  Same messages, so no version bump. Checked: 134 tests (129 pass, 5 skipped), incl. 6 PCs at 600 fps over a laggy
+  network (128 messages/s, 74 KB/s per PC, no waits, identical games).
 - 0.1.41 (Claude, 21 Nov 2026): **Cannon Ball really shoves; Invisible Shot; darker lines.**
   Cannon Ball: the catcher's speed along the shot is replaced by `CannonCarry` (0.8) × the puck's speed (by weight /
   Knockback Taken), sideways speed kept, and `PlayerState.Shoved` (`CannonTime` 0.5 s) gives toss-like low drag and

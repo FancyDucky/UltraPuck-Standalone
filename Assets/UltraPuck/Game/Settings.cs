@@ -309,12 +309,22 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("replays", value ? 1 : 0); }
         }
 
-        /// <summary>Picking: each player gets their own card (false), or each team votes on one card for all of them (true).</summary>
-        public static bool TeamVote
+        /// <summary>
+        /// Picking: 0 each player draws their own cards and takes one; 1 Same Draw: everyone on a team is offered the
+        /// same cards but each takes their own; 2 Team Vote: each team votes on one card for all of them.
+        /// </summary>
+        public static int PickMode
         {
-            get { return PlayerPrefs.GetInt("team_vote", 0) != 0; }
-            set { PlayerPrefs.SetInt("team_vote", value ? 1 : 0); }
+            get
+            {
+                var v = PlayerPrefs.GetInt("pick_mode", -1);
+                if (v < 0) v = PlayerPrefs.GetInt("team_vote", 0) != 0 ? 2 : 0; // from before Same Draw
+                return Mathf.Clamp(v, 0, 2);
+            }
+            set { PlayerPrefs.SetInt("pick_mode", Mathf.Clamp(value, 0, 2)); }
         }
+        public static readonly string[] PickModes = { "Each player", "Same draw", "Team vote" };
+        public static bool TeamVote { get { return PickMode == 2; } }
 
         /// <summary>Allow more than one utility card per player. Off (default): taking a new utility replaces the one you have.</summary>
         public static bool MultiUtility

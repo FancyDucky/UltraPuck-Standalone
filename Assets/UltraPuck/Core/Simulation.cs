@@ -47,10 +47,11 @@ namespace UltraPuck.Core
             {
                 if (i < 0 || i >= s.Players.Length) continue;
                 var p = s.Players[i];
-                // Team Vote: the first picker on a team draws the offer, and the rest of the team sees the same cards
-                if (T.TeamVote && teamOffer[p.Team & 1] != null) p.Offer = (int[])teamOffer[p.Team & 1].Clone();
+                // Team Vote and Same Draw: the first picker on a team draws the offer, and the rest of the team sees the same cards
+                var shared = T.TeamVote || T.SameDraw;
+                if (shared && teamOffer[p.Team & 1] != null) p.Offer = (int[])teamOffer[p.Team & 1].Clone();
                 else p.Offer = Cards.DrawOffer(s, i, Math.Max(1, Math.Min(5, T.CardsOffered)), T.CardsOff);
-                if (T.TeamVote && teamOffer[p.Team & 1] == null) teamOffer[p.Team & 1] = p.Offer;
+                if (shared && teamOffer[p.Team & 1] == null) teamOffer[p.Team & 1] = p.Offer;
                 p.Picked = -1;
                 p.Hover = 0;
                 any |= p.Offer.Length > 0;
@@ -181,6 +182,7 @@ namespace UltraPuck.Core
                     p.Stun = Fix.Zero;
                     p.GunCooldown = Fix.Zero; p.InvisCooldown = Fix.Zero; p.InvisibleTime = Fix.Zero; p.ShockCooldown = Fix.Zero;
                     p.SlowTime = Fix.Zero; p.HeldBy = -1; p.HeldTime = Fix.Zero; p.TossTime = Fix.Zero;
+                    p.FastTime = Fix.Zero; p.Shoved = Fix.Zero; p.ShovedBy = -1;
                 }
             s.PuckPos = Map.PuckSpot;
             s.PuckVel = FixVec2.Zero;
@@ -191,6 +193,8 @@ namespace UltraPuck.Core
             s.Shots = new Shot[0];
             s.Ice = new IcePoint[0];
             s.IceLaying = Fix.Zero;
+            s.Stones = new Stone[0];
+            s.StoneLaying = Fix.Zero;
             s.Phase = Phase.Countdown;
             s.PhaseTime = T.CountdownTime;
             PlacePylons(s);
@@ -443,6 +447,7 @@ namespace UltraPuck.Core
                     if (p.HitLag > Fix.Zero) continue; // frozen by a hit
                     p.Pos += p.Vel * sub;
                     CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
+                    if (s.Stones.Length > 0) CollideStones(s, ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
                     PushPylons(s, p);
                     PushRocks(s, p);
                 }
@@ -468,6 +473,7 @@ namespace UltraPuck.Core
             }
 
             if (s.Ice.Length > 0 || s.IceLaying > Fix.Zero) Ice(s, dt);
+            if (s.Stones.Length > 0 || s.StoneLaying > Fix.Zero) Stones(s, dt);
 
             // Invisible Shot runs out (or ends once someone has the puck); a Cannon Ball ends once it's slowed down
             if (s.PuckHidden > Fix.Zero) { s.PuckHidden -= dt; if (s.PuckHidden <= Fix.Zero || s.Carrier >= 0) { s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1; } }
@@ -643,6 +649,7 @@ namespace UltraPuck.Core
             p.ShockCooldown = Fix.Max(Fix.Zero, p.ShockCooldown - dt);
             p.SwapCooldown = Fix.Max(Fix.Zero, p.SwapCooldown - dt);
             p.SlowTime = Fix.Max(Fix.Zero, p.SlowTime - dt);
+            p.FastTime = Fix.Max(Fix.Zero, p.FastTime - dt);
             p.TossTime = Fix.Max(Fix.Zero, p.TossTime - dt);
             var rockHeld = RockCarriedBy(s, i);
             var carryingRock = rockHeld >= 0;
@@ -659,9 +666,11 @@ namespace UltraPuck.Core
             // carried by a teammate, or flying after being thrown: no skating (you can still shoot the puck)
             var flying = p.HeldBy >= 0 || p.TossTime > Fix.Zero;
             p.Shoved = Fix.Max(Fix.Zero, p.Shoved - dt);
+            if (p.Shoved <= Fix.Zero) p.ShovedBy = -1;
             var control = p.Stun > Fix.Zero || p.Shoved > Fix.Zero ? T.StunControl : Fix.One;
             var speed = p.Stats.MoveSpeed * (holding ? p.Stats.MoveSpeedWithPuck : Fix.One);
-            if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave
+            if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave, the other team's ice
+            if (p.FastTime > Fix.Zero) speed *= Fix.One + p.Fast;          // Team Play pass, your team's ice
             if (holding && input.Has(PlayerInput.ChargeBrake)) speed *= T.ChargeMoveSpeed; // charging a shot: slower
             var push = flying ? Fix.Zero : T.MoveForce * speed * control;
             p.Vel += move * (push * dt);
@@ -773,18 +782,103 @@ namespace UltraPuck.Core
             // noted for the sound side: a shot, and how hard next to a fully charged one
             p.ShotsFired++;
             p.ShotStrength = Fix.Clamp01(speed / T.ChargedShotMax);
-            // Ice Trail: a fully charged shot lays ice behind the puck
-            if (released && p.Charge >= Fix.One && p.Stats.IceTrail > 0) StartIce(s, p);
+            // Ice Trail: every shot lays ice behind the puck
+            if (p.Stats.IceTrail > 0) StartIce(s, p);
+            // Stone Wall: a full charge raises a wall along the puck's path
+            if (released && p.Charge >= Fix.One && p.Stats.StoneWall > 0) StartStone(s);
             // Invisible Shot: a quick shot hides the puck from the other team for a moment
             s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1;
             if (!released && p.Stats.GhostShot > 0) { s.PuckHidden = T.GhostShotTime; s.PuckHiddenTeam = p.Team; }
             // Cannon Ball: a full charge knocks back whoever on the other team catches it
             s.CannonTeam = released && p.Charge >= Fix.One && p.Stats.CannonBall > 0 ? p.Team : -1;
+            s.CannonFrom = s.CannonTeam >= 0 ? i : -1;
             p.Charge = Fix.Zero;
             p.NoPickup = T.ShotPickupDelay;
         }
 
         // ------------------------------------------------------------------ Ice Trail
+
+        // ------------------------------------------------------------------ Stone Wall
+
+        /// <summary>Start raising a wall behind the puck that was just shot.</summary>
+        private void StartStone(GameState s)
+        {
+            var speed = s.PuckVel.Length;
+            if (speed < Fix.One) return;
+            s.StoneDir = s.PuckVel / speed;
+            s.StoneTip = s.PuckPos + s.StoneDir * Fix.Ratio(3, 10); // clear of the shooter's wedge
+            s.StoneLaying = T.StoneLayTime;
+            s.StoneLeft = T.StoneLength;
+            s.StoneWalls++;
+        }
+
+        private void Stones(GameState s, Fix dt)
+        {
+            // raising: a piece at a time, a little behind the puck, until it's long enough, the time's up, someone
+            // has the puck, or it turned (off the boards, a body): a wall must never trap its own puck
+            if (s.StoneLaying > Fix.Zero)
+            {
+                s.StoneLaying -= dt;
+                var speed = s.PuckVel.Length;
+                if (s.Carrier >= 0 || s.StoneLaying <= Fix.Zero || s.StoneLeft <= Fix.Zero || speed < Fix.One
+                    || FixVec2.Dot(s.PuckVel, s.StoneDir) < speed * Fix.Ratio(7, 10))
+                    s.StoneLaying = Fix.Zero;
+                else
+                {
+                    var end = s.PuckPos - s.PuckVel / speed * T.StoneGap;
+                    var d = end - s.StoneTip;
+                    var len = d.Length;
+                    if (len >= T.StoneSpacing && FixVec2.Dot(d, s.StoneDir) > Fix.Zero)
+                    {
+                        if (len > s.StoneLeft) { end = s.StoneTip + d / len * s.StoneLeft; len = s.StoneLeft; }
+                        if (FirstWallHit(s.StoneTip, end) < Fix.One) s.StoneLaying = Fix.Zero;
+                        else
+                        {
+                            var a = new Stone[s.Stones.Length + 1];
+                            Array.Copy(s.Stones, a, s.Stones.Length);
+                            a[s.Stones.Length] = new Stone { A = s.StoneTip, B = end, Life = T.StoneLife, Wall = s.StoneWalls };
+                            s.Stones = a;
+                            s.StoneTip = end;
+                            s.StoneLeft -= len;
+                        }
+                    }
+                }
+            }
+            // crumbling
+            var gone = 0;
+            for (var k = 0; k < s.Stones.Length; k++)
+            {
+                s.Stones[k].Life -= dt;
+                if (s.Stones[k].Life <= Fix.Zero) gone++;
+            }
+            if (gone > 0)
+            {
+                var keep = new Stone[s.Stones.Length - gone];
+                var j = 0;
+                foreach (var st in s.Stones) if (st.Life > Fix.Zero) keep[j++] = st;
+                s.Stones = keep;
+            }
+        }
+
+        /// <summary>Keep a circle out of the Stone Walls (bouncing off them like the boards).</summary>
+        private void CollideStones(GameState s, ref FixVec2 pos, ref FixVec2 vel, Fix r, Fix bounce)
+        {
+            r += WallHalf;
+            foreach (var st in s.Stones)
+            {
+                var half = (st.B - st.A) * Fix.Half;
+                var mid = st.A + half;
+                var len2 = half.SqrLength;
+                var c = len2.Raw == 0 ? mid : mid + half * Fix.Clamp(FixVec2.Dot(pos - mid, half) / len2, -Fix.One, Fix.One);
+                var d = pos - c;
+                if (d.SqrLength >= r * r) continue;
+                var dist = d.Length;
+                var n = dist.Raw > 0 ? d / dist : new FixVec2(-half.Y, half.X).Normalized;
+                pos = c + n * r;
+                var vn = FixVec2.Dot(vel, n);
+                if (vn < Fix.Zero) vel -= n * (vn * (Fix.One + bounce));
+            }
+        }
 
         private void StartIce(GameState s, PlayerState shooter)
         {
@@ -849,14 +943,19 @@ namespace UltraPuck.Core
                 foreach (var p in s.Ice) if (p.Melt > Fix.Zero) keep[j++] = p;
                 s.Ice = keep;
             }
-            // opponents on the ice are slowed while they're on it
+            // on the ice: the other team is slowed, the team whose ice it is sped up (as much), while they're on it
             foreach (var q in s.Players)
             {
                 var reach = T.IceRadius + RadiusOf(q) * Fix.Half;
-                var slow = Fix.Zero;
+                Fix slow = Fix.Zero, fast = Fix.Zero;
                 foreach (var p in s.Ice)
-                    if (p.Team != q.Team && p.Slow > slow && (q.Pos - p.Pos).SqrLength <= reach * reach) slow = p.Slow;
+                {
+                    if ((q.Pos - p.Pos).SqrLength > reach * reach) continue;
+                    if (p.Team != q.Team) slow = Fix.Max(slow, p.Slow);
+                    else fast = Fix.Max(fast, p.Slow);
+                }
                 if (slow > Fix.Zero) SlowDown(q, slow, Fix.Ratio(1, 5));
+                if (fast > Fix.Zero) SpeedUp(q, fast, Fix.Ratio(1, 5));
             }
         }
 
@@ -940,6 +1039,7 @@ namespace UltraPuck.Core
                 CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
                 if (hit < Fix.One && FixVec2.Dot(s.PuckVel, s.PuckPos - from) >= Fix.Zero) s.PuckVel = -s.PuckVel * T.PuckWallBounce;
                 CollidePylons(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
+                if (s.Stones.Length > 0) CollideStones(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
             }
             KeepPuckIn(s, before);
 
@@ -979,7 +1079,7 @@ namespace UltraPuck.Core
                     if (IsSave(s, best)) s.Players[Credit(s, best)].Saves++;
                     if (s.PassFrom >= 0 && s.PassFrom != best && s.PassFrom < s.Players.Length && s.Players[s.PassFrom].Team == p.Team)
                     {
-                        Passed(s, s.PassFrom);
+                        Passed(s, s.PassFrom, best);
                         // a pass carries the teammate on: a push along the puck's way, more for a harder pass
                         var boost = s.PuckVel * T.PassBoost;
                         if (boost.SqrLength > T.PassBoostMax * T.PassBoostMax) boost = boost.Normalized * T.PassBoostMax;
@@ -999,6 +1099,7 @@ namespace UltraPuck.Core
                         // keep any sideways speed, replace the speed along the shot with the push (if it's harder)
                         p.Vel = p.Vel - dir * along + dir * Fix.Max(push, along);
                         p.Shoved = T.CannonTime;
+                        p.ShovedBy = s.CannonFrom;
                     }
                     s.CannonTeam = -1;
                     s.PuckPos = CarrySpot(p); // (a pre-charge carries on: see Control)
@@ -1210,27 +1311,49 @@ namespace UltraPuck.Core
 
         private void CheckGoal(GameState s)
         {
+            // Cannon Ball: a carrier the shot is still carrying off, shoved into their own net (puck or body in): a goal
+            // for the shooter
+            if (s.Carrier >= 0)
+            {
+                var c = s.Players[s.Carrier];
+                var by = c.ShovedBy;
+                if (c.Shoved > Fix.Zero && by >= 0 && by < s.Players.Length && s.Players[by].Team != c.Team)
+                    foreach (var g in Map.Goals)
+                        if (g.Team == c.Team && (g.Touches(s.PuckPos, T.PuckRadius) || g.Touches(c.Pos, RadiusOf(c))))
+                        {
+                            Goal(s, 1 - g.Team, by);
+                            return;
+                        }
+            }
             foreach (var g in Map.Goals)
             {
                 if (!g.Touches(s.PuckPos, T.PuckRadius)) continue; // the moment the puck touches the goal box
                 // a defender may carry the puck into their own net (it's safe while they hold it); let it go in there
                 // and it's a goal for the other team
                 if (s.Carrier >= 0 && s.Players[s.Carrier].Team == g.Team) continue;
-                var scorer = 1 - g.Team;
+                Goal(s, 1 - g.Team, -1);
+                return;
+            }
+        }
+
+        /// <summary>A goal for <paramref name="scorer"/>: by <paramref name="by"/> if known (a Cannon Ball), else worked out.</summary>
+        private void Goal(GameState s, int scorer, int by)
+        {
+            {
                 s.Score[scorer]++;
                 s.LastScorer = scorer;
-                s.LastGoalPlayer = WhoScored(s, scorer);
+                s.LastGoalPlayer = by >= 0 ? by : WhoScored(s, scorer);
                 // stats: the goal is the shooter's (or carrier's) on the scoring team; an own goal is nobody's. The
                 // assist is the teammate who had it just before them.
                 NoteTouch(s);
-                var credit = Shooter(s, scorer);
+                var credit = by >= 0 ? by : Shooter(s, scorer);
                 s.LastAssist = -1;
                 s.LastGoalBy = -1;
                 if (credit >= 0)
                 {
                     s.LastGoalBy = Credit(s, credit);
                     s.Players[s.LastGoalBy].Goals++;
-                    if (s.Touch1 == credit && s.Touch2 >= 0 && s.Touch2 != credit && s.Touch2 < s.Players.Length && s.Players[s.Touch2].Team == scorer)
+                    if (by < 0 && s.Touch1 == credit && s.Touch2 >= 0 && s.Touch2 != credit && s.Touch2 < s.Players.Length && s.Players[s.Touch2].Team == scorer)
                     {
                         s.LastAssist = Credit(s, s.Touch2);
                         if (s.LastAssist != s.LastGoalBy) s.Players[s.LastAssist].Assists++;
@@ -1245,7 +1368,6 @@ namespace UltraPuck.Core
                 foreach (var p in s.Players) p.SkipVote = false;
                 // goal explosion: shove everyone and loose rocks away from the puck (puck stays in the net)
                 BlastFrom(s, blastAt, T.GoalBlastRange, T.DashKnockback * T.GoalBlastPush, -1, true, false, true);
-                return;
             }
         }
 
@@ -1774,7 +1896,9 @@ namespace UltraPuck.Core
             for (var k = 0; k < s.Rocks.Length; k++)
             {
                 if (s.Rocks[k].Owner != i) continue;
-                // swap places and momentum with the rock (drops it if someone was carrying it)
+                // someone is holding it: no swapping to it
+                if (s.Rocks[k].Carrier >= 0) return;
+                // swap places and momentum with the rock
                 var rk = s.Rocks[k];
                 var from = a.Pos;
                 var to = rk.Pos;
@@ -1879,13 +2003,13 @@ namespace UltraPuck.Core
                     rk.Vel -= rk.Vel * Fix.Min(Fix.One, T.RockDrag * sub);
                     if (rk.Vel.SqrLength < Fix.Ratio(1, 400)) rk.Vel = FixVec2.Zero;
                     CollideWalls(ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
+                    if (s.Stones.Length > 0) CollideStones(s, ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
                     s.Rocks[k] = rk;
                 }
             }
 
             // pick-up: anyone not carrying the puck (or another rock) may take a loose rock into their wedge
-            if (s.Phase != Phase.Play) return;
-            for (var k = 0; k < s.Rocks.Length; k++)
+            for (var k = 0; k < s.Rocks.Length && s.Phase == Phase.Play; k++)
             {
                 var rk = s.Rocks[k];
                 if (rk.Carrier >= 0) continue;
@@ -1906,6 +2030,17 @@ namespace UltraPuck.Core
                 rk.Pos = RockCarrySpot(s.Players[best]);
                 rk.Vel = s.Players[best].Vel;
                 s.Rocks[k] = rk;
+            }
+
+            // a loose rock that has (all but) stopped is gone: throw a new one. One being carried stays, moving or not.
+            var stopped = 0;
+            foreach (var rk in s.Rocks) if (rk.Carrier < 0 && rk.Vel.SqrLength < T.RockStopSpeed * T.RockStopSpeed) stopped++;
+            if (stopped > 0)
+            {
+                var keep = new Rock[s.Rocks.Length - stopped];
+                var j = 0;
+                foreach (var rk in s.Rocks) if (rk.Carrier >= 0 || rk.Vel.SqrLength >= T.RockStopSpeed * T.RockStopSpeed) keep[j++] = rk;
+                s.Rocks = keep;
             }
         }
 
@@ -2061,10 +2196,25 @@ namespace UltraPuck.Core
             p.SlowTime = Fix.Max(p.SlowTime, time);
         }
 
-        /// <summary>Team Play: a clean pass from <paramref name="passer"/> reached a teammate.</summary>
-        private void Passed(GameState s, int passer)
+        /// <summary>Sped up by <paramref name="fast"/> (0.8 = 80%) for at least <paramref name="time"/> (the bigger boost wins).</summary>
+        private static void SpeedUp(PlayerState p, Fix fast, Fix time)
+        {
+            if (p.FastTime > Fix.Zero && p.Fast >= fast && p.FastTime >= time) return;
+            p.Fast = Fix.Max(p.FastTime > Fix.Zero ? p.Fast : Fix.Zero, fast);
+            p.FastTime = Fix.Max(p.FastTime, time);
+        }
+
+        /// <summary>Team Play: a clean pass from <paramref name="passer"/> reached teammate <paramref name="to"/>.</summary>
+        private void Passed(GameState s, int passer, int to)
         {
             var p = s.Players[passer];
+            if (p.Stats.PassSpeed > 0)
+            {
+                // both of you skate faster for a bit
+                SpeedUp(p, T.PassSpeedBoost, T.PassSpeedTime); p.Refreshes++;
+                var q = s.Players[to];
+                SpeedUp(q, T.PassSpeedBoost, T.PassSpeedTime); q.Refreshes++;
+            }
             if (p.Stats.PassRefreshTeam > 0)
             {
                 foreach (var q in s.Players) if (q.Team == p.Team) Refresh(q);

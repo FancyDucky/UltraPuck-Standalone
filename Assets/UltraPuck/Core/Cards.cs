@@ -72,7 +72,7 @@ namespace UltraPuck.Core
             "MoveSpeed", "MoveSpeedWithPuck", "ShotPower", "QuickShotPower", "ChargeSpeed", "OverCharge", "DashCooldown",
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
             "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "Swap", "PassRefresh", "PassRefreshTeam", "IceTrail",
-            "QuickShotFull", "GhostShot", "CannonBall",
+            "QuickShotFull", "GhostShot", "CannonBall", "PassSpeed", "StoneWall",
         };
 
         /// <summary>Stats that need the utility button (Triangle / Y). Used to offer only one utility at a time.</summary>
@@ -202,6 +202,8 @@ namespace UltraPuck.Core
                 case "CannonBall": st.CannonBall = Count(st.CannonBall, m); break;
                 case "PassRefresh": st.PassRefresh = Count(st.PassRefresh, m); break;
                 case "PassRefreshTeam": st.PassRefreshTeam = Count(st.PassRefreshTeam, m); break;
+                case "PassSpeed": st.PassSpeed = Count(st.PassSpeed, m); break;
+                case "StoneWall": st.StoneWall = Count(st.StoneWall, m); break;
             }
         }
 

@@ -49,6 +49,7 @@ namespace UltraPuck.Game
         private RockViews _rocks;
         private readonly List<int> _seenSwaps = new List<int>();
         private IceViews _ice;
+        private StoneViews _stones;
         // what each player's effect counters were last frame, to spot new shockwaves and Team Play refreshes
         private readonly List<int> _seenShocks = new List<int>(), _seenRefreshes = new List<int>();
         private readonly float[] _cooldowns = new float[3];
@@ -151,6 +152,7 @@ namespace UltraPuck.Game
             _pylons = new PylonViews(_entities);
             _rocks = new RockViews(_entities);
             _ice = new IceViews(_entities);
+            _stones = new StoneViews(_entities, _effects);
             SetUpCamera();
             _mainMenu.Show(MainMenu.Page.Main);
             if (ShotDir != null) StartCoroutine(Shots());
@@ -461,7 +463,7 @@ namespace UltraPuck.Game
                     if (count == 4 && _cards != null && _state.Players.Length > 0)
                     {
                         // the newest cards, so their faces get looked at
-                        var ids = new[] { "ultrapuck.ghostshot", "ultrapuck.cannonball", "ultrapuck.powershot", "ultrapuck.friendlyfire" };
+                        var ids = new[] { "ultrapuck.stonewall", "ultrapuck.teamplay", "ultrapuck.icetrail", "ultrapuck.cannonball" };
                         var offer = new List<int>();
                         foreach (var id in ids) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                         _state.Players[0].Offer = offer.ToArray();
@@ -471,6 +473,23 @@ namespace UltraPuck.Game
                     GoMainMenu();
                     yield return new WaitForSecondsRealtime(0.5f);
                 }
+            }
+
+            if (want("samedraw"))
+            {
+                // Same Draw: you and a bot teammate get the same cards; the bot's cursor locks in (green border)
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                _sim.T.SameDraw = true;
+                yield return new WaitForSecondsRealtime(0.8f);
+                _sim.StartPicking(_state, new List<int> { 0, 1 });
+                yield return new WaitForSecondsRealtime(2.4f);
+                yield return Shot("samedraw");
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
             }
 
             if (want("pausemenu"))
@@ -604,6 +623,42 @@ namespace UltraPuck.Game
                 yield return new WaitForSecondsRealtime(1.5f);
                 yield return Shot("ice-2");
                 _shotNudge = Vector2.zero;
+                GoMainMenu();
+            }
+
+            if (want("stone"))
+            {
+                // Stone Wall: one standing, one crumbling; and a crowd round the puck (their name tags fade)
+                _shotWholeRink = true;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 2, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(3.5f);
+                _shotNoInput = true;
+                System.Func<double, double, FixVec2> at = (x, y) => new FixVec2(Fix.FromDecimal((decimal)x), Fix.FromDecimal((decimal)y));
+                var stones = new List<Stone>();
+                for (var k = 0; k < 10; k++)
+                    stones.Add(new Stone { A = at(-14 + k * 0.8, -7 + k * 0.35), B = at(-14 + (k + 1) * 0.8, -7 + (k + 1) * 0.35), Life = Fix.FromDecimal(3.5m - k * 0.05m), Wall = 900 });
+                for (var k = 0; k < 6; k++)
+                    stones.Add(new Stone { A = at(-12 + k * 0.8, 6), B = at(-12 + (k + 1) * 0.8, 6), Life = Fix.FromDecimal(0.38m - k * 0.01m), Wall = 901 });
+                _state.Stones = stones.ToArray();
+                _state.StoneWalls = 901;
+                // the crowd
+                var spots = new[] { at(6, 0.6), at(4.9, 2.4), at(7.2, 2.6), at(6.1, 3.9) };
+                for (var j = 0; j < _state.Players.Length && j < spots.Length; j++) { _state.Players[j].Pos = spots[j]; _state.Players[j].Vel = FixVec2.Zero; }
+                _state.Carrier = -1;
+                _state.PuckPos = at(6, 2.3);
+                _state.PuckVel = FixVec2.Zero;
+                yield return new WaitForSecondsRealtime(0.15f);
+                yield return Shot("stone-1");
+                yield return new WaitForSecondsRealtime(0.3f);
+                yield return Shot("stone-2");
+                _shotNoInput = false;
+                _shotWholeRink = false;
                 GoMainMenu();
             }
 
@@ -1049,7 +1104,7 @@ namespace UltraPuck.Game
         private byte[] PackRules()
         {
             var b = new List<byte>();
-            b.Add((byte)((Settings.Rounds ? 1 : 0) | (Settings.TeamVote ? 2 : 0) | (Settings.Replays ? 4 : 0) | (Settings.MultiUtility ? 8 : 0)));
+            b.Add((byte)((Settings.Rounds ? 1 : 0) | (Settings.TeamVote ? 2 : 0) | (Settings.Replays ? 4 : 0) | (Settings.MultiUtility ? 8 : 0) | (Settings.PickMode == 1 ? 16 : 0)));
             b.Add((byte)Settings.CardsOffered);
             b.Add((byte)Mathf.Clamp(Settings.PickTime, 0, 255));
             b.Add((byte)Settings.MatchMode);
@@ -1069,6 +1124,7 @@ namespace UltraPuck.Game
             if (!free) t.CardsAfterGoals = (rules[0] & 1) != 0;
             if (!free && (rules[0] & 4) != 0) { t.Replays = true; t.CelebrateTime = Fix.FromInt(11); } // the explosion, then the replay
             t.TeamVote = (rules[0] & 2) != 0;
+            t.SameDraw = !t.TeamVote && (rules[0] & 16) != 0;
             t.MultiUtility = (rules[0] & 8) != 0;
             t.CardsOffered = Mathf.Clamp(rules[1], 1, 5);
             t.PickTime = Fix.FromInt(rules[2]);
@@ -1290,6 +1346,7 @@ namespace UltraPuck.Game
 
         // network stats, written to the log every 10 s during an online match (for working out lag)
         private int _netStalls, _netFrames, _netRewinds;
+        private long _netMsgs, _netBytes;
         private float _netStatsAt, _netSimMs, _netWorstFrame;
 
         private void NetStats(float simMs)
@@ -1306,11 +1363,13 @@ namespace UltraPuck.Game
                 Debug.Log("Ultra Puck net: " + s.Seats.Count + " players, ping " + Mathf.RoundToInt(s.Ping * 1000f) + " ms, ahead " + s.Advantage.ToString("0.0") +
                     " ticks, waited " + _netStalls + " times, rewinds " + (m.Rewinds - _netRewinds) + " (longest " + m.LongestRewind + " ticks), " +
                     Mathf.RoundToInt(_netFrames / secs) + " fps (worst frame " + Mathf.RoundToInt(_netWorstFrame * 1000f) + " ms), game " +
-                    (_netSimMs / Mathf.Max(1, _netFrames)).ToString("0.00") + " ms a frame, confirmed " + (m.Tick - m.Confirmed) + " ticks back");
+                    (_netSimMs / Mathf.Max(1, _netFrames)).ToString("0.00") + " ms a frame, confirmed " + (m.Tick - m.Confirmed) + " ticks back, sent " +
+                    Mathf.RoundToInt((s.MessagesSent - _netMsgs) / secs) + " messages a second (" + ((s.BytesSent - _netBytes) / secs / 1024f).ToString("0.0") + " KB/s)");
             }
             _netStatsAt = Time.unscaledTime;
             _netStalls = 0; _netFrames = 0; _netSimMs = 0f; _netWorstFrame = 0f;
             if (m != null) { _netRewinds = m.Rewinds; m.LongestRewind = 0; }
+            if (s != null) { _netMsgs = s.MessagesSent; _netBytes = s.BytesSent; }
         }
 
         private string OnlineBanner()
@@ -1895,7 +1954,7 @@ namespace UltraPuck.Game
             _cooldowns[2] = p.Stats.Shockwave > 0 ? 1f - p.ShockCooldown.ToFloat() / _sim.T.ShockCooldown.ToFloat()
                 : p.Stats.Swap > 0 ? 1f // Swap has no cooldown — always ready
                 : -1f;
-            _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, false, _cooldowns,
+            _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.FastTime > Fix.Zero, _cooldowns,
                 p.Stun > Fix.Zero, p.DashTime.ToFloat() / Mathf.Max(0.01f, _sim.T.DashHitTime.ToFloat()), p.HitLag > Fix.Zero,
                 _state != null && _state.Carrier == i, V.Of(p.DashDir));
 
@@ -1974,6 +2033,7 @@ namespace UltraPuck.Game
         private void Show(GameState a, GameState b, float t)
         {
             _hud.Tags.Clear();
+            _hud.Under.Clear();
             _hud.Cam = _cam;
             while (_players.Count > b.Players.Length) { Destroy(_players[_players.Count - 1].Root); _players.RemoveAt(_players.Count - 1); }
             for (var i = 0; i < b.Players.Length; i++)
@@ -1997,7 +2057,10 @@ namespace UltraPuck.Game
                 Vector2 hitAt;
                 var hit = _players[i].Show(pos, facing, pb.DashCharge.ToFloat(), Mathf.RoundToInt(full), pb.Charge.ToFloat(), pb.Hits, pb.HitPower.ToFloat(), V.Of(pb.HitDir), out hitAt);
                 if (!CardEffects(i, pb, pos))
-                    _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.62f, 0f), Name = NameOf(i), Team = pb.Team });
+                {
+                    _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.62f, 0f), Name = NameOf(i), Team = pb.Team, Owner = i });
+                    _hud.Under.Add(new Vector4(pos.x, pos.y, radius, i));
+                }
                 if (hit > 0f)
                 {
                     _hitsThisFrame.Add(new Vector3(hitAt.x, hitAt.y, hit));
@@ -2029,6 +2092,7 @@ namespace UltraPuck.Game
             _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
             _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team), IsLocalPerson);
             _ice.Show(b, _sim.T.IceRadius.ToFloat());
+            _stones.Show(b, _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.StoneLife.ToFloat());
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);
             // a goal: the puck blows up in the net, and stays gone until the next face-off
@@ -2050,7 +2114,9 @@ namespace UltraPuck.Game
                 ghost = theirs && !mine && !_hud.Replay ? 2 : 1;
             }
             _puck.Ghost(ghost);
-            _puck.Show((pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t), b.PuckTeam);
+            var puckAt = (pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t);
+            _puck.Show(puckAt, b.PuckTeam);
+            if (b.Phase != Phase.Scored && ghost != 2) _hud.Under.Add(new Vector4(puckAt.x, puckAt.y, _sim.T.PuckRadius.ToFloat(), -1));
             if (InMatch) MatchSounds(b); // the bots playing behind the menus are silent
         }
     }

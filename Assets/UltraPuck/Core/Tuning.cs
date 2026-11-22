@@ -87,6 +87,14 @@ namespace UltraPuck.Core
         public Fix GhostShotTime = Fix.Ratio(3, 2);
         /// <summary>Cannon Ball: the catcher is sent off along the shot at this share of the puck's speed, gliding (little control) this long.</summary>
         public Fix CannonCarry = Fix.Ratio(8, 10), CannonTime = Fix.Half;
+        /// <summary>Team Play: after a clean pass the passer and the teammate are this much faster (0.8 = 80%) for this long.</summary>
+        public Fix PassSpeedBoost = Fix.Ratio(8, 10), PassSpeedTime = Fix.FromInt(3);
+        /// <summary>
+        /// Stone Wall: raised along the puck's path for up to <see cref="StoneLength"/> (or <see cref="StoneLayTime"/>, or
+        /// until the puck turns or is caught), kept <see cref="StoneGap"/> behind it, in pieces <see cref="StoneSpacing"/>
+        /// long; each piece stands <see cref="StoneLife"/> and then crumbles.
+        /// </summary>
+        public Fix StoneLife = Fix.FromInt(4), StoneLength = Fix.FromInt(30), StoneLayTime = Fix.FromInt(3), StoneSpacing = Fix.Ratio(4, 5), StoneGap = Fix.Ratio(9, 10);
         public Fix ShotPickupDelay = Fix.Ratio(1, 5);
         /// <summary>Checking the carrier knocks the puck loose: how fast it pops out, and how long the checker must wait to grab it.</summary>
         public Fix KnockLooseSpeed = Fix.FromInt(4), CheckerPickupDelay = Fix.Ratio(1, 4);
@@ -128,7 +136,7 @@ namespace UltraPuck.Core
         /// laid (so each later bit lasts a little longer). How much it slows per copy, how wide it is, and how far
         /// apart its points are.
         /// </summary>
-        public Fix IceTime = Fix.FromInt(3), IceLife = Fix.FromInt(3), IceMeltPace = Fix.Two, IceSlow = Fix.Ratio(1, 10), IceRadius = Fix.Ratio(9, 20), IceSpacing = Fix.Ratio(2, 5);
+        public Fix IceTime = Fix.FromInt(3), IceLife = Fix.FromInt(9), IceMeltPace = Fix.FromInt(4), IceSlow = Fix.Ratio(1, 10), IceRadius = Fix.Ratio(9, 20), IceSpacing = Fix.Ratio(2, 5);
         /// <summary>A pass caught by a teammate carries them on: this share of the puck's speed, up to the most.</summary>
         public Fix PassBoost = Fix.Ratio(3, 20), PassBoostMax = Fix.FromInt(6);
         /// <summary>
@@ -157,12 +165,16 @@ namespace UltraPuck.Core
         public Fix RockRadius = Fix.Ratio(2, 5), RockWeight = Fix.Ratio(12, 100), RockDrag = Fix.Ratio(18, 100), RockSpeed = Fix.Ratio(69, 4);
         /// <summary>Bots wait this long between Swap uses so they don't spam throw/teleport.</summary>
         public Fix SwapBotCooldown = Fix.FromInt(3);
+        /// <summary>A loose Swap rock slower than this has stopped: it's gone (so it can't be left as a safe spot to swap back to).</summary>
+        public Fix RockStopSpeed = Fix.Half;
 
         // cards
         /// <summary>After every goal, the team that conceded picks a card (needs a card library).</summary>
         public bool CardsAfterGoals = true;
         /// <summary>Team Vote: each team is offered one set of cards, everyone votes, and the whole team gets the winner (a tie is random).</summary>
         public bool TeamVote;
+        /// <summary>Same Draw: everyone on a team is offered the same cards, and each takes their own.</summary>
+        public bool SameDraw;
         /// <summary>Allow more than one utility card per player. Off: taking a new utility replaces the one you have.</summary>
         public bool MultiUtility;
         /// <summary>Cards that may not be offered (library indexes), from the settings' card list.</summary>

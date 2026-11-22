@@ -55,6 +55,20 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0, s.Players[3].Cards.Length, "the other team didn't pick");
         }
 
+        /// <summary>Same Draw: everyone on a team is offered the same cards, and each takes their own.</summary>
+        [Test]
+        public void SameDrawOffersTheTeamTheSameCardsButEachPicks()
+        {
+            var sim = new Simulation(Rink(), new Tuning { SameDraw = true, CardsOffered = 3 }, _lib);
+            var s = sim.NewGame(new[] { 0, 0, 0, 1 }, 7u);
+            sim.StartPicking(s, new[] { 0, 1, 2 });
+            CollectionAssert.AreEqual(s.Players[0].Offer, s.Players[1].Offer, "the same offer for the whole team");
+            CollectionAssert.AreEqual(s.Players[0].Offer, s.Players[2].Offer);
+            var offer = (int[])s.Players[0].Offer.Clone();
+            sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 2 }, new PlayerInput { Pick = 3 }, default(PlayerInput) });
+            for (var i = 0; i < 3; i++) Assert.AreEqual(offer[i], s.Players[i].Cards[s.Players[i].Cards.Length - 1], "player " + i + " got the card they took");
+        }
+
         /// <summary>Team Vote: bots don't swing the vote — only humans count, and bots copy them.</summary>
         [Test]
         public void TeamVoteBotsFollowHumanMajority()
@@ -795,7 +809,7 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0, s.Rocks[0].Owner);
             Assert.Greater(s.Rocks[0].Pos.X.ToDouble(), s.Players[0].Pos.X.ToDouble(), "rock ahead of the player");
             // park the rock somewhere known with momentum, then swap (let go of Utility first — it's a press edge)
-            s.Rocks[0] = new Rock { Pos = At(4, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1 };
+            s.Rocks[0] = new Rock { Pos = At(4, -6), Vel = new FixVec2(Fix.FromInt(2), Fix.Zero), Owner = 0, Carrier = -1 };
             s.Players[0].Pos = At(0, -6);
             _sim.Step(s, new PlayerInput[2]);
             var before = s.Players[0].Pos;
@@ -841,7 +855,7 @@ namespace UltraPuck.Tests
             s.Carrier = -1;
             s.PuckPos = At(0, -6);
             s.PuckVel = new FixVec2(Fix.FromInt(12), Fix.Zero);
-            s.Rocks = new[] { new Rock { Pos = At(1.2, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1 } };
+            s.Rocks = new[] { new Rock { Pos = At(1.2, -6), Vel = new FixVec2(Fix.Zero, Fix.One), Owner = 0, Carrier = -1 } }; // (a still one would be gone)
             for (var t = 0; t < 20; t++) _sim.Step(s, new PlayerInput[2]);
             Assert.Less(s.PuckVel.X.ToDouble(), 12.0, "puck lost speed into the rock");
             Assert.Greater(s.Rocks[0].Vel.X.ToDouble(), 1.0, "rock was shoved");
@@ -878,7 +892,7 @@ namespace UltraPuck.Tests
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(1, s.Rocks.Length);
             Assert.Greater(s.Players[0].SwapCooldown.ToDouble(), 2.9, "bot cooling down after throw");
-            s.Rocks[0] = new Rock { Pos = At(8, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = -1 };
+            s.Rocks[0] = new Rock { Pos = At(8, -6), Vel = new FixVec2(Fix.Zero, Fix.One), Owner = 0, Carrier = -1 }; // (a still one would be gone)
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(0, s.Players[0].Swaps, "still cooling: no teleport");
             s.Players[0].SwapCooldown = Fix.Zero;
@@ -912,7 +926,7 @@ namespace UltraPuck.Tests
             Assert.Greater(s.Rocks[0].Vel.X.ToDouble(), 3.0, "easy to knock");
         }
 
-        /// <summary>Ice Trail: a fully charged shot lays ice behind the puck that slows opponents (not teammates), then melts.</summary>
+        /// <summary>Ice Trail: a shot lays ice behind the puck that slows opponents and speeds teammates up, then melts.</summary>
         [Test]
         public void IceTrailSlowsOpponentsAndMelts()
         {
@@ -936,8 +950,11 @@ namespace UltraPuck.Tests
             _sim.Step(s, new PlayerInput[3]);
             Assert.AreEqual(0.1, s.Players[1].Slow.ToDouble(), 1e-3, "an opponent on the ice is 10% slower");
             Assert.AreEqual(Fix.Zero, s.Players[2].SlowTime, "a teammate isn't");
+            Assert.AreEqual(0.1, s.Players[2].Fast.ToDouble(), 1e-3, "a teammate is 10% faster");
+            Assert.Greater(s.Players[2].FastTime.ToDouble(), 0.0);
+            Assert.AreEqual(Fix.Zero, s.Players[1].FastTime, "an opponent isn't");
 
-            for (var t = 0; t < 120 * 12; t++) _sim.Step(s, new PlayerInput[3]);
+            for (var t = 0; t < 120 * 26; t++) _sim.Step(s, new PlayerInput[3]);
             Assert.AreEqual(0, s.Ice.Length, "all melted");
         }
 
@@ -960,7 +977,8 @@ namespace UltraPuck.Tests
             var n = s.Ice.Length;
             Assert.Greater(n, 0);
             for (var t = 0; t < 120 * 2; t++) _sim.Step(s, new PlayerInput[2]);
-            Assert.Greater(s.Ice.Length, 0, "still there after 2 s: it lasts 3");
+            for (var t = 0; t < 120 * 6; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.Greater(s.Ice.Length, 0, "still there after 8 s: it lasts 9");
             for (var t = 0; t < 120 * 3; t++) _sim.Step(s, new PlayerInput[2]);
             Assert.AreEqual(0, s.Ice.Length, "melted soon after: the trail was short, so the slow melt didn't take long");
         }
@@ -984,14 +1002,169 @@ namespace UltraPuck.Tests
         }
 
         [Test]
-        public void TeamPlayRestoresCooldownsAfterACleanPass()
+        public void TeamPlaySpeedsUpBothAfterACleanPass()
         {
             var s = Pass("ultrapuck.teamplay", At(10, 8));
-            Assert.AreEqual(1, s.Players[0].Refreshes);
-            Assert.GreaterOrEqual(s.Players[0].DashCharge.ToDouble(), 1.0, "the passer's check is ready again");
-            Assert.GreaterOrEqual(s.Players[1].DashCharge.ToDouble(), 1.0, "and the teammate's");
-            Assert.AreEqual(1, s.Players[1].Refreshes);
-            Assert.AreEqual(0, s.Players[2].Refreshes, "not the other team");
+            Assert.AreEqual(0.8, s.Players[0].Fast.ToDouble(), 1e-3, "the passer is 80% faster");
+            Assert.AreEqual(0.8, s.Players[1].Fast.ToDouble(), 1e-3, "and the teammate");
+            Assert.Greater(s.Players[0].FastTime.ToDouble(), 2.9, "for 3 s");
+            Assert.AreEqual(Fix.Zero, s.Players[2].FastTime, "not the other team");
+            for (var t = 0; t < 120 * 3 + 2; t++) _sim.Step(s, new PlayerInput[3]);
+            Assert.AreEqual(Fix.Zero, s.Players[1].FastTime, "worn off");
+        }
+
+        [Test]
+        public void TeamPlayMakesYouFaster()
+        {
+            System.Func<bool, double> run = fast =>
+            {
+                Make();
+                var s = Game(0, 1);
+                Play(s);
+                s.Players[0].Pos = At(-10, -6); s.Players[0].Vel = FixVec2.Zero;
+                s.Players[1].Pos = At(10, 8);
+                if (fast) { s.Players[0].Fast = Fix.Ratio(8, 10); s.Players[0].FastTime = Fix.FromInt(3); }
+                for (var t = 0; t < 120; t++) _sim.Step(s, new[] { new PlayerInput { MoveX = 127 }, default(PlayerInput) });
+                return s.Players[0].Pos.X.ToDouble() + 10;
+            };
+            Assert.Greater(run(true), run(false) * 1.5, "skates much further in a second");
+        }
+
+        [Test]
+        public void IceTrailComesOffQuickShotsToo()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.icetrail");
+            Play(s);
+            s.Players[0].Pos = At(-8, -6); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(8, 7);
+            s.Carrier = 0; s.PuckPos = At(-7.15, -6);
+            _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput) });
+            Assert.AreEqual(-1, s.Carrier, "a quick shot");
+            for (var t = 0; t < 30; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.Greater(s.Ice.Length, 3, "ice behind it");
+        }
+
+        [Test]
+        public void ASwapRockIsGoneOnceItStops()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.swap");
+            Play(s);
+            s.PuckPos = At(14, 0);
+            s.Players[0].Pos = At(-6, -6); s.Players[1].Pos = At(10, 8);
+            s.Rocks = new[] { new Rock { Pos = At(0, -6), Vel = new FixVec2(Fix.FromInt(4), Fix.Zero), Owner = 0, Carrier = -1 } };
+            _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(1, s.Rocks.Length, "still going");
+            s.Rocks[0].Vel = new FixVec2(Fix.Ratio(1, 5), Fix.Zero);
+            _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(0, s.Rocks.Length, "stopped: gone");
+            // a held rock stays, even standing still
+            s.Players[0].NoPickup = Fix.Zero; s.Players[0].Facing = FixVec2.Right; s.Players[0].Vel = FixVec2.Zero;
+            s.Rocks = new[] { new Rock { Pos = At(-5.1, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = 0 } };
+            for (var t = 0; t < 120; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(1, s.Rocks.Length, "held: stays");
+        }
+
+        [Test]
+        public void NoSwappingToARockSomeoneHolds()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.swap");
+            Play(s);
+            s.PuckPos = At(14, 0);
+            s.Players[0].Pos = At(-6, -6);
+            s.Players[1].Pos = At(4, -6); s.Players[1].Facing = FixVec2.Right;
+            s.Rocks = new[] { new Rock { Pos = At(4.9, -6), Vel = FixVec2.Zero, Owner = 0, Carrier = 1 } };
+            var at = s.Players[0].Pos;
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.AreEqual(0, s.Players[0].Swaps, "no swap");
+            Assert.AreEqual(at.X.ToDouble(), s.Players[0].Pos.X.ToDouble(), 0.05, "still where they were");
+            Assert.AreEqual(1, s.Rocks[0].Carrier, "the opponent still has it");
+        }
+
+        [Test]
+        public void ACannonBallShovingTheCatcherIntoTheirNetScores()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.cannonball");
+            Play(s);
+            var net = _sim.Map.Goals.Find(g => g.Team == 1);
+            var side = net.Min.X > Fix.Zero ? 1 : -1;
+            var mouth = (side > 0 ? net.Min.X : net.Max.X).ToDouble();
+            // the catcher stands just in front of their own net, the shooter fires a full charge into them
+            s.Players[1].Pos = At(mouth - side * 2.2, (net.Min.Y + net.Max.Y).ToDouble() / 2); s.Players[1].Facing = new FixVec2(Fix.FromInt(-side), Fix.Zero);
+            s.Players[0].Pos = At(mouth - side * 12, s.Players[1].Pos.Y.ToDouble()); s.Players[0].Facing = new FixVec2(Fix.FromInt(side), Fix.Zero);
+            s.Carrier = 0;
+            var hold = new PlayerInput { Buttons = PlayerInput.ChargeBrake };
+            var at = s.Players[1].Pos;
+            for (var t = 0; t < 130; t++) { _sim.Step(s, new[] { hold, default(PlayerInput) }); s.Players[1].Pos = at; s.Players[1].Vel = FixVec2.Zero; }
+            _sim.Step(s, new PlayerInput[2]);
+            for (var t = 0; t < 120 && s.Phase == Phase.Play; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(Phase.Scored, s.Phase, "shoved in with the puck: a goal");
+            Assert.AreEqual(0, s.LastScorer, "for the shooter's team");
+            Assert.AreEqual(0, s.LastGoalBy, "the shooter's goal");
+        }
+
+        [Test]
+        public void CarryingThePuckIntoYourOwnNetIsStillSafeWithoutACannonBall()
+        {
+            var s = Game(0, 1);
+            Play(s);
+            var net = _sim.Map.Goals.Find(g => g.Team == 1);
+            var side = net.Min.X > Fix.Zero ? 1 : -1;
+            var mouth = (side > 0 ? net.Min.X : net.Max.X).ToDouble();
+            s.Players[1].Pos = At(mouth - side * 2, (net.Min.Y + net.Max.Y).ToDouble() / 2); s.Players[1].Facing = new FixVec2(Fix.FromInt(side), Fix.Zero);
+            s.Players[0].Pos = At(0, 8);
+            s.Carrier = 1;
+            for (var t = 0; t < 120; t++) _sim.Step(s, new[] { default(PlayerInput), new PlayerInput { MoveX = (sbyte)(side * 127) } });
+            Assert.AreEqual(Phase.Play, s.Phase, "no goal");
+        }
+
+        [Test]
+        public void StoneWallRisesBehindAFullChargeAndCrumbles()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.stonewall");
+            Play(s);
+            s.Players[0].Pos = At(-10, -5); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(10, 8);
+            s.Carrier = 0;
+            var hold = new PlayerInput { Buttons = PlayerInput.ChargeBrake };
+            for (var t = 0; t < 130; t++) _sim.Step(s, new[] { hold, default(PlayerInput) });
+            _sim.Step(s, new PlayerInput[2]);
+            for (var t = 0; t < 70; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.Greater(s.Stones.Length, 3, "a wall behind the puck");
+            var len = 0.0;
+            foreach (var st in s.Stones)
+            {
+                len += (st.B - st.A).Length.ToDouble();
+                Assert.AreEqual(-5.0, st.A.Y.ToDouble(), 0.2, "along the shot");
+                Assert.Greater(st.A.X.ToDouble(), -9.5, "starting past the shooter");
+            }
+            Assert.Greater(len, 12.0, "a long way behind the puck");
+            Assert.LessOrEqual(len, 30.01, "no longer than 30");
+            // someone skating across it is stopped
+            var mid = s.Stones[s.Stones.Length / 2];
+            var x = ((mid.A.X + mid.B.X) / 2).ToDouble();
+            s.Players[1].Pos = At(x, -2); s.Players[1].Vel = FixVec2.Zero;
+            for (var t = 0; t < 90; t++) _sim.Step(s, new[] { default(PlayerInput), new PlayerInput { MoveY = -127 } });
+            Assert.Greater(s.Players[1].Pos.Y.ToDouble(), -5.0, "can't get through");
+            for (var t = 0; t < 120 * 4; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(0, s.Stones.Length, "crumbled after 4 s");
+        }
+
+        [Test]
+        public void NoStoneWallFromAQuickShot()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.stonewall");
+            Play(s);
+            s.Players[0].Pos = At(-10, -5); s.Players[0].Facing = FixVec2.Right;
+            s.Carrier = 0;
+            _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput) });
+            for (var t = 0; t < 40; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(0, s.Stones.Length);
         }
 
         /// <summary>Holding charge/brake without the puck charges a shot; a pass arriving can be fired straight off (a one-timer).</summary>

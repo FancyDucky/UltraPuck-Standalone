@@ -120,12 +120,12 @@ namespace UltraPuck.Game
             var picking = s != null && s.Phase == Phase.Picking && Sim != null && Sim.Cards != null;
             if (!picking)
             {
+                // the picks are in: a shared draw still dives into this PC's first chooser
+                if (_stage == Stage.Choosing) { if (_teamVote && !_watching) LeaveTeamVote(); else Leave(_watching ? WatchedPick(s) : -1); }
                 _ready.Clear();
                 _watched.Clear();
                 _cursors.Clear();
                 _voters.Clear();
-                _teamVote = false;
-                if (_stage == Stage.Choosing) Leave(_watching ? WatchedPick(s) : -1);
                 if (_stage == Stage.Editing) EditInput();
             }
             else
@@ -133,10 +133,11 @@ namespace UltraPuck.Game
                 // forget confirmed picks once the game has taken them
                 var done = new List<int>();
                 foreach (var kv in _ready) if (kv.Key >= s.Players.Length || s.Players[kv.Key].Picked >= 0 || s.Players[kv.Key].Offer.Length == 0) done.Add(kv.Key);
-                foreach (var k in done) { _ready.Remove(k); _cursors.Remove(k); _voters.Remove(k); }
+                // (a shared draw keeps their cursor up, locked, until the whole team has chosen)
+                foreach (var k in done) { _ready.Remove(k); if (!_teamVote) { _cursors.Remove(k); _voters.Remove(k); } }
                 if (_stage == Stage.Idle && !_editing)
                 {
-                    if (Sim.T.TeamVote) BeginTeamVote(s);
+                    if (Sim.T.TeamVote || Sim.T.SameDraw) BeginTeamVote(s);
                     else
                     {
                         var next = NextPicker(s);
@@ -254,7 +255,9 @@ namespace UltraPuck.Game
                 _cursors.Clear();
                 var mid = offer.Length / 2;
                 foreach (var i in local) _cursors[i] = mid;
+                _shared = (int[])offer.Clone();
                 Deal(local[0], offer);
+                FollowTeammates();
                 return;
             }
             // nobody here: watch someone else (same offer for the whole team, so one deal is enough)
@@ -288,7 +291,7 @@ namespace UltraPuck.Game
             for (var n = _voters.Count - 1; n >= 0; n--)
             {
                 var player = _voters[n];
-                if (_ready.ContainsKey(player)) continue;
+                if (Voted(player)) continue;
                 var slot = SlotOf(player);
                 if (slot < 0 || slot >= Local.Slots.Count) continue;
                 var m = Local.MenuFor(slot);
@@ -320,10 +323,55 @@ namespace UltraPuck.Game
             }
             // lift the cards that have any cursor on them a little (the primary focus is the first voter's)
             if (_voters.Count > 0 && _cursors.ContainsKey(_voters[0])) _focus = _cursors[_voters[0]];
-            // everyone here has voted: put the cards away
-            var allIn = _voters.Count > 0;
-            foreach (var v in _voters) if (!_ready.ContainsKey(v)) allIn = false;
+            // everyone here has chosen, and the rest of the team (online, bots) too: put the cards away
+            var othersIn = FollowTeammates();
+            var allIn = _voters.Count > 0 && othersIn;
+            foreach (var v in _voters) if (!Voted(v)) allIn = false;
             if (allIn) LeaveTeamVote();
+        }
+
+        /// <summary>The cards dealt for a shared draw (Team Vote / Same Draw) to this PC's choosers.</summary>
+        private int[] _shared = new int[0];
+
+        /// <summary>A local chooser has confirmed (waiting for the game) or the game has their pick.</summary>
+        private bool Voted(int player)
+        {
+            return _ready.ContainsKey(player) || (_state != null && player >= 0 && player < _state.Players.Length && _state.Players[player].Picked >= 0);
+        }
+
+        /// <summary>
+        /// A shared draw: a cursor for everyone else on the team with the same cards (online players, bots), from
+        /// what they're looking at; locked on their pick once they've made it. True once they've all chosen.
+        /// </summary>
+        private bool FollowTeammates()
+        {
+            if (_state == null || _voters.Count == 0 || _voters[0] >= _state.Players.Length) return true;
+            var team = _state.Players[_voters[0]].Team;
+            var since = Time.unscaledTime - _stageAt;
+            var all = true;
+            for (var i = 0; i < _state.Players.Length; i++)
+            {
+                if (_voters.Contains(i)) continue;
+                var p = _state.Players[i];
+                if (p.Team != team || p.Offer.Length == 0 || !SameCards(p.Offer, _shared)) continue;
+                if (p.Picked >= 0)
+                {
+                    var at = System.Array.IndexOf(_shared, p.Picked);
+                    _cursors[i] = at >= 0 ? at : 0;
+                    continue;
+                }
+                all = false;
+                if (p.Hover >= 1 && p.Hover <= _cards.Count && since > 0.3f) _cursors[i] = p.Hover - 1;
+                else if (!_cursors.ContainsKey(i)) _cursors[i] = Mathf.Max(0, _cards.Count / 2);
+            }
+            return all;
+        }
+
+        private static bool SameCards(int[] a, int[] b)
+        {
+            if (a == null || b == null || a.Length != b.Length) return false;
+            for (var k = 0; k < a.Length; k++) if (a[k] != b[k]) return false;
+            return true;
         }
 
         /// <summary>Watching a team vote: follow everyone's Hover, and leave once they've all picked.</summary>
@@ -721,8 +769,9 @@ namespace UltraPuck.Game
             if (_teamVote)
             {
                 Ui.Swatch(new Rect(Ui.W / 2f - 150f, y + 6f, 26f, 26f), team);
-                Ui.Label(new Rect(Ui.W / 2f - 115f, y, 400f, 40f), Palette.TeamName(team) + "  ·  team vote", Ui.Font(22, true), new Color(1f, 1f, 1f, a));
-                Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? "Watching the vote..." : "Vote for a card",
+                var vote = Sim != null && Sim.T.TeamVote;
+                Ui.Label(new Rect(Ui.W / 2f - 115f, y, 400f, 40f), Palette.TeamName(team) + (vote ? "  ·  team vote" : "  ·  same draw"), Ui.Font(22, true), new Color(1f, 1f, 1f, a));
+                Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? (vote ? "Watching the vote..." : "Watching them choose...") : vote ? "Vote for a card" : "Choose a card",
                     Ui.Font(40, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
             }
             else
@@ -745,7 +794,7 @@ namespace UltraPuck.Game
 
             if (_teamVote && _stage == Stage.Choosing) DrawVoteCursors(a);
 
-            if (_watching) { Ui.Label(new Rect(0f, Ui.H - 46f, Ui.W, 30f), _teamVote ? "Watching the other team vote" : "Watching the other team pick", Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a)); return; }
+            if (_watching) { Ui.Label(new Rect(0f, Ui.H - 46f, Ui.W, 30f), _teamVote && Sim.T.TeamVote ? "Watching the other team vote" : "Watching the other team pick", Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a)); return; }
 
             // hovering a different utility while you already have one: say it clearly replaces yours
             var replace = UtilityReplaceHint();
@@ -801,11 +850,12 @@ namespace UltraPuck.Game
                     var locked = _ready.ContainsKey(player) || (_state != null && player < _state.Players.Length && _state.Players[player].Picked >= 0);
                     var name = NameOf != null ? NameOf(player) : "";
                     if (string.IsNullOrEmpty(name)) name = "P" + (player + 1);
-                    if (locked) name = "+ " + name;
                     var pteam = _state != null && player < _state.Players.Length ? _state.Players[player].Team : 0;
                     var tw = Mathf.Max(80f, name.Length * 9f + 28f);
-                    var yy = top + 8f + row * 26f;
-                    Ui.Box(new Rect(cx - tw / 2f, yy, tw, 22f), new Color(0f, 0f, 0f, 0.55f * a), 4f);
+                    var yy = top + 10f + row * 30f;
+                    // locked in: a green border round their cursor
+                    if (locked) Ui.Box(new Rect(cx - tw / 2f - 3f, yy - 3f, tw + 6f, 28f), new Color(0.3f, 0.92f, 0.42f, a), 7f);
+                    Ui.Box(new Rect(cx - tw / 2f, yy, tw, 22f), new Color(0f, 0f, 0f, (locked ? 0.85f : 0.55f) * a), 4f);
                     Ui.Swatch(new Rect(cx - tw / 2f + 4f, yy + 3f, 16f, 16f), pteam);
                     Ui.Label(new Rect(cx - tw / 2f + 24f, yy, tw - 28f, 22f), name, Ui.Font(15, true), new Color(1f, 1f, 1f, (locked ? 1f : 0.85f) * a));
                     row++;
@@ -885,8 +935,14 @@ namespace UltraPuck.Game
             var row = _focus / EditCols;
             if (row < _editTop) _editTop = row;
             if (row >= _editTop + EditRows) _editTop = row - EditRows + 1;
-            _editTop = Mathf.Clamp(_editTop, 0, Mathf.Max(0, EditRowCount - EditRows));
+            // on the last row, one step further, so it isn't cut off by the bottom of the screen
+            if (row == EditRowCount - 1 && EditRowCount >= EditRows) _editTop = Mathf.Max(_editTop, row - EditRows + 2);
+            _editTop = Mathf.Clamp(_editTop, 0, EditMaxTop);
             for (var k = 0; k < _cards.Count; k++) _cards[k].Home = EditHome(k);
+        }
+
+        /// <summary>How far the editor's grid scrolls: one row past the end, so the last row sits clear of the bottom.</summary>
+        private int EditMaxTop { get { return EditRowCount >= EditRows ? EditRowCount - EditRows + 1 : 0; }
         }
 
         private int EditMax(int card)
@@ -1062,7 +1118,7 @@ namespace UltraPuck.Game
                 var track = new Rect(w - 30f, 130f, 6f, h - 200f);
                 Ui.Box(track, new Color(1f, 1f, 1f, 0.12f), 3f);
                 var thumbH = track.height * EditRows / EditRowCount;
-                var at = (float)_editTop / Mathf.Max(1, EditRowCount - EditRows);
+                var at = (float)_editTop / Mathf.Max(1, EditMaxTop);
                 Ui.Box(new Rect(track.x, track.y + (track.height - thumbH) * at, track.width, thumbH), new Color(1f, 1f, 1f, 0.6f), 3f);
             }
             // what the focused card is at, and the controls

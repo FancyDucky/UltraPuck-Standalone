@@ -335,8 +335,8 @@ namespace UltraPuck.Game
         {
             _rows.Add(Switch("Rounds mode", () => Settings.Rounds, v => Settings.Rounds = v, "After each goal, the team that conceded picks a card that powers them up for the rest of the match."));
             _rows.Add(Switch("Goal replays", () => Settings.Replays, v => Settings.Replays = v, "Every goal is shown again, up to 10 seconds back, in slow motion on the big moments. Everyone pressing A skips it (bots always agree)."));
-            var vote = Choice("Picking", new[] { "Each player", "Team vote" }, () => Settings.TeamVote ? 1 : 0, v => Settings.TeamVote = v == 1,
-                "Each player: everyone gets their own card. Team vote: each team votes on one card the whole team gets (a tie is random).");
+            var vote = Choice("Picking", Settings.PickModes, () => Settings.PickMode, v => Settings.PickMode = v,
+                "Each player: everyone draws and takes their own card. Same draw: your team is offered the same cards, each takes their own. Team vote: each team votes on one card the whole team gets (a tie is random).");
             vote.Enabled = () => Settings.Rounds;
             _rows.Add(vote);
             var offered = new string[Settings.OfferCounts.Length];
@@ -650,6 +650,16 @@ namespace UltraPuck.Game
             {
                 var r = new Rect(x + 30f, rowsTop + (i - _first) * (rowH + 8f), rowW, rowH);
                 DrawRow(_rows[i], r, i == _focus, pause, mouse);
+            }
+            // more rows than fit: a scroll bar down the right
+            if (_rows.Count > visible)
+            {
+                var trackH = visible * (rowH + 8f) - 8f;
+                var track = new Rect(x + panelW - 20f, rowsTop, 6f, trackH);
+                Ui.Box(track, new Color(1f, 1f, 1f, 0.1f), 3f);
+                var thumbH = Mathf.Max(24f, trackH * visible / _rows.Count);
+                var at = (float)_first / Mathf.Max(1, _rows.Count - visible);
+                Ui.Box(new Rect(track.x, track.y + (trackH - thumbH) * at, track.width, thumbH), new Color(1f, 1f, 1f, 0.55f), 3f);
             }
 
             if (!pause)

@@ -81,6 +81,9 @@ namespace UltraPuck.Game
                 Ready = true;
                 StartedAt = UnityEngine.Time.realtimeSinceStartup;
                 SteamNetworkingUtils.InitRelayNetworkAccess(); // get the relay network warmed up early
+                // let each connection send more than Steam's default (256 KB/s) before it starts queueing, for 8-player games
+                SetGlobal(ESteamNetworkingConfigValue.k_ESteamNetworkingConfig_SendRateMin, 256 * 1024);
+                SetGlobal(ESteamNetworkingConfigValue.k_ESteamNetworkingConfig_SendRateMax, 1024 * 1024);
                 _joinRequested = Callback<GameLobbyJoinRequested_t>.Create(r => Join(r.m_steamIDLobby));
                 _lobbyEntered = Callback<LobbyEnter_t>.Create(Entered);
                 _created = CallResult<LobbyCreated_t>.Create(Created);
@@ -122,6 +125,19 @@ namespace UltraPuck.Game
         }
 
         public static void Update() { if (Ready) SteamAPI.RunCallbacks(); }
+
+        private static void SetGlobal(ESteamNetworkingConfigValue what, int value)
+        {
+            var ptr = Marshal.AllocHGlobal(4);
+            try
+            {
+                Marshal.WriteInt32(ptr, value);
+                if (!SteamNetworkingUtils.SetConfigValue(what, ESteamNetworkingConfigScope.k_ESteamNetworkingConfig_Global, IntPtr.Zero,
+                        ESteamNetworkingConfigDataType.k_ESteamNetworkingConfig_Int32, ptr))
+                    Debug.LogWarning("Ultra Puck: couldn't set Steam " + what);
+            }
+            finally { Marshal.FreeHGlobal(ptr); }
+        }
 
         public static void Shutdown()
         {
