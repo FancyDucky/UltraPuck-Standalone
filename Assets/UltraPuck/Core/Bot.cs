@@ -155,15 +155,18 @@ namespace UltraPuck.Core
             }
 
             // utility cards: shockwave when foes are close; go invisible with the puck; Puck Gun aims at a carrier and fires
-            if (me.Stats.Shockwave > 0 && me.ShockCooldown <= Fix.Zero)
+            if (me.Stats.Shockwave > 0)
             {
-                // fire when a foe is inside about one shockwave (player radius × ShockRange)
-                var reachSq = sim.T.PlayerRadius * sim.T.ShockRange;
-                reachSq *= reachSq;
-                var near = false;
+                // hold it until it's just big enough to reach the nearest foe (one that's close), then let go
+                var nearest = Fix.FromInt(1000);
                 foreach (var q in s.Players)
-                    if (q.Team != me.Team && (q.Pos - pos).SqrLength < reachSq) { near = true; break; }
-                if (near && (s.Tick & 1) == 0) b |= PlayerInput.Utility;
+                    if (q.Team != me.Team) nearest = Fix.Min(nearest, (q.Pos - pos).Length);
+                var want = nearest + sim.T.PlayerRadius;
+                if (me.ShockHold > Fix.Zero)
+                {
+                    if (want <= sim.T.ShockMax && sim.ShockRadius(me.ShockHold) < want) b |= PlayerInput.Utility;
+                }
+                else if (nearest < Fix.FromInt(4) && (s.Tick & 1) == 0) b |= PlayerInput.Utility;
             }
             if (s.Carrier == i && me.Stats.Invisibility > 0 && me.InvisCooldown <= Fix.Zero && (s.Tick & 1) == 0) b |= PlayerInput.Utility;
             // Swap: bots wait SwapBotCooldown between uses. Throw when a foe is ahead; teleport when the rock is usefully far.

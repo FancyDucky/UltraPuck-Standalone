@@ -180,7 +180,7 @@ namespace UltraPuck.Core
                     p.Charge = Fix.Zero;
                     p.NoPickup = Fix.Zero;
                     p.Stun = Fix.Zero;
-                    p.GunCooldown = Fix.Zero; p.InvisCooldown = Fix.Zero; p.InvisibleTime = Fix.Zero; p.ShockCooldown = Fix.Zero;
+                    p.GunCooldown = Fix.Zero; p.InvisCooldown = Fix.Zero; p.InvisibleTime = Fix.Zero; p.ShockCooldown = Fix.Zero; p.ShockHold = Fix.Zero;
                     p.SlowTime = Fix.Zero; p.HeldBy = -1; p.HeldTime = Fix.Zero; p.TossTime = Fix.Zero;
                     p.FastTime = Fix.Zero; p.Shoved = Fix.Zero; p.ShovedBy = -1;
                 }
@@ -374,17 +374,48 @@ namespace UltraPuck.Core
             var players = new PlayerState[s.Players.Length - 1];
             for (int i = 0, j = 0; i < s.Players.Length; i++) if (i != index) players[j++] = s.Players[i];
             s.Players = players;
-            if (s.Carrier == index) s.Carrier = -1;
-            else if (s.Carrier > index) s.Carrier--;
-            // Friendly Fire: whoever they carried is let go; everyone after them moves down one
+            // everything that points at a player: theirs is forgotten, everyone after them moves down one
+            s.Carrier = Shift(s.Carrier, index);
+            s.PassFrom = Shift(s.PassFrom, index);
+            s.Touch1 = Shift(s.Touch1, index);
+            s.Touch2 = Shift(s.Touch2, index);
+            s.AutoCarrier = Shift(s.AutoCarrier, index);
+            s.LastGoalPlayer = Shift(s.LastGoalPlayer, index);
+            s.LastGoalBy = Shift(s.LastGoalBy, index);
+            s.LastAssist = Shift(s.LastAssist, index);
+            s.CannonFrom = Shift(s.CannonFrom, index);
             foreach (var p in players)
             {
-                if (p.HeldBy == index) { p.HeldBy = -1; p.HeldTime = Fix.Zero; }
-                else if (p.HeldBy > index) p.HeldBy--;
-                if (p.Pilot == index) p.Pilot = -1;
-                else if (p.Pilot > index) p.Pilot--;
+                // Friendly Fire: whoever they carried is let go
+                if (p.HeldBy == index) p.HeldTime = Fix.Zero;
+                p.HeldBy = Shift(p.HeldBy, index);
+                p.Pilot = Shift(p.Pilot, index);
+                p.ShovedBy = Shift(p.ShovedBy, index);
             }
+            // their Swap rock goes with them; a rock they were carrying drops
+            var rocks = new System.Collections.Generic.List<Rock>();
+            foreach (var rk in s.Rocks)
+            {
+                if (rk.Owner == index) continue;
+                var r = rk;
+                r.Owner = Shift(r.Owner, index);
+                r.Carrier = Shift(r.Carrier, index);
+                rocks.Add(r);
+            }
+            s.Rocks = rocks.ToArray();
+            var shots = new System.Collections.Generic.List<Shot>();
+            foreach (var sh in s.Shots)
+            {
+                if (sh.Owner == index) continue;
+                var x = sh;
+                x.Owner = Shift(x.Owner, index);
+                shots.Add(x);
+            }
+            s.Shots = shots.ToArray();
         }
+
+        /// <summary>A player number after player <paramref name="gone"/> left: -1 if it was them, one less if after them.</summary>
+        private static int Shift(int i, int gone) { return i == gone ? -1 : i > gone ? i - 1 : i; }
 
         public Fix RadiusOf(PlayerState p) { return T.PlayerRadius * Fix.Clamp(p.Stats.Size, Fix.Ratio(1, 4), Fix.FromInt(4)); }
         private static Fix WeightOf(PlayerState p) { return Fix.Clamp(p.Stats.Weight, Fix.Ratio(1, 10), Fix.FromInt(10)); }
@@ -523,6 +554,14 @@ namespace UltraPuck.Core
                 case PlayerInput.BlueUp: s.Score[1]++; return;
                 case PlayerInput.BlueDown: s.Score[1] = Math.Max(0, s.Score[1] - 1); return;
             }
+            // taking a bot out (only ever a bot)
+            if (cmd >= PlayerInput.RemoveBot && cmd < PlayerInput.RemoveBot + 8)
+            {
+                var idx = cmd - PlayerInput.RemoveBot;
+                if (idx >= s.Players.Length || !s.Players[idx].Bot || s.Phase == Phase.Picking) return;
+                RemovePlayer(s, idx);
+                if (Cards != null) Cards.Recompute(s);
+            }
         }
 
         // ------------------------------------------------------------------ who steers whom
@@ -651,6 +690,8 @@ namespace UltraPuck.Core
             p.SlowTime = Fix.Max(Fix.Zero, p.SlowTime - dt);
             p.FastTime = Fix.Max(Fix.Zero, p.FastTime - dt);
             p.TossTime = Fix.Max(Fix.Zero, p.TossTime - dt);
+            // a thrown teammate lands once they've slowed to skating speed
+            if (p.TossTime > Fix.Zero && p.HeldBy < 0 && p.Vel.SqrLength < T.TossEndSpeed * T.TossEndSpeed) { p.TossTime = Fix.Zero; p.DashTime = Fix.Zero; }
             var rockHeld = RockCarriedBy(s, i);
             var carryingRock = rockHeld >= 0;
             // Friendly Fire: the teammate this player is carrying (thrown anyway once held too long)
@@ -671,7 +712,7 @@ namespace UltraPuck.Core
             var speed = p.Stats.MoveSpeed * (holding ? p.Stats.MoveSpeedWithPuck : Fix.One);
             if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave, the other team's ice
             if (p.FastTime > Fix.Zero) speed *= Fix.One + p.Fast;          // Team Play pass, your team's ice
-            if (holding && input.Has(PlayerInput.ChargeBrake)) speed *= T.ChargeMoveSpeed; // charging a shot: slower
+            if ((carrying || carryingRock) && input.Has(PlayerInput.ChargeBrake)) speed *= T.ChargeMoveSpeed; // charging a shot: slower (not while carrying a teammate)
             var push = flying ? Fix.Zero : T.MoveForce * speed * control;
             p.Vel += move * (push * dt);
             // getting going: an extra push, the further below top speed (along the stick) the stronger
@@ -686,7 +727,7 @@ namespace UltraPuck.Core
             var braking = !holding && input.Has(PlayerInput.ChargeBrake);
             p.DashCoast = Fix.Max(Fix.Zero, p.DashCoast - dt);
             // after a dash, lighter drag for a bit so you keep more speed when you chain them
-            var drag = p.TossTime > Fix.Zero || p.Shoved > Fix.Zero ? T.TossDrag : braking ? T.BrakeDrag : (p.DashCoast > Fix.Zero ? T.DashCoastDrag : T.Drag);
+            var drag = p.TossTime > Fix.Zero ? T.MateTossDrag : p.Shoved > Fix.Zero ? T.TossDrag : braking ? T.BrakeDrag : (p.DashCoast > Fix.Zero ? T.DashCoastDrag : T.Drag);
             p.Vel -= p.Vel * Fix.Min(Fix.One, drag * dt);
 
             var maxDashes = MaxDashes(p);
@@ -698,10 +739,16 @@ namespace UltraPuck.Core
             // utility (Y / Triangle): every utility card you have that's ready
             if ((pressed & PlayerInput.Utility) != 0)
             {
-                if (p.Stats.Shockwave > 0 && p.ShockCooldown <= Fix.Zero) FireShockwave(s, i);
                 if (p.Stats.Invisibility > 0 && p.InvisCooldown <= Fix.Zero) { p.InvisibleTime = T.InvisTime; p.InvisCooldown = T.InvisCooldown; }
                 if (p.Stats.Swap > 0 && !carrying && !holdingMate && !flying) UseSwap(s, i); // no throw/teleport while holding the puck or a teammate
             }
+            // Shockwave: hold the utility button to grow it, let go to fire it (no cooldown)
+            if (p.Stats.Shockwave > 0 && !flying)
+            {
+                if (input.Has(PlayerInput.Utility)) p.ShockHold = Fix.Min(T.ShockChargeTime, p.ShockHold + dt);
+                else if (p.ShockHold > Fix.Zero) { FireShockwave(s, i); p.ShockHold = Fix.Zero; }
+            }
+            else p.ShockHold = Fix.Zero;
 
             var step = dt * Fix.Clamp(p.Stats.ChargeSpeed, Fix.Ratio(1, 10), Fix.FromInt(10)) / T.ChargeTime;
             var full = Fix.One + Fix.Clamp(p.Stats.OverCharge, Fix.Zero, Fix.FromInt(5));
@@ -820,9 +867,14 @@ namespace UltraPuck.Core
             {
                 s.StoneLaying -= dt;
                 var speed = s.PuckVel.Length;
-                if (s.Carrier >= 0 || s.StoneLaying <= Fix.Zero || s.StoneLeft <= Fix.Zero || speed < Fix.One
-                    || FixVec2.Dot(s.PuckVel, s.StoneDir) < speed * Fix.Ratio(7, 10))
+                if (s.Carrier >= 0 || s.StoneLaying <= Fix.Zero || s.StoneLeft <= Fix.Zero || speed < Fix.One)
                     s.StoneLaying = Fix.Zero;
+                else if (FixVec2.Dot(s.PuckVel, s.StoneDir) < speed * Fix.Ratio(7, 10))
+                {
+                    // it turned (off the boards, a body): carry on along the new way, a fresh piece starting behind it
+                    s.StoneDir = s.PuckVel / speed;
+                    s.StoneTip = s.PuckPos - s.StoneDir * T.StoneGap;
+                }
                 else
                 {
                     var end = s.PuckPos - s.PuckVel / speed * T.StoneGap;
@@ -831,7 +883,7 @@ namespace UltraPuck.Core
                     if (len >= T.StoneSpacing && FixVec2.Dot(d, s.StoneDir) > Fix.Zero)
                     {
                         if (len > s.StoneLeft) { end = s.StoneTip + d / len * s.StoneLeft; len = s.StoneLeft; }
-                        if (FirstWallHit(s.StoneTip, end) < Fix.One) s.StoneLaying = Fix.Zero;
+                        if (FirstWallHit(s.StoneTip, end) < Fix.One || !Map.Inside(s.StoneTip)) s.StoneTip = end; // never through the boards: start again past them
                         else
                         {
                             var a = new Stone[s.Stones.Length + 1];
@@ -1570,7 +1622,7 @@ namespace UltraPuck.Core
             {
                 // Friendly Fire: checking a teammate with your wedge picks them up (puck and all) to throw; they're never dazed by
                 // it and keep the puck. A thrown teammate landing on a teammate is just a bump, too.
-                if (CanGrab(s, from, to) && OnWedge(a, b.Pos, RadiusOf(b) + T.MateGrabReach)) GrabMate(s, from, to);
+                if (CanGrab(s, from, to) && GrabHeld(a) && OnWedge(a, b.Pos, RadiusOf(b) + T.MateGrabReach)) GrabMate(s, from, to);
                 Hit(b, -n, Fix.Ratio(1, 2));
                 Hit(a, n, Fix.Ratio(2, 5));
                 return;
@@ -1598,6 +1650,9 @@ namespace UltraPuck.Core
             for (var j = 0; j < s.Players.Length; j++) if (s.Players[j].HeldBy == holder) return j;
             return -1;
         }
+
+        /// <summary>Friendly Fire only picks a teammate up while charge/brake is held (this tick's buttons), so it's never by accident.</summary>
+        private static bool GrabHeld(PlayerState a) { return (a.PrevButtons & PlayerInput.ChargeBrake) != 0; }
 
         /// <summary>Whether <paramref name="from"/> may pick up their teammate <paramref name="to"/>: hands free, nobody already carried or flying.</summary>
         private bool CanGrab(GameState s, int from, int to)
@@ -1627,7 +1682,7 @@ namespace UltraPuck.Core
                 for (var i = 0; i < s.Players.Length; i++)
                 {
                     var a = s.Players[i];
-                    if (a.Stats.FriendlyFire <= 0 || a.NoPickup > Fix.Zero || a.HitLag > Fix.Zero) continue;
+                    if (a.Stats.FriendlyFire <= 0 || a.NoPickup > Fix.Zero || a.HitLag > Fix.Zero || !GrabHeld(a)) continue;
                     for (var j = 0; j < s.Players.Length; j++)
                     {
                         if (j == i || s.Players[j].Team != a.Team) continue;
@@ -1696,7 +1751,6 @@ namespace UltraPuck.Core
                 : T.ChargedShotMax * p.Charge;
             var quick = QuickShotSpeed(p);
             var speed = (released ? charged : Fix.Max(quick, p.Charge > Fix.Zero ? charged : Fix.Zero)) * p.Stats.ShotPower;
-            speed = Fix.Min(T.MateThrowMax, speed * T.MateThrow);
             m.HeldBy = -1;
             m.HeldTime = Fix.Zero;
             m.Pos = MateSpot(p, m);
@@ -1705,6 +1759,7 @@ namespace UltraPuck.Core
             m.Facing = p.Facing;
             m.TossTime = T.TossTime;
             m.DashTime = T.TossTime; // a thrown teammate checks whoever they hit
+            SpeedUp(m, T.MateBoost, T.MateBoostTime); // and skates faster for a while after
             p.ShotsFired++;
             p.ShotStrength = Fix.Clamp01(speed / T.ChargedShotMax);
             p.Charge = Fix.Zero;
@@ -2178,14 +2233,20 @@ namespace UltraPuck.Core
         {
             var a = s.Players[i];
             var copies = Math.Min(3, a.Stats.Shockwave);
-            if (copies <= 0 || a.ShockCooldown > Fix.Zero) return;
-            a.ShockCooldown = T.ShockCooldown;
-            var radius = RadiusOf(a) * T.ShockRange * (Fix.One + Fix.Ratio(15, 100) * (copies - 1));
+            if (copies <= 0) return;
+            var radius = ShockRadius(a.ShockHold);
             var push = T.DashKnockback * T.ShockPush * (Fix.One + Fix.Ratio(1, 10) * (copies - 1));
             BlastFrom(s, a.Pos, radius, push, i, true, true, true, true);
             a.Shocks++;
             a.ShockAt = a.Pos;
             a.ShockRadius = radius;
+        }
+
+        /// <summary>How big a shockwave is after holding the button this long (ShockMin to ShockMax, over ShockChargeTime).</summary>
+        public Fix ShockRadius(Fix held)
+        {
+            var t = T.ShockChargeTime > Fix.Zero ? Fix.Clamp01(held / T.ShockChargeTime) : Fix.One;
+            return T.ShockMin + (T.ShockMax - T.ShockMin) * t;
         }
 
         /// <summary>A stronger or longer slow replaces a weaker one.</summary>

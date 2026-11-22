@@ -129,6 +129,9 @@ namespace UltraPuck.Game
             _menus.HostCommand = HostCommand;
             _menus.Score = t => _state != null ? _state.Score[t & 1] + PendingScore(t) : 0;
             _menus.AddBotNow = AddBotNow;
+            _menus.RemoveBotNow = RemoveBotNow;
+            _menus.CanRemoveBot = CanRemoveBot;
+            _menus.TeamBots = t => { var n = 0; if (_state != null) foreach (var p in _state.Players) if (p.Bot && (p.Team & 1) == (t & 1)) n++; return n; };
             _menus.TeamCount = t => { var n = 0; if (_state != null) foreach (var p in _state.Players) if (p.Team == t) n++; return n; };
             _menus.TeamName = t => Palette.TeamName(t);
             _menus.MapCount = () => _maps.Count;
@@ -463,7 +466,7 @@ namespace UltraPuck.Game
                     if (count == 4 && _cards != null && _state.Players.Length > 0)
                     {
                         // the newest cards, so their faces get looked at
-                        var ids = new[] { "ultrapuck.stonewall", "ultrapuck.teamplay", "ultrapuck.icetrail", "ultrapuck.cannonball" };
+                        var ids = new[] { "ultrapuck.friendlyfire", "ultrapuck.swap", "ultrapuck.ghostshot", "ultrapuck.stonewall" };
                         var offer = new List<int>();
                         foreach (var id in ids) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                         _state.Players[0].Offer = offer.ToArray();
@@ -1326,7 +1329,18 @@ namespace UltraPuck.Game
                 catch (System.Exception ex) { inputs = new PlayerInput[_local.Slots.Count]; if (!_sampleFailed) { _sampleFailed = true; Debug.LogException(ex); } }
                 if (s.IsHost && _menus.IsOpen && inputs.Length > 0) inputs[0].Buttons |= PlayerInput.Pause; // the host's menu pauses everyone
                 var sendCmd = _pendingCmds.Count > 0 && inputs.Length > 0 && _state.Phase != Phase.Picking;
-                if (sendCmd) inputs[0].Pick = _pendingCmds.Peek();
+                var leaving = -1; // a bot being taken out: which player (worked out now, as the game stands)
+                if (sendCmd)
+                {
+                    var cmd = _pendingCmds.Peek();
+                    if (cmd == RemoveRedSoon || cmd == RemoveBlueSoon)
+                    {
+                        leaving = OnlineBotToRemove(cmd == RemoveBlueSoon ? 1 : 0);
+                        if (leaving < 0) { _pendingCmds.Dequeue(); sendCmd = false; }
+                        else cmd = (byte)(PlayerInput.RemoveBot + leaving);
+                    }
+                    if (sendCmd) inputs[0].Pick = cmd;
+                }
                 if (!s.Step(inputs))
                 {
                     // waiting for the others: keep the time owed (up to a quarter of a second) so we catch up when their
@@ -1335,7 +1349,7 @@ namespace UltraPuck.Game
                     _netStalls++;
                     break;
                 }
-                if (sendCmd) _pendingCmds.Dequeue();
+                if (sendCmd) { _pendingCmds.Dequeue(); if (leaving >= 0) s.BotLeftMatch(leaving); }
                 _onlineAcc -= dt;
                 steps++;
             }
@@ -1608,6 +1622,58 @@ namespace UltraPuck.Game
             _sim.AddPlayer(_state, team & 1, true);
             if (_cards != null) _cards.Recompute(_state);
             _prev = _state.Clone();
+        }
+
+        // (queued, not sent: the bot to take out is picked when the command goes)
+        private const byte RemoveRedSoon = 230, RemoveBlueSoon = 231;
+
+        /// <summary>Match settings: take a bot off <paramref name="team"/> mid-match (the last one on it).</summary>
+        private void RemoveBotNow(int team)
+        {
+            if (_state == null || !CanRemoveBot(team)) return;
+            if (_mode == Mode.Online)
+            {
+                if (_session == null || !_session.IsHost) return;
+                _pendingCmds.Enqueue(team == 1 ? RemoveBlueSoon : RemoveRedSoon);
+                return;
+            }
+            for (var i = Mathf.Min(_local.Slots.Count, _state.Players.Length) - 1; i >= 0; i--)
+            {
+                if (!_local.Slots[i].Demo || (_state.Players[i].Team & 1) != (team & 1)) continue;
+                _local.Slots.RemoveAt(i);
+                _sim.RemovePlayer(_state, i);
+                break;
+            }
+            _seenCarrier = -1;
+            if (_cards != null) _cards.Recompute(_state);
+            _prev = _state.Clone();
+        }
+
+        /// <summary>Is there a bot on <paramref name="team"/> that can be taken out now?</summary>
+        private bool CanRemoveBot(int team)
+        {
+            if (_state == null || _state.Phase == Phase.Picking) return false;
+            if (_mode == Mode.Online) return _session != null && _session.IsHost && OnlineBotToRemove(team) >= 0;
+            for (var i = 0; i < _local.Slots.Count && i < _state.Players.Length; i++)
+                if (_local.Slots[i].Demo && (_state.Players[i].Team & 1) == (team & 1)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Online: the last bot on <paramref name="team"/> that can go, or -1. Only one with nothing but bots after it, so
+        /// no person's player number moves (every PC lines its people up by number).
+        /// </summary>
+        private int OnlineBotToRemove(int team)
+        {
+            if (_session == null || _state == null) return -1;
+            var seats = _session.Seats;
+            for (var i = _state.Players.Length - 1; i >= 0; i--)
+            {
+                var seatBot = i >= seats.Count || seats[i].Bot;
+                if (!seatBot || !_state.Players[i].Bot) return -1; // a person (here or away): nothing before them can go
+                if ((_state.Players[i].Team & 1) == (team & 1)) return i;
+            }
+            return -1;
         }
 
         /// <summary>Free play: add or remove computer players until there are <paramref name="want"/>.</summary>
@@ -1953,13 +2019,15 @@ namespace UltraPuck.Game
             var faint = invisible && !hidden;
             _cooldowns[0] = p.Stats.PuckGun > 0 ? 1f - p.GunCooldown.ToFloat() / _sim.T.GunCooldown.ToFloat() : -1f;
             _cooldowns[1] = p.Stats.Invisibility > 0 ? (invisible ? 0f : 1f - p.InvisCooldown.ToFloat() / _sim.T.InvisCooldown.ToFloat()) : -1f;
-            _cooldowns[2] = p.Stats.Shockwave > 0 ? 1f - p.ShockCooldown.ToFloat() / _sim.T.ShockCooldown.ToFloat()
+            _cooldowns[2] = p.Stats.Shockwave > 0 ? (p.ShockHold > Fix.Zero ? p.ShockHold.ToFloat() / Mathf.Max(0.01f, _sim.T.ShockChargeTime.ToFloat()) : 1f)
                 : p.Stats.Swap > 0 ? 1f // Swap has no cooldown — always ready
                 : -1f;
             _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.FastTime > Fix.Zero, _cooldowns,
                 p.Stun > Fix.Zero, p.DashTime.ToFloat() / Mathf.Max(0.01f, _sim.T.DashHitTime.ToFloat()), p.HitLag > Fix.Zero,
                 _state != null && _state.Carrier == i, V.Of(p.DashDir));
 
+            // Shockwave being held: a faint ring showing how big it'll be
+            _players[i].ShockCharge(p.ShockHold > Fix.Zero && !hidden ? _sim.ShockRadius(p.ShockHold).ToFloat() : 0f);
             while (_seenShocks.Count <= i) { _seenShocks.Add(-1); _seenRefreshes.Add(-1); _seenSwaps.Add(-1); }
             if (_seenShocks[i] >= 0 && p.Shocks > _seenShocks[i] && Settings.HitEffects)
             {

@@ -254,6 +254,51 @@ namespace UltraPuck.Tests
             foreach (var s in three) Assert.AreEqual(-1, s.DesyncTick, s.Problem);
         }
 
+        /// <summary>The host takes a bot out mid-match: every PC drops the same one and they stay identical.</summary>
+        [Test, Timeout(300000)]
+        public void TheHostTakesABotOutOnline()
+        {
+            var map = Rink();
+            var cards = Cards();
+            System.Func<Simulation> make = () => new Simulation(map, null, cards);
+            var net = new FakeNetwork(77) { Latency = 0.04, Jitter = 0.02, Loss = 0.05 };
+            var host = NetSession.Host(net.Add(), make, 8u);
+            var client = NetSession.Join(net.Add(), make, 8u);
+            host.SetLocalPlayers(new[] { new KeyValuePair<string, int>("Host", 0) });
+            client.SetLocalPlayers(new[] { new KeyValuePair<string, int>("Guest", 1) });
+            host.Bots = 2;
+            const double dt = 1.0 / 120.0;
+            var now = 0.0;
+            System.Action tick = () => { now += dt; net.Advance(dt); host.Update(now); client.Update(now); };
+            for (var k = 0; k < 600 && !(client.Current == NetSession.Stage.Lobby && client.Seats.Count == 4); k++) tick();
+            host.StartMatch(99u);
+            for (var k = 0; k < 600 && client.Current != NetSession.Stage.Playing; k++) tick();
+            Assert.AreEqual(NetSession.Stage.Playing, client.Current);
+            for (var k = 0; k < 240; k++) { tick(); host.Step(new[] { Person(1, host.Match.LocalInputTick) }); client.Step(new[] { Person(2, client.Match.LocalInputTick) }); }
+            Assert.AreEqual(4, host.Match.State.Players.Length);
+            // the host's command: take out player 3 (a bot)
+            var sent = false;
+            for (var k = 0; k < 600 && !sent; k++)
+            {
+                tick();
+                var mine = Person(1, host.Match.LocalInputTick);
+                mine.Pick = (byte)(PlayerInput.RemoveBot + 3);
+                if (host.Step(new[] { mine })) { sent = true; host.BotLeftMatch(3); }
+                client.Step(new[] { Person(2, client.Match.LocalInputTick) });
+            }
+            Assert.IsTrue(sent);
+            for (var k = 0; k < 600; k++) { tick(); host.Step(new[] { Person(1, host.Match.LocalInputTick) }); client.Step(new[] { Person(2, client.Match.LocalInputTick) }); }
+            var settle = host.Match.Tick;
+            for (var k = 0; k < 2000 && (host.Match.Confirmed < settle || client.Match.Confirmed < settle); k++) { tick(); host.Step(new[] { default(PlayerInput) }); client.Step(new[] { default(PlayerInput) }); }
+            for (var k = 0; k <= Rollback.RewindEvery; k++) { tick(); host.Step(new[] { default(PlayerInput) }); client.Step(new[] { default(PlayerInput) }); }
+            Assert.AreEqual(3, host.Match.SavedAt(settle).Players.Length, "the bot is gone on the host");
+            Assert.AreEqual(3, client.Match.SavedAt(settle).Players.Length, "and on the client");
+            Assert.AreEqual(host.Match.SavedAt(settle).Checksum(), client.Match.SavedAt(settle).Checksum(), "still the same game");
+            Assert.AreEqual(-1, host.DesyncTick, host.Problem);
+            Assert.AreEqual(-1, client.DesyncTick, client.Problem);
+            Assert.AreEqual(1, host.Bots, "the lobby has one bot left");
+        }
+
         /// <summary>The whole game state survives being turned into bytes and back (for rejoining).</summary>
         [Test]
         public void StateCodecRoundTrips()

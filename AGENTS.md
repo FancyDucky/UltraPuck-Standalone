@@ -82,6 +82,29 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.44 (Claude, 21 Nov 2026): **Shockwave held to grow; Stone Wall goes on after
+  bounces; Heavyweight bigger.** Shockwave has no cooldown: holding the utility button grows it (`PlayerState.ShockHold`)
+  and letting go fires it, radius `ShockMin` 1.5 to `ShockMax` 6 units over `ShockChargeTime` 6 s
+  (`Simulation.ShockRadius`); push still +10% a copy. A thin ring shows the size while held (`PlayerView.ShockCharge`),
+  the cooldown bar shows the charge. Bots hold until it's just big enough to reach the nearest foe. Stone Wall: when
+  the puck turns (boards, a body) or a piece would cross the boards, a fresh piece starts behind it instead of stopping
+  (still 30 long / 3 s at most); each piece stands 5.5 s. Heavyweight Size x1.16 (was x1.13). **Version 56.**
+  Checked: 149 tests (144 pass, 5 skipped).
+- 0.1.44 (Claude, 21 Nov 2026): **match settings add and remove bots.** Each team has a
+  "Red bots" / "Blue bots" row: right adds one, left takes the last one off. Host command `PlayerInput.RemoveBot` +
+  player (208..215), only ever a bot; online the host picks the player when the command is sent (`OnlineBotToRemove`:
+  the last bot on that team with nothing but bots after it, so no person's number moves) and `NetSession.BotLeftMatch`
+  drops its lobby bot and seat. `Simulation.RemovePlayer` now shifts every player reference (carrier, pass, touches,
+  goal / assist, Cannon Ball, Shoved, rocks, shots). **NetSession.Version 53.** Checked: 147 tests (142 pass, 5
+  skipped) incl. an online test where both PCs drop the bot and stay identical. Stone Wall stands 6 s (`StoneLife`, was 4). Carrying a teammate (holding charge) has no charging slow-down. **Version 55.**
+- 0.1.44 (Claude, 21 Nov 2026): **Friendly Fire: hold to grab, throw like a shot.** A teammate
+  is only picked up while charge/brake is held (`GrabHeld`, this tick's buttons; bots don't hold it, so they no longer
+  grab by accident); letting go throws them (charged), Shoot throws quick. The throw is exactly a shot's speed (no more
+  half speed / cap 30); they fly with `MateTossDrag` (the puck's 7/11) until down to `TossEndSpeed` 8 (or `TossTime` 3 s),
+  then get +15% speed for 4 s (`MateBoost`, orange arrows). `TossDrag` is now only Cannon Ball's glide. Card has a face
+  row and says hold charge. Invisible Shot hides the puck 0.5 s (`GhostShotTime`, was 1.5). Speed-up arrows are white (not orange). Friendly
+  Fire's face has a Duration 4 s row; Swap's text is "Throw a rock and then swap places with it!". **NetSession.Version 52.**
+  Checked: 145 tests (140 pass, 5 skipped).
 - 0.1.43 (Claude, 21 Nov 2026): **Swap rock glides less and can't be pumped; Ice Trail 15 s,
   +60%; speed arrows.** `RockDrag` 0.18 -> 0.277 (35% less glide) -> 0.326 (15% less again; glide goes as 1 / drag).
   Swapping: you take the rock's momentum, the rock keeps its own (it used to take yours, so spam swapping sped it up).

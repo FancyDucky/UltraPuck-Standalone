@@ -53,7 +53,7 @@
       "color": "#3CC84B",
       "flavor": "Now you see it...",
       "face": [
-        { "label": "Invisible Puck", "value": "[good]1.5 s[/]" }
+        { "label": "Invisible Puck", "value": "[good]0.5 s[/]" }
       ],
       "text": "[note]After a quick shot. Only your team can see it.[/]",
       "stats": { "GhostShot": "+1" }
@@ -92,9 +92,9 @@
       "flavor": "The bigger they are, the harder they hit.",
       "face": [
         { "label": "Weight", "value": "[good]+80%[/]" },
-        { "label": "Size", "value": "[gold]+13%[/]" }
+        { "label": "Size", "value": "[gold]+16%[/]" }
       ],
-      "stats": { "KnockbackGiven": "x1.8", "KnockbackTaken": "x0.2", "Size": "x1.13" }
+      "stats": { "KnockbackGiven": "x1.8", "KnockbackTaken": "x0.2", "Size": "x1.16" }
     },
     {
       "id": "ultrapuck.featherweight",
@@ -228,7 +228,11 @@
       "minTeam": 2,
       "color": "#FF7359",
       "flavor": "Bob, throw me!",
-      "text": "Allows you to pick up and shoot teammates as if they were the puck.",
+      "face": [
+        { "label": "Thrown Teammate", "value": "[good]+15% speed[/]" },
+        { "label": "Duration", "value": "[good]4 s[/]" }
+      ],
+      "text": "Hold charge to pick up a teammate, then shoot them as if they were the puck.",
       "stats": { "FriendlyFire": "+1" }
     },
     {
@@ -239,11 +243,11 @@
       "color": "#59A6FF",
       "flavor": "Woah Nelly!",
       "face": [
-        { "label": "Shockwave Strength", "value": "[good]+1[/]" },
-        { "label": "Range", "value": "[good]15[/]" },
-        { "label": "Cooldown", "value": "[note]6 s[/]" }
+        { "label": "Range", "value": "[good]1.5 to 6[/]" },
+        { "label": "Full Size", "value": "[good]hold 6 s[/]" },
+        { "label": "Cooldown", "value": "[good]none[/]" }
       ],
-      "text": "Press {utility} to use. [note]Knocks the puck off whoever has it.[/]",
+      "text": "Hold to grow it, let go to fire. Knocks the puck off whoever has it. Press {utility} to use.",
       "stats": { "Shockwave": "+1" }
     },
     {
@@ -254,11 +258,9 @@
       "color": "#3D5CFF",
       "flavor": "Boogie woogie.",
       "face": [
-        { "label": "Throw", "value": "[good]a rock[/]" },
-        { "label": "Again", "value": "[good]swap places[/]" },
         { "label": "Cooldown", "value": "[note]none[/]" }
       ],
-      "text": "Press {utility} to use.",
+      "text": "Throw a rock and then swap places with it! Press {utility} to use.",
       "stats": { "Swap": "+1" }
     },
     {
@@ -285,7 +287,7 @@
       "flavor": "Nobody's getting through.",
       "face": [
         { "label": "Full Charge", "value": "[good]wall behind the puck[/]" },
-        { "label": "Lasts", "value": "[good]4 s[/]" }
+        { "label": "Lasts", "value": "[good]5.5 s[/]" }
       ],
       "text": "[note]Everyone bumps into it, even the puck.[/]",
       "stats": { "StoneWall": "+1" }

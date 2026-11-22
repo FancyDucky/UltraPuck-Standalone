@@ -49,6 +49,11 @@ namespace UltraPuck.Game
         /// <summary>Match settings: add a bot to a team now (0 red, 1 blue), and whether there's room for one.</summary>
         public Action<int> AddBotNow;
         public Func<bool> CanAddBot;
+        /// <summary>Match settings: take a bot off a team (and whether one can go).</summary>
+        public Action<int> RemoveBotNow;
+        public Func<int, bool> CanRemoveBot;
+        /// <summary>How many bots a team has right now.</summary>
+        public Func<int, int> TeamBots;
         public Func<int, int> TeamCount;
         public Func<int, string> TeamName;
         /// <summary>Match settings: send a host command (kick-off, score fix), and the score as it stands.</summary>
@@ -191,12 +196,18 @@ namespace UltraPuck.Game
                     for (var t = 0; t < 2; t++)
                     {
                         var team = t;
+                        System.Action<int> step = d =>
+                        {
+                            if (d > 0) { if (CanAddBot()) { Sound.Select(); AddBotNow(team); } else Sound.Deny(); }
+                            else if (d < 0) { if (RemoveBotNow != null && CanRemoveBot != null && CanRemoveBot(team)) { Sound.Select(); RemoveBotNow(team); } else Sound.Deny(); }
+                        };
                         _rows.Add(new Row
                         {
-                            Label = "Add a bot to " + (TeamName != null ? TeamName(team) : team == 0 ? "Red" : "Blue"),
-                            Value = () => CanAddBot() ? (TeamCount != null ? TeamCount(team) + " on the team" : "") : "Match is full",
-                            Press = () => { if (CanAddBot()) { Sound.Select(); AddBotNow(team); } else Sound.Deny(); },
-                            Hint = "Joins the match straight away, at the next face-off spot on that side.",
+                            Label = (TeamName != null ? TeamName(team) : team == 0 ? "Red" : "Blue") + " bots",
+                            Value = () => { var n = TeamBots != null ? TeamBots(team) : 0; return (n == 1 ? "1 bot" : n + " bots") + (CanAddBot() ? "" : "  (match full)"); },
+                            Step = step,
+                            Press = () => step(1),
+                            Hint = "Right adds a bot to this team, left takes one off. Straight away.",
                         });
                     }
                 MatchRows();

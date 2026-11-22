@@ -84,7 +84,7 @@ namespace UltraPuck.Core
         public Fix ChargedShotMax = Fix.Ratio(207, 4); // 51.75 (45, +15%)
         public Fix ChargeTime = Fix.Ratio(9, 10);
         /// <summary>Invisible Shot: how long the puck stays hidden.</summary>
-        public Fix GhostShotTime = Fix.Ratio(3, 2);
+        public Fix GhostShotTime = Fix.Half;
         /// <summary>Cannon Ball: the catcher is sent off along the shot at this share of the puck's speed, gliding (little control) this long.</summary>
         public Fix CannonCarry = Fix.Ratio(8, 10), CannonTime = Fix.Half;
         /// <summary>Team Play: after a clean pass the passer and the teammate are this much faster (0.8 = 80%) for this long.</summary>
@@ -94,7 +94,7 @@ namespace UltraPuck.Core
         /// until the puck turns or is caught), kept <see cref="StoneGap"/> behind it, in pieces <see cref="StoneSpacing"/>
         /// long; each piece stands <see cref="StoneLife"/> and then crumbles.
         /// </summary>
-        public Fix StoneLife = Fix.FromInt(4), StoneLength = Fix.FromInt(30), StoneLayTime = Fix.FromInt(3), StoneSpacing = Fix.Ratio(4, 5), StoneGap = Fix.Ratio(9, 10);
+        public Fix StoneLife = Fix.Ratio(11, 2), StoneLength = Fix.FromInt(30), StoneLayTime = Fix.FromInt(3), StoneSpacing = Fix.Ratio(4, 5), StoneGap = Fix.Ratio(9, 10);
         public Fix ShotPickupDelay = Fix.Ratio(1, 5);
         /// <summary>Checking the carrier knocks the puck loose: how fast it pops out, and how long the checker must wait to grab it.</summary>
         public Fix KnockLooseSpeed = Fix.FromInt(4), CheckerPickupDelay = Fix.Ratio(1, 4);
@@ -126,8 +126,14 @@ namespace UltraPuck.Core
         public Fix GunSpeed = Fix.FromInt(38), GunLife = Fix.One, GunCooldown = Fix.One, GunStun = Fix.Ratio(5, 4), ShotRadius = Fix.Ratio(6, 25);
         /// <summary>Invisibility: how long, and the cooldown.</summary>
         public Fix InvisTime = Fix.FromInt(5), InvisCooldown = Fix.FromInt(15);
-        /// <summary>Shockwave (utility): cooldown; reach in player radii; push (share of a check's knockback) — shoves every other player, the loose puck, and loose Swap rocks away.</summary>
+        /// <summary>
+        /// Shockwave (utility): no cooldown. Hold the button to grow it and let go to fire: from <see cref="ShockMin"/>
+        /// (a tap) to <see cref="ShockMax"/> units across its radius after <see cref="ShockChargeTime"/> seconds. Push is a
+        /// share of a check's knockback; it shoves every other player, the loose puck and loose Swap rocks away.
+        /// (<see cref="ShockCooldown"/> / <see cref="ShockRange"/> are from before, kept for old tuning files.)
+        /// </summary>
         public Fix ShockCooldown = Fix.FromInt(6), ShockRange = Fix.FromInt(5), ShockPush = Fix.Two;
+        public Fix ShockMin = Fix.Ratio(3, 2), ShockMax = Fix.FromInt(6), ShockChargeTime = Fix.FromInt(6);
         /// <summary>Goal explosion: shove everyone (and loose rocks) away from the puck; reach in world units, push as a share of a check's knockback.</summary>
         public Fix GoalBlastRange = Fix.FromInt(12), GoalBlastPush = Fix.FromInt(3);
         /// <summary>
@@ -146,12 +152,14 @@ namespace UltraPuck.Core
         public Fix WedgeTip = Fix.Ratio(9, 5), WedgeBack = Fix.Ratio(3, 5), WedgeHalfWidth = Fix.Ratio(7, 10);
         public bool WedgePickup = true;
         /// <summary>
-        /// Friendly Fire: a teammate touching your wedge is picked up; shoot throws them like a shot, times <see cref="MateThrow"/>
-        /// (and no faster than <see cref="MateThrowMax"/>). A thrown teammate flies for <see cref="TossTime"/> seconds
-        /// with <see cref="TossDrag"/> and no skating, checking whoever they hit. Held longer than <see cref="MateHoldMax"/>:
-        /// they're thrown anyway (a quick throw).
+        /// Friendly Fire: a teammate touching your wedge while you hold charge/brake is picked up; they're thrown exactly
+        /// like a shot (as fast as the puck would go). A thrown teammate flies with <see cref="MateTossDrag"/> (the puck's)
+        /// and no skating, checking whoever they hit, until they're down to <see cref="TossEndSpeed"/> (or
+        /// <see cref="TossTime"/> at most); then they're <see cref="MateBoost"/> faster for <see cref="MateBoostTime"/>.
+        /// Held longer than <see cref="MateHoldMax"/>: they're thrown anyway. (<see cref="TossDrag"/> is Cannon Ball's glide.)
         /// </summary>
-        public Fix MateThrow = Fix.Half, MateThrowMax = Fix.FromInt(30), TossTime = Fix.Ratio(3, 4), TossDrag = Fix.One, MateHoldMax = Fix.FromInt(3);
+        public Fix TossTime = Fix.FromInt(3), TossDrag = Fix.One, MateHoldMax = Fix.FromInt(3);
+        public Fix MateTossDrag = Fix.Ratio(7, 11), TossEndSpeed = Fix.FromInt(8), MateBoost = Fix.Ratio(15, 100), MateBoostTime = Fix.FromInt(4);
         /// <summary>Friendly Fire: how far past touching your wedge a teammate can be and still be picked up.</summary>
         public Fix MateGrabReach = Fix.Ratio(1, 10);
         /// <summary>Team Play: how close an opponent may get to a passed puck before the pass no longer counts.</summary>

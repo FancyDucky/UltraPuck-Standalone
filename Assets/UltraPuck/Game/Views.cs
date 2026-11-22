@@ -120,7 +120,9 @@ namespace UltraPuck.Game
         private readonly Transform[] _slowArrows = new Transform[3];
         private readonly Mesh[] _slowMesh = new Mesh[3], _slowOutline = new Mesh[3];
         private float _slowAlpha;
-        // sped up: the same arrows, pointing up, orange, drifting up
+        // a Shockwave being held: a thin ring at the size it'll go off at
+        private GameObject _shockRing;
+        // sped up: the same arrows, pointing up, white, drifting up
         private readonly Transform _fastRoot;
         private readonly Transform[] _fastArrows = new Transform[3];
         private readonly Mesh[] _fastMesh = new Mesh[3], _fastOutline = new Mesh[3];
@@ -158,6 +160,8 @@ namespace UltraPuck.Game
             _shadow = Draw.Make("Shadow", Root.transform, Draw.Disc(radius * 1.04f, Palette.Shadow), 7).gameObject;
             _shadow.transform.localPosition = new Vector3(radius * 0.18f, -radius * 0.32f, 0f);
             _boostRing = Draw.Make("Boosted", Root.transform, Draw.Ring(radius * 1.55f, radius * 1.72f, 1f, new Color(1f, 0.62f, 0.3f, 0.85f)), 9).gameObject;
+            _shockRing = Draw.Make("ShockCharge", Root.transform, Draw.Ring(0.975f, 1f, 1f, new Color(0.55f, 0.85f, 1f, 0.45f), null, 72), 9).gameObject;
+            _shockRing.SetActive(false);
 
             _slowRoot = new GameObject("Slowed").transform;
             _slowRoot.SetParent(Root.transform, false);
@@ -192,7 +196,7 @@ namespace UltraPuck.Game
                     new Vector2(-w * 0.45f, -w * 1.4f), new Vector2(-w * 0.45f, 0f), new Vector2(-w * 1.1f, 0f), new Vector2(0f, w * 1.1f),
                     new Vector2(w * 1.1f, 0f), new Vector2(w * 0.45f, 0f), new Vector2(w * 0.45f, -w * 1.4f),
                 };
-                _fastMesh[k] = Draw.Polygon(pts, new Color(1f, 0.6f, 0.15f, 0f));
+                _fastMesh[k] = Draw.Polygon(pts, new Color(1f, 1f, 1f, 0f));
                 _fastArrows[k] = Draw.Make("Arrow" + k, _fastRoot, _fastMesh[k], 25).transform;
                 var centre = new Vector2(0f, -w * 0.15f);
                 var outline = new List<Vector2>();
@@ -398,6 +402,14 @@ namespace UltraPuck.Game
         /// <param name="dash">How much of a dash is left (0..1, 0 = not dashing): streaks behind and a bright rim.</param>
         /// <param name="lagged">Frozen by hit lag: the body shakes.</param>
         /// <param name="aiming">Carrying the puck: show the short aim line out of the wedge.</param>
+        /// <summary>A Shockwave being held: show the ring it'll go off at (0 hides it).</summary>
+        public void ShockCharge(float radius)
+        {
+            var on = radius > 0f;
+            if (_shockRing.activeSelf != on) _shockRing.SetActive(on);
+            if (on) _shockRing.transform.localScale = new Vector3(radius, radius, 1f);
+        }
+
         public void Status(bool hidden, bool faint, bool slowed, bool boosted, float[] cooldowns, bool stunned = false, float dash = 0f, bool lagged = false, bool aiming = false, Vector2 dashDir = default(Vector2))
         {
             if (Root.activeSelf == hidden) Root.SetActive(!hidden);
@@ -429,7 +441,7 @@ namespace UltraPuck.Game
                     Draw.Recolor(_slowOutline[k], new Color(0f, 0f, 0f, a));
                 }
 
-            // sped up: three orange up arrows drifting up through the player
+            // sped up: three white up arrows drifting up through the player
             _fastAlpha = Mathf.MoveTowards(_fastAlpha, boosted ? 1f : 0f, dt * 5f);
             var showFast = _fastAlpha > 0.01f && !faint;
             if (_fastRoot.gameObject.activeSelf != showFast) _fastRoot.gameObject.SetActive(showFast);
@@ -440,7 +452,7 @@ namespace UltraPuck.Game
                     var x = (k - 1) * _r * 0.75f;
                     _fastArrows[k].localPosition = new Vector3(x, _r * (-0.9f + 1.6f * phase), 0f);
                     var a = Mathf.Sin(phase * Mathf.PI) * 0.95f * _fastAlpha;
-                    Draw.Recolor(_fastMesh[k], new Color(1f, 0.6f, 0.15f, a));
+                    Draw.Recolor(_fastMesh[k], new Color(1f, 1f, 1f, a));
                     Draw.Recolor(_fastOutline[k], new Color(0f, 0f, 0f, a));
                 }
 

@@ -29,6 +29,8 @@ namespace UltraPuck.Core
         public const byte AddBotRed = 201, AddBotBlue = 202;
         /// <summary>Host commands the same way: back to the kick-off, and fix the score (red / blue, up / down).</summary>
         public const byte KickOff = 203, RedUp = 204, RedDown = 205, BlueUp = 206, BlueDown = 207;
+        /// <summary>The host takes a bot out mid-match: <c>RemoveBot + its player number</c> (208..215).</summary>
+        public const byte RemoveBot = 208;
 
         public sbyte MoveX, MoveY;   // -127..127, the left stick
         /// <summary>The right stick: when pushed, you face where it points (twin-stick aiming).</summary>
@@ -202,6 +204,8 @@ namespace UltraPuck.Core
 
         // card effects (seconds left, 0 = ready / not active)
         public Fix GunCooldown, InvisCooldown, InvisibleTime, ShockCooldown;
+        /// <summary>Shockwave: how long the utility button has been held (it fires, this big, when let go).</summary>
+        public Fix ShockHold;
         /// <summary>Slowed by a shockwave: for how long, and by how much (0.3 = 30% slower).</summary>
         public Fix SlowTime, Slow;
         /// <summary>Friendly Fire: the teammate carrying this player (-1 = nobody), and for how long so far.</summary>
@@ -437,7 +441,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);
                 Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps); Mix(ref h, p.Shoved);
-                Mix(ref h, p.ShovedBy); Mix(ref h, p.FastTime); Mix(ref h, p.Fast);
+                Mix(ref h, p.ShovedBy); Mix(ref h, p.FastTime); Mix(ref h, p.Fast); Mix(ref h, p.ShockHold);
             }
             return h;
         }

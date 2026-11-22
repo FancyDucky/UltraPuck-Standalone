@@ -1449,6 +1449,15 @@ namespace UltraPuck.Game
                 Text(v, Wrap(Markup(raw), 34), new Vector3(0f, y, -0.006f), fontSize, charSize, colour, FontStyle.Normal, TextAnchor.UpperCenter, v.Texts);
                 return;
             }
+            // words before "Press {…}" (a description) go above it, wrapped like any footnote
+            var press = raw.IndexOf("Press", System.StringComparison.Ordinal);
+            var before = press > 0 ? raw.Substring(0, press).Trim() : "";
+            if (before.Length > 0)
+            {
+                var wrapped = Wrap(Markup(before), 34);
+                Text(v, wrapped, new Vector3(0f, y, -0.006f), fontSize, charSize, colour, FontStyle.Normal, TextAnchor.UpperCenter, v.Texts);
+                y -= wrapped.Split((char)10).Length * fontSize * charSize * 0.145f + 0.03f;
+            }
             // "Press" [icon] "to use." — tight gaps so the glyph sits with the words
             const float icon = 0.18f, gap = 0.02f;
             var mid = y - 0.02f;
