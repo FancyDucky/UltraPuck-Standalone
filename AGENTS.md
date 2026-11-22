@@ -82,6 +82,10 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.48 (Claude, 22 Nov 2026): **Puck Gun on Triangle.** It fires on the utility button
+  (Triangle / Y) instead of charge / brake, when you don't have the puck, a rock or a teammate; charge / brake only
+  brakes now. `GunCooldown` 0.85 s (was 1), plus `GunBotExtra` 3 s on a body the bot runs. Bots press utility for it.
+  **Version 62.**
 - 0.1.47 (Claude, 22 Nov 2026): **your cards go with you when you swap.** `Cards.Recompute`
   gives a body the cards of whoever's steering it: a person on a bot teammate (Pilot) gives that body their cards and
   their own (bot-run) body gets the bot's, size and weight included (the bodies resize). `Simulation.Route` recomputes

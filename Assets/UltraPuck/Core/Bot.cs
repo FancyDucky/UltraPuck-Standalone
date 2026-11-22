@@ -217,7 +217,7 @@ namespace UltraPuck.Core
                 if (to.SqrLength < Fix.FromInt(144))
                 {
                     aim = to.Normalized;
-                    if (FixVec2.Dot(me.Facing, aim) > Fix.Ratio(95, 100) && (s.Tick & 1) == 0) b |= PlayerInput.ChargeBrake; // brake fires the Puck Gun
+                    if (FixVec2.Dot(me.Facing, aim) > Fix.Ratio(95, 100) && (s.Tick & 1) == 0) b |= PlayerInput.Utility; // the utility button fires the Puck Gun
                 }
             }
 

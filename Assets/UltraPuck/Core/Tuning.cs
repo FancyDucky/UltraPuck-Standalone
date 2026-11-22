@@ -123,7 +123,7 @@ namespace UltraPuck.Core
 
         // card mechanics
         /// <summary>Puck Gun: shot speed, how long a shot flies, cooldown, stun, and the shot's size.</summary>
-        public Fix GunSpeed = Fix.FromInt(38), GunLife = Fix.One, GunCooldown = Fix.One, GunStun = Fix.Ratio(5, 4), ShotRadius = Fix.Ratio(6, 25);
+        public Fix GunSpeed = Fix.FromInt(38), GunLife = Fix.One, GunCooldown = Fix.Ratio(85, 100), GunBotExtra = Fix.FromInt(3), GunStun = Fix.Ratio(5, 4), ShotRadius = Fix.Ratio(6, 25);
         /// <summary>Invisibility: how long, and the cooldown.</summary>
         public Fix InvisTime = Fix.FromInt(5), InvisCooldown = Fix.FromInt(15);
         /// <summary>

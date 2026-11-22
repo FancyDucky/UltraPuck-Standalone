@@ -768,6 +768,8 @@ namespace UltraPuck.Core
             if ((pressed & PlayerInput.Utility) != 0)
             {
                 if (p.Stats.Invisibility > 0 && p.InvisCooldown <= Fix.Zero) { p.InvisibleTime = T.InvisTime; p.InvisCooldown = T.InvisCooldown; }
+                // Puck Gun (when you don't have the puck, a rock or a teammate)
+                if (p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero && !holding && !flying) FireGun(s, i);
                 if (p.Stats.Swap > 0 && !carrying && !holdingMate && !flying) UseSwap(s, i); // no throw/teleport while holding the puck or a teammate
             }
             // Shockwave: hold the utility button to grow it, let go to fire it (no cooldown)
@@ -787,8 +789,6 @@ namespace UltraPuck.Core
                 p.Charge = input.Has(PlayerInput.ChargeBrake) && !flying ? Fix.Min(full, p.Charge + step) : Fix.Zero;
                 // after a quick shot: wait until Shoot/check is let go before a hold can check
                 if (!input.Has(PlayerInput.ShootCheck)) p.SuppressDash = false;
-                // Puck Gun: brake fires it (when you don't have the puck or a rock)
-                if ((pressed & PlayerInput.ChargeBrake) != 0 && p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero) FireGun(s, i);
                 // check: a dash that knocks people back. Not while carrying the puck or a rock, and not while dazed.
                 // Holding the button keeps dashing: the next one as soon as there's a dash ready and the last one has finished.
                 var dashWanted = !p.SuppressDash
@@ -1823,7 +1823,8 @@ namespace UltraPuck.Core
         private void FireGun(GameState s, int i)
         {
             var p = s.Players[i];
-            p.GunCooldown = T.GunCooldown;
+            // a bot (or a person's body the bot is running) waits longer between shots
+            p.GunCooldown = T.GunCooldown + (p.Bot || DriverOf(s, i) < 0 ? T.GunBotExtra : Fix.Zero);
             var start = p.Pos + p.Facing * (RadiusOf(p) + T.ShotRadius + Fix.Ratio(1, 20));
             if (!PuckFits(p.Pos, start)) start = p.Pos; // against a wall: it starts from the middle and hits the wall at once
             var shots = new Shot[s.Shots.Length + 1];

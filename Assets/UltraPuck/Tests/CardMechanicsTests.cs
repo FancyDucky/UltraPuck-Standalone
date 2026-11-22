@@ -282,7 +282,7 @@ namespace UltraPuck.Tests
             s.Players[0].Pos = At(-4, 0); s.Players[0].Facing = FixVec2.Right;
             s.Players[1].Pos = At(3, 0); s.Players[1].Facing = new FixVec2(Fix.Zero, Fix.One);
             s.Carrier = 1;
-            _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(1, s.Shots.Length, "fired");
             Run(s, 60, default(PlayerInput), default(PlayerInput));
             Assert.AreEqual(0.0, s.Players[1].Stun.ToDouble(), "no stun: a knockback, like a check");
@@ -291,11 +291,37 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0, s.Shots.Length);
             // a second shot has to wait for the cooldown
             _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
-            _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(0, s.Shots.Length, "still cooling down");
             Run(s, _sim.T.TicksPerSecond, default(PlayerInput), default(PlayerInput));
-            _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.AreEqual(1, s.Shots.Length, "ready again after a second");
+            Assert.AreEqual(0.85, s.Players[0].GunCooldown.ToDouble(), 0.01, "0.85 s for a person");
+        }
+
+        [Test]
+        public void BotsWaitLongerBetweenPuckGunShots()
+        {
+            var s = _sim.NewGame(new[] { 0, 1 }, 1u, new[] { true, false });
+            Give(s, 0, "ultrapuck.puckgun");
+            Play(s);
+            s.Players[0].Pos = At(-4, 0); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(3, 0);
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.AreEqual(1, s.Shots.Length, "fired");
+            Assert.AreEqual(3.85, s.Players[0].GunCooldown.ToDouble(), 0.01, "3 s longer for a bot");
+        }
+
+        [Test]
+        public void ChargeNoLongerFiresThePuckGun()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.puckgun");
+            Play(s);
+            s.Players[0].Pos = At(-4, 0); s.Players[0].Facing = FixVec2.Right;
+            s.Players[1].Pos = At(3, 0);
+            _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
+            Assert.AreEqual(0, s.Shots.Length, "charge / brake just brakes now");
         }
 
         /// <summary>A Puck Gun hit shoves a light player further than a heavy one (like a check).</summary>
@@ -312,7 +338,7 @@ namespace UltraPuck.Tests
                 s.Players[0].Pos = At(-4, 0); s.Players[0].Facing = FixVec2.Right;
                 s.Players[1].Pos = At(1, 0);
                 s.PuckPos = At(10, 8);
-                _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
+                _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
                 var best = 0.0;
                 for (var t = 0; t < 30; t++) { _sim.Step(s, new PlayerInput[2]); best = System.Math.Max(best, s.Players[1].Vel.X.ToDouble()); }
                 return best;
@@ -758,7 +784,7 @@ namespace UltraPuck.Tests
             s.Players[0].Pos = At(-4, -6); s.Players[0].Facing = FixVec2.Right;
             s.Players[1].Pos = At(10, 8);
             s.PuckPos = At(0, -6);
-            _sim.Step(s, new[] { Press(PlayerInput.ChargeBrake), default(PlayerInput) });
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             for (var t = 0; t < 60 && s.Shots.Length > 0; t++) _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
             Assert.Greater(s.PuckVel.X.ToDouble(), 8.0, "the shot knocked the puck along");
         }

@@ -2033,7 +2033,8 @@ namespace UltraPuck.Game
             // Replays always show the outline so everyone can follow who was invisible.
             var hidden = invisible && opponentHere && !teammateHere && !_hud.Replay;
             var faint = invisible && !hidden;
-            _cooldowns[0] = p.Stats.PuckGun > 0 ? 1f - p.GunCooldown.ToFloat() / _sim.T.GunCooldown.ToFloat() : -1f;
+            var gunFull = _sim.T.GunCooldown.ToFloat() + (p.Bot || Simulation.DriverOf(_state, i) < 0 ? _sim.T.GunBotExtra.ToFloat() : 0f);
+            _cooldowns[0] = p.Stats.PuckGun > 0 ? 1f - p.GunCooldown.ToFloat() / Mathf.Max(0.01f, gunFull) : -1f;
             _cooldowns[1] = p.Stats.Invisibility > 0 ? (invisible ? 0f : 1f - p.InvisCooldown.ToFloat() / _sim.T.InvisCooldown.ToFloat()) : -1f;
             _cooldowns[2] = p.Stats.Shockwave > 0 ? (p.ShockHold > Fix.Zero ? p.ShockHold.ToFloat() / Mathf.Max(0.01f, _sim.T.ShockChargeTime.ToFloat()) : 1f)
                 : p.Stats.Swap > 0 ? 1f // Swap has no cooldown — always ready
