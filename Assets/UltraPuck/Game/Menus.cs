@@ -217,6 +217,13 @@ namespace UltraPuck.Game
             if (Current == Page.Cards)
             {
                 if (Cards != null)
+                {
+                    _rows.Add(Button("All on", () => { foreach (var c in Cards.Cards) Settings.SetCardOn(c.Id, true); }));
+                    _rows[_rows.Count - 1].Hint = "Every card can be offered.";
+                    _rows.Add(Button("All off", () => { foreach (var c in Cards.Cards) Settings.SetCardOn(c.Id, false); }));
+                    _rows[_rows.Count - 1].Hint = "No card is offered (then turn on the ones you want). With none on, there's no card pick.";
+                }
+                if (Cards != null)
                     foreach (var c in Cards.Cards)
                     {
                         var id = c.Id;
@@ -365,8 +372,20 @@ namespace UltraPuck.Game
 
         private Page _cardsFrom = Page.Settings;
 
+        /// <summary>"12 of 20 on", for the card list's heading.</summary>
+        private string CardsOnCount()
+        {
+            if (Cards == null) return "";
+            var on = 0;
+            foreach (var c in Cards.Cards) if (Settings.CardOn(c.Id)) on++;
+            return on + " of " + Cards.Cards.Count + " on";
+        }
+
         /// <summary>Open the match settings page (for the screenshots).</summary>
         public void ShowMatchSettings() { OpenMatch(); }
+
+        /// <summary>Open the card list from the match settings (for the screenshots).</summary>
+        public void ShowCardList() { _cardsFrom = Current; Current = Page.Cards; _focus = 0; _first = 0; _focusY = -1f; }
 
         public void OpenMatch()
         {
@@ -628,7 +647,7 @@ namespace UltraPuck.Game
             var cardsPage = Current == Page.Cards;
             Ui.Label(new Rect(x, y + 22f, panelW, 50f), pause ? "Paused" : cardsPage ? "Toggle cards" : matchPage ? "Match settings" : "Settings", Ui.Font(38, true, TextAnchor.MiddleCenter), Ui.Text);
             if (pause && _subtitle.Length > 0) Ui.Label(new Rect(x, y + 66f, panelW, 26f), _subtitle, Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
-            if (cardsPage) Ui.Label(new Rect(x, y + 82f, panelW, 40f), "Which cards can be offered" + (_rows.Count > visible ? "   (" + (_first + 1) + "-" + (_first + visible) + " of " + (_rows.Count - 1) + ")" : ""), Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
+            if (cardsPage) Ui.Label(new Rect(x, y + 82f, panelW, 40f), "Which cards can be offered   (" + CardsOnCount() + ")", Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
             else if (matchPage) Ui.Label(new Rect(x, y + 82f, panelW, 40f), "Restart the match to use new settings", Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
             else if (!pause) Tabs_(x, y + 82f, panelW);
 

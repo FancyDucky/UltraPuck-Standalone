@@ -153,10 +153,23 @@ namespace UltraPuck.Core
         /// <summary>Everyone's stats worked out again from the cards held: their own, plus the other team's "Opponent" cards.</summary>
         public void Recompute(GameState s)
         {
-            foreach (var p in s.Players)
+            // your cards go with you: a person steering a bot teammate gives that body their cards, and their own body
+            // (run by the bot meanwhile) gets the bot's - size, weight and all
+            var n = s.Players.Length;
+            var from = new int[n];
+            for (var i = 0; i < n; i++) from[i] = i;
+            for (var h = 0; h < n; h++)
             {
+                var j = s.Players[h].Pilot;
+                if (s.Players[h].Bot || j < 0 || j >= n || j == h) continue;
+                from[j] = h;
+                from[h] = j;
+            }
+            for (var i = 0; i < n; i++)
+            {
+                var p = s.Players[i];
                 var st = new Stats();
-                foreach (var ci in p.Cards) Apply(ci, st, false);
+                foreach (var ci in s.Players[from[i]].Cards) Apply(ci, st, false);
                 foreach (var q in s.Players)
                     if (q.Team != p.Team)
                         foreach (var ci in q.Cards) Apply(ci, st, true);

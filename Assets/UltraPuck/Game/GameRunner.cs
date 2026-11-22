@@ -511,6 +511,9 @@ namespace UltraPuck.Game
                 _menus.ShowMatchSettings();
                 yield return new WaitForSecondsRealtime(0.5f);
                 yield return Shot("match-settings");
+                _menus.ShowCardList();
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("card-list");
                 _menus.Close();
                 GoMainMenu();
             }

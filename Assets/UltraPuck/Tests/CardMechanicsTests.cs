@@ -546,6 +546,186 @@ namespace UltraPuck.Tests
             Assert.AreEqual(2, s.Players[1].HeldBy, "so did who carries whom");
         }
 
+        /// <summary>On rinks with nets out on the ice, bots don't get stuck on them: hardly any seconds spent pinned by one.</summary>
+        [Test, Timeout(240000)]
+        public void BotsDontGetStuckOnNets()
+        {
+            foreach (var file in new[] { "hockey-rink.json", "s-rink.json", "big-rink.json" })
+            {
+                var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));
+                var sim = new Simulation(map, null, _lib);
+                int stuck = 0, total = 0;
+                foreach (var seed in new[] { 5u, 9u })
+                {
+                    var s = sim.NewGame(new[] { 0, 1, 0, 1 }, seed, new[] { true, true, true, true });
+                    Play(s);
+                    var was = new FixVec2[4];
+                    for (var t = 0; t < 120 * 90; t++)
+                    {
+                        sim.Step(s, sim.Route(s, new PlayerInput[4]));
+                        if (s.Phase == Phase.Countdown) { s.Phase = Phase.Play; s.PhaseTime = Fix.Zero; }
+                        if (t % 120 != 0) continue;
+                        // once a second: who hardly moved, next to a net?
+                        for (var i = 0; i < 4; i++)
+                        {
+                            var p = s.Players[i];
+                            if (s.Phase == Phase.Play && t > 0)
+                            {
+                                total++;
+                                var near = false;
+                                foreach (var g in map.Goals) if (g.Touches(p.Pos, Fix.FromInt(3))) near = true;
+                                if (near && (p.Pos - was[i]).SqrLength < Fix.FromInt(1) && s.Carrier != i) stuck++;
+                            }
+                            was[i] = p.Pos;
+                        }
+                    }
+                }
+                TestContext.WriteLine(file + ": bots stuck by a net " + (100.0 * stuck / total).ToString("0.0") + "% of seconds");
+            }
+        }
+
+        /// <summary>The puck stuck behind a net: bots go round to it, none of them stays wedged in or behind the net.</summary>
+        [Test, Timeout(120000)]
+        public void BotsGoRoundANetToThePuckBehindIt()
+        {
+            foreach (var file in new[] { "hockey-rink.json", "s-rink.json" })
+            {
+                var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));
+                var sim = new Simulation(map, null, _lib);
+                int stuck = 0, total = 0, reached = 0, tries = 0;
+                foreach (var g in map.Goals)
+                {
+                    if (!g.HasFacing) continue;
+                    var centre = new FixVec2((g.Min.X + g.Max.X) / 2, (g.Min.Y + g.Max.Y) / 2);
+                    var behind = centre - g.Facing * Fix.FromInt(3); // just behind the net
+                    for (var seed = 1u; seed <= 3u; seed++)
+                    {
+                        var s = sim.NewGame(new[] { 0, 1, 0, 1 }, seed, new[] { true, true, true, true });
+                        Play(s);
+                        var was = new FixVec2[4];
+                        var got = false;
+                        tries++;
+                        for (var t = 0; t < 120 * 8; t++)
+                        {
+                            if (s.Carrier < 0) { s.PuckPos = behind; s.PuckVel = FixVec2.Zero; }
+                            else got = true;
+                            sim.Step(s, sim.Route(s, new PlayerInput[4]));
+                            if (s.Phase != Phase.Play) break;
+                            if (t % 60 != 0) continue;
+                            for (var i = 0; i < 4; i++)
+                            {
+                                var p = s.Players[i];
+                                if (t >= 240)
+                                {
+                                    total++;
+                                    var near = g.Touches(p.Pos, Fix.FromInt(3));
+                                    if (near && (p.Pos - was[i]).SqrLength < Fix.Ratio(1, 4) && s.Carrier != i) stuck++;
+                                }
+                                was[i] = p.Pos;
+                            }
+                        }
+                        if (got) reached++;
+                    }
+                }
+                TestContext.WriteLine(file + ": puck behind a net reached " + reached + "/" + tries + ", bots stuck by the net " + (100.0 * stuck / System.Math.Max(1, total)).ToString("0") + "% of half-seconds");
+            }
+        }
+
+        /// <summary>A bot going after a loose puck a long way off dashes its way there: much quicker than skating.</summary>
+        [Test]
+        public void BotsDashToAFarLoosePuck()
+        {
+            var s = _sim.NewGame(new[] { 0, 1 }, 4u, new[] { true, true });
+            Play(s);
+            s.Players[0].Pos = At(-18, -4); s.Players[0].Vel = FixVec2.Zero;
+            s.Players[1].Pos = At(18, 9);
+            var t = 0;
+            var dashes = 0;
+            for (; t < 120 * 8 && s.Carrier != 0; t++)
+            {
+                s.PuckPos = At(12, -4); s.PuckVel = FixVec2.Zero; s.Players[1].Pos = At(18, 9);
+                var before = s.Players[0].DashCharge;
+                _sim.Step(s, _sim.Route(s, new PlayerInput[2]));
+                if (s.Players[0].DashCharge < before - Fix.Half) dashes++;
+            }
+            TestContext.WriteLine("30 units to a loose puck: " + (t / 120.0).ToString("0.00") + " s, " + dashes + " dashes");
+            Assert.AreEqual(0, s.Carrier, "got there");
+            Assert.Greater(dashes, 1, "dashed along the way");
+            Assert.Less(t, 120 * 3, "in under 3 s (skating alone takes about 4)");
+        }
+
+        /// <summary>Swapping onto a bot teammate: your cards (size and all) go with you; your own body gets the bot's.</summary>
+        [Test]
+        public void YourCardsGoWithYouWhenYouSwap()
+        {
+            var s = _sim.NewGame(new[] { 0, 0, 1 }, 2u, new[] { false, true, true });
+            Give(s, 0, "ultrapuck.heavyweight", "ultrapuck.shockwave");
+            Give(s, 1, "ultrapuck.speedup");
+            Play(s);
+            var big = s.Players[0].Stats.Size;
+            Assert.Greater(big.ToDouble(), 1.1, "you're big");
+            var swap = new PlayerInput { Buttons = PlayerInput.Swap };
+            _sim.Step(s, _sim.Route(s, new[] { swap, default(PlayerInput), default(PlayerInput) }));
+            Assert.AreEqual(1, Simulation.Steers(s, 0), "steering the bot now");
+            Assert.AreEqual(big, s.Players[1].Stats.Size, "the body you steer is big now");
+            Assert.AreEqual(1, s.Players[1].Stats.Shockwave, "and has your Shockwave");
+            Assert.AreEqual(1.0, s.Players[0].Stats.Size.ToDouble(), 1e-6, "your own body is back to normal size");
+            Assert.AreEqual(0, s.Players[0].Stats.Shockwave, "without your Shockwave");
+            Assert.Greater(s.Players[0].Stats.MoveSpeed.ToDouble(), 1.1, "with the bot's Speed Up instead");
+            Assert.AreEqual(2, s.Players[0].Cards.Length, "the cards are still yours");
+            // and back
+            _sim.Step(s, _sim.Route(s, new[] { default(PlayerInput), default(PlayerInput), default(PlayerInput) }));
+            _sim.Step(s, _sim.Route(s, new[] { swap, default(PlayerInput), default(PlayerInput) }));
+            Assert.AreEqual(0, Simulation.Steers(s, 0), "back on your own player");
+            Assert.AreEqual(big, s.Players[0].Stats.Size, "big again");
+            Assert.AreEqual(1.0, s.Players[1].Stats.Size.ToDouble(), 1e-6, "the bot's body normal again");
+        }
+
+        /// <summary>Bots play as a team: over a few minutes of 2 v 2 they pass to each other and take quick shots, and still score.</summary>
+        [Test, Timeout(120000)]
+        public void BotsPassAndTakeQuickShots()
+        {
+            int passes = 0, quick = 0, charged = 0, goals = 0, attempts = 0;
+            foreach (var seed in new[] { 3u, 11u })
+            {
+                var s = _sim.NewGame(new[] { 0, 1, 0, 1 }, seed, new[] { true, true, true, true });
+                Play(s);
+                int last = -1, scored = 0;
+                var shots = new int[4];
+                var charge = new double[4];
+                for (var t = 0; t < 120 * 90; t++)
+                {
+                    _sim.Step(s, _sim.Route(s, new PlayerInput[4]));
+                    if (s.Phase == Phase.Countdown) { s.Phase = Phase.Play; s.PhaseTime = Fix.Zero; }
+                    if (s.Carrier >= 0)
+                    {
+                        if (last >= 0 && last != s.Carrier && s.Players[last].Team == s.Players[s.Carrier].Team) passes++;
+                        last = s.Carrier;
+                    }
+                    if (s.Phase == Phase.Scored) last = -1;
+                    for (var i = 0; i < 4; i++)
+                    {
+                        if (s.Players[i].ShotsFired > shots[i])
+                        {
+                            if (charge[i] <= 0.0) quick++; else charged++;
+                            shots[i] = s.Players[i].ShotsFired;
+                            // aimed at a teammate: a pass attempt
+                            var mate = s.Players[i ^ 2];
+                            var to = (mate.Pos - s.Players[i].Pos).Normalized;
+                            if (FixVec2.Dot(to, s.PuckVel.Normalized) > Fix.Ratio(9, 10)) attempts++;
+                        }
+                        charge[i] = s.Players[i].Charge.ToDouble();
+                    }
+                }
+                scored = s.Score[0] + s.Score[1];
+                goals += scored;
+            }
+ TestContext.WriteLine("3 minutes of 2v2 bots: " + attempts + " pass attempts, " + passes + " passes, " + quick + " quick shots, " + charged + " charged, " + goals + " goals");
+            Assert.Greater(passes, 20, "they pass to each other");
+            Assert.Greater(quick, 20, "plenty of quick shots");
+                        Assert.Greater(goals, 0, "and still score");
+        }
+
         [Test]
         public void GoalsAndAssistsAreCounted()
         {

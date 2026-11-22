@@ -82,6 +82,26 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.47 (Claude, 22 Nov 2026): **your cards go with you when you swap.** `Cards.Recompute`
+  gives a body the cards of whoever's steering it: a person on a bot teammate (Pilot) gives that body their cards and
+  their own (bot-run) body gets the bot's, size and weight included (the bodies resize). `Simulation.Route` recomputes
+  whenever any Pilot changes, and `RockOwners` hands a Swap rock to the teammate body that now has the Swap card.
+  Cards stay stored on the person's own player (`Cards`), so picks and the card screen are unchanged. Cooldowns and
+  effects already running stay with their body. **Version 61.**
+- 0.1.47 (Claude, 22 Nov 2026): **bots play as a team and go round nets.** Passing: an open
+  teammate is one with no opponent within 1.6 (was: no opponent nearer them than the passer, which in 2v2 was almost
+  never), lane a bit narrower, up to 22 long (was 15), level or a little back is fine, any open teammate when under
+  pressure, not straight back to whoever just passed (`Touch2`) unless pressed, and a teammate with a much better look
+  gets it; otherwise a pass about 2 times in 3 when someone's open. Quick shots (no charge) when within 10 of the net,
+  an opponent within 4, or with Power Shot / Invisible Shot, lined up with a clear lane. 2v2 bots over 3 minutes went
+  from 3 passes and ~10 quick shots to ~29 and ~43 (`BotsPassAndTakeQuickShots`). Nets: Hockey and Big Rink goals
+  now have `facing` (the maps and `make_hockey_rink.py`), so bots skate round to the mouth; `Bot.OutOfNets` moves any
+  target inside a net out in front of it, `Bot.RoundNets` heads for the best corner round a net blocking the way. A
+  puck held behind a Hockey Rink net: bots reach it 6/6 (they never went round before). `RoundNets` only on rinks
+  without a route, and only for a net actually in the way (`CrossesBox`): on the U Rink it had made red win 70-42 over
+  20 bot matches (now 114-106 over 40; Hockey 69-73 over 20; S 95-76 over 40, likely noise, worth a look). Chasing
+  the puck from more than 5 away (8 if an opponent has it) a bot holds dash with `DashMove`, chaining dashes: 30 units
+  in 2.55 s instead of ~4. Toggle cards page: All on / All off rows and an "N of M on" heading. **Version 60.**
 - 0.1.46 (Claude, 21 Nov 2026): **anyone recolours their side; Shockwave looks.** Players
   screen: D-pad up / down (arrow keys on a keyboard; never the stick) steps your side to the next colour of all 8
   (skipping the other side's), for everyone on it, bots too (`LocalPlayers.RecolourSide`); left / right now moves you

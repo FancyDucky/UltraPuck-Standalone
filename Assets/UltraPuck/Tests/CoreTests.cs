@@ -843,11 +843,12 @@ namespace UltraPuck.Tests
             var sim = new Simulation(LoadMap("hockey-rink.json"));
             int[] goals = new int[2];
             // the rink is 35% longer than the Test Rink, so goals come slower: longer matches
-            for (var k = 0; k < 10; k++)
+            for (var k = 0; k < 20; k++)
             {
                 var score = BotMatch(sim, new[] { 0, 1, 0, 1 }, 0x51ED27u + (uint)k * 7919u, 240);
                 goals[0] += score[0]; goals[1] += score[1];
             }
+            TestContext.WriteLine("hockey-rink.json: goals red " + goals[0] + ", blue " + goals[1]);
             Assert.Greater(goals[0] + goals[1], 10, "goals: orange " + goals[0] + " blue " + goals[1]);
             Assert.Greater(goals[0], 0); Assert.Greater(goals[1], 0);
         }

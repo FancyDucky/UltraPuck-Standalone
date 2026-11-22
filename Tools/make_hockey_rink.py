@@ -58,8 +58,9 @@ m = {
     ],
     "goals": [
         # front edge at the mouth opening; sides stop at the walls' inner edge
-        {"team": 0, "min": [r3(-NET_X + WALL / 2), r3(-MOUTH + WALL / 2)], "max": [r3(-mouth_x), r3(MOUTH - WALL / 2)]},
-        {"team": 1, "min": [r3(mouth_x), r3(-MOUTH + WALL / 2)], "max": [r3(NET_X - WALL / 2), r3(MOUTH - WALL / 2)]},
+        # "facing": which way each net opens (bots skate round to that side, and round the net to a puck behind it)
+        {"team": 0, "min": [r3(-NET_X + WALL / 2), r3(-MOUTH + WALL / 2)], "max": [r3(-mouth_x), r3(MOUTH - WALL / 2)], "facing": [1.0, 0.0]},
+        {"team": 1, "min": [r3(mouth_x), r3(-MOUTH + WALL / 2)], "max": [r3(NET_X - WALL / 2), r3(MOUTH - WALL / 2)], "facing": [-1.0, 0.0]},
     ],
     "spawns": spawns,
     "puck": [0, 0],

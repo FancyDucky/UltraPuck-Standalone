@@ -217,6 +217,28 @@ namespace UltraPuck.Core
             p.Cards = cards;
         }
 
+        /// <summary>
+        /// After a swap: a Swap rock whose body no longer has the card goes to the teammate body that has it now (one with
+        /// no rock of its own), so it's still yours to swap to.
+        /// </summary>
+        private static void RockOwners(GameState s)
+        {
+            for (var k = 0; k < s.Rocks.Length; k++)
+            {
+                var o = s.Rocks[k].Owner;
+                if (o < 0 || o >= s.Players.Length || s.Players[o].Stats.Swap > 0) continue;
+                for (var j = 0; j < s.Players.Length; j++)
+                {
+                    if (j == o || s.Players[j].Team != s.Players[o].Team || s.Players[j].Stats.Swap <= 0) continue;
+                    var has = false;
+                    foreach (var rk in s.Rocks) if (rk.Owner == j) has = true;
+                    if (has) continue;
+                    s.Rocks[k].Owner = j;
+                    break;
+                }
+            }
+        }
+
         /// <summary>Drop rocks whose owner no longer has Swap.</summary>
         private void PruneRocks(GameState s)
         {
@@ -576,6 +598,8 @@ namespace UltraPuck.Core
         public PlayerInput[] Route(GameState s, PlayerInput[] raw)
         {
             var n = s.Players.Length;
+            var pilots = 0L; // who steered whom before (to notice a swap)
+            for (var h = 0; h < n; h++) pilots = pilots * 9 + (s.Players[h].Pilot + 1);
             if (s.Phase == Phase.Picking || s.Phase == Phase.GameOver)
                 foreach (var p in s.Players) p.Pilot = -1;
             else
@@ -603,6 +627,10 @@ namespace UltraPuck.Core
                 }
             }
             s.AutoCarrier = s.Carrier;
+            // a swap: the cards go with the people (stats again), and a Swap rock with its card
+            var now = 0L;
+            for (var h = 0; h < n; h++) now = now * 9 + (s.Players[h].Pilot + 1);
+            if (now != pilots && Cards != null) { Cards.Recompute(s); RockOwners(s); }
             var inputs = new PlayerInput[n];
             for (var i = 0; i < n; i++)
             {
