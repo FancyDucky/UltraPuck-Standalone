@@ -823,7 +823,7 @@ namespace UltraPuck.Tests
             Assert.AreEqual(before, s.Players[0].SwapFrom, "left from where they stood");
             // same Step still moves everyone after the swap, so check the directions stuck
             Assert.Less(s.Players[0].Vel.X.ToDouble(), -3.0, "player kept the rock's leftward momentum");
-            Assert.Greater(s.Rocks[0].Vel.X.ToDouble(), 1.5, "rock kept the player's rightward momentum");
+            Assert.Less(s.Rocks[0].Vel.X.ToDouble(), -3.0, "rock kept its own leftward momentum, not the player's");
         }
 
         [Test]
@@ -950,11 +950,11 @@ namespace UltraPuck.Tests
             _sim.Step(s, new PlayerInput[3]);
             Assert.AreEqual(0.1, s.Players[1].Slow.ToDouble(), 1e-3, "an opponent on the ice is 10% slower");
             Assert.AreEqual(Fix.Zero, s.Players[2].SlowTime, "a teammate isn't");
-            Assert.AreEqual(0.1, s.Players[2].Fast.ToDouble(), 1e-3, "a teammate is 10% faster");
+            Assert.AreEqual(0.6, s.Players[2].Fast.ToDouble(), 1e-3, "a teammate is 60% faster");
             Assert.Greater(s.Players[2].FastTime.ToDouble(), 0.0);
             Assert.AreEqual(Fix.Zero, s.Players[1].FastTime, "an opponent isn't");
 
-            for (var t = 0; t < 120 * 26; t++) _sim.Step(s, new PlayerInput[3]);
+            for (var t = 0; t < 120 * 20; t++) _sim.Step(s, new PlayerInput[3]);
             Assert.AreEqual(0, s.Ice.Length, "all melted");
         }
 
@@ -977,8 +977,8 @@ namespace UltraPuck.Tests
             var n = s.Ice.Length;
             Assert.Greater(n, 0);
             for (var t = 0; t < 120 * 2; t++) _sim.Step(s, new PlayerInput[2]);
-            for (var t = 0; t < 120 * 6; t++) _sim.Step(s, new PlayerInput[2]);
-            Assert.Greater(s.Ice.Length, 0, "still there after 8 s: it lasts 9");
+            for (var t = 0; t < 120 * 12; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.Greater(s.Ice.Length, 0, "still there after 14 s: it lasts 15");
             for (var t = 0; t < 120 * 3; t++) _sim.Step(s, new PlayerInput[2]);
             Assert.AreEqual(0, s.Ice.Length, "melted soon after: the trail was short, so the slow melt didn't take long");
         }

@@ -136,7 +136,7 @@ namespace UltraPuck.Core
         /// laid (so each later bit lasts a little longer). How much it slows per copy, how wide it is, and how far
         /// apart its points are.
         /// </summary>
-        public Fix IceTime = Fix.FromInt(3), IceLife = Fix.FromInt(9), IceMeltPace = Fix.FromInt(4), IceSlow = Fix.Ratio(1, 10), IceRadius = Fix.Ratio(9, 20), IceSpacing = Fix.Ratio(2, 5);
+        public Fix IceTime = Fix.FromInt(3), IceLife = Fix.FromInt(15), IceMeltPace = Fix.One, IceBoost = Fix.Ratio(6, 10), IceSlow = Fix.Ratio(1, 10), IceRadius = Fix.Ratio(9, 20), IceSpacing = Fix.Ratio(2, 5);
         /// <summary>A pass caught by a teammate carries them on: this share of the puck's speed, up to the most.</summary>
         public Fix PassBoost = Fix.Ratio(3, 20), PassBoostMax = Fix.FromInt(6);
         /// <summary>
@@ -162,7 +162,8 @@ namespace UltraPuck.Core
         public Fix PylonWeight = Fix.Two, PylonDrag = Fix.FromInt(6);
         /// <summary>Swap rock: size, weight (lighter than a player), how fast it slows, throw speed (like a quick shot).</summary>
         // Swap rock: light and very glidey so anyone can knock it around; throw still uses quick-shot speed
-        public Fix RockRadius = Fix.Ratio(2, 5), RockWeight = Fix.Ratio(12, 100), RockDrag = Fix.Ratio(18, 100), RockSpeed = Fix.Ratio(69, 4);
+        // (drag 0.326: glides 35% less far than the old 0.18, then 15% less again)
+        public Fix RockRadius = Fix.Ratio(2, 5), RockWeight = Fix.Ratio(12, 100), RockDrag = Fix.Ratio(326, 1000), RockSpeed = Fix.Ratio(69, 4);
         /// <summary>Bots wait this long between Swap uses so they don't spam throw/teleport.</summary>
         public Fix SwapBotCooldown = Fix.FromInt(3);
         /// <summary>A loose Swap rock slower than this has stopped: it's gone (so it can't be left as a safe spot to swap back to).</summary>

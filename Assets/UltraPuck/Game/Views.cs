@@ -120,6 +120,11 @@ namespace UltraPuck.Game
         private readonly Transform[] _slowArrows = new Transform[3];
         private readonly Mesh[] _slowMesh = new Mesh[3], _slowOutline = new Mesh[3];
         private float _slowAlpha;
+        // sped up: the same arrows, pointing up, orange, drifting up
+        private readonly Transform _fastRoot;
+        private readonly Transform[] _fastArrows = new Transform[3];
+        private readonly Mesh[] _fastMesh = new Mesh[3], _fastOutline = new Mesh[3];
+        private float _fastAlpha;
 
         // stunned: little stars circling the player
         private readonly Transform _stunRoot;
@@ -175,6 +180,27 @@ namespace UltraPuck.Game
                 Draw.Make("Outline", _slowArrows[k], _slowOutline[k], 24);
             }
             _slowRoot.gameObject.SetActive(false);
+
+            _fastRoot = new GameObject("SpedUp").transform;
+            _fastRoot.SetParent(Root.transform, false);
+            for (var k = 0; k < 3; k++)
+            {
+                // an up arrow: the slow arrow turned over
+                var w = radius * 0.22f;
+                var pts = new List<Vector2>
+                {
+                    new Vector2(-w * 0.45f, -w * 1.4f), new Vector2(-w * 0.45f, 0f), new Vector2(-w * 1.1f, 0f), new Vector2(0f, w * 1.1f),
+                    new Vector2(w * 1.1f, 0f), new Vector2(w * 0.45f, 0f), new Vector2(w * 0.45f, -w * 1.4f),
+                };
+                _fastMesh[k] = Draw.Polygon(pts, new Color(1f, 0.6f, 0.15f, 0f));
+                _fastArrows[k] = Draw.Make("Arrow" + k, _fastRoot, _fastMesh[k], 25).transform;
+                var centre = new Vector2(0f, -w * 0.15f);
+                var outline = new List<Vector2>();
+                foreach (var p in pts) outline.Add(centre + (p - centre) * 1.45f);
+                _fastOutline[k] = Draw.Polygon(outline, new Color(0f, 0f, 0f, 0f));
+                Draw.Make("Outline", _fastArrows[k], _fastOutline[k], 24);
+            }
+            _fastRoot.gameObject.SetActive(false);
 
             _stunRoot = new GameObject("Stunned").transform;
             _stunRoot.SetParent(Root.transform, false);
@@ -384,11 +410,11 @@ namespace UltraPuck.Game
             var showAim = aiming && !faint && len > 0.01f;
             if (_aimRoot.gameObject.activeSelf != showAim) _aimRoot.gameObject.SetActive(showAim);
             if (showAim) _aimRoot.localScale = new Vector3(len, 1f, 1f);
-            if (_boostRing.activeSelf != boosted) _boostRing.SetActive(boosted);
+            if (_boostRing.activeSelf) _boostRing.SetActive(false); // (sped up shows arrows now)
             var dt = Time.unscaledDeltaTime;
             var t = Time.unscaledTime;
 
-            // slowed: three blue down arrows drifting down through the player and fading, one after another
+            // slowed: three solid black down arrows drifting down through the player and fading, one after another
             _slowAlpha = Mathf.MoveTowards(_slowAlpha, slowed ? 1f : 0f, dt * 5f);
             var showSlow = _slowAlpha > 0.01f && !faint;
             if (_slowRoot.gameObject.activeSelf != showSlow) _slowRoot.gameObject.SetActive(showSlow);
@@ -399,8 +425,23 @@ namespace UltraPuck.Game
                     var x = (k - 1) * _r * 0.75f;
                     _slowArrows[k].localPosition = new Vector3(x, _r * (0.9f - 1.6f * phase), 0f);
                     var a = Mathf.Sin(phase * Mathf.PI) * 0.95f * _slowAlpha;
-                    Draw.Recolor(_slowMesh[k], new Color(0.5f, 0.8f, 1f, a));
+                    Draw.Recolor(_slowMesh[k], new Color(0f, 0f, 0f, a));
                     Draw.Recolor(_slowOutline[k], new Color(0f, 0f, 0f, a));
+                }
+
+            // sped up: three orange up arrows drifting up through the player
+            _fastAlpha = Mathf.MoveTowards(_fastAlpha, boosted ? 1f : 0f, dt * 5f);
+            var showFast = _fastAlpha > 0.01f && !faint;
+            if (_fastRoot.gameObject.activeSelf != showFast) _fastRoot.gameObject.SetActive(showFast);
+            if (showFast)
+                for (var k = 0; k < 3; k++)
+                {
+                    var phase = (t * 1.3f + k / 3f) % 1f;
+                    var x = (k - 1) * _r * 0.75f;
+                    _fastArrows[k].localPosition = new Vector3(x, _r * (-0.9f + 1.6f * phase), 0f);
+                    var a = Mathf.Sin(phase * Mathf.PI) * 0.95f * _fastAlpha;
+                    Draw.Recolor(_fastMesh[k], new Color(1f, 0.6f, 0.15f, a));
+                    Draw.Recolor(_fastOutline[k], new Color(0f, 0f, 0f, a));
                 }
 
             // stunned: stars circling

@@ -82,6 +82,12 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.43 (Claude, 21 Nov 2026): **Swap rock glides less and can't be pumped; Ice Trail 15 s,
+  +60%; speed arrows.** `RockDrag` 0.18 -> 0.277 (35% less glide) -> 0.326 (15% less again; glide goes as 1 / drag).
+  Swapping: you take the rock's momentum, the rock keeps its own (it used to take yours, so spam swapping sped it up).
+  Ice Trail: `IceLife` 15, `IceMeltPace` 1 (every bit lasts 15 s); teammates on it get `IceBoost` +60% (enemies still
+  -10% a copy). Sped up now shows three orange up arrows (like the slow arrows) instead of the orange ring; the slow
+  arrows are solid black. **NetSession.Version 50.** Checked: 143 tests (138 pass, 5 skipped), Windows build, stone shot.
 - 0.1.42 (Claude, 21 Nov 2026): **online match options, Same Draw, everyone's cursors.**
   The online lobby's Options (host) has every match setting: Match mode (Score / Time), Score to win 1-10 or Time
   1:00-10:00 (`MainMenu.Row.LabelNow`), Rink, Rounds, Replays, Picking, Cards offered, Pick time, Multiple

@@ -653,6 +653,8 @@ namespace UltraPuck.Game
                 _state.Carrier = -1;
                 _state.PuckPos = at(6, 2.3);
                 _state.PuckVel = FixVec2.Zero;
+                // sped up (orange arrows) and slowed (black arrows)
+                if (_state.Players.Length > 2) { _state.Players[1].Fast = Fix.Ratio(6, 10); _state.Players[1].FastTime = Fix.FromInt(9); _state.Players[2].Slow = Fix.Ratio(1, 10); _state.Players[2].SlowTime = Fix.FromInt(9); }
                 yield return new WaitForSecondsRealtime(0.15f);
                 yield return Shot("stone-1");
                 yield return new WaitForSecondsRealtime(0.3f);

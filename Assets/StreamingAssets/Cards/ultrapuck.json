@@ -213,9 +213,9 @@
       "color": "#8FD3F5",
       "flavor": "Friends call me Snow Miser",
       "face": [
-        { "label": "Teammates on Ice", "value": "[good]+10%[/]" },
+        { "label": "Teammates on Ice", "value": "[good]+60%[/]" },
         { "label": "Enemies on Ice", "value": "[good]-10%[/]" },
-        { "label": "Trail Life", "value": "[good]9 s[/]" }
+        { "label": "Trail Life", "value": "[good]15 s[/]" }
       ],
       "text": "[note]Every shot lays it. Picking up the puck ends the trail there.[/]",
       "stats": { "IceTrail": "+1" }

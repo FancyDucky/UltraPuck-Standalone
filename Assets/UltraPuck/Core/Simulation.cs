@@ -943,7 +943,7 @@ namespace UltraPuck.Core
                 foreach (var p in s.Ice) if (p.Melt > Fix.Zero) keep[j++] = p;
                 s.Ice = keep;
             }
-            // on the ice: the other team is slowed, the team whose ice it is sped up (as much), while they're on it
+            // on the ice: the other team is slowed, the team whose ice it is sped up (IceBoost), while they're on it
             foreach (var q in s.Players)
             {
                 var reach = T.IceRadius + RadiusOf(q) * Fix.Half;
@@ -952,7 +952,7 @@ namespace UltraPuck.Core
                 {
                     if ((q.Pos - p.Pos).SqrLength > reach * reach) continue;
                     if (p.Team != q.Team) slow = Fix.Max(slow, p.Slow);
-                    else fast = Fix.Max(fast, p.Slow);
+                    else fast = T.IceBoost;
                 }
                 if (slow > Fix.Zero) SlowDown(q, slow, Fix.Ratio(1, 5));
                 if (fast > Fix.Zero) SpeedUp(q, fast, Fix.Ratio(1, 5));
@@ -1902,12 +1902,12 @@ namespace UltraPuck.Core
                 var rk = s.Rocks[k];
                 var from = a.Pos;
                 var to = rk.Pos;
-                var pVel = a.Vel;
-                var rVel = rk.Carrier >= 0 && rk.Carrier < s.Players.Length ? s.Players[rk.Carrier].Vel : rk.Vel;
+                // you take the rock's momentum; the rock keeps its own (it doesn't take yours, so swapping again and
+                // again can't keep speeding it up)
+                var rVel = rk.Vel;
                 a.Pos = to;
                 a.Vel = rVel;
                 rk.Pos = from;
-                rk.Vel = pVel;
                 rk.Carrier = -1;
                 CollideWalls(ref a.Pos, ref a.Vel, RadiusOf(a), T.WallBounce);
                 CollideWalls(ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
