@@ -899,7 +899,7 @@ namespace UltraPuck.Tests
             foreach (var g in map.Goals)
             {
                 double w = (g.Max.X - g.Min.X).ToDouble(), h = (g.Max.Y - g.Min.Y).ToDouble();
-                Assert.AreEqual(2.44 * 1.3, System.Math.Max(w, h), 0.002, "across the mouth");
+                Assert.AreEqual(2.44 * 1.3 * 1.1, System.Math.Max(w, h), 0.002, "across the mouth"); // 30% bigger, then 10% wider
                 // front at the opening (no 0.2 inset): mouth to back is a full net depth inside the walls
                 Assert.AreEqual(1.56 * 1.3, System.Math.Min(w, h), 0.002, "mouth to back");
             }

@@ -14,7 +14,8 @@ NET_SCALE = 0.6                # the nets were made 40% smaller than they first 
 GROW = 1.3                     # ...and then 30% bigger again: the opening and the depth, measured inside the walls
 WALL = 0.68                    # wall thickness (the game's Tuning.WallThickness): the goal area stops at the walls' inner edge
 DEPTH = round((1.9 - WALL / 2) * GROW + WALL / 2, 3)                 # net depth: mouth to the back wall's middle
-MOUTH = round((2.6 * NET_SCALE - WALL / 2) * GROW + WALL / 2, 3)     # mouth half height (to the side walls' middle)
+WIDEN = 1.1                    # then the opening 10% wider again (easier to score)
+MOUTH = round((2.6 * NET_SCALE - WALL / 2) * GROW * WIDEN + WALL / 2, 3)     # mouth half height (to the side walls' middle)
 
 def r3(v): return round(v + 0.0, 3)
 

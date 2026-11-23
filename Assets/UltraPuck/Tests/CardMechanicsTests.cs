@@ -2013,7 +2013,7 @@ namespace UltraPuck.Tests
                 ShootPortal(s, At(29, y), -FixVec2.Right);   // right by a post
                 Assert.AreEqual(1, s.Portals.Length, "on the back of the net (y " + y + ")");
                 var half = _sim.T.PortalLength.ToDouble() / 2;
-                var post = 1.926 - _sim.T.WallThickness.ToDouble() / 2;
+                var post = 2.085 - _sim.T.WallThickness.ToDouble() / 2;
                 Assert.LessOrEqual(System.Math.Abs(s.Portals[0].Pos.Y.ToDouble()) + half, post + 0.02, "clear of the post");
             }
         }

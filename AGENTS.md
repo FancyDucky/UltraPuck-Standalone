@@ -82,6 +82,9 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.56 (Claude, 23 Nov 2026): every net's opening 10% wider (`WIDEN = 1.1` on the
+  mouth in make_rink.py, make_hockey_rink.py, make_curved_rinks.py; all five maps regenerated, depth unchanged;
+  Hockey Rink opening 3.17 -> 3.49 inside the walls). Map files are in the online fingerprint, so no protocol bump.
 - 0.1.55 (Claude, 23 Nov 2026): goal banner (Hud `GoalBanner`): "Name Scored!" in the START gold, slams in with a
   bounce and tilt, then pulses; an own goal says "<Team> Team Scored!"; assist underneath. Own goals: the sim keeps
   the last player of each team to touch the puck since the face-off (`TeamTouch0/1`, carrying or the loose puck

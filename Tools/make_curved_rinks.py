@@ -10,7 +10,8 @@ import json, math, os, sys
 
 WALL = 0.68                    # wall thickness (Tuning.WallThickness)
 GROW = 1.3                     # the nets are 30% bigger than they first were: the opening and the depth, inside the walls
-MOUTH = round((1.56 - WALL / 2) * GROW + WALL / 2, 3)   # the Hockey Rink's nets: mouth half height (wall middle)
+WIDEN = 1.1                    # then the opening 10% wider again (easier to score)
+MOUTH = round((1.56 - WALL / 2) * GROW * WIDEN + WALL / 2, 3)   # the Hockey Rink's nets: mouth half height (wall middle)
 DEPTH = round((1.9 - WALL / 2) * GROW + WALL / 2, 3)    # and depth (mouth to the back wall's middle)
 ROOM = 6.0                     # the ice behind a net: from the end wall to the net's back, like the Hockey Rink
 
