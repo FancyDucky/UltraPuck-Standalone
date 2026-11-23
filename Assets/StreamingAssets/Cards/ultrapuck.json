@@ -46,19 +46,6 @@
       "stats": { "QuickShotFull": "+1" }
     },
     {
-      "id": "ultrapuck.ghostshot",
-      "name": "Invisible Shot",
-      "tier": "A",
-      "max": 1,
-      "color": "#3CC84B",
-      "flavor": "Now you see it...",
-      "face": [
-        { "label": "Invisible Puck", "value": "[good]0.5 s[/]" }
-      ],
-      "text": "[note]After a quick shot. Only your team can see it.[/]",
-      "stats": { "GhostShot": "+1" }
-    },
-    {
       "id": "ultrapuck.cannonball",
       "name": "Cannon Ball",
       "tier": "A",
@@ -118,7 +105,7 @@
       "max": 4,
       "art": "ultrapuck.fastercharge",
       "color": "#F28C33",
-      "flavor": "And this is to go even further beyond",
+      "flavor": "\"And this is to go even further beyond\"",
       "face": [
         { "label": "Charge Speed", "value": "[good]+100%[/]" },
         { "label": "Overcharge", "value": "[good]+50%[/]" }
@@ -196,14 +183,27 @@
       "name": "Portal Gun",
       "tier": "A",
       "max": 1,
+      "maxTeam": 1,
       "color": "#3D8BFF",
-      "flavor": "In one side, out the other.",
-      "face": [
-        { "label": "Portals", "value": "[good]blue, then orange[/]" },
-        { "label": "Cooldown", "value": "[note]0.4 s[/]" }
-      ],
-      "text": "Press {utility} to shoot a blue portal, again for an orange one. They have to land on a wall. [note]Players and the puck go through.[/]",
+      "flavor": "\"That's what it says: A horrible person...\"",
+      "text": "Only [good]one person per team[/] can have this card. Use it wisely. Press {utility} to use.",
       "stats": { "PortalGun": "+1" }
+    },
+    {
+      "id": "ultrapuck.slotmachine",
+      "name": "Slot Machine",
+      "tier": "B",
+      "max": 1,
+      "color": "#E8B530",
+      "flavor": "\"Let it ride.\"",
+      "face": [
+        { "label": "Speed Up", "value": "[good]+120% for 10 s[/]" },
+        { "label": "Giant", "value": "[good]x2 size and weight, 10 s[/]" },
+        { "label": "Invisible", "value": "[good]12 s[/]" },
+        { "label": "Strong", "value": "[good]4 Over Charges, 10 s[/]" }
+      ],
+      "text": "Press {utility} to spin.",
+      "stats": { "SlotMachine": "+1" }
     },
     {
       "id": "ultrapuck.invisibility",
@@ -257,11 +257,10 @@
       "color": "#59A6FF",
       "flavor": "Woah Nelly!",
       "face": [
-        { "label": "Range", "value": "[good]0 to 6[/]" },
-        { "label": "Full Size", "value": "[good]hold 6 s[/]" },
-        { "label": "Cooldown", "value": "[good]none[/]" }
+        { "label": "Range", "value": "[good]6 units[/]" },
+        { "label": "Charge Time", "value": "[good]6 s[/]" }
       ],
-      "text": "Hold to grow it, let go to fire. Knocks the puck off whoever has it. Press {utility} to use.",
+      "text": "Hold to grow it, let go to fire. Press {utility} to use.",
       "stats": { "Shockwave": "+1" }
     },
     {
@@ -269,12 +268,13 @@
       "name": "Swap",
       "tier": "A",
       "max": 1,
+      "maxTeam": 1,
       "color": "#3D5CFF",
       "flavor": "Boogie woogie.",
       "face": [
         { "label": "Cooldown", "value": "[note]none[/]" }
       ],
-      "text": "Throw a rock and then swap places with it! Press {utility} to use.",
+      "text": "Throw a rock and then swap places with it! [good]One person per team.[/] Press {utility} to use.",
       "stats": { "Swap": "+1" }
     },
     {

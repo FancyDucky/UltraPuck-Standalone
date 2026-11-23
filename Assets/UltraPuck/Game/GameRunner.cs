@@ -51,6 +51,8 @@ namespace UltraPuck.Game
         private IceViews _ice;
         private StoneViews _stones;
         private PortalViews _portals;
+        private SlotViews _slots;
+        private readonly PortalSplit _split = new PortalSplit();
         // what each player's effect counters were last frame, to spot new shockwaves and Team Play refreshes
         private readonly List<int> _seenShocks = new List<int>(), _seenRefreshes = new List<int>();
         private readonly float[] _cooldowns = new float[3];
@@ -158,6 +160,7 @@ namespace UltraPuck.Game
             _ice = new IceViews(_entities);
             _stones = new StoneViews(_entities, _effects);
             _portals = new PortalViews(_entities, _effects);
+            _slots = new SlotViews(_entities);
             SetUpCamera();
             _mainMenu.Show(MainMenu.Page.Main);
             if (ShotDir != null) StartCoroutine(Shots());
@@ -468,7 +471,7 @@ namespace UltraPuck.Game
                     if (count == 4 && _cards != null && _state.Players.Length > 0)
                     {
                         // the newest cards, so their faces get looked at
-                        var ids = new[] { "ultrapuck.friendlyfire", "ultrapuck.swap", "ultrapuck.ghostshot", "ultrapuck.stonewall" };
+                        var ids = new[] { "ultrapuck.friendlyfire", "ultrapuck.swap", "ultrapuck.portalgun", "ultrapuck.stonewall" };
                         var offer = new List<int>();
                         foreach (var id in ids) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                         _state.Players[0].Offer = offer.ToArray();
@@ -691,6 +694,48 @@ namespace UltraPuck.Game
                 yield return new WaitForSecondsRealtime(1.5f);
             }
 
+            if (want("slots"))
+            {
+                // Slot Machine reels: one spinning, one stopping, one landed on a win, one landed on nothing
+                _shotWholeRink = true;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(3.5f);
+                _shotNoInput = true;
+                var sm = _sim.Cards.ById("ultrapuck.slotmachine").Index;
+                System.Func<double, double, FixVec2> at = (x, y) => new FixVec2(Fix.FromDecimal((decimal)x), Fix.FromDecimal((decimal)y));
+                var spots = new[] { at(-12, 4), at(-4, 4), at(4, 4), at(12, 4) };
+                for (var j = 0; j < _state.Players.Length && j < 4; j++)
+                {
+                    var p = _state.Players[j];
+                    p.Cards = new[] { sm };
+                    p.Pos = spots[j]; p.Vel = FixVec2.Zero;
+                }
+                _sim.Cards.Recompute(_state);
+                var spin = _sim.T.SlotSpinTime;
+                // spinning, nearly stopped (two reels landed), a win on Speed Up, three different (a loss)
+                int[] reels = { 1 | (5 << 4) | (7 << 8), 2 | (2 << 4) | (6 << 8), 1 | (1 << 4) | (1 << 8), 3 | (8 << 4) | (4 << 8) };
+                Fix[] left = { spin * Fix.Ratio(9, 10), spin * Fix.Ratio(15, 100), Fix.Ratio(1, 120), Fix.Ratio(1, 120) };
+                int[] won = { 0, 0, 1, 0 };
+                for (var j = 0; j < _state.Players.Length && j < 4; j++)
+                {
+                    var p = _state.Players[j];
+                    p.SlotReels = reels[j]; p.SlotSpin = left[j]; p.SlotWin = won[j]; p.SlotSpins++;
+                }
+                yield return new WaitForSecondsRealtime(0.25f);
+                yield return Shot("slots-1");
+                yield return new WaitForSecondsRealtime(0.4f);
+                yield return Shot("slots-2");
+                _shotNoInput = false;
+                _shotWholeRink = false;
+                GoMainMenu();
+            }
+
             if (want("portal"))
             {
                 // the face-off groups in front of the nets; then two portals (one on a curved corner, one on the back of
@@ -722,16 +767,22 @@ namespace UltraPuck.Game
                 };
                 yield return new WaitForSecondsRealtime(0.8f);
                 Debug.Log("Ultra Puck portal shot: portals=" + _state.Portals.Length);
-                if (_state.Portals.Length > 0)
+                if (_state.Portals.Length > 1)
                 {
+                    // slowly, so the shots catch them half way: the puck into one portal, a player into the other
+                    var wh = _sim.T.WallThickness * Fix.Half;
                     var po = _state.Portals[0];
                     _state.Carrier = -1;
-                    _state.PuckPos = po.Pos + po.Normal * Fix.FromInt(3);
-                    _state.PuckVel = -po.Normal * Fix.FromInt(14);
+                    _state.PuckPos = po.Pos + po.Normal * (wh + Fix.Ratio(45, 100));
+                    _state.PuckVel = -po.Normal * Fix.FromInt(3);
+                    var pq = _state.Portals[1];
+                    var who = _state.Players.Length - 1;
+                    _state.Players[who].Pos = pq.Pos + pq.Normal * (wh + Fix.Ratio(7, 10));
+                    _state.Players[who].Vel = -pq.Normal * Fix.FromInt(3);
                 }
-                yield return new WaitForSecondsRealtime(0.12f);
-                yield return Shot("portal-1");
                 yield return new WaitForSecondsRealtime(0.2f);
+                yield return Shot("portal-1");
+                yield return new WaitForSecondsRealtime(0.15f);
                 yield return Shot("portal-2");
                 _shotNoInput = false;
                 _shotWholeRink = false;
@@ -1016,6 +1067,8 @@ namespace UltraPuck.Game
             if (ShotDir != null) CardStats.NoSave = true; // screenshot runs leave the player's card stats alone
             NotePicks();
             CardStats.Tick();
+            // free play: the d-pad runs the puck drills (not with a menu or the cards up)
+            LocalPlayers.PuckDrills = _free && _state != null && !_menus.IsOpen && !_cardScreen.Showing;
             _cardScreen.Sim = _sim;
             _cardScreen.Frame(playing ? _state : null);
             // the theme plays through the menus and lobbies; a match plays its own songs, one after another (see Sound)
@@ -2144,12 +2197,13 @@ namespace UltraPuck.Game
             var gunFull = _sim.T.GunCooldown.ToFloat() + (p.Bot || Simulation.DriverOf(_state, i) < 0 ? _sim.T.GunBotExtra.ToFloat() : 0f);
             _cooldowns[0] = p.Stats.PuckGun > 0 ? 1f - p.GunCooldown.ToFloat() / Mathf.Max(0.01f, gunFull)
                 : p.Stats.PortalGun > 0 ? 1f - p.PortalCooldown.ToFloat() / Mathf.Max(0.01f, _sim.T.PortalCooldown.ToFloat())
+                : p.Stats.SlotMachine > 0 ? SlotBar(p)
                 : -1f;
             _cooldowns[1] = p.Stats.Invisibility > 0 ? (invisible ? 0f : 1f - p.InvisCooldown.ToFloat() / _sim.T.InvisCooldown.ToFloat()) : -1f;
             _cooldowns[2] = p.Stats.Shockwave > 0 ? (p.ShockHold > Fix.Zero ? p.ShockHold.ToFloat() / Mathf.Max(0.01f, _sim.T.ShockChargeTime.ToFloat()) : 1f)
                 : p.Stats.Swap > 0 ? 1f // Swap has no cooldown — always ready
                 : -1f;
-            _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.FastTime > Fix.Zero, _cooldowns,
+            _players[i].Status(hidden, faint, p.SlowTime > Fix.Zero, p.FastTime > Fix.Zero || (p.SlotPrizeTime > Fix.Zero && p.SlotPrize == CardLibrary.SlotSpeed), _cooldowns,
                 p.Stun > Fix.Zero, p.DashTime.ToFloat() / Mathf.Max(0.01f, _sim.T.DashHitTime.ToFloat()), p.HitLag > Fix.Zero,
                 _state != null && _state.Carrier == i, V.Of(p.DashDir));
 
@@ -2173,6 +2227,24 @@ namespace UltraPuck.Game
             _seenRefreshes[i] = p.Refreshes;
             _seenSwaps[i] = p.Swaps;
             return hidden;
+        }
+
+        /// <summary>
+        /// Slot Machine's bar under the player: a prize running down while it lasts, filling while a spin goes and during
+        /// the wait after a loss, full when it's ready to spin.
+        /// </summary>
+        private float SlotBar(PlayerState p)
+        {
+            var T = _sim.T;
+            if (p.SlotPrizeTime > Fix.Zero)
+            {
+                var full = p.SlotPrize == CardLibrary.SlotSpeed ? T.SlotSpeedTime : p.SlotPrize == CardLibrary.SlotGiant ? T.SlotGiantTime
+                    : p.SlotPrize == CardLibrary.SlotInvisible ? T.SlotInvisibleTime : T.SlotStrongTime;
+                return p.SlotPrizeTime.ToFloat() / Mathf.Max(0.01f, full.ToFloat());
+            }
+            if (p.SlotSpin > Fix.Zero) return 1f - p.SlotSpin.ToFloat() / Mathf.Max(0.01f, T.SlotSpinTime.ToFloat());
+            if (p.SlotWait > Fix.Zero) return 1f - p.SlotWait.ToFloat() / Mathf.Max(0.01f, T.SlotWait.ToFloat());
+            return 1f;
         }
 
         /// <summary>Player <paramref name="i"/>'s symbol: their online seat's, or their slot's on this PC.</summary>
@@ -2253,7 +2325,10 @@ namespace UltraPuck.Game
                 var full = Simulation.MaxDashes(pb).ToFloat();
                 Vector2 hitAt;
                 var hit = _players[i].Show(pos, facing, pb.DashCharge.ToFloat(), Mathf.RoundToInt(full), pb.Charge.ToFloat(), pb.Hits, pb.HitPower.ToFloat(), V.Of(pb.HitDir), out hitAt);
-                if (!CardEffects(i, pb, pos))
+                var hiddenNow = CardEffects(i, pb, pos);
+                // Slot Machine: the reels under them while they spin (and a moment after, to see what came up)
+                _slots.Show(i, pb, pos, radius, _sim.T.SlotSpinTime.ToFloat(), hiddenNow);
+                if (!hiddenNow)
                 {
                     _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.62f, 0f), Name = NameOf(i), Team = pb.Team, Owner = i });
                     _hud.Under.Add(new Vector4(pos.x, pos.y, radius, i));
@@ -2279,6 +2354,7 @@ namespace UltraPuck.Game
             }
             _hitsThisFrame.Clear();
             _impactsThisFrame.Clear();
+            _slots.Trim(b.Players.Length);
             if (_seenShocks.Count > b.Players.Length)
             {
                 _seenShocks.RemoveRange(b.Players.Length, _seenShocks.Count - b.Players.Length);
@@ -2290,8 +2366,7 @@ namespace UltraPuck.Game
             _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team), IsLocalPerson, _sim.T.RockFlash.ToFloat());
             _ice.Show(b, _sim.T.IceRadius.ToFloat());
             _stones.Show(b, _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.StoneLife.ToFloat());
-            _portals.Show(b, _sim.Map, _sim.T.PortalLength.ToFloat(), _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.PortalShotRadius.ToFloat(),
-                i => Palette.Team(b.Players[i].Team));
+            _portals.Show(b, _sim.Map, _sim.T.PortalLength.ToFloat(), _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.PortalShotRadius.ToFloat());
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);
             // a goal: the puck blows up in the net, and stays gone until the next face-off
@@ -2315,6 +2390,13 @@ namespace UltraPuck.Game
             _puck.Ghost(ghost);
             var puckAt = (pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t);
             _puck.Show(puckAt, b.PuckTeam);
+            // anything half way through a portal: cut at one, coming out of the other
+            var wallHalf = _sim.T.WallThickness.ToFloat() * 0.5f;
+            _split.Begin();
+            for (var i = 0; i < b.Players.Length && i < _players.Count; i++) _split.Show(_players[i].Root, b.Players[i].PortalVia, b, wallHalf);
+            _split.Show(_puck.Root, b.PuckPortal, b, wallHalf);
+            for (var k = 0; k < b.Rocks.Length; k++) _split.Show(_rocks.At(k), b.Rocks[k].Carrier < 0 ? b.Rocks[k].PortalVia : 0, b, wallHalf);
+            _split.End();
             if (b.Phase != Phase.Scored && ghost != 2) _hud.Under.Add(new Vector4(puckAt.x, puckAt.y, _sim.T.PuckRadius.ToFloat(), -1));
             if (InMatch) MatchSounds(b); // the bots playing behind the menus are silent
         }

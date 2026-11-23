@@ -38,6 +38,8 @@ namespace UltraPuck.Core
         public CardTier Tier = CardTier.C;
         /// <summary>Most copies one player can hold (0 = no limit).</summary>
         public int MaxPerPlayer;
+        /// <summary>Most players on one team who may hold it (0 = no limit): "maxTeam".</summary>
+        public int MaxPerTeam;
         /// <summary>Only offered once someone on your team has this card (an id), e.g. a card that builds on another.</summary>
         public string Requires;
         /// <summary>Only offered on teams at least this big (team cards are no use alone).</summary>
@@ -72,11 +74,11 @@ namespace UltraPuck.Core
             "MoveSpeed", "MoveSpeedWithPuck", "ShotPower", "QuickShotPower", "ChargeSpeed", "OverCharge", "DashCooldown",
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
             "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "Swap", "PassRefresh", "PassRefreshTeam", "IceTrail",
-            "QuickShotFull", "GhostShot", "CannonBall", "PassSpeed", "StoneWall", "PortalGun",
+            "QuickShotFull", "GhostShot", "CannonBall", "PassSpeed", "StoneWall", "PortalGun", "SlotMachine",
         };
 
         /// <summary>Stats that need the utility button (Triangle / Y). Used to offer only one utility at a time.</summary>
-        public static readonly string[] UtilityStats = { "PuckGun", "Invisibility", "Shockwave", "Swap", "PortalGun" };
+        public static readonly string[] UtilityStats = { "PuckGun", "Invisibility", "Shockwave", "Swap", "PortalGun", "SlotMachine" };
 
         public CardDef ById(string id) { CardDef c; return id != null && _byId.TryGetValue(id, out c) ? c : null; }
 
@@ -100,6 +102,7 @@ namespace UltraPuck.Core
                     MaxPerPlayer = Json.Get(o, "max") != null ? Json.Int(Json.Get(o, "max"), what + ".max") : 0,
                     Requires = Json.Str(Json.Get(o, "requires"), null),
                     MinTeam = Json.Get(o, "minTeam") != null ? Json.Int(Json.Get(o, "minTeam"), what + ".minTeam") : 0,
+                    MaxPerTeam = Json.Get(o, "maxTeam") != null ? Json.Int(Json.Get(o, "maxTeam"), what + ".maxTeam") : 0,
                     NoBots = Json.Get(o, "noBots") is bool && (bool)Json.Get(o, "noBots"),
                 };
                 if (string.IsNullOrEmpty(c.Id)) throw new FormatException(what + ": needs an id");
@@ -173,9 +176,22 @@ namespace UltraPuck.Core
                 foreach (var q in s.Players)
                     if (q.Team != p.Team)
                         foreach (var ci in q.Cards) Apply(ci, st, true);
+                // a Slot Machine prize that changes the body: Giant (bigger and heavier), Strong (Over Charge cards)
+                if (p.SlotPrizeTime > Fix.Zero && p.SlotPrize == SlotGiant) { st.Size *= GiantBy; st.Weight *= GiantBy; }
+                if (p.SlotPrizeTime > Fix.Zero && p.SlotPrize == SlotStrong)
+                {
+                    var oc = ById("ultrapuck.overcharge");
+                    if (oc != null) for (var k = 0; k < StrongCards; k++) Apply(oc.Index, st, false);
+                }
                 p.Stats = st;
             }
         }
+
+        /// <summary>Slot Machine prizes (<see cref="PlayerState.SlotPrize"/>).</summary>
+        public const int SlotSpeed = 1, SlotGiant = 2, SlotInvisible = 3, SlotStrong = 4;
+        /// <summary>Set from the match's tuning by the simulation: how much bigger Giant makes you, how many Over Charge cards Strong is.</summary>
+        public Fix GiantBy = Fix.Two;
+        public int StrongCards = 4;
 
         private void Apply(int card, Stats st, bool opponents)
         {
@@ -210,6 +226,7 @@ namespace UltraPuck.Core
                 case "Shockwave": st.Shockwave = Count(st.Shockwave, m); break;
                 case "Swap": st.Swap = Count(st.Swap, m); break;
                 case "PortalGun": st.PortalGun = Count(st.PortalGun, m); break;
+                case "SlotMachine": st.SlotMachine = Count(st.SlotMachine, m); break;
                 case "IceTrail": st.IceTrail = Count(st.IceTrail, m); break;
                 case "QuickShotFull": st.QuickShotFull = Count(st.QuickShotFull, m); break;
                 case "GhostShot": st.GhostShot = Count(st.GhostShot, m); break;
@@ -279,6 +296,19 @@ namespace UltraPuck.Core
             return keepList.ToArray();
         }
 
+        /// <summary>Can <paramref name="p"/> not take <paramref name="card"/> because enough of their teammates have it ("maxTeam")?</summary>
+        public bool TeamFull(GameState s, PlayerState p, int card)
+        {
+            if (card < 0 || card >= Cards.Count || Cards[card].MaxPerTeam <= 0) return false;
+            var holders = 0;
+            foreach (var q in s.Players)
+            {
+                if (q == p || q.Team != p.Team) continue;
+                if (Array.IndexOf(q.Cards, card) >= 0) holders++;
+            }
+            return holders >= Cards[card].MaxPerTeam;
+        }
+
         /// <summary>
         /// Up to <paramref name="count"/> different cards player <paramref name="i"/> may still take, picked at random:
         /// every card they could be offered is as likely as any other, whatever its tier.
@@ -302,6 +332,7 @@ namespace UltraPuck.Core
                     foreach (var h in p.Cards) if (h == c.Index) held++;
                     if (held >= c.MaxPerPlayer) continue;
                 }
+                if (TeamFull(s, p, c.Index)) continue;
                 pool.Add(c.Index);
             }
             var offer = new List<int>();

@@ -246,6 +246,8 @@ namespace UltraPuck.Game
                 if (p.Offer.Length == 0 || p.Picked >= 0 || _ready.ContainsKey(i)) continue;
                 var slot = SlotOf(i);
                 if (slot < 0 || slot >= Local.Slots.Count || Local.Slots[slot].Demo) continue;
+                // only those with the same hand share the screen (one may have a one-a-team card: they get their own turn)
+                if (offer != null && !SameCards(offer, p.Offer)) continue;
                 local.Add(i);
                 if (offer == null) offer = p.Offer;
             }
@@ -1083,6 +1085,33 @@ namespace UltraPuck.Game
 
         private bool _applied;
 
+        private float[] _badgeShow = new float[0];
+
+        /// <summary>
+        /// How much to show badge <paramref name="slot"/> of card <paramref name="k"/> (at <paramref name="badge"/>, GUI
+        /// units): it fades out while the card in front (the focused one) covers that badge, and back in after, so a
+        /// focused card bobbing near it never makes it flicker.
+        /// </summary>
+        private float BadgeShow(int k, int slot, Rect badge)
+        {
+            var i = k * 2 + slot;
+            if (_badgeShow.Length != _cards.Count * 2) { _badgeShow = new float[_cards.Count * 2]; for (var j = 0; j < _badgeShow.Length; j++) _badgeShow[j] = 1f; }
+            if (i < 0 || i >= _badgeShow.Length) return 1f;
+            if (Event.current == null || Event.current.type == EventType.Repaint)
+            {
+                var covered = false;
+                if (k != _focus && _focus >= 0 && _focus < _cards.Count)
+                {
+                    var f = ScreenRect(_cards[_focus]);
+                    var k2 = Screen.height / Ui.H;
+                    var front = new Rect(f.xMin / k2, (Screen.height - f.yMax) / k2, f.width / k2, f.height / k2);
+                    covered = front.Overlaps(badge);
+                }
+                _badgeShow[i] = Mathf.MoveTowards(_badgeShow[i], covered ? 0f : 1f, Time.unscaledDeltaTime * 7f);
+            }
+            return _badgeShow[i];
+        }
+
         private void EditGUI()
         {
             var leaving = _stage == Stage.Leaving;
@@ -1110,11 +1139,12 @@ namespace UltraPuck.Game
                     var n = _counts[_who][k];
                     var row = k / EditCols - _editTop;
                     if (n == 0 || row < 0 || row >= EditRows) continue;
-                    if (k != _focus && ScreenRect(_cards[_focus]).Overlaps(ScreenRect(_cards[k]))) continue;
                     var r = ScreenRect(_cards[k]);
                     var badge = new Rect(r.xMax / k2 - 34f, (Screen.height - r.yMax) / k2 - 10f, 46f, 30f);
-                    Ui.Box(badge, Color.white, 15f);
-                    Ui.Label(badge, "×" + n, Ui.Font(18, true, TextAnchor.MiddleCenter), new Color(0.08f, 0.08f, 0.09f), false);
+                    var show = BadgeShow(k, 0, badge);
+                    if (show <= 0.01f) continue;
+                    Ui.Box(badge, new Color(1f, 1f, 1f, show), 15f);
+                    Ui.Label(badge, "×" + n, Ui.Font(18, true, TextAnchor.MiddleCenter), new Color(0.08f, 0.08f, 0.09f, show), false);
                 }
             // scroll position
             if (EditRowCount > EditRows)
@@ -1217,10 +1247,11 @@ namespace UltraPuck.Game
 
         private void BrowseInput()
         {
-            var m = Local.MenuJoined();
+            // the main menu's controls: any controller or the keyboard (nobody has joined a game here)
+            var m = Local.Menu();
             var ready = Time.unscaledTime - _stageAt > 0.4f;
-            if (ready && (m.Back || Local.StartPressed())) { BrowseClose(); return; }
-            if (ready && (m.Tab != 0 || m.Confirm)) Resort(m.Tab < 0 ? -1 : 1);
+            if (ready && m.Back) { BrowseClose(); return; }
+            if (ready && m.Tab != 0) Resort(m.Tab);
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, EditCount - 1));
             if (m.Y != 0)
             {
@@ -1286,35 +1317,41 @@ namespace UltraPuck.Game
             var sortRect = new Rect(w / 2f - 220f, y + 40f, 440f, 34f);
             Ui.Box(sortRect, new Color(1f, 1f, 1f, 0.1f * a), 17f);
             Ui.Label(sortRect, "Sorted by:  " + SortNames[_sort], Ui.Font(18, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.9f * a));
+            // A to Z is just the cards: no places, no pick counts
+            var stats = _sort != 2;
             var from = CardStats.PeopleCount;
             var sub = "Picks in online matches  ·  you: " + _personalTotal + "  ·  everyone: " + _globalTotal
                       + (from > 0 ? " (from " + (from == 1 ? "1 player" : from + " players") + " met so far)" : "");
-            Ui.Label(new Rect(0f, y + 78f, w, 22f), sub, Ui.Font(14, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a));
+            if (stats) Ui.Label(new Rect(0f, y + 78f, w, 22f), sub, Ui.Font(14, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a));
             if (leaving) return;
 
             // each card's numbers, under it: place, your picks, everyone's (and their share)
             var k2 = Screen.height / Ui.H;
-            for (var p = 0; p < _cards.Count; p++)
+            for (var p = 0; p < _cards.Count && stats; p++)
             {
                 var row = p / EditCols - _editTop;
                 if (row < 0 || row >= EditRows) continue;
-                if (p != _focus && ScreenRect(_cards[_focus]).Overlaps(ScreenRect(_cards[p]))) continue;
                 var r = ScreenRect(_cards[p]);
                 var id = _browseLib.Cards[_order[p]].Id;
                 int mine = CardStats.Personal(id), all = CardStats.Global(id);
                 var share = _globalTotal > 0 ? Mathf.RoundToInt(100f * all / _globalTotal) + "%" : "–";
                 var place = new Rect(r.xMin / k2 - 12f, (Screen.height - r.yMax) / k2 - 12f, 40f, 30f);
-                Ui.Box(place, new Color(0.08f, 0.08f, 0.09f, 0.85f), 15f);
-                Ui.Label(place, (p + 1).ToString(), Ui.Font(16, true, TextAnchor.MiddleCenter), Color.white, false);
-                if (p == _focus) continue; // (the focused one is described at the bottom)
+                var showPlace = BadgeShow(p, 0, place);
+                if (showPlace > 0.01f)
+                {
+                    Ui.Box(place, new Color(0.08f, 0.08f, 0.09f, 0.85f * showPlace), 15f);
+                    Ui.Label(place, (p + 1).ToString(), Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, showPlace), false);
+                }
                 var pw = Mathf.Min(r.width / k2 - 6f, 170f);
                 var line = new Rect(r.center.x / k2 - pw / 2f, (Screen.height - r.yMin) / k2 - 30f, pw, 22f);
-                Ui.Box(line, new Color(0.06f, 0.06f, 0.07f, 0.88f), 11f);
-                Ui.Label(line, "You " + mine + "  ·  All " + all + " (" + share + ")", Ui.Font(12, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.9f), false);
+                var showLine = BadgeShow(p, 1, line);
+                if (p == _focus || showLine <= 0.01f) continue; // (the focused one is described at the bottom)
+                Ui.Box(line, new Color(0.06f, 0.06f, 0.07f, 0.88f * showLine), 11f);
+                Ui.Label(line, "You " + mine + "  ·  All " + all + " (" + share + ")", Ui.Font(12, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.9f * showLine), false);
             }
             // the focused card, in words, on a dark strip along the bottom (with the controls)
             Ui.Box(new Rect(0f, h - 84f, w, 84f), new Color(0.03f, 0.03f, 0.04f, 0.9f), 0f);
-            if (_focus >= 0 && _focus < _order.Count)
+            if (stats && _focus >= 0 && _focus < _order.Count)
             {
                 var def = _browseLib.Cards[_order[_focus]];
                 int mine = CardStats.Personal(def.Id), all = CardStats.Global(def.Id);
@@ -1330,7 +1367,7 @@ namespace UltraPuck.Game
                 var at = (float)_editTop / Mathf.Max(1, EditMaxTop);
                 Ui.Box(new Rect(track.x, track.y + (track.height - thumbH) * at, track.width, thumbH), new Color(1f, 1f, 1f, 0.6f), 3f);
             }
-            Glyphs.Hint(new Rect(0f, h - 44f, w, 30f), "{nav} Card      {confirm} Sort      {back} Back", 16, new Color(1f, 1f, 1f, 0.7f));
+            Glyphs.Hint(new Rect(0f, h - 44f, w, 30f), "{nav} Card      {tabs} Sort      {back} Back", 16, new Color(1f, 1f, 1f, 0.7f));
         }
 
         // ------------------------------------------------------------------ building a card
@@ -1503,6 +1540,15 @@ namespace UltraPuck.Game
                 var rows = def.Face.Count;
                 var step = rows >= 5 ? 0.125f : rows >= 4 ? 0.138f : 0.15f;
                 var y = ruleY - 0.12f;
+                // the note under the rows (bigger than it was, to be readable): squeeze the rows up a little if it
+                // wouldn't fit above the card's bottom edge
+                if (!string.IsNullOrEmpty(def.Text))
+                {
+                    var lines = NoteLines(def.Text, NoteWrap);
+                    var need = lines * NoteFont * NoteChar * 0.145f + 0.05f;
+                    var fit = (y - 0.02f - need - NoteBottom) / rows;
+                    step = Mathf.Clamp(Mathf.Min(step, fit), 0.105f, step);
+                }
                 const float xL = -0.78f, xR = 0.78f;
                 var font = rows >= 5 ? 100 : 112;
                 var ch = rows >= 5 ? 0.0084f : 0.0092f;
@@ -1514,7 +1560,7 @@ namespace UltraPuck.Game
                     y -= step;
                 }
                 if (!string.IsNullOrEmpty(def.Text))
-                    Footnote(v, def.Text, y - 0.02f, 95, 0.0078f, new Color(0.72f, 0.72f, 0.76f));
+                    Footnote(v, def.Text, y - 0.02f, NoteFont, NoteChar, new Color(0.84f, 0.84f, 0.88f), NoteWrap);
             }
             else if (!string.IsNullOrEmpty(def.Text))
                 Footnote(v, def.Text, -0.95f, 120, 0.0099f, new Color(0.88f, 0.88f, 0.9f));
@@ -1644,12 +1690,30 @@ namespace UltraPuck.Game
         /// Footnote under the face rows. If the text has {utility} (or another action), draws "Press [button] to activate"
         /// with a Kenney icon that follows the device in use; any other words stay as normal text.
         /// </summary>
-        private void Footnote(CardView v, string raw, float y, int fontSize, float charSize, Color colour)
+        // the note under a card's stat rows: size, and characters a line
+        private const int NoteFont = 108, NoteWrap = 30;
+        private const float NoteChar = 0.0089f, NoteBottom = -1.66f;
+
+        /// <summary>How many lines a note takes (its words wrapped, plus the "Press [button] to use." line if it has one).</summary>
+        private static int NoteLines(string raw, int wrap)
+        {
+            var action = ActionIn(raw);
+            var text = raw;
+            if (action != null)
+            {
+                var press = raw.IndexOf("Press", System.StringComparison.Ordinal);
+                text = press > 0 ? raw.Substring(0, press).Trim() : "";
+            }
+            var lines = text.Length > 0 ? Wrap(Markup(text), wrap).Split((char)10).Length : 0;
+            return lines + (action != null ? 1 : 0);
+        }
+
+        private void Footnote(CardView v, string raw, float y, int fontSize, float charSize, Color colour, int wrap = 34)
         {
             var action = ActionIn(raw);
             if (action == null)
             {
-                Text(v, Wrap(Markup(raw), 34), new Vector3(0f, y, -0.006f), fontSize, charSize, colour, FontStyle.Normal, TextAnchor.UpperCenter, v.Texts);
+                Text(v, Wrap(Markup(raw), wrap), new Vector3(0f, y, -0.006f), fontSize, charSize, colour, FontStyle.Normal, TextAnchor.UpperCenter, v.Texts);
                 return;
             }
             // words before "Press {…}" (a description) go above it, wrapped like any footnote
@@ -1657,7 +1721,7 @@ namespace UltraPuck.Game
             var before = press > 0 ? raw.Substring(0, press).Trim() : "";
             if (before.Length > 0)
             {
-                var wrapped = Wrap(Markup(before), 34);
+                var wrapped = Wrap(Markup(before), wrap);
                 Text(v, wrapped, new Vector3(0f, y, -0.006f), fontSize, charSize, colour, FontStyle.Normal, TextAnchor.UpperCenter, v.Texts);
                 y -= wrapped.Split((char)10).Length * fontSize * charSize * 0.145f + 0.03f;
             }

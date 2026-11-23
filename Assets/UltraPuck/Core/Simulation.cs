@@ -51,15 +51,122 @@ namespace UltraPuck.Core
                 var shared = T.TeamVote || T.SameDraw;
                 if (shared && teamOffer[p.Team & 1] != null) p.Offer = (int[])teamOffer[p.Team & 1].Clone();
                 else p.Offer = Cards.DrawOffer(s, i, Math.Max(1, Math.Min(5, T.CardsOffered)), T.CardsOff);
+                // every switched-on card is one they can't have (only the Portal Gun on, and a teammate has it): cards
+                // from the switched-off ones instead, so nobody's left without a pick
+                if (p.Offer.Length == 0 && T.CardsOff != null && T.CardsOff.Length > 0)
+                {
+                    // (a shared hand: no utility if anyone on the team has one, since a Team Vote hands everyone the winner)
+                    var not = StandInOff(p);
+                    if (shared) foreach (var q in s.Players) if (not == null && q.Team == p.Team) not = StandInOff(q);
+                    p.Offer = Cards.DrawOffer(s, i, Math.Max(1, Math.Min(5, T.CardsOffered)), not);
+                }
                 if (shared && teamOffer[p.Team & 1] == null) teamOffer[p.Team & 1] = p.Offer;
                 p.Picked = -1;
                 p.Hover = 0;
                 any |= p.Offer.Length > 0;
             }
+            if (T.TeamVote || T.SameDraw) for (var team = 0; team < 2; team++) OnePickerGets(s, team, order);
             if (!any) return;
             s.Carrier = -1;
             s.Phase = Phase.Picking;
             s.PhaseTime = T.PickTime;
+        }
+
+        /// <summary>
+        /// Team Vote / Same Draw: a card only one player a team may have (Portal Gun, Swap: "maxTeam") isn't in the team's
+        /// shared hand. It goes into just one picker's hand (a person if there is one, at random), in place of the card in
+        /// that spot; everyone else gets a fresh card there instead.
+        /// </summary>
+        private void OnePickerGets(GameState s, int team, System.Collections.Generic.List<int> order)
+        {
+            var pickers = new System.Collections.Generic.List<int>();
+            foreach (var i in order) if ((s.Players[i].Team & 1) == team && s.Players[i].Offer.Length > 0) pickers.Add(i);
+            if (pickers.Count == 0) return;
+            // worked out from one fixed copy of the shared hand, one spot at a time (so it can never go round in circles)
+            var shared = (int[])s.Players[pickers[0]].Offer.Clone();
+            var lucky = new int[shared.Length];
+            var fresh = new int[shared.Length];
+            var used = new System.Collections.Generic.List<int>(shared);
+            if (T.CardsOff != null) used.AddRange(T.CardsOff);
+            var any = false;
+            for (var k = 0; k < shared.Length; k++)
+            {
+                lucky[k] = -1; fresh[k] = -1;
+                var card = shared[k];
+                if (card < 0 || card >= Cards.Cards.Count || Cards.Cards[card].MaxPerTeam <= 0) continue;
+                any = true;
+                // a fresh card for that spot (not one already in the hand, nor another one-a-team card): may be none
+                foreach (var c in Cards.DrawOffer(s, pickers[0], Cards.Cards.Count, used.ToArray()))
+                    if (Cards.Cards[c].MaxPerTeam <= 0) { fresh[k] = c; used.Add(c); break; }
+                if (fresh[k] < 0)
+                {
+                    // nothing switched on is left: a switched-off card instead, never a utility if anyone on the team has one
+                    // (a Team Vote gives everyone the winner, so it would replace theirs)
+                    var not = new System.Collections.Generic.List<int>(shared);
+                    foreach (var i in pickers)
+                    {
+                        var u = StandInOff(s.Players[i]);
+                        if (u != null) { not.AddRange(u); break; }
+                    }
+                    fresh[k] = AnyOtherCard(s, pickers[0], not.ToArray());
+                    if (fresh[k] >= 0) used.Add(fresh[k]);
+                }
+                // the one who gets it: a person if any can, else a bot
+                var people = new System.Collections.Generic.List<int>();
+                var anyone = new System.Collections.Generic.List<int>();
+                foreach (var i in pickers)
+                {
+                    if (Cards.TeamFull(s, s.Players[i], card) || Array.IndexOf(s.Players[i].Cards, card) >= 0) continue;
+                    anyone.Add(i);
+                    if (!s.Players[i].Bot) people.Add(i);
+                }
+                var from = people.Count > 0 ? people : anyone;
+                if (from.Count > 0) lucky[k] = from[(int)(s.NextRandom() % (uint)from.Count)];
+            }
+            if (!any) return;
+            // each picker's hand: the shared one, with the one-a-team card only for its one player, a fresh card (or
+            // nothing) there for the rest
+            foreach (var i in pickers)
+            {
+                var hand = new System.Collections.Generic.List<int>(shared.Length);
+                for (var k = 0; k < shared.Length; k++)
+                {
+                    var card = shared[k];
+                    var special = card >= 0 && card < Cards.Cards.Count && Cards.Cards[card].MaxPerTeam > 0;
+                    if (!special) hand.Add(card);
+                    else if (lucky[k] == i) hand.Add(card);
+                    else if (fresh[k] >= 0) hand.Add(fresh[k]);
+                }
+                s.Players[i].Offer = hand.ToArray();
+            }
+        }
+
+        /// <summary>
+        /// A random card player <paramref name="i"/> may have that isn't one-a-team and isn't in <paramref name="not"/>,
+        /// switched off or not (for when nothing switched on is left), or -1.
+        /// </summary>
+        private int AnyOtherCard(GameState s, int i, int[] not)
+        {
+            if (i < 0 || i >= s.Players.Length) return -1;
+            var off = new System.Collections.Generic.List<int>();
+            var utilities = StandInOff(s.Players[i]);
+            if (utilities != null) off.AddRange(utilities);
+            if (not != null) off.AddRange(not);
+            foreach (var c in Cards.DrawOffer(s, i, Cards.Cards.Count, off.ToArray()))
+                if (Cards.Cards[c].MaxPerTeam <= 0) return c;
+            return -1;
+        }
+
+        /// <summary>
+        /// Cards a stand-in card (handed out when nothing switched on is left) must not be: another utility for someone
+        /// who has one (it would replace theirs without them choosing to).
+        /// </summary>
+        private int[] StandInOff(PlayerState p)
+        {
+            if (T.MultiUtility || Cards.UtilityHeld(p) == null) return null;
+            var off = new System.Collections.Generic.List<int>();
+            foreach (var c in Cards.Cards) if (Cards.IsUtilityIndex(c.Index)) off.Add(c.Index);
+            return off.ToArray();
         }
 
         /// <summary>The team that just conceded picks (after every goal, as in ROUNDS).</summary>
@@ -94,7 +201,20 @@ namespace UltraPuck.Core
             {
                 if (p.Offer.Length == 0) continue;
                 if (p.Picked < 0) p.Picked = p.Offer[(int)(s.NextRandom() % (uint)p.Offer.Length)];
-                GiveCard(s, p, p.Picked);
+                // one a teammate has just taken (only so many a team, like the Portal Gun): the next card offered instead
+                if (Cards.TeamFull(s, p, p.Picked))
+                {
+                    var other = -1;
+                    var at = Array.IndexOf(p.Offer, p.Picked);
+                    for (var k = 1; k < p.Offer.Length && other < 0; k++)
+                    {
+                        var c = p.Offer[(at + k) % p.Offer.Length];
+                        if (!Cards.TeamFull(s, p, c)) other = c;
+                    }
+                    if (other < 0) other = AnyOtherCard(s, Array.IndexOf(s.Players, p), p.Offer);
+                    p.Picked = other;
+                }
+                if (p.Picked >= 0) GiveCard(s, p, p.Picked);
                 p.Offer = new int[0];
                 p.Picked = -1;
                 p.Hover = 0;
@@ -110,10 +230,18 @@ namespace UltraPuck.Core
             }
         }
 
-        private static void TeamVoteResult(GameState s, int team)
+        private void TeamVoteResult(GameState s, int team)
         {
+            // the team's shared hand (one player may have a one-a-team card in place of one of these: see OnePickerGets)
             int[] offer = null;
-            foreach (var p in s.Players) if (p.Team == team && p.Offer.Length > 0) { offer = p.Offer; break; }
+            foreach (var p in s.Players)
+            {
+                if (p.Team != team || p.Offer.Length == 0) continue;
+                var special = false;
+                foreach (var c in p.Offer) if (c >= 0 && c < Cards.Cards.Count && Cards.Cards[c].MaxPerTeam > 0) special = true;
+                if (offer == null || !special) offer = p.Offer;
+                if (!special) break;
+            }
             if (offer == null) return;
             var votes = new int[offer.Length];
             var humans = false;
@@ -125,8 +253,8 @@ namespace UltraPuck.Core
             {
                 // time ran out with nobody locked: use where humans were looking, else bot picks
                 foreach (var p in s.Players)
-                    if (p.Team == team && !p.Bot && p.Offer.Length > 0 && p.Hover >= 1 && p.Hover <= offer.Length)
-                    { votes[p.Hover - 1]++; humans = true; }
+                    if (p.Team == team && !p.Bot && p.Offer.Length > 0 && p.Hover >= 1 && p.Hover <= p.Offer.Length)
+                    { var k = Array.IndexOf(offer, p.Offer[p.Hover - 1]); if (k >= 0) { votes[k]++; humans = true; } }
                 if (!humans)
                     foreach (var p in s.Players)
                         if (p.Team == team && p.Bot && p.Offer.Length > 0 && p.Picked >= 0)
@@ -137,7 +265,9 @@ namespace UltraPuck.Core
             var tied = new System.Collections.Generic.List<int>();
             for (var k = 0; k < offer.Length; k++) if (votes[k] == most) tied.Add(k);
             var won = offer[tied[(int)(s.NextRandom() % (uint)tied.Count)]];
-            foreach (var p in s.Players) if (p.Team == team && p.Offer.Length > 0) p.Picked = won;
+            // everyone gets the winner, except whoever took their own one-a-team card (it's theirs alone)
+            foreach (var p in s.Players)
+                if (p.Team == team && p.Offer.Length > 0 && !(p.Picked >= 0 && Array.IndexOf(offer, p.Picked) < 0)) p.Picked = won;
         }
 
         /// <summary>
@@ -208,8 +338,15 @@ namespace UltraPuck.Core
             s.Rocks = new Rock[0];
             s.Portals = new Portal[0];
             s.PortalShots = new Shot[0];
-            s.PuckPortalCool = Fix.Zero;
-            foreach (var p in s.Players) { p.PortalNext = 0; p.PortalCooldown = Fix.Zero; p.PortalCool = Fix.Zero; }
+            s.PuckPortal = 0;
+            var prizes = false;
+            foreach (var p in s.Players)
+            {
+                p.PortalNext = 0; p.PortalCooldown = Fix.Zero; p.PortalVia = 0;
+                if (p.SlotPrizeTime > Fix.Zero && (p.SlotPrize == CardLibrary.SlotGiant || p.SlotPrize == CardLibrary.SlotStrong)) prizes = true;
+                p.SlotSpin = Fix.Zero; p.SlotWin = 0; p.SlotPrize = 0; p.SlotPrizeTime = Fix.Zero; p.SlotWait = Fix.Zero;
+            }
+            if (prizes && Cards != null) Cards.Recompute(s);
             HeadStart(s);
         }
 
@@ -261,6 +398,26 @@ namespace UltraPuck.Core
                             + across * (T.FaceOffSpacing * FaceOffShape[slot, 1] / 2);
             if (!Map.Inside(pos) || !PlayerFits(pos)) return Map.SpawnFor(team, slot);
             return new SpawnDef { Team = team, Pos = pos, Facing = front };
+        }
+
+        /// <summary>Clamp into lo..hi; a range that's (just) the wrong way round, as on a net's back wall, means its middle.</summary>
+        private static Fix ClampAlong(Fix u, Fix lo, Fix hi) { return lo > hi ? (lo + hi) / 2 : Fix.Clamp(u, lo, hi); }
+
+        /// <summary>The net whose box <paramref name="p"/> (a point on a wall's middle line) is right next to, or null.</summary>
+        private GoalDef NetNear(FixVec2 p)
+        {
+            foreach (var g in Map.Goals) if (g.Touches(p, WallHalf + Fix.Ratio(3, 10))) return g;
+            return null;
+        }
+
+        /// <summary>Which way a net opens: its facing, or (a map that doesn't say) along the axis towards the puck's spot.</summary>
+        private FixVec2 NetFront(GoalDef net)
+        {
+            if (net.HasFacing) return net.Facing;
+            var centre = new FixVec2((net.Min.X + net.Max.X) / 2, (net.Min.Y + net.Max.Y) / 2);
+            var to = Map.PuckSpot - centre;
+            return Fix.Abs(to.X) >= Fix.Abs(to.Y) ? new FixVec2(to.X >= Fix.Zero ? Fix.One : -Fix.One, Fix.Zero)
+                                                  : new FixVec2(Fix.Zero, to.Y >= Fix.Zero ? Fix.One : -Fix.One);
         }
 
         /// <summary>A plain-sized player at <paramref name="at"/> touches no wall.</summary>
@@ -413,6 +570,71 @@ namespace UltraPuck.Core
             s.Carrier = best;
             s.PuckTeam = team;
             s.PuckPos = CarrySpot(s.Players[best]);
+        }
+
+        /// <summary>
+        /// Free play's puck drills (d-pad): <see cref="PlayerInput.PuckToMe"/> puts it on your stick;
+        /// <see cref="PlayerInput.PuckAtMe"/> sends it at you from a few strides away; <see cref="PlayerInput.PuckAtTheirNet"/> /
+        /// <see cref="PlayerInput.PuckAtOurNet"/> shoot it, from where it is, at the other team's net or your own.
+        /// </summary>
+        private void PuckDrill(GameState s, int i, byte drill)
+        {
+            var p = s.Players[i];
+            var had = s.Carrier;
+            s.PassFrom = -1;
+            s.CannonTeam = -1;
+            s.PuckHidden = Fix.Zero;
+            s.PuckPortal = 0;
+            StopLaying(s, false);
+            s.StoneLaying = Fix.Zero;
+            if (drill == PlayerInput.PuckToMe)
+            {
+                s.Carrier = i;
+                s.PuckTeam = p.Team;
+                s.PuckPos = CarrySpot(p);
+                s.PuckVel = p.Vel;
+                return;
+            }
+            s.Carrier = -1;
+            s.PuckTeam = -1;
+            if (had >= 0 && had < s.Players.Length) s.Players[had].NoPickup = Fix.Max(s.Players[had].NoPickup, Fix.Ratio(3, 10));
+            if (drill == PlayerInput.PuckAtMe)
+            {
+                // from a spot a few strides away with a clear line to you (a random way round), straight at you
+                var start = (int)(s.NextRandom() % 16u);
+                var from = Map.PuckSpot;
+                for (var k = 0; k < 16; k++)
+                {
+                    var angle = (start + k * 7) % 16;
+                    var dir = Rotated(FixVec2.Right, angle);
+                    var at = p.Pos + dir * Fix.FromInt(9);
+                    if (Map.Inside(at) && PuckFits(p.Pos, at)) { from = at; break; }
+                }
+                s.PuckPos = from;
+                var to = p.Pos - from;
+                s.PuckVel = to.SqrLength.Raw > 0 ? to.Normalized * Fix.FromInt(16) : FixVec2.Zero;
+                return;
+            }
+            // shot from where it is, at a net (the other team's, or your own to practise saves)
+            var team = drill == PlayerInput.PuckAtTheirNet ? 1 - p.Team : p.Team;
+            var net = Bot.GoalCentre(Map, team);
+            var way = net - s.PuckPos;
+            s.PuckVel = way.SqrLength.Raw > 0 ? way.Normalized * (T.ShotSpeed * Fix.Ratio(8, 5)) : FixVec2.Zero;
+        }
+
+        /// <summary><paramref name="v"/> turned by <paramref name="sixteenths"/> sixteenths of a full turn (exact, no trig).</summary>
+        private static FixVec2 Rotated(FixVec2 v, int sixteenths)
+        {
+            // cos / sin of k × 22.5°, written out so every PC gets exactly the same numbers
+            Fix[] c = { Fix.One, Fix.Ratio(9239, 10000), Fix.Ratio(7071, 10000), Fix.Ratio(3827, 10000), Fix.Zero };
+            var k = ((sixteenths % 16) + 16) % 16;
+            var quarter = k / 4;
+            var r = k % 4;
+            var cs = c[r]; var sn = c[4 - r];
+            var x = v.X * cs - v.Y * sn;
+            var y = v.X * sn + v.Y * cs;
+            for (var q = 0; q < quarter; q++) { var t = x; x = -y; y = t; }
+            return new FixVec2(x, y);
         }
 
         /// <summary>The puck back to its spot, loose and still; nobody else moves.</summary>
@@ -587,9 +809,22 @@ namespace UltraPuck.Core
                 foreach (var p in s.Players)
                 {
                     if (p.HitLag > Fix.Zero) continue; // frozen by a hit
+                    var wasAt = p.Pos;
+                    var wasIn = p.PortalVia != 0;
                     p.Pos += p.Vel * sub;
-                    if (p.HeldBy < 0 && s.Portals.Length > 1) ThroughPortal(s, ref p.Pos, ref p.Vel, RadiusOf(p), ref p.PortalCool);
-                    CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
+                    var inPortal = -1;
+                    bool jumpedP;
+                    FixVec2 nIn, nOut;
+                    if (p.HeldBy < 0)
+                    {
+                        inPortal = PortalPass(s, ref p.Pos, ref p.Vel, RadiusOf(p), ref p.PortalVia, out jumpedP, out nIn, out nOut);
+                        // out the other side facing the way you went in (turned with the portals)
+                        if (jumpedP) { p.Facing = PortalTurn(p.Facing, nIn, nOut).Normalized; p.DashDir = PortalTurn(p.DashDir, nIn, nOut); }
+                    }
+                    else p.PortalVia = 0;
+                    CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce, s, inPortal);
+                    // (also the step it leaves the portal: part way into the boards, the wall's push mustn't send it out the far side)
+                    if ((inPortal >= 0 || wasIn) && Escaped(wasAt, p.Pos)) { p.Pos = wasAt; p.Vel = FixVec2.Zero; p.PortalVia = 0; }
                     if (s.Stones.Length > 0) CollideStones(s, ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
                     PushPylons(s, p);
                     PushRocks(s, p);
@@ -607,7 +842,6 @@ namespace UltraPuck.Core
                 NoteTouch(s);
             }
 
-            s.PuckPortalCool = Fix.Max(Fix.Zero, s.PuckPortalCool - dt);
             // shots run out
             if (s.Shots.Length > 0)
             {
@@ -791,6 +1025,7 @@ namespace UltraPuck.Core
             var pressed = (byte)(input.Buttons & ~p.PrevButtons);
             p.PrevButtons = input.Buttons;
             if (T.FreePlay && (pressed & PlayerInput.ResetPuck) != 0) ResetPuck(s);
+            if (T.FreePlay && s.Phase == Phase.Play && input.Pick >= PlayerInput.PuckToMe && input.Pick <= PlayerInput.PuckAtOurNet) PuckDrill(s, i, input.Pick);
 
             var carrying = s.Carrier == i;
 
@@ -808,7 +1043,7 @@ namespace UltraPuck.Core
             p.ShockCooldown = Fix.Max(Fix.Zero, p.ShockCooldown - dt);
             p.SwapCooldown = Fix.Max(Fix.Zero, p.SwapCooldown - dt);
             p.PortalCooldown = Fix.Max(Fix.Zero, p.PortalCooldown - dt);
-            p.PortalCool = Fix.Max(Fix.Zero, p.PortalCool - dt);
+            SlotTimers(s, p, dt);
             p.SlowTime = Fix.Max(Fix.Zero, p.SlowTime - dt);
             p.FastTime = Fix.Max(Fix.Zero, p.FastTime - dt);
             p.TossTime = Fix.Max(Fix.Zero, p.TossTime - dt);
@@ -834,6 +1069,7 @@ namespace UltraPuck.Core
             var speed = p.Stats.MoveSpeed * (holding ? p.Stats.MoveSpeedWithPuck : Fix.One);
             if (p.SlowTime > Fix.Zero) speed *= Fix.One - p.Slow;          // Shockwave, the other team's ice
             if (p.FastTime > Fix.Zero) speed *= Fix.One + p.Fast;          // Team Play pass, your team's ice
+            if (p.SlotPrizeTime > Fix.Zero && p.SlotPrize == CardLibrary.SlotSpeed) speed *= Fix.One + T.SlotSpeed; // Slot Machine
             if ((carrying || carryingRock) && input.Has(PlayerInput.ChargeBrake)) speed *= T.ChargeMoveSpeed; // charging a shot: slower (not while carrying a teammate)
             var push = flying ? Fix.Zero : T.MoveForce * speed * control;
             p.Vel += move * (push * dt);
@@ -864,7 +1100,8 @@ namespace UltraPuck.Core
                 if (p.Stats.Invisibility > 0 && p.InvisCooldown <= Fix.Zero) { p.InvisibleTime = T.InvisTime; p.InvisCooldown = T.InvisCooldown; }
                 // Puck Gun (when you don't have the puck, a rock or a teammate)
                 if (p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero && !holding && !flying) FireGun(s, i);
-                if (p.Stats.PortalGun > 0 && p.PortalCooldown <= Fix.Zero && !flying) FirePortal(s, i);
+                if (p.Stats.PortalGun > 0 && p.PortalCooldown <= Fix.Zero && !flying && !carrying) FirePortal(s, i); // not with the puck
+                if (p.Stats.SlotMachine > 0 && p.SlotSpin <= Fix.Zero && p.SlotPrizeTime <= Fix.Zero && p.SlotWait <= Fix.Zero) SpinSlots(s, p);
                 if (p.Stats.Swap > 0 && !carrying && !holdingMate && !flying) UseSwap(s, i); // no throw/teleport while holding the puck or a teammate
             }
             // Shockwave: hold the utility button to grow it, let go to fire it (no cooldown)
@@ -1208,10 +1445,18 @@ namespace UltraPuck.Core
             {
                 var from = s.PuckPos;
                 s.PuckPos += s.PuckVel * part;
-                if (s.Portals.Length > 1 && ThroughPortal(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, ref s.PuckPortalCool))
+                bool jumped;
+                var puckWasIn = s.PuckPortal != 0;
+                var inPortal = PortalPass(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, ref s.PuckPortal, out jumped);
+                if (inPortal < 0 && puckWasIn && Escaped(from, s.PuckPos)) { s.PuckPos = from; s.PuckVel = -s.PuckVel * T.PuckWallBounce; }
+                if (inPortal >= 0)
                 {
-                    StopLaying(s, false); // an Ice Trail / Stone Wall being laid ends here (never one across the map)
-                    s.StoneLaying = Fix.Zero;
+                    // in a portal: the wall there lets it in (no wall check), anything else still stops it
+                    if (jumped) { StopLaying(s, false); s.StoneLaying = Fix.Zero; } // an Ice Trail / Stone Wall being laid ends here
+                    CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce, s, inPortal);
+                    if (Escaped(from, s.PuckPos)) { s.PuckPos = from; s.PuckVel = -s.PuckVel * T.PuckWallBounce; s.PuckPortal = 0; }
+                    CollidePylons(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
+                    if (s.Stones.Length > 0) CollideStones(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
                     before = s.PuckPos;
                     continue;
                 }
@@ -1367,6 +1612,21 @@ namespace UltraPuck.Core
             var reach = RadiusOf(c) + T.PuckRadius + Fix.Ratio(1, 50);
             var spot = c.Pos + c.Facing * reach;
             FixVec2 pos;
+            var into = CarryPortal(s, c, spot);
+            if (into >= 0)
+            {
+                // into a portal ahead of you: it slides in (drawn coming out of the other one), never far enough to
+                // reach a net's box behind that wall; once you go through, it's in front of you again over there
+                var P = s.Portals[into];
+                var face = P.Pos + P.Normal * WallHalf;
+                var depth = FixVec2.Dot(spot - face, P.Normal);
+                var deepest = -(WallHalf * 2 - T.PuckRadius - Fix.Ratio(1, 20));
+                s.PuckPos = depth < deepest ? spot + P.Normal * (deepest - depth) : spot;
+                s.PuckVel = c.Vel;
+                s.PuckPortal = P.Id;
+                return true;
+            }
+            s.PuckPortal = 0;
             if (!CarryBlocked(s, ci, spot)) pos = spot;
             else
             {
@@ -1428,6 +1688,37 @@ namespace UltraPuck.Core
             return false;
         }
 
+        /// <summary>
+        /// The portal (an index) a carried puck at <paramref name="spot"/> is going into ahead of its carrier, or -1: the
+        /// carrier is on that portal's side facing into it, and the puck's at or past its face, within its length.
+        /// </summary>
+        private int CarryPortal(GameState s, PlayerState c, FixVec2 spot)
+        {
+            if (s.Portals.Length < 2) return -1;
+            var half = T.PortalLength * Fix.Half;
+            for (var k = 0; k < s.Portals.Length; k++)
+            {
+                var P = s.Portals[k];
+                if (Partner(s, k) < 0) continue;
+                var face = P.Pos + P.Normal * WallHalf;
+                if (FixVec2.Dot(c.Facing, P.Normal) >= Fix.Zero) continue;                     // facing away from it
+                if (FixVec2.Dot(c.Pos - face, P.Normal) < -Fix.Ratio(1, 20)) continue;          // the carrier's past it
+                if (FixVec2.Dot(spot - face, P.Normal) >= T.PuckRadius) continue;              // not reached it yet
+                if (Fix.Abs(FixVec2.Dot(spot - face, new FixVec2(-P.Normal.Y, P.Normal.X))) > half) continue;
+                return k;
+            }
+            return -1;
+        }
+
+        /// <summary>Is the puck part way into a portal, past its face (so in the wall there, not in anything behind it)?</summary>
+        private bool PuckInPortal(GameState s)
+        {
+            if (s.PuckPortal == 0) return false;
+            foreach (var P in s.Portals)
+                if (P.Id == s.PuckPortal) return FixVec2.Dot(s.PuckPos - (P.Pos + P.Normal * WallHalf), P.Normal) < T.PuckRadius;
+            return false;
+        }
+
         /// <summary>Would a carried puck at <paramref name="at"/> touch the boards, a pylon or another player (or be the other side of a wall)?</summary>
         private bool CarryBlocked(GameState s, int carrier, FixVec2 at)
         {
@@ -1484,6 +1775,7 @@ namespace UltraPuck.Core
 
         private void CheckGoal(GameState s)
         {
+            if (PuckInPortal(s)) return; // half way through a portal (on the back of a net): not in the net
             // Cannon Ball: a carrier the shot is still carrying off, shoved into their own net (puck or body in): a goal
             // for the shooter
             if (s.Carrier >= 0)
@@ -1935,6 +2227,65 @@ namespace UltraPuck.Core
             s.Shots = shots;
         }
 
+        // ------------------------------------------------------------------ Slot Machine
+
+        /// <summary>Slot Machine: pull. What it lands on is settled now (by the match's random numbers): each prize 1 in SlotOdds.</summary>
+        private void SpinSlots(GameState s, PlayerState p)
+        {
+            var odds = Math.Max(4, T.SlotOdds);
+            var roll = (int)(s.NextRandom() % (uint)odds);
+            p.SlotWin = roll < 4 ? roll + 1 : 0;
+            // the three symbols: 1-4 are the prizes, 5-8 the others. A win shows three of its prize; a loss never three alike
+            int a, b, c;
+            if (p.SlotWin > 0) a = b = c = p.SlotWin;
+            else
+            {
+                a = 1 + (int)(s.NextRandom() % 8u);
+                b = 1 + (int)(s.NextRandom() % 8u);
+                c = 1 + (int)(s.NextRandom() % 8u);
+                if (a == b && b == c) c = c % 8 + 1;
+            }
+            p.SlotReels = a | (b << 4) | (c << 8);
+            p.SlotSpin = T.SlotSpinTime;
+            p.SlotSpins++;
+        }
+
+        /// <summary>Slot Machine: the spin landing (a prize starts), a prize running out, the wait after a loss.</summary>
+        private void SlotTimers(GameState s, PlayerState p, Fix dt)
+        {
+            p.SlotWait = Fix.Max(Fix.Zero, p.SlotWait - dt);
+            if (p.SlotPrizeTime > Fix.Zero)
+            {
+                p.SlotPrizeTime -= dt;
+                if (p.SlotPrizeTime <= Fix.Zero)
+                {
+                    p.SlotPrizeTime = Fix.Zero;
+                    var body = p.SlotPrize == CardLibrary.SlotGiant || p.SlotPrize == CardLibrary.SlotStrong;
+                    p.SlotPrize = 0;
+                    if (body && Cards != null) Cards.Recompute(s);
+                }
+            }
+            if (p.SlotSpin <= Fix.Zero) return;
+            p.SlotSpin -= dt;
+            if (p.SlotSpin > Fix.Zero) return;
+            p.SlotSpin = Fix.Zero;
+            if (p.SlotWin == 0) { p.SlotWait = T.SlotWait; return; }
+            p.SlotPrize = p.SlotWin;
+            switch (p.SlotWin)
+            {
+                case CardLibrary.SlotSpeed: p.SlotPrizeTime = T.SlotSpeedTime; break;
+                case CardLibrary.SlotGiant: p.SlotPrizeTime = T.SlotGiantTime; break;
+                case CardLibrary.SlotInvisible: p.SlotPrizeTime = T.SlotInvisibleTime; p.InvisibleTime = Fix.Max(p.InvisibleTime, T.SlotInvisibleTime); break;
+                default: p.SlotPrizeTime = T.SlotStrongTime; break;
+            }
+            if ((p.SlotWin == CardLibrary.SlotGiant || p.SlotWin == CardLibrary.SlotStrong) && Cards != null)
+            {
+                Cards.GiantBy = T.SlotGiant;
+                Cards.StrongCards = T.SlotStrongCards;
+                Cards.Recompute(s);
+            }
+        }
+
         // ------------------------------------------------------------------ Portal Gun
 
         /// <summary>Portal Gun: a shot from the player's middle, the way they face, in the colour that's next.</summary>
@@ -1992,6 +2343,7 @@ namespace UltraPuck.Core
             var bd = Fix.Zero;
             var bdir = FixVec2.Right;
             var bc = hit;
+            Fix bsegAt = Fix.Zero, bsegLen = Fix.Zero;
             for (var w = 0; w < Map.WallLines.Count; w++)
             {
                 var pts = Map.WallLines[w];
@@ -2006,7 +2358,7 @@ namespace UltraPuck.Core
                     var t = Fix.Clamp(FixVec2.Dot(hit - a, e) / (len * len), Fix.Zero, Fix.One);
                     var c = a + e * t;
                     var d = (hit - c).SqrLength;
-                    if (bw < 0 || d < bd) { bw = w; bd = d; bu = along + len * t; bdir = e / len; bc = c; }
+                    if (bw < 0 || d < bd) { bw = w; bd = d; bu = along + len * t; bdir = e / len; bc = c; bsegAt = along; bsegLen = len; }
                     along += len;
                 }
             }
@@ -2014,12 +2366,51 @@ namespace UltraPuck.Core
             var total = Map.LineLength(bw);
             var half = T.PortalLength * Fix.Half;
             if (total < T.PortalLength) return; // too short for a portal
-            if (!Map.WallClosed[bw]) bu = Fix.Clamp(bu, half, total - half);
+            var nearNet = NetNear(bc);
+            if (nearNet != null)
+            {
+                // on a net: only the outside of its back wall, all of the portal on it (never its sides or posts)
+                var front = NetFront(nearNet);
+                var box = new FixVec2((nearNet.Min.X + nearNet.Max.X) / 2, (nearNet.Min.Y + nearNet.Max.Y) / 2);
+                if (Fix.Abs(FixVec2.Dot(bdir, front)) > Fix.Ratio(3, 10)) return;          // a side, not the back
+                if (FixVec2.Dot(bc - box, front) >= Fix.Zero) return;                      // (in front of the net)
+                if (FixVec2.Dot(from - bc, front) >= Fix.Zero) return;                     // from inside the net
+                // clear of the rounded posts at its ends (a hit near one shifts it along, so it never bends round a post)
+                if (bsegLen < T.PortalLength + WallHalf * 2 - Fix.Ratio(1, 10)) return;
+                bu = ClampAlong(bu, bsegAt + half + WallHalf, bsegAt + bsegLen - half - WallHalf);
+            }
+            else
+            {
+                if (!Map.WallClosed[bw])
+                {
+                    if (total < T.PortalLength + WallHalf * 2 - Fix.Ratio(1, 10)) return;
+                    bu = ClampAlong(bu, half + WallHalf, total - half - WallHalf); // clear of the rounded ends
+                }
+                // never round a corner onto a net
+                for (var k = 0; k <= 12; k++)
+                {
+                    FixVec2 along;
+                    if (NetNear(Map.PointAlong(bw, bu - half + T.PortalLength * k / 12, out along)) != null) return;
+                }
+            }
             // which side of the line it came from: the portal faces that way (the same side all along the line)
             var side = FixVec2.Dot(from - bc, new FixVec2(-bdir.Y, bdir.X)) >= Fix.Zero ? Fix.One : -Fix.One;
             FixVec2 dir;
             var centre = Map.PointAlong(bw, bu, out dir);
             var normal = new FixVec2(-dir.Y, dir.X) * side;
+            // on (or overlapping) the other team's portal: it's gone, and this one goes up in its place
+            var team = sh.Owner >= 0 && sh.Owner < s.Players.Length ? s.Players[sh.Owner].Team : -1;
+            for (var k = 0; k < s.Portals.Length; k++)
+            {
+                var po = s.Portals[k];
+                var theirs = po.Owner >= 0 && po.Owner < s.Players.Length ? s.Players[po.Owner].Team : -2;
+                if (theirs == team || (po.Pos - centre).SqrLength >= T.PortalLength * T.PortalLength || FixVec2.Dot(po.Normal, normal) <= Fix.Zero) continue;
+                centre = po.Pos; normal = po.Normal; bw = po.Wall; bu = po.At;
+                var left = new System.Collections.Generic.List<Portal>(s.Portals);
+                left.RemoveAt(k);
+                s.Portals = left.ToArray();
+                break;
+            }
             // not on top of the shooter's other portal
             foreach (var po in s.Portals)
                 if (po.Owner == sh.Owner && po.Colour != sh.Kind && (po.Pos - centre).SqrLength < T.PortalLength * T.PortalLength
@@ -2031,58 +2422,115 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// Something (a circle of radius <paramref name="r"/>) moving into a portal comes out of its partner (the same
-        /// player's other colour), just off that wall, going the same speed at the same angle (turned the way the portals
-        /// are turned), never slower than PortalExitSpeed. Returns whether it went through.
+        /// The safety net for things in a portal (where some wall doesn't count): moving from <paramref name="from"/> to
+        /// <paramref name="to"/> took it off the ice, or into a net it wasn't in.
         /// </summary>
-        private bool ThroughPortal(GameState s, ref FixVec2 pos, ref FixVec2 vel, Fix r, ref Fix cool)
+        private bool Escaped(FixVec2 from, FixVec2 to)
         {
-            if (cool > Fix.Zero) return false;
+            if (!Map.Inside(to)) return true;
+            foreach (var g in Map.Goals) if (g.Contains(to) && !g.Contains(from)) return true;
+            return false;
+        }
+
+        /// <summary>The same player's other portal (the other colour), or -1 if it isn't up.</summary>
+        private static int Partner(GameState s, int a)
+        {
+            for (var k = 0; k < s.Portals.Length; k++)
+                if (k != a && s.Portals[k].Owner == s.Portals[a].Owner && s.Portals[k].Colour != s.Portals[a].Colour) return k;
+            return -1;
+        }
+
+        /// <summary>
+        /// Going through a portal, a bit at a time: something (a circle of radius <paramref name="r"/>) touching a portal's
+        /// face while moving into it sinks into the wall there (the wall lets it in), and the part that's in comes out of the
+        /// other portal (the drawing side shows both halves). Once its middle passes the face it's moved across: the same
+        /// distance out of the other portal, the same speed at the same angle (turned the way the portals are turned), never
+        /// slower than PortalExitSpeed. <paramref name="via"/> is the Id of the portal it's in (0 = none); it's kept
+        /// until it's clear of the wall again. Returns the index of the portal it's in (walls there don't stop it), or -1.
+        /// </summary>
+        private int PortalPass(GameState s, ref FixVec2 pos, ref FixVec2 vel, Fix r, ref int via, out bool jumped)
+        {
+            FixVec2 nIn, nOut;
+            return PortalPass(s, ref pos, ref vel, r, ref via, out jumped, out nIn, out nOut);
+        }
+
+        /// <summary>Turn <paramref name="v"/> the way going in at a portal facing <paramref name="nIn"/> and out of one facing <paramref name="nOut"/> turns things.</summary>
+        private static FixVec2 PortalTurn(FixVec2 v, FixVec2 nIn, FixVec2 nOut)
+        {
+            var tIn = new FixVec2(-nIn.Y, nIn.X);
+            var tOut = new FixVec2(-nOut.Y, nOut.X);
+            return -nOut * FixVec2.Dot(v, nIn) - tOut * FixVec2.Dot(v, tIn);
+        }
+
+        private int PortalPass(GameState s, ref FixVec2 pos, ref FixVec2 vel, Fix r, ref int via, out bool jumped, out FixVec2 nIn, out FixVec2 nOut)
+        {
+            jumped = false;
+            nIn = FixVec2.Zero; nOut = FixVec2.Zero;
+            if (s.Portals.Length < 2) { via = 0; return -1; }
             var half = T.PortalLength * Fix.Half;
-            var reach = r + WallHalf + Fix.Ratio(1, 20);
-            for (var a = 0; a < s.Portals.Length; a++)
+            var a = -1;
+            if (via != 0) for (var k = 0; k < s.Portals.Length; k++) if (s.Portals[k].Id == via) { a = k; break; }
+            if (a < 0 || Partner(s, a) < 0)
             {
-                var P = s.Portals[a];
-                var far = half + reach;
-                if ((pos - P.Pos).SqrLength > far * far) continue;
-                if (FixVec2.Dot(vel, P.Normal) >= Fix.Zero) continue; // not going towards the wall
-                var b = -1;
-                for (var k = 0; k < s.Portals.Length; k++)
-                    if (k != a && s.Portals[k].Owner == P.Owner && s.Portals[k].Colour != P.Colour) { b = k; break; }
-                if (b < 0) continue;
-                // touching the wall, on the portal's side, within the portal
-                var found = false;
+                // not in one yet: touching a portal's face, within its length, and moving into it?
+                via = 0; a = -1;
+                // the bit of wall it's touching (measured from the wall itself, so the ends of a portal on a curve count)
+                var reach = r + WallHalf + Fix.Ratio(1, 10);
+                var touching = false;
                 var best = Fix.Zero;
                 var c = pos;
                 foreach (var seg in Map.Segments)
                 {
                     if (seg.FarFrom(pos, reach)) continue;
                     var q = Closest(seg, pos);
-                    var d = (pos - q).SqrLength;
-                    if (d >= reach * reach) continue;
-                    if (!found || d < best) { found = true; best = d; c = q; }
+                    var dd = (pos - q).SqrLength;
+                    if (dd >= reach * reach) continue;
+                    if (!touching || dd < best) { touching = true; best = dd; c = q; }
                 }
-                if (!found || (c - P.Pos).SqrLength > half * half) continue;
-                var off = pos - c;
-                var dist = off.Length;
-                if (dist.Raw > 0 && FixVec2.Dot(off / dist, P.Normal) < Fix.Ratio(3, 10)) continue; // the other side of the wall
-                var Q = s.Portals[b];
-                var tP = new FixVec2(-P.Normal.Y, P.Normal.X);
-                var tQ = new FixVec2(-Q.Normal.Y, Q.Normal.X);
-                var room = Fix.Max(Fix.Zero, half - r);
-                var across = Fix.Clamp(FixVec2.Dot(pos - P.Pos, tP), -room, room);
-                var into = FixVec2.Dot(vel, P.Normal); // < 0
-                var sideways = FixVec2.Dot(vel, tP);
-                var exit = Q.Pos - tQ * across + Q.Normal * (r + WallHalf + Fix.Ratio(1, 20));
-                if (!Map.Inside(exit)) continue;
-                pos = exit;
-                vel = Q.Normal * Fix.Max(-into, T.PortalExitSpeed) - tQ * sideways;
-                cool = T.PortalRepeat;
-                P.Uses++; Q.Uses++;
-                s.Portals[a] = P; s.Portals[b] = Q;
-                return true;
+                if (!touching) return -1;
+                for (var k = 0; k < s.Portals.Length && a < 0; k++)
+                {
+                    var P0 = s.Portals[k];
+                    if (Partner(s, k) < 0) continue;
+                    if ((c - P0.Pos).SqrLength > half * half) continue;                         // not this portal's stretch
+                    if (FixVec2.Dot(pos - c, P0.Normal) <= Fix.Zero) continue;                  // the far side of that wall
+                    if (FixVec2.Dot(vel, P0.Normal) >= Fix.Zero) continue;                      // not moving into it
+                    a = k; via = P0.Id;
+                }
+                if (a < 0) return -1;
             }
-            return false;
+            var b = Partner(s, a);
+            var P = s.Portals[a];
+            var Q = s.Portals[b];
+            var fP = P.Pos + P.Normal * WallHalf;
+            var fQ = Q.Pos + Q.Normal * WallHalf;
+            var tP = new FixVec2(-P.Normal.Y, P.Normal.X);
+            var tQ = new FixVec2(-Q.Normal.Y, Q.Normal.X);
+            var depth = FixVec2.Dot(pos - fP, P.Normal);
+            var across = FixVec2.Dot(pos - fP, tP);
+            // clear of it (back out on its own side, or off past its end): an ordinary wall again
+            if (depth > r + Fix.Ratio(3, 10) || Fix.Abs(across) > half + r) { via = 0; return -1; }
+            if (depth >= Fix.Zero) return a;
+            // its middle is through: over to the other portal, as far out of it as it was in, at the same place along
+            // it (measured along that wall, so it follows a curve, and never past the portal's end)
+            var vn = FixVec2.Dot(vel, P.Normal);
+            var vt = FixVec2.Dot(vel, tP);
+            across = Fix.Clamp(across, -half, half);
+            FixVec2 dirQ;
+            Map.PointAlong(Q.Wall, Q.At, out dirQ);
+            var sgn = FixVec2.Dot(dirQ, tQ) >= Fix.Zero ? Fix.One : -Fix.One;
+            FixVec2 dirAt;
+            var onWall = Map.PointAlong(Q.Wall, Q.At - across * sgn, out dirAt);
+            var nAt = new FixVec2(-dirAt.Y, dirAt.X);
+            if (FixVec2.Dot(nAt, Q.Normal) < Fix.Zero) nAt = -nAt;
+            pos = onWall + nAt * (WallHalf - depth);
+            vel = Q.Normal * Fix.Max(-vn, T.PortalExitSpeed) - tQ * vt;
+            via = Q.Id;
+            P.Uses++; Q.Uses++;
+            s.Portals[a] = P; s.Portals[b] = Q;
+            jumped = true;
+            nIn = P.Normal; nOut = Q.Normal;
+            return b;
         }
 
         /// <summary>Shots fly straight; the first player they touch (not the shooter) is knocked back like a check (lighter players further) and drops the puck; walls and pylons stop them.</summary>
@@ -2329,9 +2777,12 @@ namespace UltraPuck.Core
                     rk.Pos += rk.Vel * sub;
                     rk.Vel -= rk.Vel * Fix.Min(Fix.One, T.RockDrag * sub);
                     if (rk.Vel.SqrLength < Fix.Ratio(1, 400)) rk.Vel = FixVec2.Zero;
-                    rk.PortalCool = Fix.Max(Fix.Zero, rk.PortalCool - sub);
-                    if (s.Portals.Length > 1) ThroughPortal(s, ref rk.Pos, ref rk.Vel, T.RockRadius, ref rk.PortalCool);
-                    CollideWalls(ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
+                    bool jumpedR;
+                    var rockWas = rk.Pos - rk.Vel * sub;
+                    var rockWasIn = rk.PortalVia != 0;
+                    var inPortal = PortalPass(s, ref rk.Pos, ref rk.Vel, T.RockRadius, ref rk.PortalVia, out jumpedR);
+                    CollideWalls(ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce, s, inPortal);
+                    if ((inPortal >= 0 || rockWasIn) && !jumpedR && Escaped(rockWas, rk.Pos)) { rk.Pos = rockWas; rk.Vel = FixVec2.Zero; rk.PortalVia = 0; }
                     if (s.Stones.Length > 0) CollideStones(s, ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
                     s.Rocks[k] = rk;
                 }
@@ -2582,6 +3033,38 @@ namespace UltraPuck.Core
         }
 
         // ------------------------------------------------------------------ walls
+
+        /// <summary>
+        /// As below, but going through portal <paramref name="portal"/> (an index in <paramref name="s"/>'s portals, -1 for
+        /// none): the wall it covers doesn't count.
+        /// </summary>
+        private void CollideWalls(ref FixVec2 pos, ref FixVec2 vel, Fix r, Fix bounce, GameState s, int portal)
+        {
+            if (portal < 0 || s == null || portal >= s.Portals.Length) { CollideWalls(ref pos, ref vel, r, bounce); return; }
+            var at = s.Portals[portal].Pos;
+            var along = new FixVec2(-s.Portals[portal].Normal.Y, s.Portals[portal].Normal.X);
+            var skip = T.PortalLength * Fix.Half;
+            var rr = r + WallHalf;
+            var segs = Map.Segments;
+            for (var pass = 0; pass < 2; pass++)
+                for (var k = 0; k < segs.Count; k++)
+                {
+                    if (segs[k].FarFrom(pos, rr)) continue;
+                    var c = Closest(segs[k], pos);
+                    var d = pos - c;
+                    if (d.SqrLength >= rr * rr) continue;
+                    // the portal's own stretch of wall: only within its length, and only wall running along it (never a
+                    // net's side or a corner round the end of it)
+                    var e = segs[k].B - segs[k].A;
+                    var el = e.Length;
+                    if ((c - at).SqrLength <= skip * skip && el.Raw > 0 && Fix.Abs(FixVec2.Dot(e / el, along)) > Fix.Ratio(7, 10)) continue;
+                    var dist = d.Length;
+                    var n = dist.Raw > 0 ? d / dist : segs[k].Side;
+                    pos = c + n * rr;
+                    var vn = FixVec2.Dot(vel, n);
+                    if (vn < Fix.Zero) vel -= n * (vn * (Fix.One + bounce));
+                }
+        }
 
         /// <summary>Push a circle out of any wall it overlaps and bounce its velocity off.</summary>
         private void CollideWalls(ref FixVec2 pos, ref FixVec2 vel, Fix r, Fix bounce)

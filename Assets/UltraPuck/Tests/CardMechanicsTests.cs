@@ -30,6 +30,14 @@ namespace UltraPuck.Tests
 
         private GameState Game(params int[] teams) { return _sim.NewGame(teams, 1u); }
 
+        /// <summary>The one-a-team cards (Portal Gun, Swap), left out where a test needs every hand on a team the same.</summary>
+        private int[] OneATeamOff()
+        {
+            var off = new System.Collections.Generic.List<int>();
+            foreach (var c in _lib.Cards) if (c.MaxPerTeam > 0) off.Add(c.Index);
+            return off.ToArray();
+        }
+
         /// <summary>Give player <paramref name="i"/> these cards and work out everyone's stats again.</summary>
         private void Give(GameState s, int i, params string[] ids)
         {
@@ -43,7 +51,7 @@ namespace UltraPuck.Tests
         [Test]
         public void TeamVoteGivesTheWholeTeamTheWinningCard()
         {
-            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3 }, _lib);
+            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3, CardsOff = OneATeamOff() }, _lib);
             var s = sim.NewGame(new[] { 0, 0, 0, 1 }, 7u);
             sim.StartPicking(s, new[] { 0, 1, 2 });
             CollectionAssert.AreEqual(s.Players[0].Offer, s.Players[1].Offer, "the same offer for the whole team");
@@ -59,7 +67,7 @@ namespace UltraPuck.Tests
         [Test]
         public void SameDrawOffersTheTeamTheSameCardsButEachPicks()
         {
-            var sim = new Simulation(Rink(), new Tuning { SameDraw = true, CardsOffered = 3 }, _lib);
+            var sim = new Simulation(Rink(), new Tuning { SameDraw = true, CardsOffered = 3, CardsOff = OneATeamOff() }, _lib);
             var s = sim.NewGame(new[] { 0, 0, 0, 1 }, 7u);
             sim.StartPicking(s, new[] { 0, 1, 2 });
             CollectionAssert.AreEqual(s.Players[0].Offer, s.Players[1].Offer, "the same offer for the whole team");
@@ -73,7 +81,7 @@ namespace UltraPuck.Tests
         [Test]
         public void TeamVoteBotsFollowHumanMajority()
         {
-            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3 }, _lib);
+            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3, CardsOff = OneATeamOff() }, _lib);
             var s = sim.NewGame(new[] { 0, 0, 0, 1 }, 11u);
             s.Players[1].Bot = true;
             s.Players[2].Bot = true;
@@ -113,7 +121,7 @@ namespace UltraPuck.Tests
         public void TeamVoteBotAlonePicksByTier()
         {
             // 1v1: bot's team has no human — must still pick (not wait forever)
-            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3 }, _lib);
+            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3, CardsOff = OneATeamOff() }, _lib);
             var s = sim.NewGame(new[] { 0, 1 }, 3u);
             s.Players[1].Bot = true;
             sim.StartPicking(s, new[] { 1 });
@@ -489,28 +497,6 @@ namespace UltraPuck.Tests
             Assert.AreEqual(full, QuickShot("ultrapuck.powershot"), 0.3, "Power Shot: a full charge's speed");
             Assert.AreEqual(full, QuickShot("ultrapuck.powershot", "ultrapuck.overcharge"), 0.3, "Over Charge doesn't add to it");
             Assert.AreEqual(1, _lib.ById("ultrapuck.powershot").MaxPerPlayer);
-        }
-
-        [Test]
-        public void InvisibleQuickShotHidesThePuckForHalfASecond()
-        {
-            var s = Game(0, 1);
-            Give(s, 0, "ultrapuck.ghostshot");
-            Play(s);
-            s.Players[1].Pos = At(10, 8);
-            s.Players[0].Pos = At(-6, -3); s.Players[0].Facing = FixVec2.Right;
-            s.Carrier = 0;
-            _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput) });
-            Assert.Greater(s.PuckHidden.ToDouble(), 0.45);
-            Assert.AreEqual(0, s.PuckHiddenTeam);
-            Run(s, _sim.T.TicksPerSecond * 6 / 10, default(PlayerInput), default(PlayerInput));
-            Assert.AreEqual(0.0, s.PuckHidden.ToDouble(), "seen again");
-            // a charged shot isn't hidden
-            s.Carrier = 0; s.PuckHidden = Fix.Zero;
-            var hold = new PlayerInput { Buttons = PlayerInput.ChargeBrake };
-            for (var t = 0; t < 60; t++) _sim.Step(s, new[] { hold, default(PlayerInput) });
-            _sim.Step(s, new PlayerInput[2]);
-            Assert.AreEqual(0.0, s.PuckHidden.ToDouble());
         }
 
         [Test]
@@ -1710,11 +1696,16 @@ namespace UltraPuck.Tests
             s.PuckVel = -blue.Normal * Fix.FromInt(12);
             var speedIn = s.PuckVel.Length.ToDouble();
             var through = false;
+            var halfway = false;
+            var face = blue.Pos + blue.Normal * (_sim.T.WallThickness * Fix.Half);
             for (var t = 0; t < 60 && !through; t++)
             {
                 _sim.Step(s, new PlayerInput[2]);
+                var depth = FixVec2.Dot(s.PuckPos - face, blue.Normal).ToDouble();
+                if (s.PuckPortal == blue.Id && depth >= 0.0 && depth < _sim.T.PuckRadius.ToDouble() * 0.9) halfway = true;
                 if ((s.PuckPos - orange.Pos).Length < Fix.Two) through = true;
             }
+            Assert.IsTrue(halfway, "part way in for a moment, not straight across (it's drawn half at each portal)");
             Assert.IsTrue(through, "came out of orange");
             Assert.Greater(FixVec2.Dot(s.PuckVel, orange.Normal).ToDouble(), 0.0, "going away from the wall");
             Assert.AreEqual(speedIn, s.PuckVel.Length.ToDouble(), 2.0, "about as fast as it went in");
@@ -1749,6 +1740,479 @@ namespace UltraPuck.Tests
             _sim.FaceOff(s);
             Assert.AreEqual(0, s.Portals.Length);
             Assert.AreEqual(0, s.Players[0].PortalNext, "blue first again");
+        }
+    
+
+        [Test]
+        public void PortalsGoOnlyOnTheBackOfANet()
+        {
+            var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", "hockey-rink.json")));
+            _sim = new Simulation(map, null, _lib);
+            var s = PortalGame();
+            // the outside of a side of blue's net, and its post from the front: no portal
+            ShootPortal(s, At(23.8, 6), new FixVec2(Fix.Zero, -Fix.One));
+            Assert.AreEqual(0, s.Portals.Length, "not on the side of a net");
+            ShootPortal(s, At(17, 1.8), FixVec2.Right);
+            Assert.AreEqual(0, s.Portals.Length, "not on a post (it used to end up inside the net)");
+            // the outside of its back: yes, all of it on the back wall, facing away from the net
+            ShootPortal(s, At(29, 0.5), -FixVec2.Right);
+            Assert.AreEqual(1, s.Portals.Length, "on the back of the net");
+            Assert.Greater(s.Portals[0].Normal.X.ToDouble(), 0.95);
+            Assert.AreEqual(0.0, s.Portals[0].Pos.Y.ToDouble(), 0.4, "all of it on the back wall");
+        }
+
+        [Test]
+        public void OnlyOnePlayerATeamCanHaveThePortalGun()
+        {
+            var s = Game(0, 0, 1);
+            var pg = _lib.ById("ultrapuck.portalgun").Index;
+            var sp = _lib.ById("ultrapuck.speedup").Index;
+            Give(s, 0, "ultrapuck.portalgun");
+            CollectionAssert.DoesNotContain(_lib.DrawOffer(s, 1, 40), pg, "not offered to a teammate");
+            CollectionAssert.Contains(_lib.DrawOffer(s, 2, 40), pg, "the other team can still get one");
+            // two teammates take it at the same pick: the first gets it, the other the next card offered
+            s.Players[0].Cards = new int[0];
+            _lib.Recompute(s);
+            s.Players[0].Offer = new[] { pg, sp }; s.Players[1].Offer = new[] { pg, sp };
+            s.Phase = Phase.Picking; s.PhaseTime = Fix.FromInt(10);
+            _sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 }, default(PlayerInput) });
+            CollectionAssert.Contains(s.Players[0].Cards, pg);
+            CollectionAssert.DoesNotContain(s.Players[1].Cards, pg);
+            CollectionAssert.Contains(s.Players[1].Cards, sp);
+        }
+    
+
+        /// <summary>Skating into a portal with the puck: you and the puck come out of the other one (not stopped like at a wall).</summary>
+        [Test]
+        public void CarryingThePuckThroughAPortal()
+        {
+            var s = PortalGame();
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, Fix.One));
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, -Fix.One));
+            var blue = PortalOf(s, 0); var orange = PortalOf(s, 1);
+            var p = s.Players[0];
+            p.Pos = blue.Pos + blue.Normal * Fix.FromInt(3);
+            p.Vel = FixVec2.Zero;
+            p.Facing = -blue.Normal;
+            s.Carrier = 0;
+            s.PuckPos = p.Pos - blue.Normal;
+            var push = new PlayerInput { MoveX = PlayerInput.Axis(-blue.Normal.X.ToFloat()), MoveY = PlayerInput.Axis(-blue.Normal.Y.ToFloat()) };
+            var through = false;
+            var closest = 99.0;
+            var puckIn = false;
+            for (var t = 0; t < 240 && !through; t++)
+            {
+                _sim.Step(s, new[] { push, default(PlayerInput) });
+                if (s.PuckPortal == blue.Id && p.PortalVia == 0) puckIn = true; // the puck went in ahead of the carrier
+                closest = System.Math.Min(closest, FixVec2.Dot(p.Pos - blue.Pos, blue.Normal).ToDouble());
+                if ((p.Pos - orange.Pos).Length < Fix.FromInt(2)) through = true;
+            }
+            TestContext.WriteLine("closest to blue's wall line: " + closest + ", carrier " + s.Carrier + ", via " + p.PortalVia);
+            Assert.IsTrue(through, "the carrier came out of orange");
+            Assert.IsTrue(puckIn, "the puck slid in ahead (not pulled back as at a wall)");
+            Assert.AreEqual(0, s.Carrier, "still carrying the puck");
+            Assert.Greater(FixVec2.Dot(p.Facing, orange.Normal).ToDouble(), 0.9, "facing out of orange (turned with the portals)");
+            Assert.AreEqual(0, s.Score[0] + s.Score[1], "no goal from it");
+        }
+    
+
+        /// <summary>A portal on a curved corner lets you in near its ends too (not only at its middle).</summary>
+        [Test]
+        public void TheEndsOfACurvedPortalLetYouIn()
+        {
+            var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", "hockey-rink.json")));
+            _sim = new Simulation(map, null, _lib);
+            var s = PortalGame();
+            ShootPortal(s, At(-20, 2), new FixVec2(-Fix.One, Fix.One));
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, -Fix.One));
+            var blue = PortalOf(s, 0);
+            var tangent = new FixVec2(-blue.Normal.Y, blue.Normal.X);
+            var q = s.Players[1];
+            // aimed at a spot near one end, along the wall's own normal there
+            FixVec2 dir;
+            var end = map.PointAlong(blue.Wall, blue.At + _sim.T.PortalLength * Fix.Ratio(4, 10), out dir);
+            var n = new FixVec2(-dir.Y, dir.X);
+            if (FixVec2.Dot(n, blue.Normal) < Fix.Zero) n = -n;
+            q.Pos = end + n * Fix.Two;
+            q.Vel = -n * Fix.FromInt(8);
+            var went = false;
+            for (var t = 0; t < 90 && !went; t++)
+            {
+                q.Vel = -n * Fix.FromInt(8);
+                _sim.Step(s, new PlayerInput[2]);
+                if (q.PortalVia != 0) went = true;
+            }
+            Assert.IsTrue(went, "started going in near the end of the portal");
+        }
+    
+
+        /// <summary>Skating along the boards past a portal (pressed against them) never takes you off the ice.</summary>
+        [TestCase("hockey-rink.json")]
+        [TestCase("test-rink.json")]
+        public void HuggingTheWallPastAPortalStaysOnTheIce(string file)
+        {
+            var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));
+            _sim = new Simulation(map, null, _lib);
+            foreach (var corner in new[] { true, false })
+            {
+                var s = PortalGame();
+                if (corner) ShootPortal(s, At(-12, 2), new FixVec2(-Fix.One, Fix.One));
+                else ShootPortal(s, At(-6, 0), new FixVec2(Fix.Zero, Fix.One));
+                ShootPortal(s, At(4, 0), new FixVec2(Fix.Zero, -Fix.One));
+                var blue = PortalOf(s, 0);
+                var q = s.Players[1];
+                foreach (var way in new[] { 1, -1 })
+                {
+                    // start along the wall a bit past one end of blue, then skate along it past the whole portal,
+                    // pushing into the boards the whole time
+                    FixVec2 dir;
+                    var start = map.PointAlong(blue.Wall, blue.At - _sim.T.PortalLength * way, out dir);
+                    var inward = new FixVec2(-dir.Y, dir.X);
+                    if (FixVec2.Dot(inward, blue.Normal) < Fix.Zero) inward = -inward;
+                    q.Pos = start + inward * Fix.One; q.PortalVia = 0;
+                    for (var t = 0; t < 120; t++)
+                    {
+                        FixVec2 d2;
+                        map.PointAlong(blue.Wall, blue.At, out d2);
+                        q.Vel = d2 * Fix.FromInt(9 * way) - blue.Normal * Fix.FromInt(3);
+                        _sim.Step(s, new PlayerInput[2]);
+                        Assert.IsTrue(map.Inside(q.Pos), file + (corner ? " corner" : " side") + ": on the ice at tick " + t + " (" + q.Pos + ")");
+                        foreach (var g in map.Goals) Assert.IsFalse(g.Contains(q.Pos), "not in a net");
+                    }
+                }
+            }
+        }
+    
+
+        /// <summary>
+        /// Going into a straight portal right by its edge and out of one on a curved corner: you come out on the ice,
+        /// along the curve (it used to measure along a straight line, which past the curve's end is behind the boards).
+        /// </summary>
+        [Test]
+        public void OutOfACurvedPortalByItsEdgeStaysOnTheIce()
+        {
+            var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", "hockey-rink.json")));
+            _sim = new Simulation(map, null, _lib);
+            foreach (var side in new[] { 1, -1 })
+            {
+                var s = PortalGame();
+                ShootPortal(s, At(-20, 2), new FixVec2(-Fix.One, Fix.One));   // blue: the curved corner
+                ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, -Fix.One));    // orange: the flat bottom
+                var blue = PortalOf(s, 0); var orange = PortalOf(s, 1);
+                var tO = new FixVec2(-orange.Normal.Y, orange.Normal.X);
+                var q = s.Players[1];
+                // right by orange's edge, moving into it
+                q.Pos = orange.Pos + orange.Normal * (_sim.T.WallThickness * Fix.Half + Fix.Ratio(3, 10)) + tO * (_sim.T.PortalLength * Fix.Ratio(48, 100) * side);
+                q.PortalVia = 0;
+                var through = false;
+                for (var t = 0; t < 90; t++)
+                {
+                    q.Vel = -orange.Normal * Fix.FromInt(6);
+                    if (through) q.Vel = blue.Normal * Fix.FromInt(6);
+                    _sim.Step(s, new PlayerInput[2]);
+                    if (q.PortalVia == blue.Id) through = true;
+                    Assert.IsTrue(map.Inside(q.Pos), "side " + side + ": on the ice at tick " + t + " (" + q.Pos + ")");
+                }
+                Assert.IsTrue(through, "side " + side + ": came out of blue");
+            }
+        }
+    
+
+        /// <summary>
+        /// Hundreds of runs at the portals (a curved corner and the back of a net) from all angles, speeds and places,
+        /// sliding along the boards too: nobody ever ends up off the ice or inside a net.
+        /// </summary>
+        [Test]
+        public void NoWayOffTheIceThroughPortals()
+        {
+            var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", "hockey-rink.json")));
+            _sim = new Simulation(map, null, _lib);
+            var s = PortalGame();
+            ShootPortal(s, At(-20, 2), new FixVec2(-Fix.One, Fix.One));   // blue: the top left corner
+            ShootPortal(s, At(29, 0.5), -FixVec2.Right);                  // orange: the back of blue's net
+            Assert.AreEqual(2, s.Portals.Length);
+            var rng = new System.Random(1234);
+            var q = s.Players[1];
+            s.Players[0].Pos = At(0, -8);
+            var throughs = 0;
+            for (var run = 0; run < 400; run++)
+            {
+                var po = s.Portals[run % 2];
+                var t0 = new FixVec2(-po.Normal.Y, po.Normal.X);
+                var lateral = (rng.NextDouble() * 2 - 1) * 3.0;   // up to well past the ends
+                var outward = 0.6 + rng.NextDouble() * 2.0;
+                q.Pos = po.Pos + po.Normal * Fix.FromDecimal((decimal)outward) + t0 * Fix.FromDecimal((decimal)lateral);
+                if (!map.Inside(q.Pos)) continue;
+                q.PortalVia = 0; q.Vel = FixVec2.Zero;
+                var ang = (rng.NextDouble() * 2 - 1) * 1.4;      // into the wall, up to almost along it
+                var speed = 2 + rng.NextDouble() * 16;
+                var into = -po.Normal;
+                var dir = new FixVec2(Fix.FromDecimal((decimal)(System.Math.Cos(ang))), Fix.FromDecimal((decimal)(System.Math.Sin(ang))));
+                var push = into * dir.X + t0 * dir.Y;
+                var seen = q.PortalVia;
+                for (var t = 0; t < 70; t++)
+                {
+                    q.Vel = push * Fix.FromDecimal((decimal)speed);
+                    _sim.Step(s, new PlayerInput[2]);
+                    if (q.PortalVia != 0 && q.PortalVia != seen && seen != 0) throughs++;
+                    if (q.PortalVia != 0) seen = q.PortalVia;
+                    Assert.IsTrue(map.Inside(q.Pos), "run " + run + " tick " + t + ": off the ice at " + q.Pos);
+                    foreach (var g in map.Goals) Assert.IsFalse(g.Contains(q.Pos), "run " + run + " tick " + t + ": in a net at " + q.Pos);
+                }
+            }
+            TestContext.WriteLine("went through " + throughs + " times");
+            Assert.Greater(throughs, 20, "plenty of the runs went through");
+        }
+    
+
+        /// <summary>No portal shots while you have the puck; a portal on a net's back sits clear of its posts.</summary>
+        [Test]
+        public void NoPortalWithThePuckAndNonePastTheNetPosts()
+        {
+            var s = PortalGame();
+            s.Carrier = 0;
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, Fix.One));
+            Assert.AreEqual(0, s.Portals.Length + s.PortalShots.Length, "nothing fired while carrying");
+
+            var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", "hockey-rink.json")));
+            _sim = new Simulation(map, null, _lib);
+            foreach (var y in new[] { 1.7, -1.7 })
+            {
+                s = PortalGame();
+                ShootPortal(s, At(29, y), -FixVec2.Right);   // right by a post
+                Assert.AreEqual(1, s.Portals.Length, "on the back of the net (y " + y + ")");
+                var half = _sim.T.PortalLength.ToDouble() / 2;
+                var post = 1.926 - _sim.T.WallThickness.ToDouble() / 2;
+                Assert.LessOrEqual(System.Math.Abs(s.Portals[0].Pos.Y.ToDouble()) + half, post + 0.02, "clear of the post");
+            }
+        }
+    
+
+        /// <summary>Free play's d-pad puck drills: to you, at you, at their net, at yours.</summary>
+        [Test]
+        public void FreePlayPuckDrills()
+        {
+            var sim = new Simulation(Rink(), Tuning.ForFreePlay(), _lib);
+            var s = sim.NewGame(new[] { 0 }, 1u);
+            sim.Step(s, null);
+            Assert.AreEqual(Phase.Play, s.Phase);
+            var p = s.Players[0];
+            p.Pos = At(-5, 3); p.Vel = FixVec2.Zero;
+            System.Func<byte, PlayerInput[]> drill = d => new[] { new PlayerInput { Pick = d } };
+
+            sim.Step(s, drill(PlayerInput.PuckToMe));
+            Assert.AreEqual(0, s.Carrier, "down: the puck's yours");
+
+            sim.Step(s, drill(PlayerInput.PuckAtTheirNet));
+            Assert.AreEqual(-1, s.Carrier);
+            Assert.Greater(s.PuckVel.X.ToDouble(), 20.0, "right: hard at the other team's net (to the right)");
+
+            s.Carrier = 0;
+            sim.Step(s, drill(PlayerInput.PuckAtOurNet));
+            Assert.Less(s.PuckVel.X.ToDouble(), -20.0, "left: at your own net");
+
+            sim.Step(s, drill(PlayerInput.PuckAtMe));
+            var to = p.Pos - s.PuckPos;
+            Assert.Greater(to.Length.ToDouble(), 6.0, "up: from a few strides away");
+            Assert.Greater(FixVec2.Dot(s.PuckVel.Normalized, to.Normalized).ToDouble(), 0.95, "coming straight at you");
+            var caught = false;
+            for (var t = 0; t < 120 && !caught; t++) { sim.Step(s, new PlayerInput[1]); caught = s.Carrier == 0; }
+            Assert.IsTrue(caught, "and it reaches you");
+
+            // not in a real match
+            var match = _sim.NewGame(new[] { 0, 1 }, 1u);
+            Play(match);
+            match.Carrier = -1;
+            _sim.Step(match, new[] { new PlayerInput { Pick = PlayerInput.PuckToMe }, default(PlayerInput) });
+            Assert.AreEqual(-1, match.Carrier, "only in free play");
+        }
+    
+
+        /// <summary>
+        /// Same Draw / Team Vote: the Portal Gun (one a team) is never in the shared hand; just one person on the team gets
+        /// it in place of one card, and in a Team Vote they keep it while the rest get the vote's winner.
+        /// </summary>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void OneATeamCardsGoToOnePickerInASharedHand(bool vote)
+        {
+            var pg = _lib.ById("ultrapuck.portalgun").Index;
+            var keep = new[] { pg, _lib.ById("ultrapuck.speedup").Index, _lib.ById("ultrapuck.heavyweight").Index, _lib.ById("ultrapuck.slowpoke").Index };
+            var off = new System.Collections.Generic.List<int>();
+            foreach (var c in _lib.Cards) if (System.Array.IndexOf(keep, c.Index) < 0) off.Add(c.Index);
+            var seen = 0;
+            for (uint seed = 1; seed < 40; seed++)
+            {
+                var sim = new Simulation(Rink(), new Tuning { SameDraw = !vote, TeamVote = vote, CardsOffered = 3, CardsOff = off.ToArray() }, _lib);
+                var s = sim.NewGame(new[] { 0, 0, 0, 1 }, seed);
+                sim.StartPicking(s, new[] { 0, 1, 2 });
+                int with = 0, special = -1;
+                for (var i = 0; i < 3; i++) if (System.Array.IndexOf(s.Players[i].Offer, pg) >= 0) { with++; special = i; }
+                Assert.LessOrEqual(with, 1, "seed " + seed + ": in one hand at most");
+                if (with == 0) continue;
+                seen++;
+                // the others' hands match, and differ from the special one in just that spot
+                var other = special == 0 ? 1 : 0;
+                var diff = 0;
+                for (var k = 0; k < 3; k++) if (s.Players[special].Offer[k] != s.Players[other].Offer[k]) diff++;
+                Assert.AreEqual(1, diff, "one card swapped for it");
+                // the special one takes it; the others take the first card of the shared hand
+                var inputs = new PlayerInput[4];
+                for (var i = 0; i < 3; i++)
+                    inputs[i] = new PlayerInput { Pick = (byte)(i == special ? System.Array.IndexOf(s.Players[i].Offer, pg) + 1 : 1) };
+                var firstShared = s.Players[other].Offer[0];
+                sim.Step(s, inputs);
+                for (var i = 0; i < 3; i++)
+                {
+                    if (i == special) CollectionAssert.Contains(s.Players[i].Cards, pg, "it's theirs");
+                    else { CollectionAssert.DoesNotContain(s.Players[i].Cards, pg); CollectionAssert.Contains(s.Players[i].Cards, firstShared, "the rest got the shared pick"); }
+                }
+                // and it isn't offered on that team again
+                sim.StartPicking(s, new[] { 0, 1, 2 });
+                for (var i = 0; i < 3; i++) CollectionAssert.DoesNotContain(s.Players[i].Offer, pg, "not again");
+            }
+            Assert.Greater(seen, 3, "the Portal Gun came up in some of the draws");
+        }
+    
+
+        /// <summary>A portal shot onto the other team's portal takes its place: theirs is gone, the new one is there instead.</summary>
+        [Test]
+        public void APortalOnTheOtherTeamsPortalReplacesIt()
+        {
+            var s = PortalGame();
+            Give(s, 1, "ultrapuck.portalgun");
+            Give(s, 0, "ultrapuck.portalgun");
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, Fix.One));           // red's blue portal on the top wall
+            var red = PortalOf(s, 0);
+            // blue's player shoots near it (not quite on it)
+            var q = s.Players[1];
+            q.Pos = At(0.8, 0); q.Vel = FixVec2.Zero; q.Facing = new FixVec2(Fix.Zero, Fix.One);
+            _sim.Step(s, new[] { default(PlayerInput), Press(PlayerInput.Utility) });
+            for (var t = 0; t < 70; t++) { q.Pos = At(0.8, 0); q.Vel = FixVec2.Zero; s.Players[0].Pos = At(-6, -6); _sim.Step(s, new PlayerInput[2]); }
+            Assert.AreEqual(1, s.Portals.Length, "red's is gone");
+            Assert.AreEqual(1, s.Portals[0].Owner, "blue's is up");
+            Assert.AreEqual(red.Pos, s.Portals[0].Pos, "in exactly its place");
+        }
+    
+
+        /// <summary>
+        /// Only the Portal Gun can be drawn (every other card switched off), two players: after a goal the pick still
+        /// happens and play goes on, whatever the picking mode and whether they're on one team or two (it used to hang).
+        /// </summary>
+        [Test, Timeout(20000)]
+        public void PicksWithOnlyTheOneATeamCardLeft([Values(0, 1, 2)] int mode, [Values(true, false)] bool sameTeam)
+        {
+            var pg = _lib.ById("ultrapuck.portalgun").Index;
+            var off = new System.Collections.Generic.List<int>();
+            foreach (var c in _lib.Cards) if (c.Index != pg) off.Add(c.Index);
+            var sim = new Simulation(Rink(), new Tuning { SameDraw = mode == 1, TeamVote = mode == 2, CardsOffered = 3, CardsOff = off.ToArray() }, _lib);
+            var s = sim.NewGame(sameTeam ? new[] { 0, 0 } : new[] { 0, 1 }, 5u);
+            for (var round = 0; round < 3; round++)
+            {
+                sim.StartPicking(s, new[] { 0, 1 });
+                for (var t = 0; t < 600 && s.Phase == Phase.Picking; t++)
+                    sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 } });
+                Assert.AreNotEqual(Phase.Picking, s.Phase, "the pick finished (round " + round + ")");
+                foreach (var p in s.Players) Assert.AreEqual(round + 1, p.Cards.Length, "everyone got a card each round (a random one if the Portal Gun wasn't theirs to have)");
+                var holders = 0;
+                foreach (var p in s.Players) if (System.Array.IndexOf(p.Cards, pg) >= 0) holders++;
+                Assert.LessOrEqual(holders, sameTeam ? 1 : 2);
+            }
+        }
+    
+
+        // ------------------------------------------------------------------ Slot Machine
+
+        private GameState SlotGame()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.slotmachine");
+            Play(s);
+            s.PuckPos = At(14, 8);
+            s.Players[0].Pos = At(-6, 0); s.Players[1].Pos = At(10, -8);
+            return s;
+        }
+
+        /// <summary>A spin lands on what was settled when it started: here forced to <paramref name="prize"/>.</summary>
+        private void Land(GameState s, int prize)
+        {
+            var p = s.Players[0];
+            p.SlotSpin = Fix.Ratio(1, 120); p.SlotWin = prize; p.SlotSpins++;
+            _sim.Step(s, new PlayerInput[2]);
+        }
+
+        [Test]
+        public void SlotMachineSpinsAndLosesOrWinsAboutAsOftenAsItShould()
+        {
+            var s = SlotGame();
+            var p = s.Players[0];
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.Greater(p.SlotSpin.ToDouble(), 1.0, "spinning");
+            Assert.AreEqual(1, p.SlotSpins);
+            _sim.Step(s, new PlayerInput[2]);
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.AreEqual(1, p.SlotSpins, "no second spin while it spins");
+            // the odds: each prize 1 in 30, so about 4 in 30 spins win
+            int wins = 0, spins = 3000;
+            for (var k = 0; k < spins; k++)
+            {
+                p.SlotSpin = Fix.Zero; p.SlotPrizeTime = Fix.Zero; p.SlotWait = Fix.Zero; p.PrevButtons = 0;
+                _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+                if (p.SlotWin > 0) wins++;
+                var r = p.SlotReels;
+                var same = (r & 15) == ((r >> 4) & 15) && ((r >> 4) & 15) == ((r >> 8) & 15);
+                Assert.AreEqual(p.SlotWin > 0, same, "three alike exactly when it's a win");
+            }
+            Assert.AreEqual(4.0 / 30, (double)wins / spins, 0.025, "about 4 in 30");
+        }
+
+        [Test]
+        public void SlotMachinePrizes()
+        {
+            // Giant: twice as big and heavy for 10 s, then back
+            var s = SlotGame();
+            var p = s.Players[0];
+            var size = p.Stats.Size.ToDouble(); var weight = p.Stats.Weight.ToDouble();
+            Land(s, CardLibrary.SlotGiant);
+            Assert.AreEqual(size * 2, p.Stats.Size.ToDouble(), 1e-3, "giant");
+            Assert.AreEqual(weight * 2, p.Stats.Weight.ToDouble(), 1e-3);
+            // no spinning while a prize lasts
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.AreEqual(Fix.Zero, p.SlotSpin, "one prize at a time");
+            Run(s, _sim.T.TicksPerSecond * 9, default(PlayerInput), default(PlayerInput));
+            Assert.AreEqual(size * 2, p.Stats.Size.ToDouble(), 1e-3, "still giant after 9 s");
+            Run(s, _sim.T.TicksPerSecond + 2, default(PlayerInput), default(PlayerInput));
+            Assert.AreEqual(size, p.Stats.Size.ToDouble(), 1e-3, "back to normal after 10 s");
+
+            // Strong: as if holding 4 Over Charge cards, for 10 s
+            Land(s, CardLibrary.SlotStrong);
+            Assert.AreEqual(2.0, p.Stats.OverCharge.ToDouble(), 1e-3, "4 Over Charges (+50% each)");
+            Run(s, _sim.T.TicksPerSecond * 10 + 2, default(PlayerInput), default(PlayerInput));
+            Assert.AreEqual(0.0, p.Stats.OverCharge.ToDouble(), 1e-3);
+
+            // Invisible: 12 s
+            Land(s, CardLibrary.SlotInvisible);
+            Assert.AreEqual(12.0, p.InvisibleTime.ToDouble(), 0.05);
+
+            // Speed Up: 120% faster for 10 s
+            var t = SlotGame();
+            var q = t.Players[0];
+            q.Pos = At(-21, 0);
+            var right = new PlayerInput { MoveX = 127 };
+            Run(t, 90, right, default(PlayerInput));
+            var normal = q.Vel.X.ToDouble();
+            t = SlotGame(); q = t.Players[0];
+            q.Pos = At(-21, 0);
+            q.SlotSpin = Fix.Ratio(1, 120); q.SlotWin = CardLibrary.SlotSpeed;
+            Run(t, 90, right, default(PlayerInput));
+            Assert.AreEqual(normal * 2.2, q.Vel.X.ToDouble(), normal * 0.12, "120% faster");
+
+            // a loss: spin again straight away
+            var u = SlotGame(); var w = u.Players[0];
+            w.SlotSpin = Fix.Ratio(1, 120); w.SlotWin = 0;
+            _sim.Step(u, new PlayerInput[2]);
+            _sim.Step(u, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            Assert.Greater(w.SlotSpin.ToDouble(), 1.0, "spinning again straight away");
         }
     }
 }

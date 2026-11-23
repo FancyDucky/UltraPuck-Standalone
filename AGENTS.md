@@ -82,6 +82,50 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.50 (Claude, 22 Nov 2026): **Portal Gun fixes, Invisible Shot gone.** On a net a portal
+  may only go on the outside of its back wall, all of it on that one segment (`NetNear` / `NetFront` in
+  `PlacePortal`); anywhere else a portal that would reach round onto a net fizzles (the old post shot put one inside
+  the net). Cards can say `"maxTeam"` (`CardDef.MaxPerTeam`, `CardLibrary.TeamFull`): not offered once that many
+  teammates hold it, and two teammates taking it at once — the second gets the next card in their offer. Portal Gun
+  is `maxTeam` 1. Going through a portal is gradual now: `PortalPass` lets a thing touching a portal's face (moving in)
+  sink into that wall (`CollideWalls` overload skips the portal's stretch), records it in `PortalVia` / `PuckPortal`
+  (portal Id, 0 = none), and moves it across once its middle passes the face, as far out of the other face as it
+  was in, along the other portal's wall (`PointAlong`, so curves work, never past its end). Entry is measured from
+  the real wall (curved ends let you in); only wall running along the portal, within its length, is skipped. A
+  carried puck slides into a portal ahead of its carrier (`CarryPortal`, kept short of a net's box; `CheckGoal`
+  ignores a puck in a portal), and a player coming out faces out (`PortalTurn`). Safety net `Escaped`: anything that
+  ends a substep off the ice or newly in a net while in (or just leaving) a portal goes back to where it was.
+  `PortalSplit` (Views.cs) draws things cut at one face (shader `UltraPuck/Clip`) plus a copy coming out of the
+  other. The second team's portals are green / red (`PortalViews.Of(colour, team)`); no owner dot, no sparks on
+  pass-through, the drifting glow motes stay. Invisible Shot card and art removed (its stat / code stay, unused).
+  No portal shots while carrying the puck; on a net's back wall (and at the ends of any open wall) a portal stays
+  `WallHalf` clear of the rounded ends (`ClampAlong`; the hockey nets' back is an exact fit, so it's centred).
+  Free play d-pad puck drills (`PlayerInput.PuckToMe` / `PuckAtMe` / `PuckAtTheirNet` / `PuckAtOurNet`, 220-223 as
+  a Pick, `Simulation.PuckDrill`; `LocalPlayers.PuckDrills` latches them and stops the d-pad moving you in free play).
+  Main menu Cards page reads any device (`Local.Menu()`), sorts on the bumpers, and A–Z shows no numbers or stats.
+  Count badges on cards fade under the focused card (`BadgeShow`) instead of flickering. Same Draw / Team Vote:
+  a `maxTeam` card (Portal Gun, and now Swap) is never in the shared hand; `OnePickerGets` puts it in just one
+  picker's hand (a person first) in place of one card, the rest get a fresh card there; in a Team Vote whoever took
+  it keeps it and isn't counted in the vote (bots ignore them too); the card screen only shares a screen between
+  local players with the same hand. A portal shot onto the other team's portal replaces it in exactly its place.
+  Card notes (under the stat rows) are bigger (`NoteFont` / `NoteChar` / `NoteWrap`); rows squeeze up to fit.
+  Portal Gun card: no rows, just "Only one person per team (green) can have this card. Use it wisely."
+  Fixed a hang after a goal (Same Draw / Team Vote, the Portal Gun the only card switched on): `OnePickerGets`
+  could loop for ever; it now works from a fixed copy of the shared hand. When nothing switched on is left for
+  someone (that case, or a teammate holds the one-a-team card in Each player mode), they get stand-in cards from the
+  switched-off ones (`AnyOtherCard` / `StandInOff`: never another utility for someone holding one). Test
+  `PicksWithOnlyTheOneATeamCardLeft`. Shockwave card: Range 6 units, Charge Time 6 s, no knock-off line or cooldown.
+  **Slot Machine** (`ultrapuck.slotmachine`, utility stat `SlotMachine`): the utility button spins (`SpinSlots`: outcome
+  settled from the match RNG, each prize 1 in `SlotOdds` 30; `SlotReels` packs the three shown symbols, 1-4 prizes,
+  5-8 fillers), `SlotSpinTime` 1.2 s; prizes (`CardLibrary.SlotSpeed/Giant/Invisible/Strong`): +120% speed 10 s, x2
+  size and weight 10 s (in `Cards.Recompute`), invisible 12 s (`InvisibleTime`), 4 Over Charges 10 s (Recompute);
+  one prize at a time, no wait after a loss (`SlotWait` 0), all cleared at face-offs. Sounds `Sfx.SlotStop` (each
+  reel), `SlotWin`, `SlotDud`, played by `SlotViews`; grey reel border. `SlotViews` draws the mini reels under
+  the player (drawn symbols; a picture in StreamingAssets/Cards/Slot/<name>.png would replace one). Bots spin about
+  every 2 s. Free play's hint text at the bottom is gone. **Version 65.**
+  A player got outside the rink by hugging the boards through a corner
+  portal (before the safety net); the exact route wasn't reproduced in tests (`NoWayOffTheIceThroughPortals` fuzzes
+  it). **Version 64.**
 - 0.1.49 (Claude, 22 Nov 2026): **face-offs in front of the nets, Portal Gun.**
   Face-offs no longer use the maps' `spawns` (only as a fallback): `Simulation.FaceOffSpot(team, slot)` puts each team
   in a tight group (`FaceOffShape`, `FaceOffBack` 3 / `FaceOffRow` 1 / `FaceOffSpacing` 1.2) just in front of its own

@@ -111,9 +111,6 @@ namespace UltraPuck.Game
             if (_free)
             {
                 Ui.Label(new Rect(0, 64, w, 26), "FREE PLAY", Ui.Font(15, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.55f));
-                Glyphs.Hint(new Rect(0, h - 36, w, 28),
-                    "{reset} Puck back      {menu} Menu (bots, pick a card, settings)      " + (InputMode.Pad ? "{join} on another controller: join" : "{join} Join on the keyboard"),
-                    15, new Color(1f, 1f, 1f, 0.6f));
             }
 
             var big = Ui.Font(46, true, TextAnchor.MiddleCenter);

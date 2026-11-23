@@ -1314,6 +1314,9 @@ namespace UltraPuck.Game
             return 0.65f * on;
         }
 
+        /// <summary>What's drawn for rock <paramref name="k"/> (as last shown), or null.</summary>
+        public GameObject At(int k) { return k >= 0 && k < _pool.Count ? _pool[k] : null; }
+
         public void Show(GameState s, float radius, System.Func<int, int> symbolOf, System.Func<int, Color> colourOf, System.Func<int, bool> mine = null, float flashFrom = 3f)
         {
             for (var k = 0; k < s.Rocks.Length; k++)
@@ -1415,13 +1418,15 @@ namespace UltraPuck.Game
 
     /// <summary>
     /// Portal Gun: each portal as a glowing band on the face of its wall (bending with a curved wall), in blue or
-    /// orange, with a soft glow fading out over the ice, a gentle pulse and motes drifting off it. Anything going
-    /// through throws out sparks in that portal's colour at both ends. Portal shots are glowing orbs with a short tail.
+    /// orange (green / red for the other team), with a soft glow fading out over the ice, a gentle pulse and glowing
+    /// motes drifting off it. Portal shots are glowing orbs with a short tail.
     /// </summary>
     internal sealed class PortalViews
     {
-        public static readonly Color Blue = new Color(0.25f, 0.6f, 1f), Orange = new Color(1f, 0.55f, 0.12f);
-        public static Color Of(int colour) { return colour == 1 ? Orange : Blue; }
+        public static readonly Color Blue = new Color(0.25f, 0.6f, 1f), Orange = new Color(1f, 0.55f, 0.12f),
+            Green = new Color(0.3f, 0.92f, 0.42f), Red = new Color(1f, 0.26f, 0.24f);
+        /// <summary>A portal's colour: blue then orange for the first team's, green then red for the other team's.</summary>
+        public static Color Of(int colour, int team) { return (team & 1) == 1 ? (colour == 1 ? Red : Green) : (colour == 1 ? Orange : Blue); }
 
         private sealed class One
         {
@@ -1432,22 +1437,25 @@ namespace UltraPuck.Game
             public Color Colour;
             public int Uses;
             public float Phase, MoteClock;
+            /// <summary>The soft glow over the ice (only once both portals are up).</summary>
+            public GameObject GlowGo;
         }
+
         private sealed class Mote { public GameObject Go; public Mesh Mesh; public Vector2 Pos, Vel; public float Age, Life, Size; public Color Colour; }
 
         private readonly Transform _parent;
         private readonly Effects _effects;
+        private readonly List<Mote> _motes = new List<Mote>(), _spareMotes = new List<Mote>();
         private readonly Dictionary<int, One> _drawn = new Dictionary<int, One>();
         private readonly List<int> _gone = new List<int>();
         private readonly HashSet<int> _seen = new HashSet<int>();
-        private readonly List<Mote> _motes = new List<Mote>(), _spareMotes = new List<Mote>();
         private readonly List<GameObject> _shots = new List<GameObject>();
         private readonly List<int> _shotKinds = new List<int>();
         private Color[] _glowCols = new Color[0];
 
         public PortalViews(Transform parent, Effects effects) { _parent = parent; _effects = effects; }
 
-        public void Show(GameState s, MapDef map, float length, float wallHalf, float shotRadius, System.Func<int, Color> teamOf)
+        public void Show(GameState s, MapDef map, float length, float wallHalf, float shotRadius)
         {
             _seen.Clear();
             foreach (var po in s.Portals)
@@ -1456,20 +1464,17 @@ namespace UltraPuck.Game
                 One one;
                 if (!_drawn.TryGetValue(po.Id, out one))
                 {
-                    one = Make(po, map, length, wallHalf, teamOf != null && po.Owner >= 0 && po.Owner < s.Players.Length ? teamOf(po.Owner) : Color.white);
+                    one = Make(po, map, length, wallHalf, TeamOf(s, po.Owner));
                     _drawn[po.Id] = one;
                     // a new portal: a pop of its colour
                     _effects.Ring(one.Centre + one.Normal * 0.4f, 0.5f, one.Colour, 1.6f, 0.3f);
                 }
-                // something went through: sparks out of it, in its colour
-                if (po.Uses > one.Uses)
-                {
-                    var at = one.Centre + one.Normal * 0.6f;
-                    _effects.Sparks(at, 0.55f, one.Colour, 16);
-                    _effects.Ring(at, 0.4f, one.Colour, 1.4f, 0.25f);
-                }
                 one.Uses = po.Uses;
-                Pulse(one);
+                // just a line on the wall until the other portal is up too; then the glow and the motes
+                var open = false;
+                foreach (var other in s.Portals) if (other.Owner == po.Owner && other.Colour != po.Colour) open = true;
+                if (one.GlowGo.activeSelf != open) one.GlowGo.SetActive(open);
+                if (open) Pulse(one);
             }
             _gone.Clear();
             foreach (var id in _drawn.Keys) if (!_seen.Contains(id)) _gone.Add(id);
@@ -1484,10 +1489,12 @@ namespace UltraPuck.Game
             ShowShots(s, shotRadius);
         }
 
-        private One Make(Portal po, MapDef map, float length, float wallHalf, Color team)
+        private static int TeamOf(GameState s, int player) { return player >= 0 && player < s.Players.Length ? s.Players[player].Team : 0; }
+
+        private One Make(Portal po, MapDef map, float length, float wallHalf, int team)
         {
             const int n = 18;
-            var one = new One { Colour = Of(po.Colour), Uses = po.Uses, Phase = Random.value * 6f };
+            var one = new One { Colour = Of(po.Colour, team), Uses = po.Uses, Phase = Random.value * 6f };
             var normal = V.Of(po.Normal);
             var half = length * 0.5f;
             var face = new Vector2[n + 1];
@@ -1511,7 +1518,7 @@ namespace UltraPuck.Game
             one.Go.transform.SetParent(_parent, false);
             var glow = one.Colour; glow.a = 0.5f;
             one.Glow = Draw.Strip(face, outer, glow, Palette.Clear(one.Colour));
-            Draw.Make("Glow", one.Go.transform, one.Glow, 5);
+            one.GlowGo = Draw.Make("Glow", one.Go.transform, one.Glow, 5).gameObject;
             // the band: a solid stripe of colour over the wall's face, with a white-hot line along its middle
             var band = Color.Lerp(one.Colour, Color.white, 0.15f);
             one.Band = Draw.Strip(inner, face, band, band);
@@ -1519,13 +1526,10 @@ namespace UltraPuck.Game
             var core = new List<Vector2>();
             for (var k = 0; k <= n; k++) core.Add(Vector2.Lerp(inner[k], face[k], 0.5f));
             Draw.Make("Core", one.Go.transform, Draw.Line(core, false, 0.07f, Color.Lerp(one.Colour, Color.white, 0.75f)), 7);
-            // whose it is: a small dot in their team's colour in the middle
-            Draw.Make("Owner", one.Go.transform, Draw.Disc(0.11f, team, 20), 8).transform.localPosition = one.Centre + normal * 0.22f;
-            Pulse(one);
             return one;
         }
 
-        // the glow breathes, a little brighter now and then; motes drift off it all the time
+        // the glow breathes, a little brighter now and then; glowing motes drift off it all the time
         private void Pulse(One one)
         {
             var t = Time.time * 3.2f + one.Phase;
@@ -1586,12 +1590,14 @@ namespace UltraPuck.Game
             {
                 var sh = s.PortalShots[k];
                 if (k >= _shots.Count) { _shots.Add(null); _shotKinds.Add(-1); }
-                if (_shots[k] == null || _shotKinds[k] != sh.Kind)
+                var team = TeamOf(s, sh.Owner);
+                var key = sh.Kind + 2 * (team & 1);
+                if (_shots[k] == null || _shotKinds[k] != key)
                 {
                     if (_shots[k] != null) Object.Destroy(_shots[k]);
                     var go = new GameObject("PortalShot");
                     go.transform.SetParent(_parent, false);
-                    var c = Of(sh.Kind);
+                    var c = Of(sh.Kind, team);
                     var glow = c; glow.a = 0.55f;
                     var tail = c; tail.a = 0.5f;
                     Draw.Make("Tail", go.transform, Draw.Strip(new[] { new Vector2(-1.4f, 0f), new Vector2(0f, 0f) },
@@ -1602,7 +1608,7 @@ namespace UltraPuck.Game
                     Draw.Make("Body", go.transform, Draw.Disc(radius, c), 23);
                     Draw.Make("Core", go.transform, Draw.Disc(radius * 0.55f, Color.Lerp(c, Color.white, 0.8f)), 24);
                     _shots[k] = go;
-                    _shotKinds[k] = sh.Kind;
+                    _shotKinds[k] = key;
                 }
                 _shots[k].SetActive(true);
                 _shots[k].transform.localPosition = new Vector3(sh.Pos.X.ToFloat(), sh.Pos.Y.ToFloat(), 0f);
@@ -1610,6 +1616,382 @@ namespace UltraPuck.Game
                 if (v.sqrMagnitude > 1e-6f) _shots[k].transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(v.y, v.x) * Mathf.Rad2Deg);
             }
             for (var k = s.PortalShots.Length; k < _shots.Count; k++) if (_shots[k] != null && _shots[k].activeSelf) _shots[k].SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// Something half way through a portal is drawn in two parts: at the portal it went into, only the part still out
+    /// on the ice (the rest is cut off at the portal's face), and a copy at the other portal showing the part that's
+    /// come out there, turned the way the portals are turned. The copy shares the meshes, so it looks the same.
+    /// </summary>
+    internal sealed class PortalSplit
+    {
+        private sealed class Entry
+        {
+            public GameObject Root, Ghost;
+            public MeshRenderer[] Own, GhostRenderers;
+            public Transform[] From, To;
+            public bool Cut;
+        }
+
+        private static Material _mat;
+        private static Material Mat
+        {
+            get
+            {
+                if (_mat == null)
+                {
+                    var shader = Resources.Load<Shader>("UltraPuck/Clip");
+                    _mat = shader != null && shader.isSupported ? new Material(shader) : null;
+                }
+                return _mat;
+            }
+        }
+
+        private readonly Dictionary<GameObject, Entry> _entries = new Dictionary<GameObject, Entry>();
+        private readonly List<GameObject> _gone = new List<GameObject>();
+        private readonly MaterialPropertyBlock _block = new MaterialPropertyBlock();
+        private readonly HashSet<GameObject> _seen = new HashSet<GameObject>();
+
+        /// <summary>Call once a frame before the <see cref="Show"/>s.</summary>
+        public void Begin() { _seen.Clear(); }
+
+        /// <summary>Call once a frame after them: anything not shown this frame (or gone) is put back whole.</summary>
+        public void End()
+        {
+            _gone.Clear();
+            foreach (var kv in _entries) if (kv.Key == null || !_seen.Contains(kv.Key)) _gone.Add(kv.Key);
+            foreach (var k in _gone) { var e = _entries[k]; Whole(e); if (e.Ghost != null) Object.Destroy(e.Ghost); _entries.Remove(k); }
+        }
+
+        /// <summary>
+        /// <paramref name="root"/> is drawn for something going through the portal with Id <paramref name="via"/> (0 = none):
+        /// cut it at that portal's face and show the rest coming out of the other one.
+        /// </summary>
+        public void Show(GameObject root, int via, GameState s, float wallHalf)
+        {
+            if (root == null) return;
+            _seen.Add(root);
+            Entry e;
+            _entries.TryGetValue(root, out e);
+            int a = -1, b = -1;
+            if (via != 0 && s != null && Mat != null)
+            {
+                for (var k = 0; k < s.Portals.Length; k++) if (s.Portals[k].Id == via) a = k;
+                if (a >= 0)
+                    for (var k = 0; k < s.Portals.Length; k++)
+                        if (k != a && s.Portals[k].Owner == s.Portals[a].Owner && s.Portals[k].Colour != s.Portals[a].Colour) b = k;
+            }
+            if (a < 0 || b < 0 || !root.activeInHierarchy)
+            {
+                if (e != null) { Whole(e); if (e.Ghost != null) e.Ghost.SetActive(false); }
+                return;
+            }
+            if (e == null) { e = new Entry { Root = root }; _entries[root] = e; }
+            if (e.Own == null || e.From == null || e.From.Length != root.GetComponentsInChildren<Transform>(true).Length) Rebuild(e);
+
+            // the two portals' faces, in the world (the entities' parent may move)
+            var parent = root.transform.parent;
+            var nP = V.Of(s.Portals[a].Normal); var nQ = V.Of(s.Portals[b].Normal);
+            var fP = V.Of(s.Portals[a].Pos) + nP * wallHalf;
+            var fQ = V.Of(s.Portals[b].Pos) + nQ * wallHalf;
+            var tP = new Vector2(-nP.y, nP.x); var tQ = new Vector2(-nQ.y, nQ.x);
+
+            // here: only what's still in front of the face it went into
+            SetCut(e.Own, World(parent, fP), WorldDir(parent, nP));
+            e.Cut = true;
+
+            // there: the copy, carried across (as far out of the other face as it's in this one), only what's come out
+            var local = (Vector2)root.transform.localPosition;
+            var d = local - fP;
+            var there = fQ - nQ * Vector2.Dot(d, nP) - tQ * Vector2.Dot(d, tP);
+            var turn = Mathf.Atan2(-nQ.y, -nQ.x) * Mathf.Rad2Deg - Mathf.Atan2(nP.y, nP.x) * Mathf.Rad2Deg;
+            e.Ghost.SetActive(true);
+            for (var k = 0; k < e.From.Length; k++)
+            {
+                if (k == 0) continue;
+                e.To[k].localPosition = e.From[k].localPosition;
+                e.To[k].localRotation = e.From[k].localRotation;
+                e.To[k].localScale = e.From[k].localScale;
+                if (e.To[k].gameObject.activeSelf != e.From[k].gameObject.activeSelf) e.To[k].gameObject.SetActive(e.From[k].gameObject.activeSelf);
+            }
+            e.Ghost.transform.localPosition = new Vector3(there.x, there.y, root.transform.localPosition.z);
+            e.Ghost.transform.localRotation = Quaternion.Euler(0f, 0f, turn) * root.transform.localRotation;
+            e.Ghost.transform.localScale = root.transform.localScale;
+            SetCut(e.GhostRenderers, World(parent, fQ), WorldDir(parent, nQ));
+        }
+
+        private static Vector2 World(Transform parent, Vector2 p) { return parent != null ? (Vector2)parent.TransformPoint(p) : p; }
+        private static Vector2 WorldDir(Transform parent, Vector2 d) { return parent != null ? ((Vector2)parent.TransformDirection(d)).normalized : d; }
+
+        private void SetCut(MeshRenderer[] rs, Vector2 at, Vector2 n)
+        {
+            _block.SetVector("_Clip", new Vector4(n.x, n.y, Vector2.Dot(at, n), 1f));
+            foreach (var r in rs)
+            {
+                if (r == null) continue;
+                if (r.sharedMaterial == Draw.Flat) r.sharedMaterial = Mat;
+                if (r.sharedMaterial == Mat) r.SetPropertyBlock(_block);
+            }
+        }
+
+        // back to plain drawing, the whole thing
+        private void Whole(Entry e)
+        {
+            if (!e.Cut || e.Own == null) return;
+            e.Cut = false;
+            foreach (var r in e.Own)
+            {
+                if (r == null || r.sharedMaterial != Mat) continue;
+                r.SetPropertyBlock(null);
+                r.sharedMaterial = Draw.Flat;
+            }
+        }
+
+        private void Rebuild(Entry e)
+        {
+            Whole(e);
+            if (e.Ghost != null) Object.Destroy(e.Ghost);
+            e.Own = e.Root.GetComponentsInChildren<MeshRenderer>(true);
+            e.Ghost = Object.Instantiate(e.Root, e.Root.transform.parent);
+            e.Ghost.name = e.Root.name + " (through a portal)";
+            e.From = e.Root.GetComponentsInChildren<Transform>(true);
+            e.To = e.Ghost.GetComponentsInChildren<Transform>(true);
+            e.GhostRenderers = e.Ghost.GetComponentsInChildren<MeshRenderer>(true);
+            foreach (var r in e.GhostRenderers) if (r.sharedMaterial == Draw.Flat) r.sharedMaterial = Mat;
+            if (e.To.Length != e.From.Length) e.From = new Transform[0];
+        }
+    }
+
+    /// <summary>
+    /// Slot Machine: a slim grey-edged strip of three reels just under a player while they spin. The reels blur through
+    /// symbols and stop left to right with a little bump (and a soft clunk) on the symbols the game settled on; a win
+    /// flashes the edge and pops the symbols, with a power-up sound (a dud gets a "womp"). Symbols are pictures from StreamingAssets/Cards/Slot/&lt;name&gt;.png where there is one
+    /// (pixel art, drawn sharp), else simple drawn shapes.
+    /// </summary>
+    internal sealed class SlotViews
+    {
+        // symbol 1-4: the prizes; 5-8: the rest
+        private static readonly string[] Names = { "", "speed", "giant", "invisible", "strong", "diamond", "star", "cherry", "clover" };
+        private const float Cell = 0.46f, Gap = 0.06f, Below = 0.78f, Hold = 0.9f, HoldWin = 1.6f;
+        private static readonly Color Edge = new Color(0.55f, 0.56f, 0.6f), Dark = new Color(0.07f, 0.07f, 0.08f, 0.95f);
+
+        private sealed class One
+        {
+            public GameObject Root;
+            public Transform[] Cells = new Transform[3];
+            public GameObject[,] Syms = new GameObject[3, 9];
+            public Mesh Frame;
+            public int Seen = -1;
+            public float LandedAt = -100f;
+            public bool Spinning;
+            /// <summary>Which reels have been heard stopping this spin, and whether its result has been heard.</summary>
+            public bool[] Stopped = new bool[3];
+            public bool Told;
+        }
+
+        private readonly Transform _parent;
+        private readonly List<One> _views = new List<One>();
+        private static readonly Dictionary<string, Texture2D> _pictures = new Dictionary<string, Texture2D>();
+        private static bool _loaded;
+
+        public SlotViews(Transform parent) { _parent = parent; }
+
+        /// <summary>Player <paramref name="i"/>'s reels (or none), under them at <paramref name="pos"/>.</summary>
+        public void Show(int i, PlayerState p, Vector2 pos, float radius, float spinTime, bool hidden)
+        {
+            while (_views.Count <= i) _views.Add(null);
+            var one = _views[i];
+            var spinning = p.SlotSpin > Fix.Zero;
+            if (one == null && !spinning) return;
+            if (one == null) { one = Make(); _views[i] = one; }
+            var now = Time.time;
+            if (p.SlotSpins != one.Seen)
+            {
+                one.Seen = p.SlotSpins; one.LandedAt = -100f;
+                for (var k = 0; k < 3; k++) one.Stopped[k] = false;
+                one.Told = false;
+            }
+            var landedNow = one.Spinning && !spinning;
+            if (landedNow) one.LandedAt = now;
+            one.Spinning = spinning;
+            var win = p.SlotWin > 0;
+            var since = now - one.LandedAt;
+            // sounds: a soft clunk as each reel stops (a little higher each time), then the power-up or the dud
+            var pan = Mathf.Clamp(pos.x / 16f, -0.6f, 0.6f);
+            var gone = spinning ? spinTime - p.SlotSpin.ToFloat() : spinTime;
+            if (spinning || landedNow)
+                for (var k = 0; k < 3; k++)
+                    if (!one.Stopped[k] && gone >= spinTime * (0.42f + 0.27f * k))
+                    {
+                        one.Stopped[k] = true;
+                        Sound.Play(Sfx.SlotStop, 0.35f, 1f + 0.08f * k, pan, 0.02f);
+                    }
+            if (!spinning && !one.Told && one.LandedAt > 0f && since >= 0.12f)
+            {
+                one.Told = true;
+                if (win) Sound.Play(Sfx.SlotWin, 0.6f, 1f, pan);
+                else Sound.Play(Sfx.SlotDud, 0.4f, 1f, pan);
+            }
+            var show = !hidden && (spinning || since < (win ? HoldWin : Hold));
+            if (one.Root.activeSelf != show) one.Root.SetActive(show);
+            if (!show) return;
+            one.Root.transform.localPosition = new Vector3(pos.x, pos.y - radius - Below, 0f);
+
+            var elapsed = spinning ? spinTime - p.SlotSpin.ToFloat() : spinTime;
+            for (var k = 0; k < 3; k++)
+            {
+                var stopAt = spinTime * (0.42f + 0.27f * k);
+                var landed = elapsed >= stopAt;
+                var sym = landed ? (p.SlotReels >> (4 * k)) & 15 : 1 + (int)(now * 15f + k * 3) % 8;
+                if (sym < 1 || sym > 8) sym = 5;
+                for (var n = 1; n <= 8; n++)
+                    if (one.Syms[k, n].activeSelf != (n == sym)) one.Syms[k, n].SetActive(n == sym);
+                // spinning: the symbols slide down through the window; landed: a little bump down and back
+                var y = 0f;
+                if (!landed) y = -Mathf.Repeat(now * 15f + k * 0.3f, 1f) * Cell * 0.5f + Cell * 0.25f;
+                else
+                {
+                    var t = elapsed - stopAt;
+                    if (spinning && t < 0.12f) y = -Mathf.Sin(t / 0.12f * Mathf.PI) * 0.06f;
+                }
+                // a win: the symbols pop once it's landed, then pulse
+                var s = 1f;
+                if (!spinning && win) s = 1f + 0.22f * Mathf.Exp(-since * 6f) + 0.06f * Mathf.Sin(since * 10f);
+                one.Cells[k].localPosition = new Vector3((k - 1) * (Cell + Gap), y, 0f);
+                one.Cells[k].localScale = new Vector3(s, s, 1f);
+            }
+            // the frame: a grey edge, flashing white on a win
+            var edge = Edge;
+            if (!spinning && win) edge = Color.Lerp(Edge, Color.white, 0.5f + 0.5f * Mathf.Sin(since * 14f));
+            Draw.Recolor(one.Frame, edge);
+        }
+
+        /// <summary>Players gone from the match: their reels go too.</summary>
+        public void Trim(int players)
+        {
+            for (var i = players; i < _views.Count; i++) if (_views[i] != null) { Object.Destroy(_views[i].Root); _views[i] = null; }
+        }
+
+        private One Make()
+        {
+            LoadPictures();
+            var one = new One { Root = new GameObject("SlotReels") };
+            one.Root.transform.SetParent(_parent, false);
+            var w = 3f * Cell + 2f * Gap + 0.12f;
+            var h = Cell + 0.12f;
+            one.Frame = Draw.Rect(new Vector2(-w / 2f - 0.05f, -h / 2f - 0.05f), new Vector2(w / 2f + 0.05f, h / 2f + 0.05f), Edge);
+            Draw.Make("Frame", one.Root.transform, one.Frame, 40);
+            Draw.Make("Back", one.Root.transform, Draw.Rect(new Vector2(-w / 2f, -h / 2f), new Vector2(w / 2f, h / 2f), new Color(0.17f, 0.17f, 0.19f)), 41);
+            for (var k = 0; k < 3; k++)
+            {
+                var x = (k - 1) * (Cell + Gap);
+                var win = Draw.Make("Window", one.Root.transform, Draw.Rect(new Vector2(x - Cell / 2f, -Cell / 2f), new Vector2(x + Cell / 2f, Cell / 2f), Dark), 42);
+                var cell = new GameObject("Reel" + k).transform;
+                cell.SetParent(one.Root.transform, false);
+                one.Cells[k] = cell;
+                for (var n = 1; n <= 8; n++)
+                {
+                    var go = Symbol(n, cell);
+                    go.SetActive(false);
+                    one.Syms[k, n] = go;
+                }
+            }
+            return one;
+        }
+
+        private static void LoadPictures()
+        {
+            if (_loaded) return;
+            _loaded = true;
+            for (var n = 1; n < Names.Length; n++)
+            {
+                try
+                {
+                    var path = System.IO.Path.Combine(Application.streamingAssetsPath, "Cards", "Slot", Names[n] + ".png");
+                    if (!System.IO.File.Exists(path)) continue;
+                    var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                    if (!tex.LoadImage(System.IO.File.ReadAllBytes(path))) continue;
+                    tex.filterMode = tex.width <= 64 ? FilterMode.Point : FilterMode.Bilinear; // pixel art stays sharp
+                    tex.wrapMode = TextureWrapMode.Clamp;
+                    _pictures[Names[n]] = tex;
+                }
+                catch (System.Exception e) { Debug.LogWarning("Ultra Puck: slot symbol " + Names[n] + " not loaded: " + e.Message); }
+            }
+        }
+
+        /// <summary>One symbol, as its picture if there is one, else drawn: centred, about a cell across.</summary>
+        private static GameObject Symbol(int n, Transform parent)
+        {
+            var go = new GameObject("Sym" + Names[n]);
+            go.transform.SetParent(parent, false);
+            Texture2D tex;
+            var r = Cell * 0.42f;
+            if (_pictures.TryGetValue(Names[n], out tex))
+            {
+                var m = new Mesh();
+                var s = Cell * 0.46f;
+                m.vertices = new[] { new Vector3(-s, -s, 0f), new Vector3(s, -s, 0f), new Vector3(s, s, 0f), new Vector3(-s, s, 0f) };
+                m.uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+                m.colors = new[] { Color.white, Color.white, Color.white, Color.white };
+                m.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+                var mf = Draw.Make("Picture", go.transform, m, 43);
+                var mr = mf.GetComponent<MeshRenderer>();
+                var mat = new Material(Draw.Flat) { mainTexture = tex };
+                mr.sharedMaterial = mat;
+                return go;
+            }
+            switch (n)
+            {
+                case 1: // speed: two cyan chevrons
+                    for (var c = 0; c < 2; c++)
+                    {
+                        var x = -0.1f + c * 0.13f;
+                        Draw.Make("Chevron", go.transform, Draw.Polygon(new List<Vector2> { new Vector2(x - 0.07f, r * 0.8f), new Vector2(x + 0.08f, 0f), new Vector2(x - 0.07f, -r * 0.8f), new Vector2(x - 0.01f, 0f) }, new Color(0.3f, 0.8f, 1f)), 43);
+                    }
+                    break;
+                case 2: // giant: orange ball with an up arrow
+                    Draw.Make("Ball", go.transform, Draw.Disc(r, new Color(1f, 0.55f, 0.15f), 24), 43);
+                    Draw.Make("Up", go.transform, Draw.Triangle(new Vector2(0f, r * 0.62f), new Vector2(-r * 0.5f, -r * 0.1f), new Vector2(r * 0.5f, -r * 0.1f), Color.white), 44);
+                    Draw.Make("Stem", go.transform, Draw.Rect(new Vector2(-r * 0.16f, -r * 0.55f), new Vector2(r * 0.16f, -r * 0.05f), Color.white), 44);
+                    break;
+                case 3: // invisible: an eye, crossed out
+                    Draw.Make("Eye", go.transform, Draw.Ring(r * 0.62f, r * 0.82f, 1f, new Color(0.85f, 0.85f, 0.95f), null, 24), 43);
+                    Draw.Make("Pupil", go.transform, Draw.Disc(r * 0.3f, new Color(0.85f, 0.85f, 0.95f), 16), 43);
+                    Draw.Make("Slash", go.transform, Draw.Line(new List<Vector2> { new Vector2(-r * 0.85f, -r * 0.85f), new Vector2(r * 0.85f, r * 0.85f) }, false, 0.05f, new Color(1f, 0.3f, 0.3f)), 44);
+                    break;
+                case 4: // strong: a flame
+                    Draw.Make("Flame", go.transform, Draw.Polygon(new List<Vector2> { new Vector2(0f, r), new Vector2(r * 0.55f, 0f), new Vector2(r * 0.45f, -r * 0.6f), new Vector2(0f, -r * 0.85f), new Vector2(-r * 0.45f, -r * 0.6f), new Vector2(-r * 0.55f, 0f) }, new Color(1f, 0.35f, 0.12f)), 43);
+                    Draw.Make("Core", go.transform, Draw.Polygon(new List<Vector2> { new Vector2(0f, r * 0.35f), new Vector2(r * 0.28f, -r * 0.3f), new Vector2(0f, -r * 0.6f), new Vector2(-r * 0.28f, -r * 0.3f) }, new Color(1f, 0.85f, 0.3f)), 44);
+                    break;
+                case 5: // diamond
+                    Draw.Make("Diamond", go.transform, Draw.Polygon(new List<Vector2> { new Vector2(0f, r), new Vector2(r * 0.7f, 0f), new Vector2(0f, -r), new Vector2(-r * 0.7f, 0f) }, new Color(0.45f, 0.9f, 0.95f)), 43);
+                    break;
+                case 6: // star
+                    var pts = new List<Vector2>();
+                    for (var k = 0; k < 10; k++)
+                    {
+                        var a = Mathf.PI / 2f + k * Mathf.PI / 5f;
+                        var rr = k % 2 == 0 ? r : r * 0.45f;
+                        pts.Add(new Vector2(Mathf.Cos(a) * rr, Mathf.Sin(a) * rr));
+                    }
+                    Draw.Make("Star", go.transform, Draw.Polygon(pts, new Color(1f, 0.85f, 0.25f)), 43);
+                    break;
+                case 7: // cherries
+                    Draw.Make("Stem", go.transform, Draw.Line(new List<Vector2> { new Vector2(-r * 0.4f, -r * 0.2f), new Vector2(0.02f, r * 0.85f), new Vector2(r * 0.4f, -r * 0.2f) }, false, 0.035f, new Color(0.3f, 0.75f, 0.3f)), 43);
+                    Draw.Make("Left", go.transform, Draw.Disc(r * 0.38f, new Color(0.9f, 0.15f, 0.2f), 16), 44).transform.localPosition = new Vector3(-r * 0.4f, -r * 0.45f, 0f);
+                    Draw.Make("Right", go.transform, Draw.Disc(r * 0.38f, new Color(0.9f, 0.15f, 0.2f), 16), 44).transform.localPosition = new Vector3(r * 0.4f, -r * 0.45f, 0f);
+                    break;
+                default: // clover
+                    for (var k = 0; k < 3; k++)
+                    {
+                        var a = Mathf.PI / 2f + k * Mathf.PI * 2f / 3f;
+                        Draw.Make("Leaf", go.transform, Draw.Disc(r * 0.38f, new Color(0.35f, 0.8f, 0.35f), 16), 43).transform.localPosition = new Vector3(Mathf.Cos(a) * r * 0.42f, Mathf.Sin(a) * r * 0.42f + 0.03f, 0f);
+                    }
+                    Draw.Make("Stem", go.transform, Draw.Rect(new Vector2(-0.015f, -r), new Vector2(0.015f, -r * 0.2f), new Color(0.3f, 0.65f, 0.3f)), 43);
+                    break;
+            }
+            return go;
         }
     }
 }

@@ -31,6 +31,11 @@ namespace UltraPuck.Core
         public const byte KickOff = 203, RedUp = 204, RedDown = 205, BlueUp = 206, BlueDown = 207;
         /// <summary>The host takes a bot out mid-match: <c>RemoveBot + its player number</c> (208..215).</summary>
         public const byte RemoveBot = 208;
+        /// <summary>
+        /// Free play's puck drills (the d-pad), as a <see cref="Pick"/> from that player: the puck to you, the puck sent at
+        /// you, shot at the other team's net, shot at your own.
+        /// </summary>
+        public const byte PuckToMe = 220, PuckAtMe = 221, PuckAtTheirNet = 222, PuckAtOurNet = 223;
 
         public sbyte MoveX, MoveY;   // -127..127, the left stick
         /// <summary>The right stick: when pushed, you face where it points (twin-stick aiming).</summary>
@@ -131,6 +136,8 @@ namespace UltraPuck.Core
         public int StoneWall;
         /// <summary>Utility: shoot a blue portal, then an orange one, onto the walls; anything going into one comes out the other.</summary>
         public int PortalGun;
+        /// <summary>Utility: spin a slot machine for a short power-up (speed, giant, invisible, strong).</summary>
+        public int SlotMachine;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
@@ -144,7 +151,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
             GameState.Mix(ref h, Swap); GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
-            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun);
+            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine);
         }
     }
 
@@ -244,8 +251,16 @@ namespace UltraPuck.Core
         /// <summary>Portal Gun: the colour the next shot makes (0 blue, 1 orange), and the wait before the next shot.</summary>
         public int PortalNext;
         public Fix PortalCooldown;
-        /// <summary>Just came out of a portal: can't go into one again until this runs out.</summary>
-        public Fix PortalCool;
+        /// <summary>Going through a portal: the Id of the portal it's in (0 = none).</summary>
+        public int PortalVia;
+        /// <summary>
+        /// Slot Machine: time left of the spin going on (0 = none), what it'll land on (<see cref="SlotWin"/>: 0 = nothing,
+        /// else the prize), the three symbols it shows (4 bits each, for the drawing side), how many spins so far (so the
+        /// drawing side sees a new one), the prize being enjoyed and for how long, and the wait after a losing spin.
+        /// </summary>
+        public Fix SlotSpin;
+        public int SlotWin, SlotReels, SlotSpins, SlotPrize;
+        public Fix SlotPrizeTime, SlotWait;
 
         public PlayerState Clone()
         {
@@ -341,8 +356,8 @@ namespace UltraPuck.Core
         public int Carrier;
         /// <summary>Seconds left before it disappears (it flashes for the last few).</summary>
         public Fix Life;
-        /// <summary>Just came out of a portal: can't go into one again until this runs out.</summary>
-        public Fix PortalCool;
+        /// <summary>Going through a portal: the Id of the portal it's in (0 = none).</summary>
+        public int PortalVia;
     }
 
     public enum Phase : byte
@@ -428,8 +443,8 @@ namespace UltraPuck.Core
         public Portal[] Portals = new Portal[0];
         public Shot[] PortalShots = new Shot[0];
         public int PortalsMade;
-        /// <summary>The loose puck just came out of a portal: it can't go into one again until this runs out.</summary>
-        public Fix PuckPortalCool;
+        /// <summary>The loose puck going through a portal: the Id of the portal it's in (0 = none).</summary>
+        public int PuckPortal;
 
         public GameState Clone()
         {
@@ -465,10 +480,10 @@ namespace UltraPuck.Core
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom); Mix(ref h, KickOffTurn);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); Mix(ref h, py.Radius); }
-            foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); Mix(ref h, rk.Life); Mix(ref h, rk.PortalCool); }
+            foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); Mix(ref h, rk.Life); Mix(ref h, rk.PortalVia); }
             foreach (var po in Portals) { Mix(ref h, po.Pos); Mix(ref h, po.Normal); Mix(ref h, po.Owner); Mix(ref h, po.Colour); Mix(ref h, po.Wall); Mix(ref h, po.At); Mix(ref h, po.Uses); Mix(ref h, po.Id); }
             foreach (var sh in PortalShots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); Mix(ref h, sh.Kind); }
-            Mix(ref h, PortalsMade); Mix(ref h, PuckPortalCool);
+            Mix(ref h, PortalsMade); Mix(ref h, PuckPortal);
             Mix(ref h, IceLaying); Mix(ref h, IceAge); Mix(ref h, IceTrails);
             Mix(ref h, CannonFrom); Mix(ref h, StoneLaying); Mix(ref h, StoneLeft); Mix(ref h, StoneTip); Mix(ref h, StoneDir); Mix(ref h, StoneWalls);
             foreach (var st in Stones) { Mix(ref h, st.A); Mix(ref h, st.B); Mix(ref h, st.Life); Mix(ref h, st.Wall); }
@@ -489,7 +504,9 @@ namespace UltraPuck.Core
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);
                 Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps); Mix(ref h, p.Shoved);
                 Mix(ref h, p.ShovedBy); Mix(ref h, p.FastTime); Mix(ref h, p.Fast); Mix(ref h, p.ShockHold);
-                Mix(ref h, p.PortalNext); Mix(ref h, p.PortalCooldown); Mix(ref h, p.PortalCool);
+                Mix(ref h, p.PortalNext); Mix(ref h, p.PortalCooldown); Mix(ref h, p.PortalVia);
+                Mix(ref h, p.SlotSpin); Mix(ref h, p.SlotWin); Mix(ref h, p.SlotReels); Mix(ref h, p.SlotSpins); Mix(ref h, p.SlotPrize);
+                Mix(ref h, p.SlotPrizeTime); Mix(ref h, p.SlotWait);
             }
             return h;
         }

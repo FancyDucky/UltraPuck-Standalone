@@ -211,6 +211,10 @@ namespace UltraPuck.Core
                         b |= PlayerInput.Utility;
                 }
             }
+            // Slot Machine: give it a spin now and then (about every 2 s) when it's free
+            if (me.Stats.SlotMachine > 0 && me.SlotSpin <= Fix.Zero && me.SlotPrizeTime <= Fix.Zero && me.SlotWait <= Fix.Zero
+                && (s.Tick + i * 29) % 240 == 0)
+                b |= PlayerInput.Utility;
             // Portal Gun: now and then (about every 3 s), a portal wherever we're facing, until both are up
             if (me.Stats.PortalGun > 0 && me.PortalCooldown <= Fix.Zero && s.Carrier != i && (s.Tick + i * 37) % 360 == 0)
             {
@@ -259,9 +263,10 @@ namespace UltraPuck.Core
                 var anyLook = false;
                 foreach (var p in s.Players)
                 {
-                    if (p.Team != me.Team || p.Offer.Length == 0) continue;
-                    if (!p.Bot) humans = true;
-                    if (p.Bot) continue;
+                    if (p.Team != me.Team || p.Offer.Length == 0 || p.Bot) continue;
+                    // someone who took a card that was only in their hand (one a team) isn't in the vote
+                    if (p.Picked >= 0 && System.Array.IndexOf(me.Offer, p.Picked) < 0) continue;
+                    humans = true;
                     var idx = -1;
                     if (p.Picked >= 0) { idx = System.Array.IndexOf(me.Offer, p.Picked); anyLocked = true; }
                     else if (p.Hover >= 1 && p.Hover <= me.Offer.Length) idx = p.Hover - 1;

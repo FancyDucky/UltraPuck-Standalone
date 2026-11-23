@@ -175,8 +175,20 @@ namespace UltraPuck.Core
         /// <summary>
         /// Portal Gun (utility): a portal is as long as a net's back wall. The shot flies at <see cref="PortalShotSpeed"/>
         /// for up to <see cref="PortalShotLife"/> s; <see cref="PortalCooldown"/> between shots. Things come out at least
-        /// <see cref="PortalExitSpeed"/> fast, and can't go back in for <see cref="PortalRepeat"/> s.
+        /// <see cref="PortalExitSpeed"/> fast. (<see cref="PortalRepeat"/> is from 0.1.49, unused.)
         /// </summary>
+        /// <summary>
+        /// Slot Machine (utility): a spin lasts <see cref="SlotSpinTime"/>; each prize comes up 1 time in
+        /// <see cref="SlotOdds"/>; after a losing spin, <see cref="SlotWait"/> before the next. Prizes: Speed Up
+        /// (<see cref="SlotSpeed"/> faster for <see cref="SlotSpeedTime"/>), Giant (<see cref="SlotGiant"/>× size and
+        /// weight for <see cref="SlotGiantTime"/>), Invisible (<see cref="SlotInvisibleTime"/>), Strong (as if holding
+        /// <see cref="SlotStrongCards"/> Over Charge cards for <see cref="SlotStrongTime"/>). One prize at a time; no
+        /// spinning while one lasts.
+        /// </summary>
+        public Fix SlotSpinTime = Fix.Ratio(6, 5), SlotWait = Fix.Zero, SlotSpeed = Fix.Ratio(6, 5), SlotSpeedTime = Fix.FromInt(10),
+            SlotGiant = Fix.Two, SlotGiantTime = Fix.FromInt(10), SlotInvisibleTime = Fix.FromInt(12), SlotStrongTime = Fix.FromInt(10);
+        public int SlotOdds = 30, SlotStrongCards = 4;
+
         public Fix PortalLength = Fix.Ratio(3172, 1000), PortalShotSpeed = Fix.FromInt(45), PortalShotLife = Fix.FromInt(3),
             PortalCooldown = Fix.Ratio(2, 5), PortalExitSpeed = Fix.Two, PortalRepeat = Fix.Ratio(15, 100), PortalShotRadius = Fix.Ratio(1, 5);
         /// <summary>Pylon goalies can be pushed: how heavy they are (a player is 1) and how fast they slow down.</summary>

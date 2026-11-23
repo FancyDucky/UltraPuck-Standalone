@@ -16,6 +16,8 @@ namespace UltraPuck.Game
         Swap,
         /// <summary>The countdown: a beep for 3, 2 and 1, and a brighter one for START.</summary>
         CountBeep, CountGo,
+        /// <summary>Slot Machine: a soft clunk as each reel stops; a rising power-up on a win; a flat "womp" on a dud.</summary>
+        SlotStop, SlotWin, SlotDud,
     }
 
     /// <summary>
@@ -187,6 +189,39 @@ namespace UltraPuck.Game
                         Tone(s, 0.32f, 0.68f, 0.14f, Wave.Sine, t => f, t => Pluck(t, 0.03f, 4.5f) * (0.65f + 0.35f * Mathf.Sin(Tau * 9f * t + phase)));
                     }
                     Noise(s, 0.3f, 0.6f, 0.15f, t => Glide(3500f, 500f, t, 0.2f), 200f, t => Pluck(t, 0.01f, 5.5f), 82u);
+                    break;
+
+                case Sfx.SlotStop:
+                    // a reel stopping: a small, soft mechanical clunk
+                    s = New(0.09f);
+                    Tone(s, 0f, 0.07f, 0.5f, Wave.Triangle, t => Glide(520f, 330f, t, 0.012f), t => Pluck(t, 0.001f, 55f));
+                    Noise(s, 0f, 0.025f, 0.22f, t => 3200f, 500f, t => Pluck(t, 0.001f, 140f), 101u);
+                    break;
+
+                case Sfx.SlotWin:
+                    // a power-up: a quick rising run of notes, then a bright chord that rings out with a shimmer
+                    s = New(0.9f);
+                    {
+                        var run = new[] { 523.3f, 659.3f, 784f, 1046.5f, 1318.5f };
+                        for (var k = 0; k < run.Length; k++)
+                        {
+                            var f = run[k];
+                            Tone(s, k * 0.05f, 0.12f, 0.45f, Wave.Square, t => f, t => Pluck(t, 0.002f, 22f));
+                            Tone(s, k * 0.05f, 0.12f, 0.4f, Wave.Triangle, t => f, t => Pluck(t, 0.002f, 18f));
+                        }
+                        foreach (var f in new[] { 1046.5f, 1318.5f, 1568f, 2093f })
+                            Tone(s, 0.25f, 0.65f, 0.22f, Wave.Triangle, t => f, t => Pluck(t, 0.004f, 4.5f) * (0.8f + 0.2f * Mathf.Sin(Tau * 11f * t)));
+                        Noise(s, 0.25f, 0.5f, 0.08f, t => 9000f, 3000f, t => Pluck(t, 0.01f, 7f), 102u);
+                    }
+                    break;
+
+                case Sfx.SlotDud:
+                    // a dud: two flat, falling low notes
+                    s = New(0.4f);
+                    Tone(s, 0f, 0.14f, 0.45f, Wave.Square, t => 196f, t => Pluck(t, 0.003f, 12f));
+                    Tone(s, 0f, 0.14f, 0.5f, Wave.Triangle, t => 196f, t => Pluck(t, 0.003f, 10f));
+                    Tone(s, 0.15f, 0.25f, 0.45f, Wave.Square, t => Glide(165f, 130f, t, 0.12f), t => Pluck(t, 0.003f, 8f));
+                    Tone(s, 0.15f, 0.25f, 0.5f, Wave.Triangle, t => Glide(165f, 130f, t, 0.12f), t => Pluck(t, 0.003f, 7f));
                     break;
 
                 case Sfx.Swap:

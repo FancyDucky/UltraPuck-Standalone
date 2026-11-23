@@ -54,6 +54,8 @@ namespace UltraPuck.Game
             public bool Typing;
             /// <summary>Buttons pressed since the last tick, so a tap shorter than a tick still counts.</summary>
             public byte Latched;
+            /// <summary>Free play: a d-pad puck drill pressed since the last tick (a <see cref="PlayerInput.PuckToMe"/>-style Pick).</summary>
+            public byte PuckDrill;
             /// <summary>Swap-to-bot pressed since the last tick (latched like buttons so a short tap still counts).</summary>
             public bool WantSwap;
             public bool PrevLeft, PrevRight, PrevUp, PrevDown;
@@ -723,6 +725,23 @@ namespace UltraPuck.Game
 
         // ------------------------------------------------------------------ playing
 
+        /// <summary>
+        /// Free play: the d-pad runs the puck drills (down: puck to you, up: at you, right: at their net, left: at yours)
+        /// instead of moving you. Set by the game while free play is being played (no menu open).
+        /// </summary>
+        public static bool PuckDrills;
+
+        private static byte DrillPressed(InputDevice d)
+        {
+            var g = Live(d) as Gamepad;
+            if (g == null) return 0;
+            if (g.dpad.down.wasPressedThisFrame) return PlayerInput.PuckToMe;
+            if (g.dpad.up.wasPressedThisFrame) return PlayerInput.PuckAtMe;
+            if (g.dpad.right.wasPressedThisFrame) return PlayerInput.PuckAtTheirNet;
+            if (g.dpad.left.wasPressedThisFrame) return PlayerInput.PuckAtOurNet;
+            return 0;
+        }
+
         /// <summary>Every frame: remember presses until the next tick reads them.</summary>
         public void LatchPresses()
         {
@@ -732,6 +751,12 @@ namespace UltraPuck.Game
             {
                 s.Latched |= (byte)(Buttons(s.Device, true) | Buttons(s.Extra, true));
                 if (HasKeyboard(s)) s.Latched |= MouseButtons(true);
+                if (PuckDrills)
+                {
+                    var d = DrillPressed(s.Device);
+                    if (d == 0) d = DrillPressed(s.Extra);
+                    if (d != 0) s.PuckDrill = d;
+                }
                 if (SwapPressed(s, true)) s.WantSwap = true;
             }
         }
@@ -787,10 +812,11 @@ namespace UltraPuck.Game
                     AimY = PlayerInput.Axis(a.y),
                     Buttons = (byte)(Buttons(s.Device, false) | Buttons(s.Extra, false) | (HasKeyboard(s) ? MouseButtons(false) : 0) | s.Latched
                         | setting | (swap ? PlayerInput.Swap : 0)),
-                    Pick = state != null && state.Phase == Phase.Picking && PickFor != null ? PickFor(i) : (byte)0,
+                    Pick = state != null && state.Phase == Phase.Picking && PickFor != null ? PickFor(i) : PuckDrills ? s.PuckDrill : (byte)0,
                     Hover = state != null && state.Phase == Phase.Picking && HoverFor != null ? HoverFor(i) : (byte)0,
                 };
                 s.Latched = 0;
+                s.PuckDrill = 0;
             }
             return inputs;
         }
@@ -815,7 +841,7 @@ namespace UltraPuck.Game
             if (g != null)
             {
                 var v = g.leftStick.ReadValue();
-                if (v.sqrMagnitude < 0.01f) v = g.dpad.ReadValue();
+                if (v.sqrMagnitude < 0.01f && !PuckDrills) v = g.dpad.ReadValue(); // (free play: the d-pad is for the puck drills)
                 return Vector2.ClampMagnitude(v, 1f);
             }
             var kb = Live(d) as Keyboard;
