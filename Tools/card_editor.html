@@ -142,7 +142,7 @@ function form() {
     <label class="f">Tier (frame colour)</label>
     <select onchange="setField('tier', this.value)">${Object.keys(TIER).map(t => `<option${t === (c.tier || 'C') ? ' selected' : ''}>${t}</option>`).join('')}</select>
     <label class="f">Finish (special look; needs a game version that has it)</label>
-    <select onchange="setField('finish', this.value)">${['', 'foil', 'polychrome'].map(f => `<option value="${f}"${f === (c.finish || '') ? ' selected' : ''}>${f || '(none)'}</option>`).join('')}</select>
+    <select onchange="setField('finish', this.value)">${['', 'foil', 'polychrome'].map(f => `<option value="${f}"${f === (c.finish || '').toLowerCase() ? ' selected' : ''}>${f ? f[0].toUpperCase() + f.slice(1) : 'None'}</option>`).join('')}</select>
     <div class="nums">${num('max', 'Max each')}${num('maxTeam', 'Max a team')}${num('minTeam', 'Team size')}
       <div><label class="f">No bots</label><input type="checkbox" style="width:auto" ${c.noBots ? 'checked' : ''} onchange="setField('noBots', this.checked)"></div></div>
     <label class="f">Accent colour</label>
