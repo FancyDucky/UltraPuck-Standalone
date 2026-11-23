@@ -604,6 +604,78 @@ namespace UltraPuck.Game
             public bool Exact;       // grow 0 → Size (hit radius), not the impact overshoot curve
         }
         private readonly List<Burst> _live = new List<Burst>(), _spare = new List<Burst>();
+
+        // swapping to a bot teammate: a glowing head flies from where you were to where you are now, leaving dots behind
+        private sealed class Comet { public GameObject Head; public Mesh HeadMesh; public Vector2 From; public Transform To; public float Age, Life, Drop; public Color Colour; }
+        private sealed class Dot { public GameObject Go; public Mesh Mesh; public Vector2 Pos, Vel; public float Age, Life, Size; public Color Colour; }
+        private readonly List<Comet> _comets = new List<Comet>();
+        private readonly List<Dot> _dots = new List<Dot>(), _spareDots = new List<Dot>();
+
+        /// <summary>A trail from <paramref name="from"/> to <paramref name="to"/> (followed if it moves), in <paramref name="colour"/>, ending in a ring there.</summary>
+        public void SwapTrail(Vector2 from, Transform to, Color colour)
+        {
+            if (to == null) return;
+            var c = new Comet { From = from, To = to, Life = 0.38f, Colour = colour };
+            c.HeadMesh = Draw.SoftDisc(0.32f, Color.white, Palette.Clear(colour), 24);
+            c.Head = Draw.Make("SwapTrail", _parent, c.HeadMesh, 27).gameObject;
+            c.Head.transform.localPosition = new Vector3(from.x, from.y, 0f);
+            _comets.Add(c);
+            Ring(from, 0.35f, colour, 0.9f, 0.25f);
+        }
+
+        private void StepComets(float dt)
+        {
+            for (var i = _comets.Count - 1; i >= 0; i--)
+            {
+                var c = _comets[i];
+                c.Age += dt;
+                var target = c.To != null ? (Vector2)c.To.localPosition : c.From;
+                var t = Mathf.Clamp01(c.Age / c.Life);
+                var e = 1f - (1f - t) * (1f - t) * (1f - t);
+                var at = Vector2.Lerp(c.From, target, e);
+                c.Head.transform.localPosition = new Vector3(at.x, at.y, 0f);
+                c.Drop -= dt;
+                while (c.Drop <= 0f)
+                {
+                    c.Drop += 0.008f;
+                    AddDot(at + Random.insideUnitCircle * 0.12f, Random.insideUnitCircle * 0.6f, Color.Lerp(c.Colour, Color.white, Random.value * 0.5f));
+                }
+                if (t >= 1f)
+                {
+                    Ring(target, 0.6f, c.Colour, 1.5f, 0.35f);
+                    Object.Destroy(c.HeadMesh);
+                    Object.Destroy(c.Head);
+                    _comets.RemoveAt(i);
+                }
+            }
+            for (var i = _dots.Count - 1; i >= 0; i--)
+            {
+                var d = _dots[i];
+                d.Age += dt;
+                if (d.Age >= d.Life) { d.Go.SetActive(false); _dots.RemoveAt(i); _spareDots.Add(d); continue; }
+                d.Pos += d.Vel * dt;
+                var f = d.Age / d.Life;
+                var col = d.Colour; col.a = 1f - f;
+                Draw.Recolor(d.Mesh, col);
+                var size = d.Size * (1f - 0.6f * f);
+                d.Go.transform.localPosition = new Vector3(d.Pos.x, d.Pos.y, 0f);
+                d.Go.transform.localScale = new Vector3(size, size, 1f);
+            }
+        }
+
+        private void AddDot(Vector2 at, Vector2 vel, Color colour)
+        {
+            Dot d;
+            if (_spareDots.Count > 0) { d = _spareDots[_spareDots.Count - 1]; _spareDots.RemoveAt(_spareDots.Count - 1); }
+            else
+            {
+                d = new Dot { Mesh = Draw.Disc(1f, Color.white, 10) };
+                d.Go = Draw.Make("TrailDot", _parent, d.Mesh, 26).gameObject;
+            }
+            d.Pos = at; d.Vel = vel; d.Age = 0f; d.Life = Random.Range(0.35f, 0.55f); d.Size = Random.Range(0.07f, 0.12f); d.Colour = colour;
+            d.Go.SetActive(true);
+            _dots.Add(d);
+        }
         private readonly Transform _parent;
 
         public Effects(Transform parent) { _parent = parent; }
@@ -871,6 +943,7 @@ namespace UltraPuck.Game
         public void Update()
         {
             var dt = Time.unscaledDeltaTime;
+            StepComets(dt);
             for (var i = _waves.Count - 1; i >= 0; i--)
             {
                 var w = _waves[i];

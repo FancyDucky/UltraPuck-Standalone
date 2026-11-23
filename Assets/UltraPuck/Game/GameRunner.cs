@@ -736,6 +736,29 @@ namespace UltraPuck.Game
                 GoMainMenu();
             }
 
+            if (want("swaptrail"))
+            {
+                _shotWholeRink = true;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(0.6f);
+                _shotNoInput = true;
+                _state.Players[0].Pos = new FixVec2(Fix.FromInt(-12), Fix.FromInt(-4));
+                _state.Players[1].Pos = new FixVec2(Fix.FromInt(10), Fix.FromInt(5));
+                yield return new WaitForSecondsRealtime(0.2f);
+                _effects.SwapTrail(_players[0].Root.transform.localPosition, _players[1].Root.transform, Palette.Team(0));
+                yield return new WaitForSecondsRealtime(0.18f);
+                yield return Shot("swaptrail-1");
+                yield return new WaitForSecondsRealtime(0.3f);
+                yield return Shot("swaptrail-2");
+                _shotNoInput = false;
+                _shotWholeRink = false;
+                GoMainMenu();
+            }
+
             if (want("portal"))
             {
                 // the face-off groups in front of the nets; then two portals (one on a curved corner, one on the back of
@@ -2229,6 +2252,28 @@ namespace UltraPuck.Game
             return hidden;
         }
 
+        private readonly List<int> _steering = new List<int>();
+
+        /// <summary>
+        /// Swap trail (a setting, off by default): when someone on this PC swaps to another body (a bot teammate, or back
+        /// to their own), a trail flies from the body they left to the one they're on now.
+        /// </summary>
+        private void SwapTrails(GameState b)
+        {
+            while (_steering.Count < b.Players.Length) _steering.Add(-1);
+            for (var h = 0; h < b.Players.Length; h++)
+            {
+                var now = b.Players[h].Bot ? -1 : Simulation.Steers(b, h);
+                var was = _steering[h];
+                _steering[h] = now;
+                if (!Settings.SwapTrail || was < 0 || now < 0 || was == now || !IsLocalPerson(now)) continue;
+                if (was >= _players.Count || now >= _players.Count || _players[was].Root == null || _players[now].Root == null) continue;
+                var from = (Vector2)_players[was].Root.transform.localPosition;
+                _effects.SwapTrail(from, _players[now].Root.transform, Palette.Team(b.Players[now].Team));
+            }
+            if (_steering.Count > b.Players.Length) _steering.RemoveRange(b.Players.Length, _steering.Count - b.Players.Length);
+        }
+
         /// <summary>
         /// Slot Machine's bar under the player: a prize running down while it lasts, filling while a spin goes and during
         /// the wait after a loss, full when it's ready to spin.
@@ -2392,6 +2437,7 @@ namespace UltraPuck.Game
             _puck.Show(puckAt, b.PuckTeam);
             // anything half way through a portal: cut at one, coming out of the other
             var wallHalf = _sim.T.WallThickness.ToFloat() * 0.5f;
+            SwapTrails(b);
             _split.Begin();
             for (var i = 0; i < b.Players.Length && i < _players.Count; i++) _split.Show(_players[i].Root, b.Players[i].PortalVia, b, wallHalf);
             _split.Show(_puck.Root, b.PuckPortal, b, wallHalf);

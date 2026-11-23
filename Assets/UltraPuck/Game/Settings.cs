@@ -210,6 +210,13 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("hit_fx", value ? 1 : 0); }
         }
 
+        /// <summary>Swapping to a bot teammate: a trail from where you were to where you are now (off by default).</summary>
+        public static bool SwapTrail
+        {
+            get { return PlayerPrefs.GetInt("swap_trail", 0) != 0; }
+            set { PlayerPrefs.SetInt("swap_trail", value ? 1 : 0); }
+        }
+
         /// <summary>
         /// The keyboard and the first controller both play player 1 (true, the default), or are separate players.
         /// </summary>
@@ -282,7 +289,7 @@ namespace UltraPuck.Game
         /// <summary>The list of everyone's cards in the lower-left corner during a match.</summary>
         public static bool CornerCards
         {
-            get { return PlayerPrefs.GetInt("corner_cards", 1) != 0; }
+            get { return PlayerPrefs.GetInt("corner_cards", 0) != 0; }
             set { PlayerPrefs.SetInt("corner_cards", value ? 1 : 0); }
         }
 

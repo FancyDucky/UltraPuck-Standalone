@@ -284,7 +284,7 @@
       "max": 1,
       "minTeam": 2,
       "color": "#4DC78C",
-      "flavor": "Pass it on, speed it up.",
+      "flavor": "I'm open!",
       "face": [
         { "label": "Speed on Pass", "value": "[good]+50%[/]" },
         { "label": "Lasts", "value": "[good]3 s[/]" }
@@ -298,7 +298,7 @@
       "tier": "A",
       "max": 1,
       "color": "#9A9AA6",
-      "flavor": "Nobody's getting through.",
+      "flavor": "This rocks!",
       "face": [
         { "label": "Full Charge", "value": "[good]wall behind the puck[/]" },
         { "label": "Lasts", "value": "[good]5.5 s[/]" }

@@ -308,10 +308,10 @@ namespace UltraPuck.Game
 
             var x = TitleScreen.MenuX;
             if (!arriving) TitleScreen.Logo(x, TitleScreen.MenuY, 1f, 1f);
-            if (Current == Page.Main) Ui.Label(new Rect(x + 4f, 46f, 300f, 26f), "v" + Updater.Current, Ui.Font(16, true), new Color(1f, 1f, 1f, arriving ? 0.5f * Ui.EaseOut(leave) : 0.5f));
             Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim);
 
-            Rows(x, 220f, 460f, 64f, 10f, 26, t, Current == Page.Friends ? Ui.H - 130f : float.MaxValue);
+            // the main page's choices sit right under the title (the other pages have a line of subtitle there)
+            Rows(x, Current == Page.Main ? 160f : 220f, 460f, 64f, 10f, 26, t, Current == Page.Friends ? Ui.H - 130f : float.MaxValue);
 
             var status = Status();
             if (!string.IsNullOrEmpty(status)) Ui.Label(new Rect(x, Ui.H - 120f, 540f, 80f), status, WrapStyle(), new Color(1f, 1f, 1f, 0.65f));
@@ -540,7 +540,7 @@ namespace UltraPuck.Game
             {
                 case Page.OnlineLobby: return "{join} Join      {side} Switch team      {shape} Symbol      {leave} Leave seat      {settings} Options";
                 case Page.JoinIp: return _typing ? "Type the address, then Enter      Esc: back" : "{confirm} Choose      {back} Back";
-                case Page.Main: return "{confirm} Choose";
+                case Page.Main: return "";
                 case Page.Title: return "";
                 default: return "{confirm} Choose      {back} Back";
             }

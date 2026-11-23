@@ -82,6 +82,12 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.51 (Claude, 23 Nov 2026): flavor text Stone Wall "This rocks!", Team Play "I'm open!".
+  **Swap trail** setting (Gameplay, under Hit effects; `Settings.SwapTrail`, off by default): when someone on this PC
+  swaps body (`Simulation.Steers` changes), `Effects.SwapTrail` flies a glowing head with a dotted trail from the body
+  they left to the one they're on, ending in a ring (`GameRunner.SwapTrails`; screenshot scene `swaptrail`). The
+  corner card list is hidden by default (`corner_cards` 0). Main menu: no version above the title (the one
+  bottom-right stays), the choices start right under the title (top 160), no "Choose" hint.
 - 0.1.50 (Claude, 22 Nov 2026): **Portal Gun fixes, Invisible Shot gone.** On a net a portal
   may only go on the outside of its back wall, all of it on that one segment (`NetNear` / `NetFront` in
   `PlacePortal`); anywhere else a portal that would reach round onto a net fizzles (the old post shot put one inside

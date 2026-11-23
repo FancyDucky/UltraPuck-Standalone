@@ -274,6 +274,7 @@ namespace UltraPuck.Game
                     _rows.Add(Switch("Name tags", () => Settings.NameTags, v => Settings.NameTags = v, "Names floating over the players."));
                     _rows.Add(Slider("Screen shake", () => Settings.ShakeAmount, v => Settings.ShakeAmount = v, v => v < 0.01f ? "Off" : Mathf.RoundToInt(v * 100f) + "%"));
                     _rows.Add(Switch("Hit effects", () => Settings.HitEffects, v => Settings.HitEffects = v, "Squash, flash and impact rings when players collide."));
+                    _rows.Add(Switch("Swap trail", () => Settings.SwapTrail, v => Settings.SwapTrail = v, "When you swap to a bot teammate, a trail shows where you went."));
                     _rows.Add(Choice("Check bar", new[] { "While recharging", "Always" }, () => Settings.DashBarAlways ? 1 : 0, v => Settings.DashBarAlways = v == 1));
                     _rows.Add(Choice("Corner card list", new[] { "Shown", "Hidden" }, () => Settings.CornerCards ? 0 : 1, v => Settings.CornerCards = v == 0,
                         "Everyone's cards in the lower-left corner during a match. Hold Tab / View in a match for the full scoreboard."));
