@@ -15,12 +15,28 @@ namespace UltraPuck.Game
     {
         public readonly GameObject Root;
 
+        /// <summary>The underwater dressing's settings, or null on an ordinary rink.</summary>
+        public readonly UnderwaterTheme Dress;
+
         public RinkView(MapDef map, float wallThickness)
         {
             Root = new GameObject("Rink");
             var outline = new List<Vector2>();
             foreach (var p in map.WallLines[0]) outline.Add(V.Of(p));
-            Draw.Make("Floor", Root.transform, Draw.Polygon(outline, Palette.Floor), 0);
+            var floor = Draw.Make("Floor", Root.transform, Draw.Polygon(outline, Palette.Floor), 0);
+            // a themed look: under the sea (sand with moving light, water and sea life all round)
+            // (the scenery and these settings come from the dressing prefab, made and edited in Unity)
+            var wet = map.Theme == Underwater.Theme;
+            var dress = wet ? Underwater.Dress(Root, map) : null;
+            Dress = dress;
+            if (dress != null && dress.Floor != null) floor.GetComponent<MeshRenderer>().sharedMaterial = dress.Floor;
+            // over the players but under the puck (order 30 up), so it stays bright white and easy to see: the light
+            // through the water on the floor and everyone on it, then the water's colour over the whole picture. (The
+            // cards have their own camera, on top of all this.)
+            if (dress != null && dress.Caustics != null)
+                Draw.Make("Caustics", Root.transform, Draw.Polygon(outline, Color.white), 28).GetComponent<MeshRenderer>().sharedMaterial = dress.Caustics;
+            if (dress != null && dress.ScreenTint.a > 0f)
+                Draw.Make("WaterTint", Root.transform, Draw.Rect(V.Of(map.BoundsMin) - new Vector2(200f, 150f), V.Of(map.BoundsMax) + new Vector2(200f, 150f), dress.ScreenTint), 29);
 
             var min = V.Of(map.BoundsMin); var max = V.Of(map.BoundsMax);
             var size = max - min;
@@ -28,17 +44,19 @@ namespace UltraPuck.Game
 
             // markings: the circle round the puck's spot; on a straight rink also a centre line and a line across each
             // half (a bent rink, one with a route, has no "across", so no lines)
-            Draw.Make("CentreCircle", Root.transform, Draw.Ring(2.4f, 2.54f, 1f, Palette.FloorLines), 2).transform.localPosition = V.Of(map.PuckSpot);
-            Draw.Make("CentreDot", Root.transform, Draw.Disc(0.25f, Palette.FloorLines), 2).transform.localPosition = V.Of(map.PuckSpot);
+            // (under the sea: soft white lines on the sand, and the team lines in their own colours)
+            var lines = dress != null ? dress.Lines : Palette.FloorLines;
+            Draw.Make("CentreCircle", Root.transform, Draw.Ring(2.4f, 2.54f, 1f, lines), 2).transform.localPosition = V.Of(map.PuckSpot);
+            Draw.Make("CentreDot", Root.transform, Draw.Disc(0.25f, lines), 2).transform.localPosition = V.Of(map.PuckSpot);
             if (map.Route.Count < 2)
             {
-                AcrossLine(map, cx, min.y, max.y, Palette.FloorLines, "CentreLine");
+                AcrossLine(map, cx, min.y, max.y, lines, "CentreLine");
                 // each half's line in a dark shade of the team that defends that end (the centre line stays grey)
                 foreach (var side in new[] { -1f, 1f })
                 {
                     var team = side < 0f ? 0 : 1;
                     foreach (var g in map.Goals) if ((V.Of(g.Min).x + V.Of(g.Max).x) / 2f < cx == side < 0f) { team = g.Team; break; }
-                    AcrossLine(map, cx + side * size.x * 0.19f, min.y, max.y, Palette.Darker(Palette.Team(team), 0.3f), "SideLine");
+                    AcrossLine(map, cx + side * size.x * 0.19f, min.y, max.y, dress != null ? new Color(Palette.Team(team).r, Palette.Team(team).g, Palette.Team(team).b, dress.TeamLines) : Palette.Darker(Palette.Team(team), 0.3f), "SideLine");
                 }
             }
 
@@ -50,7 +68,16 @@ namespace UltraPuck.Game
             {
                 var pts = new List<Vector2>();
                 foreach (var p in map.WallLines[w]) pts.Add(V.Of(p));
-                Draw.Make("Wall" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], wallThickness, Palette.Wall), 4);
+                Draw.Make("Wall" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], wallThickness, dress != null ? dress.Walls : Palette.Wall), 4);
+                // under the sea, lit from above: a soft shadow falling just below each wall
+                // (each pixel shaded once, and only on the sand: no darker blots where the pieces overlap round a curve,
+                // nothing spilling onto the water)
+                if (dress != null && dress.WallShadow != null)
+                {
+                    var sh = Draw.Make("WallShadow" + w, Root.transform, Draw.Line(pts, map.WallClosed[w], wallThickness * 1.5f, dress.ShadowColour), 1);
+                    sh.transform.localPosition = new Vector3(dress.ShadowOffset.x, dress.ShadowOffset.y, 0f);
+                    sh.GetComponent<MeshRenderer>().sharedMaterial = dress.WallShadow;
+                }
             }
         }
 
@@ -1042,6 +1069,18 @@ namespace UltraPuck.Game
         }
 
         private readonly GameObject[] _solid = new GameObject[3];
+        private Color _fill = Palette.Puck, _edge = Palette.PuckEdge;
+
+        /// <summary>The puck's colours for this rink (brighter on the underwater one); the usual ones for null.</summary>
+        public void Look(UnderwaterTheme dress)
+        {
+            var fill = dress != null ? dress.Puck : Palette.Puck;
+            var edge = dress != null ? dress.PuckEdge : Palette.PuckEdge;
+            if (fill == _fill && edge == _edge) return;
+            _fill = fill; _edge = edge;
+            _solid[1].GetComponent<MeshFilter>().sharedMesh = Draw.Disc(_r, edge);
+            _solid[2].GetComponent<MeshFilter>().sharedMesh = Draw.Disc(_r * 0.68f, fill);
+        }
         private readonly GameObject _ghost;
         private int _ghostMode;
 

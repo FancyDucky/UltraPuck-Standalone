@@ -477,12 +477,14 @@ namespace UltraPuck.Game
     /// the menus and lobbies (stopping where it is when a match starts and carrying on from there afterwards), and
     /// every song in the Match folder is the match playlist: each match starts on a random one, and when a song ends
     /// another starts, never the same one twice in a row (see <see cref="Playlist"/>). Drop a song into either place
-    /// and it's used; no code to change. Volumes come from <see cref="Settings"/>.
+    /// and it's used; no code to change. A rink can have its own song (its map file's "music", a file in Music/Rinks):
+    /// a match there starts with it (then the playlist), and it's the menu theme while that rink is behind the menu.
+    /// Volumes come from <see cref="Settings"/>.
     /// Created by <see cref="GameRunner"/>; until then (and in tests) every call here does nothing.
     /// </summary>
     internal sealed class Sound : MonoBehaviour
     {
-        private const string ThemePath = "UltraPuck/Music/MenuTheme", SongsPath = "UltraPuck/Music/Match";
+        private const string ThemePath = "UltraPuck/Music/MenuTheme", SongsPath = "UltraPuck/Music/Match", RinksPath = "UltraPuck/Music/Rinks";
 
         /// <summary>How loud the music is next to the effects at full volume (the effects need to cut through it).</summary>
         private const float MusicLevel = 0.6f;
@@ -524,6 +526,9 @@ namespace UltraPuck.Game
         private Track _theme, _wanted;
         private bool _matchMusic, _musicChosen;
         private int _lastSong = -1;
+        /// <summary>The rink's song asked for last ("" for none), and its tracks: looping as a theme, once through as a song.</summary>
+        private string _rinkSong = "";
+        private readonly Dictionary<string, Track> _rinkThemes = new Dictionary<string, Track>(), _rinkSongs = new Dictionary<string, Track>();
         /// <summary>Seconds the match song that should be playing has been silent (it has ended: time for the next).</summary>
         private float _songOver;
 
@@ -696,14 +701,42 @@ namespace UltraPuck.Game
         /// Which music should be playing: the match playlist (<paramref name="match"/>) or the menu theme. Call it as
         /// often as you like; only a change does anything. Going into a match always starts a new song.
         /// </summary>
-        public static void Music(bool match)
+        public static void Music(bool match) { Music(match, ""); }
+
+        /// <summary>
+        /// The same, on a rink with its own song <paramref name="rinkSong"/> ("" for none): a match starts with it, and
+        /// in the menus it plays instead of the theme.
+        /// </summary>
+        public static void Music(bool match, string rinkSong)
         {
             var s = _it;
-            if (s == null || (s._musicChosen && s._matchMusic == match)) return;
+            if (s == null) return;
+            rinkSong = rinkSong ?? "";
+            if (s._musicChosen && s._matchMusic == match && (match || s._rinkSong == rinkSong)) return;
             s._musicChosen = true;
             s._matchMusic = match;
-            if (match) s.NextSong(false);
-            else s._wanted = s._theme;
+            s._rinkSong = rinkSong;
+            if (match)
+            {
+                var first = s.RinkTrack(rinkSong, true);
+                if (first != null) s.Begin(first, false);
+                else s.NextSong(false);
+            }
+            else s._wanted = s.RinkTrack(rinkSong, false) ?? s._theme;
+        }
+
+        /// <summary>Rink song <paramref name="name"/> as a match song or a (looping) theme, or null if there's no such file.</summary>
+        private Track RinkTrack(string name, bool song)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            var have = song ? _rinkSongs : _rinkThemes;
+            Track t;
+            if (have.TryGetValue(name, out t)) return t;
+            var clip = Resources.Load<AudioClip>(RinksPath + "/" + name);
+            if (clip == null) Debug.LogWarning("Ultra Puck: no rink song \"" + name + "\" in Resources/" + RinksPath);
+            t = clip != null ? NewTrack(clip, song) : null;
+            have[name] = t;
+            return t;
         }
 
         /// <summary>
@@ -715,13 +748,19 @@ namespace UltraPuck.Game
             _songOver = 0f;
             var k = Playlist.Next(_songs.Count, _lastSong, UnityEngine.Random.Range(0, int.MaxValue));
             if (k < 0) { _wanted = null; return; } // no songs: a match is played without music
-            var t = _songs[k];
+            _lastSong = k;
+            Begin(_songs[k], straightIn);
+        }
+
+        /// <summary>Start match song <paramref name="t"/> from its first note.</summary>
+        private void Begin(Track t, bool straightIn)
+        {
+            _songOver = 0f;
             t.Source.Stop(); // from the top, even if it was still fading out from last time
             t.Started = false;
             t.Paused = false;
             t.Level = straightIn ? 1f : 0f;
             t.Plays++;
-            _lastSong = k;
             _wanted = t;
             Debug.Log("Ultra Puck: match song: " + t.Name);
         }

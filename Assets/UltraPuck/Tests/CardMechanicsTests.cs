@@ -1099,7 +1099,7 @@ namespace UltraPuck.Tests
             Assert.AreEqual(before, s.Players[0].SwapFrom, "left from where they stood");
             // same Step still moves everyone after the swap, so check the directions stuck
             Assert.Less(s.Players[0].Vel.X.ToDouble(), -3.0, "player kept the rock's leftward momentum");
-            Assert.Less(s.Rocks[0].Vel.X.ToDouble(), -3.0, "rock kept its own leftward momentum, not the player's");
+            Assert.Greater(s.Rocks[0].Vel.X.ToDouble(), 2.0, "rock took the player's rightward momentum (they trade)");
         }
 
         [Test]

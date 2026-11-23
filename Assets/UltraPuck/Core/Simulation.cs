@@ -2657,7 +2657,7 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// Swap (utility): throw a rock ahead like a quick shot, or swap places (and momentum) with your rock.
+        /// Swap (utility): throw a rock ahead like a quick shot, or swap places with your rock and trade momentum with it.
         /// Players have no cooldown; bots wait <see cref="Tuning.SwapBotCooldown"/> between uses.
         /// </summary>
         private void UseSwap(GameState s, int i)
@@ -2677,10 +2677,10 @@ namespace UltraPuck.Core
                 var rk = s.Rocks[k];
                 var from = a.Pos;
                 var to = rk.Pos;
-                // you take the rock's momentum; the rock keeps its own (it doesn't take yours, so swapping again and
-                // again can't keep speeding it up)
+                // you and the rock trade momentum: you take its, it takes yours
                 var rVel = rk.Vel;
                 a.Pos = to;
+                rk.Vel = a.Vel;
                 a.Vel = rVel;
                 rk.Pos = from;
                 rk.Carrier = -1;

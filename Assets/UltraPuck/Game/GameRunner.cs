@@ -90,7 +90,10 @@ namespace UltraPuck.Game
             InputIcons.Warm(); // Kenney button pictures for hints and utility card prompts
             _fingerprint = Fingerprint();
             var saved = PlayerPrefs.GetString("map_file", "test-rink.json");
-            BuildSims(Mathf.Max(0, _mapFiles.IndexOf(saved)));
+            // behind the main menu: a random rink (not saved: the one you picked comes back when you go to play).
+            // Screenshot runs keep the saved one, so their pictures don't change.
+            _menuRink = ShotDir == null && _maps.Count > 1;
+            BuildSims(_menuRink ? UnityEngine.Random.Range(0, _maps.Count) : Mathf.Max(0, _mapFiles.IndexOf(saved)));
 
             SteamNet.Init();
             LogDevices("at start");
@@ -255,6 +258,69 @@ namespace UltraPuck.Game
                 GoMainMenu();
                 yield return new WaitForSecondsRealtime(1.5f);
                 Debug.Log("Ultra Puck sound at music-menu: " + Sound.Report());
+            }
+
+            if (want("video"))
+            {
+                // frames for a short video (30 a second, the game stepped exactly that much each): the rink screen going
+                // from Classic to Underwater, then a match there from the countdown
+                var startMap = _mapIndex;
+                var dir = Path.Combine(ShotDir, "video");
+                Directory.CreateDirectory(dir);
+                GoLocalLobby();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Colour = 0, Symbol = 0, Name = "FancyDuck" });
+                var hockey = _mapFiles.IndexOf("hockey-rink.json");
+                if (hockey >= 0) UseMap(hockey);
+                _play.Open(PlayScreens.Page.Map);
+                yield return new WaitForSecondsRealtime(1f);
+                Time.captureFramerate = 30;
+                yield return VideoFrames(dir, 40);
+                StepLook(1);
+                yield return VideoFrames(dir, 60);
+                _play.Open(PlayScreens.Page.None);
+                _local.Slots.Clear();
+                for (var b = 0; b < 4; b++) _local.Slots.Add(new LocalPlayers.Slot { Team = b & 1, Colour = b & 1, Demo = true, Name = "Bot" });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                _shotWholeRink = true;
+                StartMatch(false);
+                yield return VideoFrames(dir, 420);
+                Time.captureFramerate = 0;
+                _shotWholeRink = false;
+                GoMainMenu();
+                UseMap(startMap);
+                Debug.Log("Ultra Puck video: " + _videoFrame + " frames in " + dir);
+            }
+
+            if (want("rinkpick"))
+            {
+                // the rink screen with a rink that has looks (the Hockey Rink: Classic and Underwater), on each look
+                var startMap = _mapIndex;
+                GoLocalLobby();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Colour = 0, Symbol = 0, Name = "FancyDuck" });
+                var hockey = _mapFiles.IndexOf("hockey-rink.json");
+                if (hockey >= 0) UseMap(hockey);
+                _play.Open(PlayScreens.Page.Map);
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("rinkpick-classic");
+                StepLook(1);
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("rinkpick-underwater");
+                // and the underwater rink itself, with bots playing on it
+                _play.Open(PlayScreens.Page.None);
+                _local.Slots.Clear();
+                for (var b = 0; b < 4; b++) _local.Slots.Add(new LocalPlayers.Slot { Team = b & 1, Colour = b & 1, Demo = true, Name = "Bot" });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                _shotWholeRink = true;
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(4f);
+                yield return Shot("underwater-1");
+                yield return new WaitForSecondsRealtime(1.5f);
+                yield return Shot("underwater-2");
+                _shotWholeRink = false;
+                GoMainMenu();
+                UseMap(startMap);
             }
 
             if (want("players"))
@@ -888,6 +954,21 @@ namespace UltraPuck.Game
             Application.Quit();
         }
 
+        private int _videoFrame;
+
+        /// <summary>Screenshot runs: <paramref name="count"/> frames in a row, as JPGs numbered on from the last (for a video).</summary>
+        private System.Collections.IEnumerator VideoFrames(string dir, int count)
+        {
+            for (var k = 0; k < count; k++)
+            {
+                yield return new WaitForEndOfFrame();
+                var tex = ScreenCapture.CaptureScreenshotAsTexture();
+                File.WriteAllBytes(Path.Combine(dir, "f" + _videoFrame.ToString("D5") + ".jpg"), tex.EncodeToJPG(90));
+                Destroy(tex);
+                _videoFrame++;
+            }
+        }
+
         private System.Collections.IEnumerator Shot(string name)
         {
             // nobody can hear a screenshot run: the log says which sounds each scene set off, and what the music is doing
@@ -1095,7 +1176,8 @@ namespace UltraPuck.Game
             _cardScreen.Sim = _sim;
             _cardScreen.Frame(playing ? _state : null);
             // the theme plays through the menus and lobbies; a match plays its own songs, one after another (see Sound)
-            Sound.Music(InMatch);
+            // (a rink's own song: first in a match there, and the theme while it's the main menu's rink)
+            Sound.Music(InMatch, _map != null && (InMatch || _mode == Mode.Menu) ? _map.Music : "");
             Sound.QuietMusic = _menus.IsOpen; // pause menu (and settings from it): music at half volume
             Sound.HearingMusic = _menus.HearingMusic; // unless you're on the Music slider
             _hud.Show(false, _free, _local, _state, _sim, _error, _menus.IsOpen || _cardScreen.Showing || !playing);
@@ -1182,6 +1264,7 @@ namespace UltraPuck.Game
 
         public void GoLocalLobby()
         {
+            PlayersRink();
             _mainMenu.Show(MainMenu.Page.None);
             _mainMenu.Message = null;
             _local.Slots.Clear();
@@ -1194,6 +1277,7 @@ namespace UltraPuck.Game
         {
             _mainMenu.Show(MainMenu.Page.None);
             _mainMenu.Message = null;
+            PlayersRink();
             _local.Slots.Clear(); // no bots to start with: add them from the pause menu when you want them
             _local.JoinDevice(device ?? (UnityEngine.InputSystem.InputDevice)UnityEngine.InputSystem.Keyboard.current);
             StartMatch(true);
@@ -1256,7 +1340,54 @@ namespace UltraPuck.Game
 
         public int MapIndex { get { return _mapIndex; } }
         public int MapCount { get { return _maps.Count; } }
-        public string MapName(int i) { return i >= 0 && i < _maps.Count ? (string.IsNullOrEmpty(_maps[i].Name) ? _mapFiles[i] : _maps[i].Name) : "?"; }
+        public string MapName(int i)
+        {
+            if (i < 0 || i >= _maps.Count) return "?";
+            var name = string.IsNullOrEmpty(_maps[i].Name) ? _mapFiles[i] : _maps[i].Name;
+            return string.IsNullOrEmpty(_maps[i].Variant) ? name : name + " (" + _maps[i].Variant + ")";
+        }
+
+        /// <summary>A rink's name without its look ("Hockey Rink"), and the look's ("Underwater", or "Classic").</summary>
+        public string RinkName(int i) { return i >= 0 && i < _maps.Count ? (string.IsNullOrEmpty(_maps[i].Name) ? _mapFiles[i] : _maps[i].Name) : "?"; }
+        public string LookName(int i) { return i >= 0 && i < _maps.Count && !string.IsNullOrEmpty(_maps[i].Variant) ? _maps[i].Variant : "Classic"; }
+
+        /// <summary>The map file each map is a look of (its own for an ordinary map).</summary>
+        private readonly List<string> _mapBase = new List<string>();
+
+        /// <summary>Rink <paramref name="i"/>'s looks (the plain one first, then its variants), as map indexes.</summary>
+        public List<int> Looks(int i)
+        {
+            var list = new List<int>();
+            if (i < 0 || i >= _maps.Count) return list;
+            for (var k = 0; k < _maps.Count; k++) if (_mapBase[k] == _mapBase[i]) list.Add(k);
+            return list;
+        }
+
+        /// <summary>The plain rinks (no variants), as map indexes, in order.</summary>
+        public List<int> Rinks()
+        {
+            var list = new List<int>();
+            for (var k = 0; k < _maps.Count; k++) if (string.IsNullOrEmpty(_maps[k].Variant)) list.Add(k);
+            return list;
+        }
+
+        /// <summary>The rink screen: the next / previous rink (its plain look).</summary>
+        public void StepRink(int d)
+        {
+            var rinks = Rinks();
+            if (rinks.Count == 0) return;
+            var here = rinks.IndexOf(Looks(_mapIndex).Count > 0 ? Looks(_mapIndex)[0] : _mapIndex);
+            UseMap(rinks[((Mathf.Max(0, here) + d) % rinks.Count + rinks.Count) % rinks.Count]);
+        }
+
+        /// <summary>The rink screen: the next / previous look of this rink.</summary>
+        public void StepLook(int d)
+        {
+            var looks = Looks(_mapIndex);
+            if (looks.Count < 2) return;
+            var here = looks.IndexOf(_mapIndex);
+            UseMap(looks[((here + d) % looks.Count + looks.Count) % looks.Count]);
+        }
 
         /// <summary>Every map in the Maps folder (the Test Rink first, then the rest by file name).</summary>
         private void LoadMaps()
@@ -1266,9 +1397,32 @@ namespace UltraPuck.Game
             var list = new List<string>(files);
             var test = list.FindIndex(f => Path.GetFileName(f) == "test-rink.json");
             if (test > 0) { var t = list[test]; list.RemoveAt(test); list.Insert(0, t); }
+            // ordinary maps first; then each variant (a look for one of them) right after its base
+            var variants = new List<string>();
             foreach (var f in list)
             {
-                try { _maps.Add(MapDef.FromJson(File.ReadAllText(f))); _mapFiles.Add(Path.GetFileName(f)); }
+                try
+                {
+                    var text = File.ReadAllText(f);
+                    if (MapDef.BaseOf(text) != null) { variants.Add(f); continue; }
+                    _maps.Add(MapDef.FromJson(text)); _mapFiles.Add(Path.GetFileName(f)); _mapBase.Add(Path.GetFileName(f));
+                }
+                catch (System.Exception ex) { _mapProblem = Path.GetFileName(f) + ": " + ex.Message; Debug.LogWarning("Ultra Puck: couldn't load map " + _mapProblem); }
+            }
+            foreach (var f in variants)
+            {
+                try
+                {
+                    var text = File.ReadAllText(f);
+                    var baseFile = MapDef.BaseOf(text);
+                    var at = _mapFiles.IndexOf(baseFile);
+                    if (at < 0) throw new System.Exception("its base map \"" + baseFile + "\" isn't there");
+                    var m = MapDef.FromVariant(text, File.ReadAllText(Path.Combine(MapsFolder, baseFile)));
+                    // after the base and any variants of it already in
+                    var pos = at + 1;
+                    while (pos < _maps.Count && _mapBase[pos] == baseFile) pos++;
+                    _maps.Insert(pos, m); _mapFiles.Insert(pos, Path.GetFileName(f)); _mapBase.Insert(pos, baseFile);
+                }
                 catch (System.Exception ex) { _mapProblem = Path.GetFileName(f) + ": " + ex.Message; Debug.LogWarning("Ultra Puck: couldn't load map " + _mapProblem); }
             }
         }
@@ -1332,17 +1486,33 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Switch rinks (between matches): new rules objects, the new rink drawn, the camera reset.</summary>
-        public void UseMap(int index)
+        public void UseMap(int index) { UseMap(index, true); }
+
+        /// <summary><see cref="UseMap(int)"/>; <paramref name="remember"/>: as the rink you play on (saved), not just the menu's backdrop.</summary>
+        private void UseMap(int index, bool remember)
         {
             if (_maps.Count == 0) return;
             index = ((index % _maps.Count) + _maps.Count) % _maps.Count;
+            if (remember) _menuRink = false;
             if (index == _mapIndex && _rink != null) return;
             BuildSims(index);
-            PlayerPrefs.SetString("map_file", _mapFiles[_mapIndex]);
+            if (remember) PlayerPrefs.SetString("map_file", _mapFiles[_mapIndex]);
             if (_rink != null) Destroy(_rink.Root);
             _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat());
             if (_session != null && _session.IsHost) _session.Map = _mapIndex;
             if (_cam != null) UpdateCamera(false, true);
+        }
+
+        /// <summary>The main menu shows a random rink (any of them, looks too), not the one you play on.</summary>
+        private bool _menuRink;
+
+        /// <summary>Leaving the main menu to play: back to the rink you picked last time.</summary>
+        private void PlayersRink()
+        {
+            if (!_menuRink) return;
+            _menuRink = false;
+            var i = _mapFiles.IndexOf(PlayerPrefs.GetString("map_file", "test-rink.json"));
+            UseMap(Mathf.Max(0, i), true);
         }
 
         /// <summary>Next / previous rink.</summary>
@@ -1388,6 +1558,7 @@ namespace UltraPuck.Game
         private void StartOnline(NetSession session)
         {
             if (_session != null) _session.Dispose();
+            PlayersRink();
             _session = session;
             if (session.IsHost) session.Map = _mapIndex;
             _mainMenu.Session = session;
@@ -1660,6 +1831,17 @@ namespace UltraPuck.Game
             var half = _matchSim.T.WallThickness.ToFloat() / 2f;
             var px = new Color32[W * H];
             Color32 floor = Palette.Floor, wall = new Color(0.62f, 0.62f, 0.64f);
+            var wet = map.Theme == Underwater.Theme;
+            if (wet)
+            {
+                // under the sea: sand, blue-grey boards, deep water all round (lighter towards the top)
+                floor = Underwater.Sand; wall = Underwater.Wall;
+                for (var y = 0; y < H; y++)
+                {
+                    Color32 c = Color.Lerp(Underwater.DeepWater, Underwater.ShallowWater, (float)y / H);
+                    for (var x = 0; x < W; x++) px[y * W + x] = c;
+                }
+            }
             System.Func<float, int> toX = wx => Mathf.RoundToInt((wx - min.x) * scale + off.x);
             System.Func<float, int> toY = wy => Mathf.RoundToInt((wy - min.y) * scale + off.y);
 
@@ -2447,6 +2629,7 @@ namespace UltraPuck.Game
             }
             _puck.Ghost(ghost);
             var puckAt = (pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t);
+            _puck.Look(_rink != null ? _rink.Dress : null);
             _puck.Show(puckAt, b.PuckTeam);
             // anything half way through a portal: cut at one, coming out of the other
             var wallHalf = _sim.T.WallThickness.ToFloat() * 0.5f;

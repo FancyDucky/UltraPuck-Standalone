@@ -82,6 +82,42 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.54 (Claude, 23 Nov 2026): **map variants (looks) and Underwater Hockey Rink.**
+  A map file with a `"base"` (another map file), `"variant"` (its name) and `"theme"` is a look for that rink:
+  `MapDef.BaseOf` / `MapDef.FromVariant` (the base's walls, nets and spawns; `MapDef.Theme` / `Variant`). GameRunner
+  loads variants after the ordinary maps, each right after its base (`_mapBase`; `Looks(i)`, `Rinks()`, `StepRink`,
+  `StepLook`, `RinkName`, `LookName`; `MapName` adds "(Underwater)"). The rink screen (PlayScreens `DrawMap`): left /
+  right steps rinks, up / down the looks, shown as a small vertical carousel above the picture (`DrawLooks`). Menu
+  "Rink" rows still step every map, looks included. `hockey-rink-underwater.json`: theme `underwater` (`Game/Underwater.cs`):
+  floor shader `UltraPuck/Sand` (sand plus animated caustics, world space), backdrop `UltraPuck/Water`, light rays,
+  wavy surface, swaying seaweed, coral, rocks and shells round the edges, rising bubbles, blue-grey boards, soft
+  floor lines; sprites cut from the user's own sheet (now Art/Underwater/*.png). Rink pictures
+  paint it sand and water. Screenshot scene `rinkpick`. Tuned to the user's reference: soft caustics, a blue-green
+  cast on the sand (`_Tint`), sun rays over the arena (shader `UltraPuck/Rays`, additive, order 5, under the
+  players), soft wall shadows (offset copies below each wall), and sea life placed by hand like the reference
+  (fractions across the rink, blue haze on things further back), bubble streams up the sides.
+  Each piece gets its own size (78-122%), a nudge and sometimes a flip, plus smaller bits between. Wall shadows
+  use shader `UltraPuck/Shadow`: the sand writes stencil 1, the shadow draws only there and once a pixel (no
+  darker joints round curves, nothing on the water). Screenshot scene `video` writes 30 fps JPG frames (with
+  `Time.captureFramerate`) for ffmpeg.
+  **The dressing is a prefab, edited in Unity:** `Resources/UltraPuck/Themes/Underwater Hockey.prefab` (named by the
+  map file's `"dressing"`; `Underwater.Dress` instantiates it under the rink). Its root's `UnderwaterTheme` holds the
+  floor material, wall colour, shadow (material, colour, offset), line colours; `RinkGuide` draws the rink outline as
+  gizmos. Children: Water / Sun Rays quads, Surface (`SurfaceBob`), Reef (top/bottom) sprites (`Sway` on seaweed),
+  `Bubbles`. Materials in `Art/Underwater/Materials` (Sand, Water, Rays, Shadow); sprites in `Art/Underwater`.
+  Menu Ultra Puck > Underwater > Open Underwater Hockey; Rebuild (`Editor/ThemeBuilder.cs`) remakes the prefab from
+  code, losing hand edits. The user edits it by hand now: don't rebuild over it.
+  Water tint over the whole game (players, puck): `UnderwaterTheme.ScreenTint`, a big quad at sorting order 1000
+  under the rink (the cards have their own camera, so stay clean); the sand's own `_TintAmount` is 0 now. Brighter
+  puck there: `UnderwaterTheme.Puck` / `PuckEdge` (white, dark rim), via `PuckView.Look`. The caustics moved off
+  the sand into `UltraPuck/Caustics` (additive, `Caustics.cginc` shared with Sand), a floor-shaped layer at order 28
+  over the players; the tint is at order 29; the puck (30-33) is above both, so it stays bright white.
+  Rink songs: a map file's `"music"` (`MapDef.Music`, a clip in Resources/UltraPuck/Music/Rinks): a match there
+  starts with it, then the playlist; and it's the menu theme while that rink is the main menu's (`Sound.Music(match,
+  rinkSong)`). Underwater Hockey: "Deep Focus". The main menu shows a random rink at launch (`_menuRink`, not
+  saved; `PlayersRink()` puts your saved rink back when you go to a lobby, free play or online; screenshot runs
+  keep the saved one). U Rink arms 8 shorter (make_curved_rinks.py `end` 13). Swap trades momentum again (you take
+  the rock's, it takes yours): protocol 67.
 - 0.1.53 (Claude, 23 Nov 2026): Shockwave max 1 a player; its note is just "Press {utility} to use."
 - 0.1.52 (Claude, 23 Nov 2026): Shockwave charges faster (40%, then 20% more):
   `ShockChargeTime` 25/7 s (about 3.6 s to its full 6 units), and its push grows with the charge, up to

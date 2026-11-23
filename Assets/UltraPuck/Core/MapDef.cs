@@ -95,6 +95,34 @@ namespace UltraPuck.Core
     {
         public string Name = "Untitled";
         public string Author = "";
+        /// <summary>
+        /// A look for a rink: "" for the plain one, or a variant's (from a variant file: one naming a "base" map, with a
+        /// "variant" name and a "theme", e.g. "underwater"). Only looks: a variant plays exactly as its base.
+        /// </summary>
+        public string Theme = "", Variant = "";
+        /// <summary>A variant's dressing: the prefab (Resources/UltraPuck/Themes/&lt;name&gt;) with the scenery round the rink.</summary>
+        public string Dressing = "";
+        /// <summary>A rink's own song (Resources/UltraPuck/Music/Rinks/&lt;name&gt;): first in a match there, and the menu theme while it's the menu's rink.</summary>
+        public string Music = "";
+
+        /// <summary>The map file a variant file is a look for (its "base"), or null for an ordinary map file.</summary>
+        public static string BaseOf(string json)
+        {
+            var root = Json.Parse(json) as System.Collections.Generic.Dictionary<string, object>;
+            return root == null ? null : Json.Str(Json.Get(root, "base"), null);
+        }
+
+        /// <summary>A variant: its base map (read from <paramref name="baseJson"/>) with the variant file's name and theme.</summary>
+        public static MapDef FromVariant(string json, string baseJson)
+        {
+            var m = FromJson(baseJson);
+            var root = Json.Obj(Json.Parse(json), "variant");
+            m.Variant = Json.Str(Json.Get(root, "variant"), "Variant");
+            m.Theme = Json.Str(Json.Get(root, "theme"), "");
+            m.Dressing = Json.Str(Json.Get(root, "dressing"), "");
+            m.Music = Json.Str(Json.Get(root, "music"), "");
+            return m;
+        }
         /// <summary>Each wall as its points (for drawing); <see cref="Segments"/> is the same walls split into pieces.</summary>
         public readonly List<FixVec2[]> WallLines = new List<FixVec2[]>();
         public readonly List<bool> WallClosed = new List<bool>();

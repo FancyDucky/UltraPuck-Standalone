@@ -141,7 +141,7 @@ def u_rink():
     # drawn lying on its side (open to the right), then stood up at the end (open at the top)
     w, gap = 24.0, 6.0         # corridor width, the gap between the arms
     inner, outer = gap / 2, gap / 2 + w
-    cx, end = -6.0, 21.0       # the bend's centre, the end walls of the arms
+    cx, end = -6.0, 13.0       # the bend's centre, the end walls of the arms (arms 19 long; were 27)
     arm = inner + w / 2        # the middle of each arm, either side of the centre line
     steps = 36
     outline = [(end, outer), (cx, outer)]

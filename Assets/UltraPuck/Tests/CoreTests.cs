@@ -1160,5 +1160,26 @@ namespace UltraPuck.Tests
                 }
             }
         }
+    
+
+        /// <summary>A map variant (a look for a rink) has its base map's walls, nets and spawns, and its own name and theme.</summary>
+        [Test]
+        public void TheUnderwaterHockeyRinkIsTheHockeyRinkUnderwater()
+        {
+            var folder = Path.Combine(Application.streamingAssetsPath, "Maps");
+            var text = File.ReadAllText(Path.Combine(folder, "hockey-rink-underwater.json"));
+            Assert.AreEqual("hockey-rink.json", MapDef.BaseOf(text));
+            Assert.IsNull(MapDef.BaseOf(File.ReadAllText(Path.Combine(folder, "hockey-rink.json"))), "an ordinary map has no base");
+            var baseMap = LoadMap("hockey-rink.json");
+            var wet = MapDef.FromVariant(text, File.ReadAllText(Path.Combine(folder, "hockey-rink.json")));
+            Assert.AreEqual("underwater", wet.Theme);
+            Assert.AreEqual("Underwater", wet.Variant);
+            Assert.AreEqual(baseMap.Name, wet.Name);
+            Assert.AreEqual(baseMap.Segments.Count, wet.Segments.Count, "the same walls");
+            Assert.AreEqual(baseMap.Goals.Count, wet.Goals.Count);
+            Assert.AreEqual(baseMap.BoundsMin, wet.BoundsMin);
+            Assert.AreEqual(baseMap.BoundsMax, wet.BoundsMax);
+            Assert.AreEqual("", baseMap.Theme, "the plain one has no theme");
+        }
     }
 }

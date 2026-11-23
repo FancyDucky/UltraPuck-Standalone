@@ -1,0 +1,9 @@
+// A look for the Hockey Rink: the same rink (walls, nets and spawns from its "base" map), under the sea.
+// Only the look changes ("theme"), so it plays exactly like the Hockey Rink.
+{
+  "base": "hockey-rink.json",
+  "variant": "Underwater",
+  "theme": "underwater",
+  "dressing": "Underwater Hockey",
+  "music": "Deep Focus"
+}
