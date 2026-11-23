@@ -399,6 +399,9 @@ namespace UltraPuck.Core
         public int LastGoalBy = -1;
         /// <summary>The last two players to have held the puck (newest first), for assists.</summary>
         public int Touch1 = -1, Touch2 = -1;
+        /// <summary>The last player of each team (0, 1) to touch the puck since the face-off, or -1: a goal is only an own
+        /// goal when nobody on the scoring team touched it.</summary>
+        public int TeamTouch0 = -1, TeamTouch1 = -1;
         /// <summary>The carrier the last time bots were handed to people (so a new carrier is noticed once).</summary>
         public int AutoCarrier = -1;
         /// <summary>Invisible Shot: seconds the loose puck stays hidden from everyone but <see cref="PuckHiddenTeam"/>.</summary>
@@ -476,7 +479,7 @@ namespace UltraPuck.Core
         {
             ulong h = 14695981039346656037UL;
             Mix(ref h, Clock); Mix(ref h, Overtime ? 1 : 0); Mix(ref h, Paused ? 1 : 0);
-            Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, LastGoalPlayer); Mix(ref h, LastAssist); Mix(ref h, LastGoalBy); Mix(ref h, Touch1); Mix(ref h, Touch2); Mix(ref h, AutoCarrier); Mix(ref h, PuckHidden); Mix(ref h, PuckHiddenTeam); Mix(ref h, CannonTeam); Mix(ref h, (long)Rng);
+            Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, LastGoalPlayer); Mix(ref h, LastAssist); Mix(ref h, LastGoalBy); Mix(ref h, Touch1); Mix(ref h, Touch2); Mix(ref h, TeamTouch0); Mix(ref h, TeamTouch1); Mix(ref h, AutoCarrier); Mix(ref h, PuckHidden); Mix(ref h, PuckHiddenTeam); Mix(ref h, CannonTeam); Mix(ref h, (long)Rng);
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom); Mix(ref h, KickOffTurn);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); Mix(ref h, py.Radius); }

@@ -17,6 +17,34 @@ namespace UltraPuck.Game
 
         /// <summary>The underwater dressing's settings, or null on an ordinary rink.</summary>
         public readonly UnderwaterTheme Dress;
+        /// <summary>The moving light over the underwater rink (null on others); off with the Caustics setting.</summary>
+        public readonly GameObject Caustics;
+
+        /// <summary>Follow the Caustics setting (call every frame; only a change does anything).</summary>
+        public void Settle()
+        {
+            if (Caustics != null && Caustics.activeSelf != Settings.Caustics) Caustics.SetActive(Settings.Caustics);
+        }
+
+        /// <summary>A closed outline pushed out by <paramref name="by"/> all round (mitred corners, capped on sharp ones).</summary>
+        private static List<Vector2> Grow(List<Vector2> pts, float by)
+        {
+            var n = pts.Count;
+            var area = 0f;
+            for (var i = 0; i < n; i++) { var a = pts[i]; var b = pts[(i + 1) % n]; area += a.x * b.y - b.x * a.y; }
+            var outward = area > 0f ? 1f : -1f; // anticlockwise: outward is to the right of each edge
+            var grown = new List<Vector2>(n);
+            for (var i = 0; i < n; i++)
+            {
+                var prev = pts[(i + n - 1) % n]; var here = pts[i]; var next = pts[(i + 1) % n];
+                var d0 = (here - prev).normalized; var d1 = (next - here).normalized;
+                var n0 = new Vector2(d0.y, -d0.x) * outward; var n1 = new Vector2(d1.y, -d1.x) * outward;
+                var m = (n0 + n1).normalized;
+                var k = Vector2.Dot(m, n0);
+                grown.Add(here + m * (by / Mathf.Max(0.35f, k)));
+            }
+            return grown;
+        }
 
         public RinkView(MapDef map, float wallThickness)
         {
@@ -33,8 +61,13 @@ namespace UltraPuck.Game
             // over the players but under the puck (order 30 up), so it stays bright white and easy to see: the light
             // through the water on the floor and everyone on it, then the water's colour over the whole picture. (The
             // cards have their own camera, on top of all this.)
+            // (out to the walls' outer edge, so the light plays over the boards too)
             if (dress != null && dress.Caustics != null)
-                Draw.Make("Caustics", Root.transform, Draw.Polygon(outline, Color.white), 28).GetComponent<MeshRenderer>().sharedMaterial = dress.Caustics;
+            {
+                Caustics = Draw.Make("Caustics", Root.transform, Draw.Polygon(Grow(outline, wallThickness / 2f + 0.02f), Color.white), 28).gameObject;
+                Caustics.GetComponent<MeshRenderer>().sharedMaterial = dress.Caustics;
+                Caustics.SetActive(Settings.Caustics);
+            }
             if (dress != null && dress.ScreenTint.a > 0f)
                 Draw.Make("WaterTint", Root.transform, Draw.Rect(V.Of(map.BoundsMin) - new Vector2(200f, 150f), V.Of(map.BoundsMax) + new Vector2(200f, 150f), dress.ScreenTint), 29);
 
@@ -1883,7 +1916,7 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class SlotViews
     {
-        // symbol 1-4: the prizes; 5-8: the rest
+        // symbol 1-4: the prizes (all the reels show); 5-8: old filler symbols, not used now
         private static readonly string[] Names = { "", "speed", "giant", "invisible", "strong", "diamond", "star", "cherry", "clover" };
         private const float Cell = 0.46f, Gap = 0.06f, Below = 0.78f, Hold = 0.9f, HoldWin = 1.6f;
         private static readonly Color Edge = new Color(0.55f, 0.56f, 0.6f), Dark = new Color(0.07f, 0.07f, 0.08f, 0.95f);
@@ -1955,9 +1988,10 @@ namespace UltraPuck.Game
             {
                 var stopAt = spinTime * (0.42f + 0.27f * k);
                 var landed = elapsed >= stopAt;
-                var sym = landed ? (p.SlotReels >> (4 * k)) & 15 : 1 + (int)(now * 15f + k * 3) % 8;
-                if (sym < 1 || sym > 8) sym = 5;
-                for (var n = 1; n <= 8; n++)
+                // (only the prizes go round)
+                var sym = landed ? (p.SlotReels >> (4 * k)) & 15 : 1 + (int)(now * 15f + k * 3) % 4;
+                if (sym < 1 || sym > 4) sym = 1;
+                for (var n = 1; n <= 4; n++)
                     if (one.Syms[k, n].activeSelf != (n == sym)) one.Syms[k, n].SetActive(n == sym);
                 // spinning: the symbols slide down through the window; landed: a little bump down and back
                 var y = 0f;
@@ -2002,7 +2036,7 @@ namespace UltraPuck.Game
                 var cell = new GameObject("Reel" + k).transform;
                 cell.SetParent(one.Root.transform, false);
                 one.Cells[k] = cell;
-                for (var n = 1; n <= 8; n++)
+                for (var n = 1; n <= 4; n++)
                 {
                     var go = Symbol(n, cell);
                     go.SetActive(false);

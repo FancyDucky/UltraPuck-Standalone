@@ -2630,6 +2630,7 @@ namespace UltraPuck.Game
             _puck.Ghost(ghost);
             var puckAt = (pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t);
             _puck.Look(_rink != null ? _rink.Dress : null);
+            if (_rink != null) _rink.Settle();
             _puck.Show(puckAt, b.PuckTeam);
             // anything half way through a portal: cut at one, coming out of the other
             var wallHalf = _sim.T.WallThickness.ToFloat() * 0.5f;

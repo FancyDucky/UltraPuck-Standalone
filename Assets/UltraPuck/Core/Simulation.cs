@@ -326,6 +326,7 @@ namespace UltraPuck.Core
             s.Carrier = -1;
             s.PuckTeam = -1;
             s.PassFrom = -1;
+            s.TeamTouch0 = -1; s.TeamTouch1 = -1;
             s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1; s.CannonTeam = -1;
             s.Shots = new Shot[0];
             s.Ice = new IcePoint[0];
@@ -693,6 +694,8 @@ namespace UltraPuck.Core
             s.PassFrom = Shift(s.PassFrom, index);
             s.Touch1 = Shift(s.Touch1, index);
             s.Touch2 = Shift(s.Touch2, index);
+            s.TeamTouch0 = Shift(s.TeamTouch0, index);
+            s.TeamTouch1 = Shift(s.TeamTouch1, index);
             s.AutoCarrier = Shift(s.AutoCarrier, index);
             s.LastGoalPlayer = Shift(s.LastGoalPlayer, index);
             s.LastGoalBy = Shift(s.LastGoalBy, index);
@@ -838,6 +841,7 @@ namespace UltraPuck.Core
                 BouncePuckAndRocks(s); // rock ↔ puck (after both have moved)
                 MoveShots(s, sub);
                 if (s.PortalShots.Length > 0) MovePortalShots(s, sub);
+                TeamTouches(s);
                 if (s.Phase == Phase.Play) CheckGoal(s);
                 NoteTouch(s);
             }
@@ -1812,6 +1816,10 @@ namespace UltraPuck.Core
                 // assist is the teammate who had it just before them.
                 NoteTouch(s);
                 var credit = by >= 0 ? by : Shooter(s, scorer);
+                // nobody on the scoring team shot or carried it in, but one of them touched it since the face-off:
+                // theirs (the last to touch it). Only an own goal when none of them did.
+                var touched = scorer == 0 ? s.TeamTouch0 : s.TeamTouch1;
+                if (credit < 0 && touched >= 0 && touched < s.Players.Length && s.Players[touched].Team == scorer) credit = touched;
                 s.LastAssist = -1;
                 s.LastGoalBy = -1;
                 if (credit >= 0)
@@ -1826,6 +1834,7 @@ namespace UltraPuck.Core
                     }
                 }
                 s.Touch1 = -1; s.Touch2 = -1;
+                s.TeamTouch0 = -1; s.TeamTouch1 = -1;
                 var blastAt = s.PuckPos;
                 if (s.Carrier >= 0) { s.PuckVel = s.Players[s.Carrier].Vel; s.Carrier = -1; }
                 s.Phase = Phase.Scored;
@@ -1849,6 +1858,26 @@ namespace UltraPuck.Core
         {
             var d = DriverOf(s, i);
             return d >= 0 ? d : i;
+        }
+
+        /// <summary>Who touched the puck (carrying it, or it against them): the last of each team, for own goals.</summary>
+        private void TeamTouches(GameState s)
+        {
+            if (s.Carrier >= 0) { Touched(s, s.Carrier); return; }
+            var near = T.PuckRadius + Fix.Ratio(1, 20);
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var p = s.Players[i];
+                var r = RadiusOf(p) + near;
+                if ((p.Pos - s.PuckPos).SqrLength <= r * r) Touched(s, i);
+            }
+        }
+
+        private static void Touched(GameState s, int i)
+        {
+            if (i < 0 || i >= s.Players.Length) return;
+            if (s.Players[i].Team == 0) s.TeamTouch0 = i;
+            else if (s.Players[i].Team == 1) s.TeamTouch1 = i;
         }
 
         /// <summary>Keep the last two players to hold the puck (for assists).</summary>
@@ -2235,15 +2264,15 @@ namespace UltraPuck.Core
             var odds = Math.Max(4, T.SlotOdds);
             var roll = (int)(s.NextRandom() % (uint)odds);
             p.SlotWin = roll < 4 ? roll + 1 : 0;
-            // the three symbols: 1-4 are the prizes, 5-8 the others. A win shows three of its prize; a loss never three alike
+            // the three symbols, all prizes (1-4): a win shows three of its prize; a loss never three alike
             int a, b, c;
             if (p.SlotWin > 0) a = b = c = p.SlotWin;
             else
             {
-                a = 1 + (int)(s.NextRandom() % 8u);
-                b = 1 + (int)(s.NextRandom() % 8u);
-                c = 1 + (int)(s.NextRandom() % 8u);
-                if (a == b && b == c) c = c % 8 + 1;
+                a = 1 + (int)(s.NextRandom() % 4u);
+                b = 1 + (int)(s.NextRandom() % 4u);
+                c = 1 + (int)(s.NextRandom() % 4u);
+                if (a == b && b == c) c = c % 4 + 1;
             }
             p.SlotReels = a | (b << 4) | (c << 8);
             p.SlotSpin = T.SlotSpinTime;
@@ -2415,8 +2444,16 @@ namespace UltraPuck.Core
             foreach (var po in s.Portals)
                 if (po.Owner == sh.Owner && po.Colour != sh.Kind && (po.Pos - centre).SqrLength < T.PortalLength * T.PortalLength
                     && FixVec2.Dot(po.Normal, normal) > Fix.Zero) return;
+            // a team never has more than its two up: this one, and the shooter's other colour. Any teammate's go
+            // (a Portal Gun that changed hands leaves no strays)
             var list = new System.Collections.Generic.List<Portal>(s.Portals.Length + 1);
-            foreach (var po in s.Portals) if (po.Owner != sh.Owner || po.Colour != sh.Kind) list.Add(po);
+            foreach (var po in s.Portals)
+            {
+                var mine = po.Owner == sh.Owner;
+                var mate = !mine && po.Owner >= 0 && po.Owner < s.Players.Length && s.Players[po.Owner].Team == team;
+                if (mate || (mine && po.Colour == sh.Kind)) continue;
+                list.Add(po);
+            }
             list.Add(new Portal { Pos = centre, Normal = normal, Owner = sh.Owner, Colour = sh.Kind, Wall = bw, At = bu, Id = ++s.PortalsMade });
             s.Portals = list.ToArray();
         }
@@ -2559,6 +2596,7 @@ namespace UltraPuck.Core
                     if (s.Carrier >= 0) KnockLoose(s, s.Carrier, dir, -1);
                     s.PuckVel += dir * T.GunPuckPush;
                     s.PassFrom = -1;
+                    Touched(s, sh.Owner);
                     gone = true;
                 }
                 if (!gone)

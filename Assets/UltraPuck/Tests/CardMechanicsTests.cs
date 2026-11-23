@@ -1378,6 +1378,37 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0, s.LastGoalBy, "the shooter's goal");
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void AnOwnGoalOnlyWhenNobodyOnTheScoringTeamTouchedIt(bool touched)
+        {
+            var s = Game(0, 1);
+            Play(s);
+            var net = _sim.Map.Goals.Find(g => g.Team == 1);
+            var side = net.Min.X > Fix.Zero ? 1 : -1;
+            var mouth = (side > 0 ? net.Min.X : net.Max.X).ToDouble();
+            var midY = (net.Min.Y + net.Max.Y).ToDouble() / 2;
+            s.Players[0].Pos = At(-side * 10, midY + 6); s.Players[0].Vel = FixVec2.Zero;
+            s.Players[1].Pos = At(mouth - side * 8, midY - 6); s.Players[1].Vel = FixVec2.Zero;
+            s.Carrier = -1;
+            if (touched)
+            {
+                // the loose puck brushes red's player (who can't pick it up just now)
+                s.Players[0].NoPickup = Fix.FromInt(1);
+                s.PuckPos = s.Players[0].Pos + new FixVec2(_sim.T.PlayerRadius + _sim.T.PuckRadius, Fix.Zero);
+                s.PuckVel = FixVec2.Zero;
+                _sim.Step(s, new PlayerInput[2]);
+            }
+            // then blue knocks it into blue's own net
+            s.PassFrom = 1; s.PuckTeam = 1;
+            s.PuckPos = At(mouth - side * 1.5, midY);
+            s.PuckVel = new FixVec2(Fix.FromInt(side * 10), Fix.Zero);
+            for (var t = 0; t < 60 && s.Phase == Phase.Play; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(Phase.Scored, s.Phase);
+            Assert.AreEqual(0, s.LastScorer, "red's goal");
+            Assert.AreEqual(touched ? 0 : -1, s.LastGoalBy, touched ? "red touched it: red's player scored" : "nobody on red touched it: an own goal");
+        }
+
         [Test]
         public void CarryingThePuckIntoYourOwnNetIsStillSafeWithoutACannonBall()
         {
@@ -2162,6 +2193,7 @@ namespace UltraPuck.Tests
                 var r = p.SlotReels;
                 var same = (r & 15) == ((r >> 4) & 15) && ((r >> 4) & 15) == ((r >> 8) & 15);
                 Assert.AreEqual(p.SlotWin > 0, same, "three alike exactly when it's a win");
+                for (var k2 = 0; k2 < 3; k2++) Assert.That((r >> (4 * k2)) & 15, Is.InRange(1, 4), "only prize symbols on the reels");
             }
             Assert.AreEqual(4.0 / 30, (double)wins / spins, 0.025, "about 4 in 30");
         }

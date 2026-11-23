@@ -44,6 +44,12 @@ namespace UltraPuck.Game
         public bool Reticle;
         /// <summary>When play last began after a countdown (for the START banner).</summary>
         public float StartAt = -10f;
+        /// <summary>When the goal on show was scored (for its banner's animation), and which score it was.</summary>
+        private float _goalAt = -10f;
+        private int _goalKey = -1;
+
+        /// <summary>The countdown's "START!" gold: the goal banner is the same.</summary>
+        private static readonly Color Gold = new Color(1f, 0.85f, 0.25f);
         /// <summary>View / Tab is held in a match: the scoreboard (everyone's cards and stats) is up.</summary>
         public bool Board;
 
@@ -144,7 +150,7 @@ namespace UltraPuck.Game
                         var age = Time.unscaledTime - StartAt;
                         var size = Mathf.RoundToInt(Mathf.Lerp(130f, 96f, Ui.EaseOut(age / 0.3f)));
                         var a = 1f - Mathf.Clamp01((age - 0.55f) / 0.35f);
-                        Ui.Label(new Rect(0, h * 0.28f - 40f, w, 140), "START!", Ui.Font(size, true, TextAnchor.MiddleCenter), new Color(1f, 0.85f, 0.25f, a));
+                        Ui.Label(new Rect(0, h * 0.28f - 40f, w, 140), "START!", Ui.Font(size, true, TextAnchor.MiddleCenter), new Color(Gold.r, Gold.g, Gold.b, a));
                     }
                     break;
                 case Phase.Scored:
@@ -178,9 +184,7 @@ namespace UltraPuck.Game
                     }
                     else
                     {
-                        Ui.Label(new Rect(0, h * 0.28f, w, 70), "GOAL!  " + Palette.TeamName(_state.LastScorer) + " scores", big, Palette.Team(_state.LastScorer));
-                        var line = GoalLine();
-                        if (line != null) Ui.Label(new Rect(0, h * 0.28f + 66f, w, 34), line, Ui.Font(20, true, TextAnchor.MiddleCenter), Color.white);
+                        GoalBanner(w, h);
                     }
                     break;
                 case Phase.GameOver:
@@ -225,6 +229,39 @@ namespace UltraPuck.Game
         }
 
         /// <summary>"Goal: Sam  ·  Assist: Alex" for the last goal, or null (an own goal).</summary>
+        /// <summary>
+        /// "Name Scored!" (or "Red Team Scored!" for an own goal) in the START gold: slams in big with a bounce and a
+        /// tilt, then keeps a gentle pulse and sway. The assist underneath.
+        /// </summary>
+        private void GoalBanner(float w, float h)
+        {
+            var key = _state.Score[0] * 1000 + _state.Score[1];
+            if (key != _goalKey) { _goalKey = key; _goalAt = Time.unscaledTime; }
+            var age = Time.unscaledTime - _goalAt;
+            var by = _state.LastGoalBy;
+            var who = by >= 0 && by < _state.Players.Length && SeatName != null ? SeatName(by) : Palette.TeamName(_state.LastScorer) + " Team";
+            var text = who + " Scored!";
+            // in: from huge and see-through down past its size and back (a slam); then a slow pulse
+            var pop = Ui.EaseOutBack(age / 0.45f);
+            var scale = Mathf.LerpUnclamped(2.2f, 1f, pop) * (1f + 0.04f * Mathf.Sin(age * 5f) * Mathf.Clamp01((age - 0.45f) * 3f));
+            // (a long name: smaller, so it still fits across the screen once it's settled)
+            var fit = Mathf.Min(1f, w * 0.9f / Mathf.Max(1f, Ui.Font(104, true, TextAnchor.MiddleCenter).CalcSize(new GUIContent(text)).x));
+            var size = Mathf.Clamp(Mathf.RoundToInt(104f * fit * scale), 20, 300);
+            var a = Mathf.Clamp01(age / 0.15f);
+            var tilt = Mathf.Lerp(-12f, 0f, Ui.EaseOut(age / 0.5f)) + 2.5f * Mathf.Sin(age * 3.2f) * Mathf.Clamp01((age - 0.5f) * 2f);
+            var centre = new Vector2(w / 2f, h * 0.3f);
+            var keep = GUI.matrix;
+            GUIUtility.RotateAroundPivot(tilt, centre);
+            Ui.Label(new Rect(0, centre.y - 90f, w, 180f), text, Ui.Font(size, true, TextAnchor.MiddleCenter), new Color(Gold.r, Gold.g, Gold.b, a));
+            GUI.matrix = keep;
+            var assist = _state.LastAssist;
+            if (assist >= 0 && assist < _state.Players.Length && SeatName != null)
+            {
+                var b = Mathf.Clamp01((age - 0.4f) / 0.3f);
+                Ui.Label(new Rect(0, centre.y + 70f, w, 40), "Assist: " + SeatName(assist), Ui.Font(24, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, b));
+            }
+        }
+
         private string GoalLine()
         {
             if (_state == null || SeatName == null) return null;

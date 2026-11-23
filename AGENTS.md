@@ -82,6 +82,14 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.55 (Claude, 23 Nov 2026): goal banner (Hud `GoalBanner`): "Name Scored!" in the START gold, slams in with a
+  bounce and tilt, then pulses; an own goal says "<Team> Team Scored!"; assist underneath. Own goals: the sim keeps
+  the last player of each team to touch the puck since the face-off (`TeamTouch0/1`, carrying or the loose puck
+  against them, or their Puck Gun shot moving it); a goal nobody on the scoring team shot or carried in goes to that
+  player, and is only an own goal when there's none. Portals: placing one drops every teammate's portals and your
+  own of that colour, so a team has at most two up. Caustics layer grown out to the walls' outer edge (`RinkView.Grow`)
+  and a Graphics setting "Caustics" (`Settings.Caustics`, `RinkView.Settle`). Slot reels: only the four prize symbols
+  (sim and drawing). Protocol 68.
 - 0.1.54 (Claude, 23 Nov 2026): **map variants (looks) and Underwater Hockey Rink.**
   A map file with a `"base"` (another map file), `"variant"` (its name) and `"theme"` is a look for that rink:
   `MapDef.BaseOf` / `MapDef.FromVariant` (the base's walls, nets and spawns; `MapDef.Theme` / `Variant`). GameRunner
