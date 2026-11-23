@@ -82,6 +82,7 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.53 (Claude, 23 Nov 2026): Shockwave max 1 a player; its note is just "Press {utility} to use."
 - 0.1.52 (Claude, 23 Nov 2026): Shockwave charges faster (40%, then 20% more):
   `ShockChargeTime` 25/7 s (about 3.6 s to its full 6 units), and its push grows with the charge, up to
   `ShockFullPush` 3.5x a tap's at full. Shockwave sounds: `Sfx.ShockHum` (a loop like the charge hum,

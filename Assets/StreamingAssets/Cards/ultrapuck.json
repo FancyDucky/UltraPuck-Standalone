@@ -253,7 +253,7 @@
       "id": "ultrapuck.shockwave",
       "name": "Shockwave",
       "tier": "A",
-      "max": 3,
+      "max": 1,
       "color": "#59A6FF",
       "flavor": "Woah Nelly!",
       "face": [
@@ -261,7 +261,7 @@
         { "label": "Charge Time", "value": "[good]3.6 s[/]" },
         { "label": "Knockback", "value": "[good]up to x3.5[/]" }
       ],
-      "text": "Hold to grow it, let go to fire. Press {utility} to use.",
+      "text": "Press {utility} to use.",
       "stats": { "Shockwave": "+1" }
     },
     {
