@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ultra Puck Cards</title>
+<style>
+  :root { --bg:#15161b; --panel:#1e2027; --line:#30333d; --ink:#e8e8ee; --dim:#9a9ca8; --good:#7BE38A; --bad:#FF7A7A; --note:#A0A0A8; --gold:#FFD24D; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.35 "Segoe UI", system-ui, sans-serif; display:flex; height:100vh; overflow:hidden; }
+  #left { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #bar { display:flex; gap:8px; align-items:center; padding:10px 14px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  #bar h1 { font-size:16px; margin:0 12px 0 0; }
+  #msg { color:var(--dim); white-space:pre-wrap; flex-basis:100%; font-size:13px; }
+  #msg.err { color:var(--bad); }
+  button { background:#2b2e38; color:var(--ink); border:1px solid #444856; border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; }
+  button:hover { background:#363a46; }
+  button.main { background:#2f6fdb; border-color:#2f6fdb; }
+  button.danger:hover { background:#7a2b2b; }
+  #grid { flex:1; overflow:auto; padding:16px; display:grid; grid-template-columns:repeat(auto-fill, 220px); gap:18px; align-content:start; }
+  #edit { width:380px; border-left:1px solid var(--line); background:var(--panel); overflow:auto; padding:14px; }
+  #edit h2 { margin:0 0 10px; font-size:15px; }
+  label.f { display:block; margin:8px 0 2px; color:var(--dim); font-size:12px; }
+  input, select, textarea { width:100%; background:#14151a; color:var(--ink); border:1px solid #3a3d48; border-radius:5px; padding:5px 7px; font:inherit; }
+  textarea { resize:vertical; min-height:44px; }
+  .row { display:flex; gap:6px; align-items:center; margin-top:4px; }
+  .row > * { flex:1; }
+  .row > button { flex:0 0 auto; padding:4px 8px; }
+  .nums { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .hint { color:var(--dim); font-size:12px; margin-top:4px; }
+  .actions { display:flex; gap:6px; margin-top:14px; flex-wrap:wrap; }
+
+  /* the card */
+  .card { width:220px; height:296px; border-radius:12px; padding:5px; cursor:pointer; position:relative; transition:transform .1s; }
+  .card:hover { transform:translateY(-3px); }
+  .card.sel { outline:3px solid #fff; outline-offset:3px; }
+  .inner { height:100%; border-radius:8px; background:#0f1014; display:flex; flex-direction:column; overflow:hidden; border:2px solid var(--accent); }
+  .title { padding:6px 8px 4px; font-weight:700; font-size:15px; display:flex; justify-content:space-between; gap:6px; }
+  .tier { font-size:11px; padding:1px 6px; border-radius:4px; color:#111; align-self:center; }
+  .art { height:112px; background:#22242c center/cover no-repeat; margin:0 8px; border-radius:4px; display:flex; align-items:center; justify-content:center; color:#555; font-size:12px; }
+  .flavor { font-style:italic; color:#c8c8d0; font-size:12px; padding:5px 9px 3px; }
+  .rule { height:2px; background:var(--accent); margin:0 9px 4px; }
+  .face { padding:0 9px; font-size:12px; }
+  .face div { display:flex; justify-content:space-between; gap:6px; }
+  .text { padding:4px 9px; font-size:11.5px; }
+  .tags { position:absolute; bottom:8px; right:10px; font-size:10px; color:var(--dim); }
+  .good { color:var(--good); } .bad { color:var(--bad); } .note { color:var(--note); } .gold { color:var(--gold); }
+</style>
+</head>
+<body>
+<div id="left">
+  <div id="bar">
+    <h1>Ultra Puck cards</h1>
+    <button class="main" onclick="save()">Save</button>
+    <button onclick="addCard()">New card</button>
+    <button onclick="publish()" id="pub">Publish to GitHub</button>
+    <span id="dirty" class="hint"></span>
+    <div id="msg"></div>
+  </div>
+  <div id="grid"></div>
+</div>
+<div id="edit"><p class="hint">Click a card to edit it.</p></div>
+
+<script>
+const TIER = { S:'#F5C442', A:'#BA8CFF', B:'#5CA8F5', C:'#6BD68A', D:'#A1A1A1', F:'#C27A59' };
+const ORDER = ['id','name','tier','finish','max','maxTeam','minTeam','requires','noBots','art','color','flavor','face','text','stats'];
+let cards = [], stats = [], art = [], version = '', sel = -1, dirty = false;
+
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const markup = s => esc(s).replace(/\[(good|bad|note|gold)\]/g, '<span class="$1">').replace(/\[\/\]/g, '</span>');
+const artFile = c => { const b = c.art || c.id; return art.find(f => f.replace(/\.(jpg|jpeg|png)$/i,'') === b); };
+
+function msg(t, err) { const m = document.getElementById('msg'); m.textContent = t; m.className = err ? 'err' : ''; }
+function setDirty(d) { dirty = d; document.getElementById('dirty').textContent = d ? 'Unsaved changes' : ''; }
+window.onbeforeunload = () => dirty ? 'unsaved' : undefined;
+
+async function load() {
+  const r = await (await fetch('/api/cards')).json();
+  cards = r.cards; stats = r.stats; art = r.art; version = r.version;
+  document.getElementById('pub').textContent = 'Publish to GitHub v' + version;
+  drawAll(); setDirty(false);
+}
+
+function cardHtml(c, i) {
+  const tier = c.tier || 'C', frame = TIER[tier] || TIER.C, accent = c.color || frame, f = artFile(c);
+  const tags = [c.max ? 'max ' + c.max : '', c.maxTeam ? 'team max ' + c.maxTeam : '', c.minTeam ? 'team of ' + c.minTeam + '+' : '',
+                c.noBots ? 'no bots' : '', c.requires ? 'needs ' + c.requires.replace(/^ultrapuck\./,'') : ''].filter(Boolean).join(' · ');
+  return `<div class="card${i === sel ? ' sel' : ''}" style="--accent:${esc(accent)};background:linear-gradient(150deg,${frame},#333 55%,${frame})" onclick="pick(${i})">
+    <div class="inner">
+      <div class="title"><span style="color:${esc(accent)}">${esc(c.name || '?')}</span><span class="tier" style="background:${frame}">${esc(tier)}</span></div>
+      <div class="art" style="${f ? `background-image:url('/art/${encodeURIComponent(f)}')` : ''}">${f ? '' : 'no art: ' + esc(c.art || c.id)}</div>
+      ${c.flavor ? `<div class="flavor">${markup(c.flavor)}</div>` : '<div style="height:8px"></div>'}
+      <div class="rule"></div>
+      <div class="face">${(c.face || []).map(r => `<div><span>${markup(r.label)}</span><span>${markup(r.value)}</span></div>`).join('')}</div>
+      ${c.text ? `<div class="text">${markup(c.text)}</div>` : ''}
+    </div>
+    <div class="tags">${esc(tags)}</div>
+  </div>`;
+}
+
+function drawAll() { document.getElementById('grid').innerHTML = cards.map(cardHtml).join(''); }
+function drawOne() {
+  const el = document.getElementById('grid').children[sel];
+  if (el) el.outerHTML = cardHtml(cards[sel], sel);
+}
+
+// set a field, keeping the usual key order; empty removes it
+function setField(key, val) {
+  const c = cards[sel];
+  const empty = val === '' || val === null || val === undefined || val === false;
+  if (empty) delete c[key];
+  else if (key in c) c[key] = val;
+  else {
+    const out = {}; let placed = false; const at = ORDER.indexOf(key);
+    for (const k of Object.keys(c)) {
+      const ki = ORDER.indexOf(k);
+      if (!placed && ki > at) { out[key] = val; placed = true; }
+      out[k] = c[k];
+    }
+    if (!placed) out[key] = val;
+    cards[sel] = out;
+  }
+  setDirty(true); drawOne();
+}
+
+function pick(i) { sel = i; drawAll(); form(); }
+
+function form() {
+  const c = cards[sel], e = document.getElementById('edit');
+  if (!c) { e.innerHTML = '<p class="hint">Click a card to edit it.</p>'; return; }
+  const txt = (k, label, area) => `<label class="f">${label}</label>` + (area
+      ? `<textarea oninput="setField('${k}', this.value)">${esc(c[k])}</textarea>`
+      : `<input value="${esc(c[k])}" oninput="setField('${k}', this.value)">`);
+  const num = (k, label) => `<div><label class="f">${label}</label><input type="number" min="0" value="${c[k] ?? ''}" oninput="setField('${k}', this.value === '' || this.value === '0' ? '' : parseInt(this.value))"></div>`;
+  const artOpts = ['<option value="">(same as id)</option>'].concat([...new Set(art.map(f => f.replace(/\.(jpg|jpeg|png)$/i,'')))]
+      .map(b => `<option${b === c.art ? ' selected' : ''}>${esc(b)}</option>`)).join('');
+  const reqOpts = ['<option value="">(none)</option>'].concat(cards.filter(o => o !== c && o.id)
+      .map(o => `<option value="${esc(o.id)}"${o.id === c.requires ? ' selected' : ''}>${esc(o.name)}</option>`)).join('');
+  const statOpts = v => stats.flatMap(s => [s, 'Opponent' + s]).map(s => `<option${s === v ? ' selected' : ''}>${s}</option>`).join('');
+  e.innerHTML = `<h2>${esc(c.name || 'Card')}</h2>
+    ${txt('id', 'id (never change it once released)')}
+    ${txt('name', 'Name')}
+    <label class="f">Tier (frame colour)</label>
+    <select onchange="setField('tier', this.value)">${Object.keys(TIER).map(t => `<option${t === (c.tier || 'C') ? ' selected' : ''}>${t}</option>`).join('')}</select>
+    <label class="f">Finish (special look; needs a game version that has it)</label>
+    <select onchange="setField('finish', this.value)">${['', 'foil', 'polychrome'].map(f => `<option value="${f}"${f === (c.finish || '') ? ' selected' : ''}>${f || '(none)'}</option>`).join('')}</select>
+    <div class="nums">${num('max', 'Max each')}${num('maxTeam', 'Max a team')}${num('minTeam', 'Team size')}
+      <div><label class="f">No bots</label><input type="checkbox" style="width:auto" ${c.noBots ? 'checked' : ''} onchange="setField('noBots', this.checked)"></div></div>
+    <label class="f">Accent colour</label>
+    <div class="row"><input type="color" value="${esc(c.color || '#888888')}" oninput="setField('color', this.value.toUpperCase()); this.nextElementSibling.value = this.value.toUpperCase()" style="flex:0 0 44px;padding:0;height:30px">
+      <input value="${esc(c.color)}" placeholder="tier colour" oninput="setField('color', this.value)"></div>
+    <label class="f">Art (Cards/Art/&lt;name&gt;.jpg or .png)</label>
+    <select onchange="setField('art', this.value)">${artOpts}</select>
+    <label class="f">Only offered if the team has</label>
+    <select onchange="setField('requires', this.value)">${reqOpts}</select>
+    ${txt('flavor', 'Flavor (under the title)')}
+    <label class="f">Face rows (label / value) — [good]..[/] [bad]..[/] [note]..[/] [gold]..[/]</label>
+    <div id="faces">${(c.face || []).map((r, j) => `<div class="row">
+      <input value="${esc(r.label)}" oninput="faceSet(${j}, 'label', this.value)">
+      <input value="${esc(r.value)}" oninput="faceSet(${j}, 'value', this.value)">
+      <button onclick="faceDel(${j})">✕</button></div>`).join('')}</div>
+    <button style="margin-top:4px" onclick="faceAdd()">+ row</button>
+    ${txt('text', 'Footnote (same markup)', true)}
+    <label class="f">Stats (what the card really does) — "x1.5" multiplies, "/1.6" divides, "+1" adds</label>
+    <div>${Object.entries(c.stats || {}).map(([k, v], j) => `<div class="row">
+      <select onchange="statKey(${j}, this.value)">${statOpts(k)}</select>
+      <input value="${esc(v)}" oninput="statVal(${j}, this.value)" style="flex:0 0 80px">
+      <button onclick="statDel(${j})">✕</button></div>`).join('')}</div>
+    <button style="margin-top:4px" onclick="statAdd()">+ stat</button>
+    <p class="hint">Face rows are only what the card says. Some numbers (like Shockwave's) live in the game's code and need a full build.</p>
+    <div class="actions">
+      <button onclick="dup()">Duplicate</button>
+      <button onclick="move(-1)">◀ Move</button><button onclick="move(1)">Move ▶</button>
+      <button class="danger" onclick="del()">Delete</button>
+    </div>`;
+}
+
+function faceSet(j, k, v) { cards[sel].face[j][k] = v; setDirty(true); drawOne(); }
+function faceAdd() { setField('face', [...(cards[sel].face || []), { label: '', value: '' }]); form(); }
+function faceDel(j) { const f = cards[sel].face.filter((_, i) => i !== j); setField('face', f.length ? f : ''); form(); }
+function statsFrom(entries) { setField('stats', entries.length ? Object.fromEntries(entries) : ''); }
+function statKey(j, k) {
+  const e = Object.entries(cards[sel].stats);
+  if (e.some(([x], i) => x === k && i !== j)) { msg('That card already has ' + k + '.', true); form(); return; }
+  e[j][0] = k; statsFrom(e);
+}
+function statVal(j, v) { const e = Object.entries(cards[sel].stats); e[j][1] = v; statsFrom(e); }
+function statAdd() {
+  const have = Object.keys(cards[sel].stats || {}), k = stats.find(s => !have.includes(s));
+  statsFrom([...Object.entries(cards[sel].stats || {}), [k, 'x1']]); form();
+}
+function statDel(j) { statsFrom(Object.entries(cards[sel].stats).filter((_, i) => i !== j)); form(); }
+
+function freeId(base) { let id = base, n = 2; while (cards.some(c => c.id === id)) id = base + n++; return id; }
+function addCard() {
+  cards.push({ id: freeId('ultrapuck.newcard'), name: 'New Card', tier: 'C', flavor: '', face: [{ label: 'Move Speed', value: '[good]+10%[/]' }], stats: { MoveSpeed: 'x1.1' } });
+  setDirty(true); pick(cards.length - 1); document.getElementById('grid').lastElementChild.scrollIntoView();
+}
+function dup() {
+  const c = JSON.parse(JSON.stringify(cards[sel]));
+  c.id = freeId(c.id + 'copy'); c.name += ' (copy)';
+  cards.splice(sel + 1, 0, c); sel++;
+  if (!c.art) setField('art', cards[sel - 1].id); // keep the original's picture
+  setDirty(true); pick(sel);
+}
+function move(d) {
+  const j = sel + d; if (j < 0 || j >= cards.length) return;
+  [cards[sel], cards[j]] = [cards[j], cards[sel]]; setDirty(true); pick(j);
+}
+function del() {
+  if (!confirm('Delete "' + cards[sel].name + '"? (Nothing is written until you Save.)')) return;
+  cards.splice(sel, 1); sel = -1; setDirty(true); drawAll(); form();
+}
+
+async function save() {
+  const r = await (await fetch('/api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cards }) })).json();
+  if (r.error) { msg("Not saved:\n" + r.error, true); return; }
+  setDirty(false);
+  msg('Saved ultrapuck.json' + (r.synced.length ? ' and copied it to ' + r.synced.join(', ') : ' (no local build found to copy to)') +
+      '. Restart the game to see it. Online, everyone needs the same card file.');
+}
+
+async function publish() {
+  if (dirty) { msg('Save first.', true); return; }
+  if (!confirm('Re-upload the game zips to GitHub release v' + version + ' with these cards?\n\n' +
+      'New downloads get them. People who already have ' + version + ' do NOT (the updater only looks at the version number), ' +
+      'and players with different card files can\'t play online together.')) return;
+  const r = await (await fetch('/api/publish', { method: 'POST' })).json();
+  if (r.error) { msg(r.error, true); return; }
+  const poll = async () => {
+    const s = await (await fetch('/api/status')).json();
+    msg(s.log.trim(), /Failed/.test(s.log));
+    if (s.busy) setTimeout(poll, 1000);
+  };
+  poll();
+}
+
+load();
+</script>
+</body>
+</html>

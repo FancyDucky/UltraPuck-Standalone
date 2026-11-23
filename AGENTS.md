@@ -76,12 +76,24 @@ so whoever works next knows what changed.
   `make_curved_rinks.py` (edit the script, regenerate; don't hand-edit). Cards: `StreamingAssets/Cards/ultrapuck.json`
   + art in `Cards/Art/<id>.jpg`. Every eligible card is offered as often as any other (tier is frame colour / bot
   preference only). S Rink nets stand on the ice; U Rink is upright (open at the top).
+  Card editor: `Card Editor.bat` (`Tools/card_editor.py` + `card_editor.html`, a local page on 127.0.0.1:8765).
+  Its stat dropdown reads `CardLibrary.StatNames` from `Core/Cards.cs`, so new stats show up by themselves; new card
+  keys need adding to `ORDER` / the form in the html (unknown keys are kept as they are).
 - Button pictures: Kenney Input Prompts (CC0) in `StreamingAssets/InputPrompts/` (`Xbox`, `PlayStation`, `Switch`,
   `Keyboard`, `Generic`). Hints (`Glyphs`) and utility card footnotes (`Press {utility} to activate`) load PNGs via
   `InputIcons` for the last device used. Empty Kenney placeholder folders are not used — drop packs here.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.56, not released (Claude, 23 Nov 2026): **card editor.** `Card Editor.bat` opens a local page showing every
+  card as a card (tier frame, accent, art, flavor, face markup, footnote); click one to edit it live; new / duplicate /
+  move / delete. Save checks it the way the loader does (ids, tiers, known stats, "x1.5"/"/1.6"/"+1" values), writes
+  `ultrapuck.json` in the same layout under the same header, and copies the cards + art into `Builds/Windows` and
+  `Builds/Linux` (no compile). "Publish to GitHub v<version>" patches the cards into `dist/` zip + tar.gz and
+  `gh release upload --clobber`s them onto the current release (no version bump). Caveats: the updater only compares
+  version numbers, so people already on that version keep their old cards; and card files are in
+  `GameRunner.Fingerprint`, so mixed card files can't play online together. `python Tools/card_editor.py --check`
+  tests that saving the file unchanged gives the same text. No game code changed.
 - 0.1.56 (Claude, 23 Nov 2026): every net's opening 10% wider (`WIDEN = 1.1` on the
   mouth in make_rink.py, make_hockey_rink.py, make_curved_rinks.py; all five maps regenerated, depth unchanged;
   Hockey Rink opening 3.17 -> 3.49 inside the walls). Map files are in the online fingerprint, so no protocol bump.
