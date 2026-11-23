@@ -1498,11 +1498,17 @@ namespace UltraPuck.Game
             body.SetFloat("_Border", 0.075f);
             body.SetColor("_BorderColor", accent);
             // S: rainbow holo + sparkles. A: pearlescent (no holo). Lower tiers: soft glare only.
+            // A card file's "finish" (foil / polychrome) takes the place of the tier's holo / pearl.
+            var metal = def.Finish == "foil";
+            var poly = def.Finish == "polychrome";
+            var plain = !metal && !poly;
             Finish(body, fx,
-                foil: tier == 0 ? 0.55f : 0f,
+                foil: tier == 0 && plain ? 0.55f : 0f,
                 glare: tier == 1 ? 0.55f : 0.45f,
                 sparkle: tier == 0 ? 0.45f : 0f,
-                pearl: tier == 1 ? 1f : 0f);
+                pearl: tier == 1 && plain ? 1f : 0f,
+                metal: metal ? 0.85f : 0f,
+                poly: poly ? 0.8f : 0f);
             v.Finishes.Add(body);
             body.SetFloat("_Rim", fx ? (tier <= 1 ? 0.7f : 0.4f) : 0f);
             body.SetFloat("_SweepStrength", fx ? 1f : 0.5f);
@@ -1514,10 +1520,12 @@ namespace UltraPuck.Game
             art.SetFloat("_Border", 0.018f);
             art.SetColor("_BorderColor", new Color(0f, 0f, 0f, 1f));
             Finish(art, fx,
-                foil: tier == 0 ? 0.75f : 0f,
+                foil: tier == 0 && plain ? 0.75f : 0f,
                 glare: tier == 1 ? 0.5f : tier == 0 ? 0.42f : 0.28f,
                 sparkle: tier == 0 ? 0.9f : 0f,
-                pearl: tier == 1 ? 1f : 0f);
+                pearl: tier == 1 && plain ? 1f : 0f,
+                metal: metal ? 0.6f : 0f,
+                poly: poly ? 0.65f : 0f);
             v.Finishes.Add(art);
             art.SetFloat("_SweepStrength", fx ? 0.9f : 0.4f);
             v.ArtMat = art;
@@ -1578,8 +1586,10 @@ namespace UltraPuck.Game
             return v;
         }
 
-        private static void Finish(Material m, bool fx, float foil, float glare, float sparkle, float pearl)
+        private static void Finish(Material m, bool fx, float foil, float glare, float sparkle, float pearl, float metal = 0f, float poly = 0f)
         {
+            m.SetFloat("_Metal", fx ? metal : 0f);
+            m.SetFloat("_Poly", fx ? poly : 0f);
             m.SetFloat("_Foil", fx ? foil : 0f);
             m.SetFloat("_Pearl", fx ? pearl : 0f);
             m.SetFloat("_Glare", fx ? glare : 0.12f);

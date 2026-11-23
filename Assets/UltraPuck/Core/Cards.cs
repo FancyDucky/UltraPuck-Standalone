@@ -36,6 +36,8 @@ namespace UltraPuck.Core
         /// <summary>The card's accent colour as "#RRGGBB" (for its frame), or null for the default.</summary>
         public string Color;
         public CardTier Tier = CardTier.C;
+        /// <summary>Optional special look, display only: "foil" (metal sheen) or "polychrome" (shifting rainbow), else null.</summary>
+        public string Finish;
         /// <summary>Most copies one player can hold (0 = no limit).</summary>
         public int MaxPerPlayer;
         /// <summary>Most players on one team who may hold it (0 = no limit): "maxTeam".</summary>
@@ -110,6 +112,13 @@ namespace UltraPuck.Core
                 CardTier tier;
                 if (!Enum.TryParse(Json.Str(Json.Get(o, "tier"), "C"), true, out tier)) throw new FormatException(what + ": tier must be S, A, B, C, D or F");
                 c.Tier = tier;
+                var finish = Json.Str(Json.Get(o, "finish"), null);
+                if (!string.IsNullOrEmpty(finish))
+                {
+                    finish = finish.ToLowerInvariant();
+                    if (finish != "foil" && finish != "polychrome") throw new FormatException(what + ": finish must be foil or polychrome");
+                    c.Finish = finish;
+                }
                 if (c.Art == null) c.Art = c.Id;
                 if (Json.Get(o, "face") != null)
                 {

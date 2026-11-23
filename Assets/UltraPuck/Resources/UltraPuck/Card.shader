@@ -1,6 +1,8 @@
 // Ultra Puck card surface: a rounded card shape with optional trading-card finishes that react to the card's tilt.
 //   _Foil     holographic rainbow foil (bands slide across as the card tilts) — S tier
 //   _Pearl    soft mother-of-pearl sheen (pastel white/cream interference) — A tier
+//   _Metal    "foil" finish: brushed metal with a bright sheen that sweeps across as the card tilts (per card)
+//   _Poly     "polychrome" finish: every colour on the card slowly shifts round the rainbow, in drifting waves (per card)
 //   _Glare    a soft light streak and hotspot that move opposite the tilt, like light on a glossy card
 //   _Sparkle  tiny glints that twinkle as the card moves
 //   _Sweep    a bright band of light crossing the card (its position; animated from C#), _SweepStrength how bright
@@ -19,6 +21,8 @@ Shader "UltraPuck/Card"
         _BorderColor ("Border colour", Color) = (1,1,1,1)
         _Foil ("Holo foil", Range(0,1)) = 0
         _Pearl ("Pearlescent", Range(0,1)) = 0
+        _Metal ("Metal foil finish", Range(0,1)) = 0
+        _Poly ("Polychrome finish", Range(0,1)) = 0
         _Glare ("Glare", Range(0,1)) = 0.35
         _Sparkle ("Sparkle", Range(0,1)) = 0
         _Tilt ("Tilt (x, y)", Vector) = (0,0,0,0)
@@ -47,7 +51,7 @@ Shader "UltraPuck/Card"
             sampler2D _MainTex; float4 _MainTex_ST;
             fixed4 _Color, _Color2, _BorderColor;
             float4 _Size, _Tilt;
-            float _Border, _Foil, _Pearl, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
+            float _Border, _Foil, _Pearl, _Metal, _Poly, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
 
@@ -66,6 +70,13 @@ Shader "UltraPuck/Card"
             }
 
             float3 Hue(float h) { return saturate(abs(frac(h + float3(0, 2.0 / 3.0, 1.0 / 3.0)) * 6 - 3) - 1); }
+            // turns a colour round the colour wheel (keeps its brightness)
+            float3 HueTurn(float3 col, float a)
+            {
+                const float3 k = float3(0.57735, 0.57735, 0.57735);
+                float ca = cos(a);
+                return col * ca + cross(k, col) * sin(a) + k * dot(k, col) * (1.0 - ca);
+            }
             float Hash(float2 p) { return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
 
             fixed4 frag(v2f i) : SV_Target
@@ -110,6 +121,32 @@ Shader "UltraPuck/Card"
                     float broad = pow(saturate(1.0 - length((i.uv - 0.5 - t * 0.15) * float2(1.1, 0.85)) * 1.4), 1.6);
                     float mixAmt = saturate(_Pearl * pearlMask * (0.35 + 0.4 * sheen + 0.45 * broad));
                     c.rgb = lerp(c.rgb, c.rgb * 0.72 + pearl * 0.65 + sheen * 0.28 + broad * 0.12, mixAmt);
+                }
+
+                // metal foil: brushed metal (fine horizontal grain) whose bright sheen slides across with the tilt
+                if (_Metal > 0.001)
+                {
+                    float grain = 0.86 + 0.14 * Hash(float2(floor(i.uv.y * 260.0), 3.7)) + 0.05 * sin(i.uv.x * 90.0 + Hash(float2(floor(i.uv.y * 90.0), 1.3)) * 6.0);
+                    float across = dot(i.uv - 0.5, normalize(float2(0.45, 1.0)));
+                    float at = t.y * 0.85 + t.x * 0.45 + sin(_Time.y * 0.35) * 0.06;
+                    float sheen = exp(-pow((across - at) * 4.2, 2.0)) + 0.45 * exp(-pow((across - at + 0.55) * 6.0, 2.0));
+                    float3 steel = lerp(float3(0.62, 0.66, 0.74), float3(1.0, 0.96, 0.86), saturate(sheen));
+                    float3 metal = (0.25 + lum * 0.85) * steel * grain * (0.55 + 0.75 * sheen);
+                    float metalMask = 0.45 + 0.55 * smoothstep(0.02, 0.6, lum);
+                    c.rgb = lerp(c.rgb, c.rgb * 0.5 + metal * 0.75, saturate(_Metal * metalMask * 0.85));
+                    c.rgb += sheen * sheen * _Metal * 0.18 * grain;
+                }
+
+                // polychrome: the whole card's colours turn round the rainbow in slow waves; greys pick up a tint
+                if (_Poly > 0.001)
+                {
+                    float2 q = i.uv - 0.5 - t * 0.25;
+                    float wave = length(q * float2(1.0, 0.8)) * 2.6 + sin(q.x * 5.0 + _Time.y * 0.4) * 0.35 + q.y * 1.2;
+                    float turn = (wave + t.x * 0.9 - t.y * 0.6 + _Time.y * 0.08) * 6.2831853;
+                    float3 turned = HueTurn(c.rgb, turn);
+                    float3 tint = Hue(wave * 0.5 + t.x * 0.3 + _Time.y * 0.013) * (0.18 + lum * 0.9);
+                    float3 poly = lerp(turned, saturate(turned * 0.6 + tint * 0.75), 0.55);
+                    c.rgb = lerp(c.rgb, poly, saturate(_Poly * 0.9));
                 }
 
                 // shine sweep: a bright diagonal band passing across

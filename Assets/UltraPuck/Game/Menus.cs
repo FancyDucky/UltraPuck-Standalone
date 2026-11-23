@@ -255,7 +255,7 @@ namespace UltraPuck.Game
                     _rows.Add(Switch("Show FPS", () => Settings.ShowFps, v => Settings.ShowFps = v, "A small frame-rate number in the top-left corner."));
                     _rows.Add(Slider("UI size", () => (Settings.UiScale - 0.6f) / 1.4f, v => Settings.UiScale = 0.6f + v * 1.4f, v => Mathf.RoundToInt((0.6f + v * 1.4f) * 100f) + "%"));
                     _rows.Add(Switch("Puck trail", () => Settings.PuckTrail, v => Settings.PuckTrail = v));
-                    _rows.Add(Switch("Card effects", () => Settings.CardEffects, v => Settings.CardEffects = v, "Holo foil, glare and sparkle on cards."));
+                    _rows.Add(Switch("Card effects", () => Settings.CardEffects, v => Settings.CardEffects = v, "Holo, foil and polychrome finishes, glare and sparkle on cards."));
                     _rows.Add(Switch("Caustics", () => Settings.Caustics, v => Settings.Caustics = v, "The moving sunlight over the underwater rink."));
                     break;
                 case 1:
