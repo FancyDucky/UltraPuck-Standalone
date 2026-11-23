@@ -2176,6 +2176,13 @@ namespace UltraPuck.Game
             }
             _heardCount = count;
 
+            // a Shockwave being held hums, higher as it grows (the loudest one: yours, if you're holding one)
+            if (!s.Paused && Time.unscaledTime - _heardMovingAt < 0.15f && _sim != null)
+                for (var k = 0; k < n; k++)
+                    if (s.Players[k].ShockHold > Fix.Zero && s.Players[k].InvisibleTime <= Fix.Zero)
+                        Sound.ShockCharge(s.Players[k].ShockHold.ToFloat() / Mathf.Max(0.01f, _sim.T.ShockChargeTime.ToFloat()),
+                            IsLocalPerson(k) ? 1f : 0.6f, Pan(V.Of(s.Players[k].Pos)));
+
             // charging a shot hums while the game is actually running (not paused, not waiting for other players)
             var c = s.Carrier;
             if (c >= 0 && c < n && s.Players[c].Charge > Fix.Zero && !s.Paused && Time.unscaledTime - _heardMovingAt < 0.15f)
@@ -2233,6 +2240,12 @@ namespace UltraPuck.Game
             // Shockwave being held: a faint ring showing how big it'll be
             _players[i].ShockCharge(p.ShockHold > Fix.Zero && !hidden ? _sim.ShockRadius(p.ShockHold).ToFloat() : 0f);
             while (_seenShocks.Count <= i) { _seenShocks.Add(-1); _seenRefreshes.Add(-1); _seenSwaps.Add(-1); }
+            if (_seenShocks[i] >= 0 && p.Shocks > _seenShocks[i])
+            {
+                // the blast: bigger waves boom deeper and louder
+                var big = Mathf.Clamp01(p.ShockRadius.ToFloat() / Mathf.Max(0.01f, _sim.T.ShockMax.ToFloat()));
+                Sound.Play(Sfx.ShockBlast, Mathf.Lerp(0.45f, 0.95f, big), Mathf.Lerp(1.25f, 0.85f, big), Pan(pos));
+            }
             if (_seenShocks[i] >= 0 && p.Shocks > _seenShocks[i] && Settings.HitEffects)
             {
                 // thin expanding ring stuck to the caster, sized to the real hit radius

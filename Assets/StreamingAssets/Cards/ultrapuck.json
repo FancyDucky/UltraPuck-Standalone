@@ -223,7 +223,7 @@
       "id": "ultrapuck.icetrail",
       "name": "Ice Trail",
       "tier": "B",
-      "max": 3,
+      "max": 1,
       "color": "#8FD3F5",
       "flavor": "Friends call me Snow Miser",
       "face": [
@@ -258,7 +258,8 @@
       "flavor": "Woah Nelly!",
       "face": [
         { "label": "Range", "value": "[good]6 units[/]" },
-        { "label": "Charge Time", "value": "[good]6 s[/]" }
+        { "label": "Charge Time", "value": "[good]3.6 s[/]" },
+        { "label": "Knockback", "value": "[good]up to x3.5[/]" }
       ],
       "text": "Hold to grow it, let go to fire. Press {utility} to use.",
       "stats": { "Shockwave": "+1" }

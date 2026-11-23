@@ -2967,6 +2967,9 @@ namespace UltraPuck.Core
             if (copies <= 0) return;
             var radius = ShockRadius(a.ShockHold);
             var push = T.DashKnockback * T.ShockPush * (Fix.One + Fix.Ratio(1, 10) * (copies - 1));
+            // held longer: pushes harder, up to ShockFullPush times as hard at a full charge
+            var charged = T.ShockChargeTime > Fix.Zero ? Fix.Clamp01(a.ShockHold / T.ShockChargeTime) : Fix.One;
+            push *= Fix.One + (T.ShockFullPush - Fix.One) * charged;
             BlastFrom(s, a.Pos, radius, push, i, true, true, true, true);
             a.Shocks++;
             a.ShockAt = a.Pos;

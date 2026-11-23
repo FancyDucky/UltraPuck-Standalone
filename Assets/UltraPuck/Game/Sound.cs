@@ -18,6 +18,8 @@ namespace UltraPuck.Game
         CountBeep, CountGo,
         /// <summary>Slot Machine: a soft clunk as each reel stops; a rising power-up on a win; a flat "womp" on a dud.</summary>
         SlotStop, SlotWin, SlotDud,
+        /// <summary>Shockwave: a loop, a low rising hum while it's held (higher as it grows); then the blast when it goes.</summary>
+        ShockHum, ShockBlast,
     }
 
     /// <summary>
@@ -35,7 +37,7 @@ namespace UltraPuck.Game
         private delegate float Curve(float t);
 
         /// <summary>Played round and round (its end runs into its start without a click).</summary>
-        public static bool Loops(Sfx id) { return id == Sfx.Charge; }
+        public static bool Loops(Sfx id) { return id == Sfx.Charge || id == Sfx.ShockHum; }
 
         public static float[] Render(Sfx id)
         {
@@ -189,6 +191,26 @@ namespace UltraPuck.Game
                         Tone(s, 0.32f, 0.68f, 0.14f, Wave.Sine, t => f, t => Pluck(t, 0.03f, 4.5f) * (0.65f + 0.35f * Mathf.Sin(Tau * 9f * t + phase)));
                     }
                     Noise(s, 0.3f, 0.6f, 0.15f, t => Glide(3500f, 500f, t, 0.2f), 200f, t => Pluck(t, 0.01f, 5.5f), 82u);
+                    break;
+
+                case Sfx.ShockHum:
+                    // a deep, throbbing hum with a rushing wind in it, exactly one second long so it joins up with itself
+                    s = New(1f);
+                    Tone(s, 0f, 1f, 0.55f, Wave.Sine, t => 110f, t => 1f, false);
+                    Tone(s, 0f, 1f, 0.45f, Wave.Sine, t => 113f, t => 1f, false);
+                    Tone(s, 0f, 1f, 0.2f, Wave.Triangle, t => 220f, t => 1f, false);
+                    Tone(s, 0f, 1f, 0.08f, Wave.Sine, t => 331f, t => 1f, false);
+                    Noise(s, 0f, 1f, 0.18f, t => 1400f, 700f, t => 1f, 111u);
+                    break;
+
+                case Sfx.ShockBlast:
+                    // the wave going off: a deep boom with a rush of air outward, ringing a little in the rink
+                    s = New(1f);
+                    Noise(s, 0f, 0.02f, 0.8f, t => 6000f, 1000f, t => 1f, 112u);
+                    Tone(s, 0f, 0.7f, 1f, Wave.Sine, t => Glide(150f, 38f, t, 0.12f), t => Pluck(t, 0.003f, 5.5f));
+                    Tone(s, 0f, 0.25f, 0.35f, Wave.Square, t => Glide(300f, 70f, t, 0.06f), t => Pluck(t, 0.002f, 14f));
+                    Noise(s, 0f, 0.6f, 0.85f, t => Glide(4500f, 300f, t, 0.15f), 0f, t => Pluck(t, 0.004f, 6f), 113u);
+                    Reverb(s, 0.35f);
                     break;
 
                 case Sfx.SlotStop:
@@ -488,7 +510,9 @@ namespace UltraPuck.Game
         private float[] _lastPlayed;
         private int[] _played;
 
-        private AudioSource _charge;
+        private AudioSource _charge, _shock;
+        private float _shockLevel, _shockWant, _shockPitch = 1f, _shockPan;
+        private int _shockFrame = -10;
         private float _chargeLevel, _chargeWant, _chargePitch = 1f, _chargePan;
         private bool _chargeFull;
         private int _chargeFrame = -10;
@@ -548,6 +572,10 @@ namespace UltraPuck.Game
             _charge.clip = _clips[(int)Sfx.Charge];
             _charge.loop = true;
             _charge.volume = 0f;
+            _shock = NewSource(100);
+            _shock.clip = _clips[(int)Sfx.ShockHum];
+            _shock.loop = true;
+            _shock.volume = 0f;
 
             // the music: the theme, and every song in the Match folder (by name, so the list is the same on every PC)
             var theme = Resources.Load<AudioClip>(ThemePath);
@@ -626,6 +654,21 @@ namespace UltraPuck.Game
         /// Someone is charging a shot: call every frame while they are. <paramref name="charge"/> is 0..1 (more with
         /// Over Charge): the hum climbs with it, and wavers once it's full. It stops by itself when the calls stop.
         /// </summary>
+        /// <summary>A Shockwave being held this frame: <paramref name="charge"/> is how far it's grown (0..1).</summary>
+        public static void ShockCharge(float charge, float volume, float pan)
+        {
+            var s = _it;
+            if (s == null || s._shock == null) return;
+            charge = Mathf.Clamp01(charge);
+            if (Time.frameCount != s._shockFrame || volume > s._shockWant)
+            {
+                s._shockFrame = Time.frameCount;
+                s._shockWant = Mathf.Lerp(0.25f, 0.55f, charge) * volume;
+                s._shockPitch = Mathf.Lerp(0.7f, 1.9f, charge);
+                s._shockPan = pan;
+            }
+        }
+
         public static void Charge(float charge, float volume, float pan)
         {
             var s = _it;
@@ -746,6 +789,18 @@ namespace UltraPuck.Game
                 if (!_charge.isPlaying) { _charge.Play(); _played[(int)Sfx.Charge]++; }
             }
             else if (_charge.isPlaying) _charge.Stop();
+
+            // the Shockwave hum: the same, for whoever's holding one
+            var holding = Time.frameCount - _shockFrame <= 1;
+            _shockLevel = Mathf.MoveTowards(_shockLevel, holding ? _shockWant : 0f, dt / 0.05f);
+            if (_shockLevel > 0.001f)
+            {
+                _shock.volume = _shockLevel * Settings.SoundVolume;
+                _shock.pitch = _shockPitch;
+                _shock.panStereo = _shockPan;
+                if (!_shock.isPlaying) { _shock.Play(); _played[(int)Sfx.ShockHum]++; }
+            }
+            else if (_shock.isPlaying) _shock.Stop();
         }
 
         private void OnDestroy() { if (_it == this) _it = null; }

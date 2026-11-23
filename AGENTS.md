@@ -82,6 +82,11 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.52 (Claude, 23 Nov 2026): Shockwave charges faster (40%, then 20% more):
+  `ShockChargeTime` 25/7 s (about 3.6 s to its full 6 units), and its push grows with the charge, up to
+  `ShockFullPush` 3.5x a tap's at full. Shockwave sounds: `Sfx.ShockHum` (a loop like the charge hum,
+  `Sound.ShockCharge`, pitch rising with the hold) and `Sfx.ShockBlast` (deeper and louder for a bigger wave).
+  Ice Trail max 1 a player. **Version 66.**
 - 0.1.51 (Claude, 23 Nov 2026): flavor text Stone Wall "This rocks!", Team Play "I'm open!".
   **Swap trail** setting (Gameplay, under Hit effects; `Settings.SwapTrail`, off by default): when someone on this PC
   swaps body (`Simulation.Steers` changes), `Effects.SwapTrail` flies a glowing head with a dotted trail from the body

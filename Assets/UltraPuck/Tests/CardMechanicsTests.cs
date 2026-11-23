@@ -987,19 +987,19 @@ namespace UltraPuck.Tests
             s.Players[1].Pos = At(1.0, -6);   // foe
             s.Players[2].Pos = At(-1.0, -6);  // teammate
             for (var t = 0; t < 120; t++) { s.Players[1].Pos = At(1.0, -6); s.Players[2].Pos = At(-1.0, -6); s.Players[1].Vel = s.Players[2].Vel = FixVec2.Zero; _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput), default(PlayerInput) }); }
-            _sim.Step(s, new PlayerInput[3]); // let go after a second: 1 unit
+            _sim.Step(s, new PlayerInput[3]); // let go after a second: 1.68 units
             Assert.AreEqual(1, s.Players[0].Shocks, "a shockwave went out");
             Assert.Greater(s.Players[1].Vel.X.ToDouble(), 0.5, "foe shoved away");
             Assert.Less(s.Players[2].Vel.X.ToDouble(), -0.5, "teammate shoved away too");
             Assert.AreEqual(Fix.Zero, s.Players[1].SlowTime, "no slow — push only");
-            Assert.AreEqual(1.0, s.Players[0].ShockRadius.ToDouble(), 0.02, "held a second: 1 unit (it grows from nothing)");
+            Assert.AreEqual(1.68, s.Players[0].ShockRadius.ToDouble(), 0.02, "held a second: 1.68 units (it grows from nothing, full in 3.6 s)");
             _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput), default(PlayerInput) });
             _sim.Step(s, new PlayerInput[3]);
             Assert.Less(s.Players[0].ShockRadius.ToDouble(), 0.05, "a tap: next to nothing");
             Assert.AreEqual(2, s.Players[0].Shocks, "no cooldown: another straight away");
             for (var t = 0; t < 120 * 7; t++) _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput), default(PlayerInput) });
             _sim.Step(s, new PlayerInput[3]);
-            Assert.AreEqual(6.0, s.Players[0].ShockRadius.ToDouble(), 0.01, "held 6 s or more: 6 units, no bigger");
+            Assert.AreEqual(6.0, s.Players[0].ShockRadius.ToDouble(), 0.01, "held 3.6 s or more: 6 units, no bigger");
         }
 
         [Test]
@@ -2213,6 +2213,39 @@ namespace UltraPuck.Tests
             _sim.Step(u, new PlayerInput[2]);
             _sim.Step(u, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
             Assert.Greater(w.SlotSpin.ToDouble(), 1.0, "spinning again straight away");
+        }
+    
+
+        /// <summary>A Shockwave held longer pushes harder: at a full charge, 3.5x what the same wave pushed before.</summary>
+        [Test]
+        public void AFullShockwavePushesHarder()
+        {
+            double Shove(Simulation sim, int ticks)
+            {
+                var s = sim.NewGame(new[] { 0, 1 }, 1u);
+                var c = new int[] { _lib.ById("ultrapuck.shockwave").Index };
+                s.Players[0].Cards = c;
+                _lib.Recompute(s);
+                Play(s);
+                s.PuckPos = At(14, 8);
+                s.Players[0].Pos = At(0, -6);
+                for (var t = 0; t < ticks; t++)
+                {
+                    s.Players[1].Pos = At(1.2, -6); s.Players[1].Vel = FixVec2.Zero;
+                    sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+                }
+                s.Players[1].Pos = At(1.2, -6); s.Players[1].Vel = FixVec2.Zero;
+                sim.Step(s, new PlayerInput[2]);
+                return s.Players[1].Vel.X.ToDouble();
+            }
+            var plain = new Simulation(Rink(), new Tuning { ShockFullPush = Fix.One }, _lib);
+            var before = Shove(plain, 120 * 5);
+            var full = Shove(_sim, 120 * 5);
+            Assert.Greater(before, 0.5);
+            Assert.AreEqual(3.5, full / before, 0.1, "a full charge: 3.5x the push");
+            // half a charge: half way there (2.25x)
+            var half = (int)(_sim.T.ShockChargeTime.ToDouble() * 60);
+            Assert.AreEqual(2.25, Shove(_sim, half) / Shove(plain, half), 0.1, "half a charge: 2.25x");
         }
     }
 }
