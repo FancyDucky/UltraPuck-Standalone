@@ -88,7 +88,7 @@ namespace UltraPuck.Core
         /// <summary>Cannon Ball: the catcher is sent off along the shot at this share of the puck's speed, gliding (little control) this long.</summary>
         public Fix CannonCarry = Fix.Ratio(8, 10), CannonTime = Fix.Half;
         /// <summary>Team Play: after a clean pass the passer and the teammate are this much faster (0.8 = 80%) for this long.</summary>
-        public Fix PassSpeedBoost = Fix.Ratio(8, 10), PassSpeedTime = Fix.FromInt(3);
+        public Fix PassSpeedBoost = Fix.Ratio(5, 10), PassSpeedTime = Fix.FromInt(3);
         /// <summary>
         /// Stone Wall: raised along the puck's path for up to <see cref="StoneLength"/> (or <see cref="StoneLayTime"/>, or
         /// until the puck turns or is caught), kept <see cref="StoneGap"/> behind it, in pieces <see cref="StoneSpacing"/>
@@ -166,6 +166,19 @@ namespace UltraPuck.Core
         public Fix PassTouch = Fix.Ratio(3, 10);
         /// <summary>Pylon goalies: size, distance out from the goal line, and spacing.</summary>
         public Fix PylonRadius = Fix.Half, PylonOut = Fix.Ratio(12, 5), PylonSpread = Fix.Ratio(11, 10);
+        /// <summary>
+        /// Face-offs: each team stands in a tight group just in front of its own net. The back of the group is
+        /// <see cref="FaceOffBack"/> out from the net's mouth (clear of a pylon goalie); the kick-off spot, at the front,
+        /// is <see cref="FaceOffRow"/> × 3 further. Players stand <see cref="FaceOffSpacing"/> apart across a row.
+        /// </summary>
+        public Fix FaceOffBack = Fix.FromInt(3), FaceOffRow = Fix.One, FaceOffSpacing = Fix.Ratio(6, 5);
+        /// <summary>
+        /// Portal Gun (utility): a portal is as long as a net's back wall. The shot flies at <see cref="PortalShotSpeed"/>
+        /// for up to <see cref="PortalShotLife"/> s; <see cref="PortalCooldown"/> between shots. Things come out at least
+        /// <see cref="PortalExitSpeed"/> fast, and can't go back in for <see cref="PortalRepeat"/> s.
+        /// </summary>
+        public Fix PortalLength = Fix.Ratio(3172, 1000), PortalShotSpeed = Fix.FromInt(45), PortalShotLife = Fix.FromInt(3),
+            PortalCooldown = Fix.Ratio(2, 5), PortalExitSpeed = Fix.Two, PortalRepeat = Fix.Ratio(15, 100), PortalShotRadius = Fix.Ratio(1, 5);
         /// <summary>Pylon goalies can be pushed: how heavy they are (a player is 1) and how fast they slow down.</summary>
         public Fix PylonWeight = Fix.Two, PylonDrag = Fix.FromInt(6);
         /// <summary>Swap rock: size, weight (lighter than a player), how fast it slows, throw speed (like a quick shot).</summary>

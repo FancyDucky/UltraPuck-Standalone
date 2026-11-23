@@ -126,7 +126,7 @@ namespace UltraPuck.Game
                 _watched.Clear();
                 _cursors.Clear();
                 _voters.Clear();
-                if (_stage == Stage.Editing) EditInput();
+                if (_stage == Stage.Editing) { if (_browse) BrowseInput(); else EditInput(); }
             }
             else
             {
@@ -169,12 +169,15 @@ namespace UltraPuck.Game
                 _cursors.Clear();
                 _voters.Clear();
                 _editing = false;
+                var browsed = _browse;
+                _browse = false;
                 foreach (var c in _cards) { Destroy(c.Root.gameObject); Destroy(c.Shadow.gameObject); }
                 foreach (var m in _motes) if (m.Go != null) Destroy(m.Go);
                 _motes.Clear();
                 _cards.Clear();
                 _stage = Stage.Idle;
                 _slot = -1;
+                if (browsed && OnBrowseClosed != null) OnBrowseClosed();
             }
         }
 
@@ -618,12 +621,12 @@ namespace UltraPuck.Game
                     else tr += new Vector3(Mathf.Sin(t * 0.9f + c.Phase) * 3f, Mathf.Cos(t * 0.8f + c.Phase) * 4f, 0f);
                     ts = (focused ? (_editing ? 1.3f : 1.12f) : 0.95f) * size;
                     // in the editor, cards you don't have sit back a little
-                    if (_editing && !focused && _counts[_who][k] == 0) ts *= 0.92f;
+                    if (_editing && !_browse && !focused && _counts[_who][k] == 0) ts *= 0.92f;
                 }
                 if (live)
                 {
                     var focusedNow = k == _focus;
-                    c.GlowTarget = (focusedNow ? 0.35f : 0f) + (_editing && _counts[_who][k] > 0 ? 0.45f : 0f);
+                    c.GlowTarget = (focusedNow ? 0.35f : 0f) + (_editing && !_browse && _counts[_who][k] > 0 ? 0.45f : 0f);
                     if (!c.Landed && since > c.Delay + 0.32f) { c.Landed = true; c.SweepAt = t; c.NextSweep = t + 2.6f + c.Phase * 0.3f; }
                     if (c.Landed && t > c.NextSweep && (focusedNow || c.Rare)) { c.SweepAt = t; c.NextSweep = t + (focusedNow ? 2.6f : 4.5f); }
                     // the top-tier cards shed little sparks of light
@@ -758,10 +761,11 @@ namespace UltraPuck.Game
 
         private void OnGUI()
         {
-            if (_stage == Stage.Idle || _state == null || _slot < 0 || _slot >= _state.Players.Length) return;
+            if (_stage == Stage.Idle) return;
+            if (!_browse && (_state == null || _slot < 0 || _slot >= _state.Players.Length)) return; // (the card list needs no game)
             GUI.depth = 5;
             Ui.Begin();
-            if (_editing) { EditGUI(); return; }
+            if (_editing) { if (_browse) BrowseGUI(); else EditGUI(); return; }
             var team = _state.Players[_slot].Team;
             var appear = Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.4f);
             var a = _stage == Stage.Leaving ? 1f - Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.3f) : appear;
@@ -1128,6 +1132,205 @@ namespace UltraPuck.Game
             Glyphs.Hint(new Rect(0f, h - 44f, w, 30f), "{nav} Card      {confirm} Add      {back} Remove      {start} Apply      Hold {back} Cancel", 16, new Color(1f, 1f, 1f, 0.7f));
             var cancel = CancelProgress;
             if (cancel > 0f) Hud.LeavingBar(new Rect(w / 2f - 150f, h - 104f, 300f, 24f), cancel, "Cancel the changes");
+        }
+
+        // ------------------------------------------------------------------ the main menu's card list (pick stats)
+
+        private bool _browse;
+        private CardLibrary _browseLib;
+        /// <summary>Card index at each place in the grid (the browser sorts them).</summary>
+        private readonly List<int> _order = new List<int>();
+        private int _sort;
+        private static readonly string[] SortNames = { "Your favourites", "Everyone's favourites", "A to Z" };
+        private int _personalTotal, _globalTotal;
+        /// <summary>The main menu's card list closed (the menu comes back).</summary>
+        public System.Action OnBrowseClosed;
+
+        /// <summary>Open the card list from the main menu: every card, sorted by how often it's picked online.</summary>
+        public void OpenBrowser(CardLibrary lib)
+        {
+            if (_stage != Stage.Idle || lib == null || lib.Cards.Count == 0) return;
+            _browseLib = lib;
+            _browse = true;
+            _editing = true;
+            _watching = false;
+            _people.Clear();
+            _counts = new[] { new int[lib.Cards.Count] };
+            _who = 0;
+            _slot = -1;
+            _chosen = -1;
+            _focus = 0;
+            _editTop = 0;
+            _cancelHeld = 0f;
+            _personalTotal = 0; _globalTotal = 0;
+            foreach (var c in lib.Cards) { _personalTotal += CardStats.Personal(c.Id); _globalTotal += CardStats.Global(c.Id); }
+            _sort = _personalTotal > 0 ? 0 : _globalTotal > 0 ? 1 : 2;
+            _stage = Stage.Editing;
+            _stageAt = Time.unscaledTime;
+            SortOrder();
+            for (var p = 0; p < _order.Count; p++)
+            {
+                var v = Build(lib.Cards[_order[p]], p);
+                v.Home = EditHome(p);
+                v.Pos = new Vector3(v.Home.x * 0.3f, -7.5f, 1f);
+                v.Rot = new Vector3(0f, 180f, Random.Range(-28f, 28f));
+                v.Scale = 0.75f * EditScale;
+                var row = p / EditCols;
+                v.Delay = row < EditRows ? 0.1f + row * 0.12f + (p % EditCols) * 0.05f : 0.5f;
+                _cards.Add(v);
+            }
+        }
+
+        private void SortOrder()
+        {
+            var cards = _browseLib.Cards;
+            _order.Clear();
+            for (var k = 0; k < cards.Count; k++) _order.Add(k);
+            var mine = new int[cards.Count];
+            var all = new int[cards.Count];
+            for (var k = 0; k < cards.Count; k++) { mine[k] = CardStats.Personal(cards[k].Id); all[k] = CardStats.Global(cards[k].Id); }
+            _order.Sort((a, b) =>
+            {
+                int d = 0;
+                if (_sort == 0) { d = mine[b].CompareTo(mine[a]); if (d == 0) d = all[b].CompareTo(all[a]); }
+                else if (_sort == 1) { d = all[b].CompareTo(all[a]); if (d == 0) d = mine[b].CompareTo(mine[a]); }
+                if (d == 0) d = string.Compare(cards[a].Name, cards[b].Name, System.StringComparison.OrdinalIgnoreCase);
+                return d != 0 ? d : a.CompareTo(b);
+            });
+        }
+
+        /// <summary>A new sort: the cards fly to their new places, and the focus stays on the same card.</summary>
+        private void Resort(int d)
+        {
+            var focusCard = _focus >= 0 && _focus < _order.Count ? _order[_focus] : -1;
+            var byCard = new Dictionary<int, CardView>();
+            for (var p = 0; p < _order.Count; p++) byCard[_order[p]] = _cards[p];
+            _sort = (_sort + d + SortNames.Length) % SortNames.Length;
+            SortOrder();
+            for (var p = 0; p < _order.Count; p++) _cards[p] = byCard[_order[p]];
+            _focus = Mathf.Max(0, _order.IndexOf(focusCard));
+            _editTop = 0;
+            EditHomes();
+            foreach (var c in _cards) c.ScaleVel += 1.2f;
+            Sound.Move();
+        }
+
+        private void BrowseInput()
+        {
+            var m = Local.MenuJoined();
+            var ready = Time.unscaledTime - _stageAt > 0.4f;
+            if (ready && (m.Back || Local.StartPressed())) { BrowseClose(); return; }
+            if (ready && (m.Tab != 0 || m.Confirm)) Resort(m.Tab < 0 ? -1 : 1);
+            if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, EditCount - 1));
+            if (m.Y != 0)
+            {
+                var to = _focus - m.Y * EditCols;
+                if (to >= 0 && to < EditCount) SetFocus(to);
+                else if (m.Y < 0 && _focus / EditCols < EditRowCount - 1) SetFocus(EditCount - 1);
+            }
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse != null)
+            {
+                var mp = mouse.position.ReadValue();
+                if (mouse.delta.ReadValue().sqrMagnitude > 0.5f && !ScreenRect(_cards[_focus]).Contains(mp) && Time.unscaledTime - _lastHover > 0.12f)
+                    for (var k = 0; k < _cards.Count; k++)
+                    {
+                        var row = k / EditCols - _editTop;
+                        if (row < 0 || row >= EditRows || !ScreenRect(_cards[k]).Contains(mp)) continue;
+                        SetFocus(k); _lastHover = Time.unscaledTime; break;
+                    }
+                if (ready && mouse.rightButton.wasPressedThisFrame) { BrowseClose(); return; }
+                if (ready && mouse.leftButton.wasPressedThisFrame && new Rect(Ui.W / 2f - 220f, 58f, 440f, 34f).Contains(GuiMouse(mp))) Resort(1);
+                var wheel = mouse.scroll.ReadValue().y;
+                if (wheel != 0f)
+                {
+                    var r = Mathf.Clamp(_focus / EditCols + (wheel < 0f ? 1 : -1), 0, EditRowCount - 1);
+                    SetFocus(Mathf.Min(EditCount - 1, r * EditCols + _focus % EditCols));
+                }
+            }
+        }
+
+        /// <summary>A mouse position (pixels, bottom-left origin) in the GUI's own units (top-left origin).</summary>
+        private static Vector2 GuiMouse(Vector2 mp)
+        {
+            var k = Screen.height / Ui.H;
+            return new Vector2(mp.x / k, (Screen.height - mp.y) / k);
+        }
+
+        /// <summary>Close the main menu's card list (if it's open).</summary>
+        public void CloseBrowser() { if (_browse && _stage == Stage.Editing) BrowseClose(); }
+
+        private void BrowseClose()
+        {
+            foreach (var s in Local.Slots) s.Latched = 0;
+            Sound.Back();
+            _chosen = -1;
+            _stage = Stage.Leaving;
+            _stageAt = Time.unscaledTime;
+            for (var k = 0; k < _cards.Count; k++)
+            {
+                var row = k / EditCols - _editTop;
+                _cards[k].Delay = row >= 0 && row < EditRows ? 0.03f * (row * EditCols + k % EditCols) : 0f;
+            }
+        }
+
+        private void BrowseGUI()
+        {
+            var leaving = _stage == Stage.Leaving;
+            var since = Time.unscaledTime - _stageAt;
+            var a = leaving ? 1f - Ui.EaseOut(since / 0.3f) : Ui.EaseOut(since / 0.4f);
+            if (a <= 0.01f) return;
+            float w = Ui.W, h = Ui.H;
+            var y = 18f + (1f - a) * -20f;
+            Ui.Label(new Rect(0f, y, w, 46f), "Cards", Ui.Font(36, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+            var sortRect = new Rect(w / 2f - 220f, y + 40f, 440f, 34f);
+            Ui.Box(sortRect, new Color(1f, 1f, 1f, 0.1f * a), 17f);
+            Ui.Label(sortRect, "Sorted by:  " + SortNames[_sort], Ui.Font(18, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.9f * a));
+            var from = CardStats.PeopleCount;
+            var sub = "Picks in online matches  ·  you: " + _personalTotal + "  ·  everyone: " + _globalTotal
+                      + (from > 0 ? " (from " + (from == 1 ? "1 player" : from + " players") + " met so far)" : "");
+            Ui.Label(new Rect(0f, y + 78f, w, 22f), sub, Ui.Font(14, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a));
+            if (leaving) return;
+
+            // each card's numbers, under it: place, your picks, everyone's (and their share)
+            var k2 = Screen.height / Ui.H;
+            for (var p = 0; p < _cards.Count; p++)
+            {
+                var row = p / EditCols - _editTop;
+                if (row < 0 || row >= EditRows) continue;
+                if (p != _focus && ScreenRect(_cards[_focus]).Overlaps(ScreenRect(_cards[p]))) continue;
+                var r = ScreenRect(_cards[p]);
+                var id = _browseLib.Cards[_order[p]].Id;
+                int mine = CardStats.Personal(id), all = CardStats.Global(id);
+                var share = _globalTotal > 0 ? Mathf.RoundToInt(100f * all / _globalTotal) + "%" : "–";
+                var place = new Rect(r.xMin / k2 - 12f, (Screen.height - r.yMax) / k2 - 12f, 40f, 30f);
+                Ui.Box(place, new Color(0.08f, 0.08f, 0.09f, 0.85f), 15f);
+                Ui.Label(place, (p + 1).ToString(), Ui.Font(16, true, TextAnchor.MiddleCenter), Color.white, false);
+                if (p == _focus) continue; // (the focused one is described at the bottom)
+                var pw = Mathf.Min(r.width / k2 - 6f, 170f);
+                var line = new Rect(r.center.x / k2 - pw / 2f, (Screen.height - r.yMin) / k2 - 30f, pw, 22f);
+                Ui.Box(line, new Color(0.06f, 0.06f, 0.07f, 0.88f), 11f);
+                Ui.Label(line, "You " + mine + "  ·  All " + all + " (" + share + ")", Ui.Font(12, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.9f), false);
+            }
+            // the focused card, in words, on a dark strip along the bottom (with the controls)
+            Ui.Box(new Rect(0f, h - 84f, w, 84f), new Color(0.03f, 0.03f, 0.04f, 0.9f), 0f);
+            if (_focus >= 0 && _focus < _order.Count)
+            {
+                var def = _browseLib.Cards[_order[_focus]];
+                int mine = CardStats.Personal(def.Id), all = CardStats.Global(def.Id);
+                var share = _globalTotal > 0 ? "  (" + Mathf.RoundToInt(100f * all / _globalTotal) + "% of all picks)" : "";
+                Ui.Label(new Rect(0f, h - 74f, w, 26f), "#" + (_focus + 1) + "  " + def.Name + ":  you picked it " + mine + (mine == 1 ? " time" : " times")
+                         + "  ·  everyone " + all + share, Ui.Font(17, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.85f));
+            }
+            if (EditRowCount > EditRows)
+            {
+                var track = new Rect(w - 30f, 130f, 6f, h - 200f);
+                Ui.Box(track, new Color(1f, 1f, 1f, 0.12f), 3f);
+                var thumbH = track.height * EditRows / EditRowCount;
+                var at = (float)_editTop / Mathf.Max(1, EditMaxTop);
+                Ui.Box(new Rect(track.x, track.y + (track.height - thumbH) * at, track.width, thumbH), new Color(1f, 1f, 1f, 0.6f), 3f);
+            }
+            Glyphs.Hint(new Rect(0f, h - 44f, w, 30f), "{nav} Card      {confirm} Sort      {back} Back", 16, new Color(1f, 1f, 1f, 0.7f));
         }
 
         // ------------------------------------------------------------------ building a card

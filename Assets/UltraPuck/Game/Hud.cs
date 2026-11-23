@@ -287,7 +287,7 @@ namespace UltraPuck.Game
                 var name = SeatName != null ? SeatName(i) : "P" + (i + 1);
                 Ui.Label(new Rect(r.x + 18f, r.y, 220f, r.height), name, Ui.Font(18, true), Color.white);
                 if (i == mvp) Badge(new Rect(r.x + 240f, r.y + 4f, 64f, r.height - 8f), "MVP", new Color(0.95f, 0.75f, 0.2f), new Color(0.15f, 0.1f, 0f));
-                else if (i == worst) Badge(new Rect(r.x + 240f, r.y + 4f, 130f, r.height - 8f), "Useless player", new Color(0.45f, 0.47f, 0.52f), Color.white);
+                else if (i == worst) Badge(new Rect(r.x + 240f, r.y + 4f, 140f, r.height - 8f), "Tried their best", new Color(0.45f, 0.47f, 0.52f), Color.white);
                 int[] v = { p.Goals, p.Assists, p.Saves, p.Bumps };
                 for (var c = 0; c < v.Length; c++) Ui.Label(new Rect(cols + c * colW, r.y, colW, r.height), v[c].ToString(), cell, v[c] > 0 ? Color.white : new Color(1f, 1f, 1f, 0.35f));
                 ty += rowH;

@@ -99,6 +99,7 @@ namespace UltraPuck.Tests
             {
                 var s = sim.NewGame(new[] { 0, 1 });
                 PlayNow(s);
+                OutOfTheWay(s);
                 var dir = goalTeam == 1 ? 1 : -1; // team 1 defends the right goal
                 s.PuckPos = new FixVec2(Fix.FromInt(13 * dir), Fix.Zero);
                 s.PuckVel = new FixVec2(Fix.FromInt(20 * dir), Fix.Zero);
@@ -114,6 +115,13 @@ namespace UltraPuck.Tests
             }
         }
 
+        /// <summary>Players stand in front of their nets at a face-off: move them off the puck's way to the net.</summary>
+        private static void OutOfTheWay(GameState s)
+        {
+            for (var i = 0; i < s.Players.Length; i++)
+                s.Players[i].Pos = new FixVec2(Fix.FromInt(-6 + 3 * i), Fix.FromInt(i % 2 == 0 ? 8 : -8));
+        }
+
         [Test]
         public void FirstToFiveWins()
         {
@@ -121,6 +129,7 @@ namespace UltraPuck.Tests
             var s = sim.NewGame(new[] { 0, 1 });
             s.Score[0] = 4;
             PlayNow(s);
+            OutOfTheWay(s);
             s.PuckPos = new FixVec2(Fix.FromInt(13), Fix.Zero);
             s.PuckVel = new FixVec2(Fix.FromInt(20), Fix.Zero);
             for (var t = 0; t < 900 && s.Phase != Phase.GameOver; t++) sim.Step(s, null);
@@ -1116,6 +1125,40 @@ namespace UltraPuck.Tests
             Assert.IsFalse(map.Inside(new FixVec2(Fix.FromInt(30), Fix.Zero)));
             Assert.IsFalse(map.Inside(new FixVec2(Fix.Zero, Fix.FromInt(14))));
             Assert.IsFalse(map.Inside(new FixVec2(Fix.FromInt(23), Fix.FromInt(13))), "past a rounded corner");
+        }
+    
+
+        /// <summary>
+        /// Face-offs on every rink: each team's group fits on the ice (none of it falls back to the map's old spawns),
+        /// tight together, and nearer its own net than the other.
+        /// </summary>
+        [TestCase("test-rink.json")]
+        [TestCase("hockey-rink.json")]
+        [TestCase("big-rink.json")]
+        [TestCase("s-rink.json")]
+        [TestCase("u-rink.json")]
+        public void FaceOffGroupsFitInFrontOfTheNets(string file)
+        {
+            var map = LoadMap(file);
+            var sim = new Simulation(map);
+            for (var team = 0; team < 2; team++)
+            {
+                var own = Bot.GoalCentre(map, team);
+                var other = Bot.GoalCentre(map, 1 - team);
+                for (var slot = 0; slot < 8; slot++)
+                {
+                    var sp = sim.FaceOffSpot(team, slot);
+                    Assert.IsTrue(map.Inside(sp.Pos), file + " team " + team + " slot " + slot + " on the ice");
+                    Assert.AreNotEqual(map.SpawnFor(team, slot).Pos, sp.Pos, file + " team " + team + " slot " + slot + " fits (not the old spawn)");
+                    Assert.Less((sp.Pos - own).Length.ToDouble(), (sp.Pos - other).Length.ToDouble(), "nearer its own net");
+                    Assert.Less((sp.Pos - own).Length.ToDouble(), 9.0, file + " just in front of the net");
+                    var nearest = 99.0;
+                    for (var o = 0; o < 8; o++)
+                        if (o != slot) nearest = System.Math.Min(nearest, (sim.FaceOffSpot(team, o).Pos - sp.Pos).Length.ToDouble());
+                    Assert.Greater(nearest, 1.0, "players don't overlap");
+                    Assert.Less(nearest, 1.3, "tight together");
+                }
+            }
         }
     }
 }

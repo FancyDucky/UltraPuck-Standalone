@@ -50,6 +50,7 @@ namespace UltraPuck.Game
         private readonly List<int> _seenSwaps = new List<int>();
         private IceViews _ice;
         private StoneViews _stones;
+        private PortalViews _portals;
         // what each player's effect counters were last frame, to spot new shockwaves and Team Play refreshes
         private readonly List<int> _seenShocks = new List<int>(), _seenRefreshes = new List<int>();
         private readonly float[] _cooldowns = new float[3];
@@ -156,6 +157,7 @@ namespace UltraPuck.Game
             _rocks = new RockViews(_entities);
             _ice = new IceViews(_entities);
             _stones = new StoneViews(_entities, _effects);
+            _portals = new PortalViews(_entities, _effects);
             SetUpCamera();
             _mainMenu.Show(MainMenu.Page.Main);
             if (ShotDir != null) StartCoroutine(Shots());
@@ -670,6 +672,72 @@ namespace UltraPuck.Game
                 GoMainMenu();
             }
 
+            if (want("browse"))
+            {
+                // the main menu's card list, with some made-up pick counts from two other players (not saved)
+                var fake = new CardStatsTable();
+                var names = new[] { "Alex", "Sam" };
+                for (var who = 0; who < names.Length; who++)
+                {
+                    var person = new CardStatsTable.Person { Name = names[who] };
+                    for (var c = 0; c < _cards.Cards.Count; c++) if ((c + who) % 3 != 0) person.Picks[_cards.Cards[c].Id] = 1 + (c * 7 + who * 3) % 9;
+                    fake.People["test:" + who] = person;
+                }
+                CardStats.In(fake.ToBytes());
+                OpenCards();
+                yield return new WaitForSecondsRealtime(2f);
+                yield return Shot("card-stats");
+                _cardScreen.CloseBrowser();
+                yield return new WaitForSecondsRealtime(1.5f);
+            }
+
+            if (want("portal"))
+            {
+                // the face-off groups in front of the nets; then two portals (one on a curved corner, one on the back of
+                // a net) and the puck going through
+                _shotWholeRink = true;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("faceoff");
+                yield return new WaitForSecondsRealtime(3f);
+                _shotNoInput = true;
+                System.Func<double, double, FixVec2> at = (x, y) => new FixVec2(Fix.FromDecimal((decimal)x), Fix.FromDecimal((decimal)y));
+                var mn = _sim.Map.BoundsMin; var mx = _sim.Map.BoundsMax;
+                var corner = new FixVec2(mn.X + Fix.FromInt(3), mx.Y - Fix.FromInt(3));
+                var from0 = at(-14, 2);
+                var behind = Fix.Zero;
+                foreach (var g in _sim.Map.Goals) if (g.Team == 1) behind = g.Max.X + Fix.FromInt(3);
+                _state.PortalShots = new[]
+                {
+                    new Shot { Pos = from0, Vel = (corner - from0).Normalized * _sim.T.PortalShotSpeed, Owner = 0, Life = Fix.FromInt(3), Kind = 0 },
+                    new Shot { Pos = new FixVec2(behind, Fix.Zero), Vel = new FixVec2(-_sim.T.PortalShotSpeed, Fix.Zero), Owner = 0, Life = Fix.FromInt(3), Kind = 1 },
+                };
+                yield return new WaitForSecondsRealtime(0.8f);
+                Debug.Log("Ultra Puck portal shot: portals=" + _state.Portals.Length);
+                if (_state.Portals.Length > 0)
+                {
+                    var po = _state.Portals[0];
+                    _state.Carrier = -1;
+                    _state.PuckPos = po.Pos + po.Normal * Fix.FromInt(3);
+                    _state.PuckVel = -po.Normal * Fix.FromInt(14);
+                }
+                yield return new WaitForSecondsRealtime(0.12f);
+                yield return Shot("portal-1");
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield return Shot("portal-2");
+                _shotNoInput = false;
+                _shotWholeRink = false;
+                GoMainMenu();
+            }
+
             if (want("carry"))
             {
                 // Friendly Fire: orange carrying a teammate who has the puck, then the throw; blue's pylon goalie with
@@ -945,6 +1013,9 @@ namespace UltraPuck.Game
                 _ripples.RemoveAt(k);
             }
             _effects.Update();
+            if (ShotDir != null) CardStats.NoSave = true; // screenshot runs leave the player's card stats alone
+            NotePicks();
+            CardStats.Tick();
             _cardScreen.Sim = _sim;
             _cardScreen.Frame(playing ? _state : null);
             // the theme plays through the menus and lobbies; a match plays its own songs, one after another (see Sound)
@@ -997,6 +1068,7 @@ namespace UltraPuck.Game
 
         private void OnApplicationQuit()
         {
+            CardStats.Save();
             if (_session != null) _session.Dispose();
             SteamNet.Shutdown();
         }
@@ -1052,6 +1124,40 @@ namespace UltraPuck.Game
         }
 
         public void OpenSettings() { _menus.OpenSettings(true); }
+
+        /// <summary>The main menu's card list (with how often each is picked online).</summary>
+        public void OpenCards()
+        {
+            if (_cards == null || _cards.Cards.Count == 0 || _cardScreen.Showing) { Debug.Log("Ultra Puck: card list not opened (cards " + (_cards != null) + ", card screen busy " + _cardScreen.Showing + ")"); return; }
+            _mainMenu.Show(MainMenu.Page.None);
+            _cardScreen.OnBrowseClosed = () => _mainMenu.Show(MainMenu.Page.Main);
+            _cardScreen.OpenBrowser(_cards);
+        }
+
+        private float _picksAt;
+
+        /// <summary>Online: the cards this PC's people hold, noted for the card stats (once a second, in play).</summary>
+        private void NotePicks()
+        {
+            if (_mode != Mode.Online || _session == null || _state == null || _sim == null || _sim.Cards == null || _state.Phase != Phase.Play) return;
+            if (Time.unscaledTime < _picksAt) return;
+            _picksAt = Time.unscaledTime + 1f;
+            var held = new Dictionary<string, int>();
+            for (var i = 0; i < _state.Players.Length && i < _session.Seats.Count; i++)
+            {
+                var seat = _session.Seats[i];
+                if (seat.Bot || seat.Peer != _session.MyPeer || _state.Players[i].Bot) continue;
+                foreach (var c in _state.Players[i].Cards)
+                {
+                    if (c < 0 || c >= _sim.Cards.Cards.Count) continue;
+                    var id = _sim.Cards.Cards[c].Id;
+                    int n;
+                    held.TryGetValue(id, out n);
+                    held[id] = n + 1;
+                }
+            }
+            if (held.Count > 0) CardStats.SeeMatch(_session.MatchId + ":" + _session.Seed, held);
+        }
 
         // ------------------------------------------------------------------ online
 
@@ -1214,6 +1320,8 @@ namespace UltraPuck.Game
             _mode = Mode.Online;
             // the host's people work on the host's bots; on someone else's game there are none to change
             _local.Bots = session.IsHost ? new SessionBots(session) : null;
+            session.CardStatsOut = CardStats.Out;
+            session.CardStatsIn = CardStats.In;
             _local.OnlineSides = () => session.TeamColours;
             _local.OnlineRecolour = session.RequestRecolour;
             _seenRecolours = 0;
@@ -2034,7 +2142,9 @@ namespace UltraPuck.Game
             var hidden = invisible && opponentHere && !teammateHere && !_hud.Replay;
             var faint = invisible && !hidden;
             var gunFull = _sim.T.GunCooldown.ToFloat() + (p.Bot || Simulation.DriverOf(_state, i) < 0 ? _sim.T.GunBotExtra.ToFloat() : 0f);
-            _cooldowns[0] = p.Stats.PuckGun > 0 ? 1f - p.GunCooldown.ToFloat() / Mathf.Max(0.01f, gunFull) : -1f;
+            _cooldowns[0] = p.Stats.PuckGun > 0 ? 1f - p.GunCooldown.ToFloat() / Mathf.Max(0.01f, gunFull)
+                : p.Stats.PortalGun > 0 ? 1f - p.PortalCooldown.ToFloat() / Mathf.Max(0.01f, _sim.T.PortalCooldown.ToFloat())
+                : -1f;
             _cooldowns[1] = p.Stats.Invisibility > 0 ? (invisible ? 0f : 1f - p.InvisCooldown.ToFloat() / _sim.T.InvisCooldown.ToFloat()) : -1f;
             _cooldowns[2] = p.Stats.Shockwave > 0 ? (p.ShockHold > Fix.Zero ? p.ShockHold.ToFloat() / Mathf.Max(0.01f, _sim.T.ShockChargeTime.ToFloat()) : 1f)
                 : p.Stats.Swap > 0 ? 1f // Swap has no cooldown — always ready
@@ -2180,6 +2290,8 @@ namespace UltraPuck.Game
             _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team), IsLocalPerson, _sim.T.RockFlash.ToFloat());
             _ice.Show(b, _sim.T.IceRadius.ToFloat());
             _stones.Show(b, _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.StoneLife.ToFloat());
+            _portals.Show(b, _sim.Map, _sim.T.PortalLength.ToFloat(), _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.PortalShotRadius.ToFloat(),
+                i => Palette.Team(b.Players[i].Team));
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);
             // a goal: the puck blows up in the net, and stays gone until the next face-off

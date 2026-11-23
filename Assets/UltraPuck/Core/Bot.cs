@@ -211,6 +211,13 @@ namespace UltraPuck.Core
                         b |= PlayerInput.Utility;
                 }
             }
+            // Portal Gun: now and then (about every 3 s), a portal wherever we're facing, until both are up
+            if (me.Stats.PortalGun > 0 && me.PortalCooldown <= Fix.Zero && s.Carrier != i && (s.Tick + i * 37) % 360 == 0)
+            {
+                var mine = 0;
+                foreach (var po in s.Portals) if (po.Owner == i) mine++;
+                if (mine < 2) b |= PlayerInput.Utility;
+            }
             if (me.Stats.PuckGun > 0 && me.GunCooldown <= Fix.Zero && s.Carrier >= 0 && s.Players[s.Carrier].Team != me.Team)
             {
                 var to = s.Players[s.Carrier].Pos - pos;

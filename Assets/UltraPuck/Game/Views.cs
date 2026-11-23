@@ -1412,4 +1412,204 @@ namespace UltraPuck.Game
             _lines[i].gameObject.SetActive(true);
         }
     }
+
+    /// <summary>
+    /// Portal Gun: each portal as a glowing band on the face of its wall (bending with a curved wall), in blue or
+    /// orange, with a soft glow fading out over the ice, a gentle pulse and motes drifting off it. Anything going
+    /// through throws out sparks in that portal's colour at both ends. Portal shots are glowing orbs with a short tail.
+    /// </summary>
+    internal sealed class PortalViews
+    {
+        public static readonly Color Blue = new Color(0.25f, 0.6f, 1f), Orange = new Color(1f, 0.55f, 0.12f);
+        public static Color Of(int colour) { return colour == 1 ? Orange : Blue; }
+
+        private sealed class One
+        {
+            public GameObject Go;
+            public Mesh Glow, Band;
+            public Vector2[] Face, Out;
+            public Vector2 Normal, Centre;
+            public Color Colour;
+            public int Uses;
+            public float Phase, MoteClock;
+        }
+        private sealed class Mote { public GameObject Go; public Mesh Mesh; public Vector2 Pos, Vel; public float Age, Life, Size; public Color Colour; }
+
+        private readonly Transform _parent;
+        private readonly Effects _effects;
+        private readonly Dictionary<int, One> _drawn = new Dictionary<int, One>();
+        private readonly List<int> _gone = new List<int>();
+        private readonly HashSet<int> _seen = new HashSet<int>();
+        private readonly List<Mote> _motes = new List<Mote>(), _spareMotes = new List<Mote>();
+        private readonly List<GameObject> _shots = new List<GameObject>();
+        private readonly List<int> _shotKinds = new List<int>();
+        private Color[] _glowCols = new Color[0];
+
+        public PortalViews(Transform parent, Effects effects) { _parent = parent; _effects = effects; }
+
+        public void Show(GameState s, MapDef map, float length, float wallHalf, float shotRadius, System.Func<int, Color> teamOf)
+        {
+            _seen.Clear();
+            foreach (var po in s.Portals)
+            {
+                _seen.Add(po.Id);
+                One one;
+                if (!_drawn.TryGetValue(po.Id, out one))
+                {
+                    one = Make(po, map, length, wallHalf, teamOf != null && po.Owner >= 0 && po.Owner < s.Players.Length ? teamOf(po.Owner) : Color.white);
+                    _drawn[po.Id] = one;
+                    // a new portal: a pop of its colour
+                    _effects.Ring(one.Centre + one.Normal * 0.4f, 0.5f, one.Colour, 1.6f, 0.3f);
+                }
+                // something went through: sparks out of it, in its colour
+                if (po.Uses > one.Uses)
+                {
+                    var at = one.Centre + one.Normal * 0.6f;
+                    _effects.Sparks(at, 0.55f, one.Colour, 16);
+                    _effects.Ring(at, 0.4f, one.Colour, 1.4f, 0.25f);
+                }
+                one.Uses = po.Uses;
+                Pulse(one);
+            }
+            _gone.Clear();
+            foreach (var id in _drawn.Keys) if (!_seen.Contains(id)) _gone.Add(id);
+            foreach (var id in _gone)
+            {
+                var one = _drawn[id];
+                Object.Destroy(one.Glow); Object.Destroy(one.Band);
+                Object.Destroy(one.Go);
+                _drawn.Remove(id);
+            }
+            StepMotes();
+            ShowShots(s, shotRadius);
+        }
+
+        private One Make(Portal po, MapDef map, float length, float wallHalf, Color team)
+        {
+            const int n = 18;
+            var one = new One { Colour = Of(po.Colour), Uses = po.Uses, Phase = Random.value * 6f };
+            var normal = V.Of(po.Normal);
+            var half = length * 0.5f;
+            var face = new Vector2[n + 1];
+            var outer = new Vector2[n + 1];
+            var inner = new Vector2[n + 1];
+            for (var k = 0; k <= n; k++)
+            {
+                var u = po.At.ToFloat() - half + length * k / n;
+                FixVec2 dir;
+                var p = V.Of(map.PointAlong(po.Wall, Fix.FromDecimal((decimal)u), out dir));
+                var nn = new Vector2(-dir.Y.ToFloat(), dir.X.ToFloat());
+                if (Vector2.Dot(nn, normal) < 0f) nn = -nn;
+                face[k] = p + nn * (wallHalf - 0.06f);
+                inner[k] = p + nn * (wallHalf - 0.2f);
+                outer[k] = p + nn * (wallHalf + 1.25f);
+            }
+            one.Face = face; one.Out = outer;
+            one.Normal = normal;
+            one.Centre = V.Of(po.Pos) + normal * wallHalf;
+            one.Go = new GameObject("Portal" + po.Id);
+            one.Go.transform.SetParent(_parent, false);
+            var glow = one.Colour; glow.a = 0.5f;
+            one.Glow = Draw.Strip(face, outer, glow, Palette.Clear(one.Colour));
+            Draw.Make("Glow", one.Go.transform, one.Glow, 5);
+            // the band: a solid stripe of colour over the wall's face, with a white-hot line along its middle
+            var band = Color.Lerp(one.Colour, Color.white, 0.15f);
+            one.Band = Draw.Strip(inner, face, band, band);
+            Draw.Make("Band", one.Go.transform, one.Band, 6);
+            var core = new List<Vector2>();
+            for (var k = 0; k <= n; k++) core.Add(Vector2.Lerp(inner[k], face[k], 0.5f));
+            Draw.Make("Core", one.Go.transform, Draw.Line(core, false, 0.07f, Color.Lerp(one.Colour, Color.white, 0.75f)), 7);
+            // whose it is: a small dot in their team's colour in the middle
+            Draw.Make("Owner", one.Go.transform, Draw.Disc(0.11f, team, 20), 8).transform.localPosition = one.Centre + normal * 0.22f;
+            Pulse(one);
+            return one;
+        }
+
+        // the glow breathes, a little brighter now and then; motes drift off it all the time
+        private void Pulse(One one)
+        {
+            var t = Time.time * 3.2f + one.Phase;
+            var a = 0.42f + 0.14f * Mathf.Sin(t) + 0.06f * Mathf.Sin(t * 2.7f);
+            var n = one.Glow.vertexCount;
+            if (_glowCols.Length != n) _glowCols = new Color[n];
+            var c = one.Colour; c.a = a;
+            var clear = Palette.Clear(one.Colour);
+            for (var k = 0; k < n; k++) _glowCols[k] = (k & 1) == 0 ? c : clear;
+            one.Glow.colors = _glowCols;
+            one.MoteClock -= Time.deltaTime;
+            if (one.MoteClock <= 0f)
+            {
+                one.MoteClock = Random.Range(0.06f, 0.14f);
+                var k = Random.Range(0, one.Face.Length);
+                AddMote(one.Face[k] + one.Normal * 0.05f, one.Normal * Random.Range(0.4f, 1.1f) + new Vector2(-one.Normal.y, one.Normal.x) * Random.Range(-0.35f, 0.35f), one.Colour);
+            }
+        }
+
+        private void AddMote(Vector2 at, Vector2 vel, Color colour)
+        {
+            Mote m;
+            if (_spareMotes.Count > 0) { m = _spareMotes[_spareMotes.Count - 1]; _spareMotes.RemoveAt(_spareMotes.Count - 1); }
+            else
+            {
+                m = new Mote { Mesh = Draw.Disc(1f, Color.white, 10) };
+                m.Go = Draw.Make("Mote", _parent, m.Mesh, 8).gameObject;
+            }
+            m.Pos = at; m.Vel = vel; m.Age = 0f; m.Life = Random.Range(0.5f, 0.9f); m.Size = Random.Range(0.04f, 0.08f);
+            m.Colour = Random.value < 0.3f ? Color.Lerp(colour, Color.white, 0.6f) : colour;
+            m.Go.SetActive(true);
+            _motes.Add(m);
+        }
+
+        private void StepMotes()
+        {
+            var dt = Time.deltaTime;
+            for (var k = _motes.Count - 1; k >= 0; k--)
+            {
+                var m = _motes[k];
+                m.Age += dt;
+                if (m.Age >= m.Life) { m.Go.SetActive(false); _motes.RemoveAt(k); _spareMotes.Add(m); continue; }
+                m.Pos += m.Vel * dt;
+                m.Vel *= 1f - Mathf.Min(1f, 1.5f * dt);
+                var f = m.Age / m.Life;
+                var c = m.Colour; c.a = (1f - f) * Mathf.Min(1f, f * 6f);
+                Draw.Recolor(m.Mesh, c);
+                m.Go.transform.localPosition = new Vector3(m.Pos.x, m.Pos.y, 0f);
+                var size = m.Size * (1f - 0.5f * f);
+                m.Go.transform.localScale = new Vector3(size, size, 1f);
+            }
+        }
+
+        // portal shots: an orb in the portal's colour with a short tail behind it
+        private void ShowShots(GameState s, float radius)
+        {
+            for (var k = 0; k < s.PortalShots.Length; k++)
+            {
+                var sh = s.PortalShots[k];
+                if (k >= _shots.Count) { _shots.Add(null); _shotKinds.Add(-1); }
+                if (_shots[k] == null || _shotKinds[k] != sh.Kind)
+                {
+                    if (_shots[k] != null) Object.Destroy(_shots[k]);
+                    var go = new GameObject("PortalShot");
+                    go.transform.SetParent(_parent, false);
+                    var c = Of(sh.Kind);
+                    var glow = c; glow.a = 0.55f;
+                    var tail = c; tail.a = 0.5f;
+                    Draw.Make("Tail", go.transform, Draw.Strip(new[] { new Vector2(-1.4f, 0f), new Vector2(0f, 0f) },
+                        new[] { new Vector2(-1.4f, 0.01f), new Vector2(0f, radius) }, Palette.Clear(c), tail), 21);
+                    Draw.Make("Tail2", go.transform, Draw.Strip(new[] { new Vector2(-1.4f, 0f), new Vector2(0f, 0f) },
+                        new[] { new Vector2(-1.4f, -0.01f), new Vector2(0f, -radius) }, Palette.Clear(c), tail), 21);
+                    Draw.Make("Glow", go.transform, Draw.SoftDisc(radius * 3f, glow, Palette.Clear(glow)), 22);
+                    Draw.Make("Body", go.transform, Draw.Disc(radius, c), 23);
+                    Draw.Make("Core", go.transform, Draw.Disc(radius * 0.55f, Color.Lerp(c, Color.white, 0.8f)), 24);
+                    _shots[k] = go;
+                    _shotKinds[k] = sh.Kind;
+                }
+                _shots[k].SetActive(true);
+                _shots[k].transform.localPosition = new Vector3(sh.Pos.X.ToFloat(), sh.Pos.Y.ToFloat(), 0f);
+                var v = V.Of(sh.Vel);
+                if (v.sqrMagnitude > 1e-6f) _shots[k].transform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(v.y, v.x) * Mathf.Rad2Deg);
+            }
+            for (var k = s.PortalShots.Length; k < _shots.Count; k++) if (_shots[k] != null && _shots[k].activeSelf) _shots[k].SetActive(false);
+        }
+    }
 }

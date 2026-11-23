@@ -82,6 +82,27 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.49 (Claude, 22 Nov 2026): **face-offs in front of the nets, Portal Gun.**
+  Face-offs no longer use the maps' `spawns` (only as a fallback): `Simulation.FaceOffSpot(team, slot)` puts each team
+  in a tight group (`FaceOffShape`, `FaceOffBack` 3 / `FaceOffRow` 1 / `FaceOffSpacing` 1.2) just in front of its own
+  net's mouth (the goal's `facing`, or towards the puck on the Test Rink), slot 0 at the front. `GameState.KickOffTurn`
+  goes up each face-off and rotates who stands in slot 0. **Portal Gun** (`ultrapuck.portalgun`, stat `PortalGun`,
+  utility): shots (`GameState.PortalShots`, `Shot.Kind` = colour) go blue / orange alternately (`PortalNext`), pass
+  through everything and make a `Portal` where they meet a wall line (`PlacePortal`: slid along an open line so all
+  `PortalLength` 3.172 fits, fizzles into a net or on a too-short wall, replaces that colour). `ThroughPortal` sends
+  players, the loose puck and loose rocks touching one portal (moving into the wall) out of the owner's other one,
+  velocity turned with the portals, never slower than `PortalExitSpeed`, `PortalRepeat` before re-entry. Face-offs
+  clear portals. `PortalViews` draws them (glow strip along the wall via `MapDef.PointAlong`, motes, sparks on
+  `Portal.Uses`). Team Play text trimmed, its boost 50% (`PassSpeedBoost`). "Useless player" badge is now "Tried their
+  best". **Card stats:** `Game/CardStats.cs` logs this PC's people's cards per online match (`NotePicks` in
+  GameRunner, once a second in play, most of each card seen per "MatchId:Seed") to `card-stats.dat` in the save folder,
+  plus a `CardStatsTable` of everyone met (per person id: Steam id or a random PC id). In the lobby
+  (`Msg.CardStats` = 15, every 3 s) clients send their table to the host, the host sends its merged table to
+  everyone; merging keeps the bigger count per person and card and never touches this PC's own rows. Main menu
+  "Cards" opens `CardScreen.OpenBrowser`: the free-play grid, read-only, sorted by your picks / everyone's / A–Z
+  (confirm or LB/RB or clicking the sort bar), each card showing its place, your picks and everyone's share.
+  Screenshot runs never save (`CardStats.NoSave`). Screenshot scenes `portal` (also takes `faceoff`) and
+  `browse`. **Version 63.**
 - 0.1.48 (Claude, 22 Nov 2026): **Puck Gun on Triangle.** It fires on the utility button
   (Triangle / Y) instead of charge / brake, when you don't have the puck, a rock or a teammate; charge / brake only
   brakes now. `GunCooldown` 0.85 s (was 1), plus `GunBotExtra` 3 s on a body the bot runs. Bots press utility for it.

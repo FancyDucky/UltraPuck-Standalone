@@ -192,6 +192,20 @@
       "stats": { "PuckGun": "+1" }
     },
     {
+      "id": "ultrapuck.portalgun",
+      "name": "Portal Gun",
+      "tier": "A",
+      "max": 1,
+      "color": "#3D8BFF",
+      "flavor": "In one side, out the other.",
+      "face": [
+        { "label": "Portals", "value": "[good]blue, then orange[/]" },
+        { "label": "Cooldown", "value": "[note]0.4 s[/]" }
+      ],
+      "text": "Press {utility} to shoot a blue portal, again for an orange one. They have to land on a wall. [note]Players and the puck go through.[/]",
+      "stats": { "PortalGun": "+1" }
+    },
+    {
       "id": "ultrapuck.invisibility",
       "name": "Invisibility",
       "tier": "A",
@@ -272,10 +286,10 @@
       "color": "#4DC78C",
       "flavor": "Pass it on, speed it up.",
       "face": [
-        { "label": "Speed on Pass", "value": "[good]+80%[/]" },
+        { "label": "Speed on Pass", "value": "[good]+50%[/]" },
         { "label": "Lasts", "value": "[good]3 s[/]" }
       ],
-      "text": "[note]For you and the teammate you passed to. Not if an opponent touches the puck first.[/]",
+      "text": "[note]For you and the teammate you passed to.[/]",
       "stats": { "PassSpeed": "+1" }
     },
     {

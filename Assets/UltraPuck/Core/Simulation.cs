@@ -162,17 +162,24 @@ namespace UltraPuck.Core
         /// </summary>
         public void FaceOff(GameState s)
         {
+            // the team's own players (not Double Agents) take turns at the front spot: one further along each face-off
+            var own = new int[2];
+            foreach (var p in s.Players) if (p.Stats.DoubleAgent <= 0) own[p.Team & 1]++;
+            var turn = s.KickOffTurn;
+            s.KickOffTurn++;
             var count = new int[2];
-            // everyone else first, then the Double Agents take the other team's next spawns
+            // everyone else first, then the Double Agents take the other team's next spots
             for (var pass = 0; pass < 2; pass++)
                 foreach (var p in s.Players)
                 {
                     var agent = p.Stats.DoubleAgent > 0;
                     if ((pass == 1) != agent) continue;
                     var side = agent ? 1 - p.Team : p.Team;
-                    var sp = Map.SpawnFor(side, count[side]++);
+                    var k = count[side]++;
+                    var slot = !agent && own[side] > 0 ? (k + turn) % own[side] : k;
+                    var sp = FaceOffSpot(side, slot);
                     p.Pos = sp.Pos;
-                    p.Facing = agent ? Map.SpawnFor(p.Team, 0).Facing : sp.Facing; // agents still face the goal they attack
+                    p.Facing = agent ? FaceOffSpot(p.Team, 0).Facing : sp.Facing; // agents still face the goal they attack
                     p.Vel = FixVec2.Zero;
                     p.DashCharge = MaxDashes(p);
                     p.DashTime = Fix.Zero;
@@ -199,7 +206,70 @@ namespace UltraPuck.Core
             s.PhaseTime = T.CountdownTime;
             PlacePylons(s);
             s.Rocks = new Rock[0];
+            s.Portals = new Portal[0];
+            s.PortalShots = new Shot[0];
+            s.PuckPortalCool = Fix.Zero;
+            foreach (var p in s.Players) { p.PortalNext = 0; p.PortalCooldown = Fix.Zero; p.PortalCool = Fix.Zero; }
             HeadStart(s);
+        }
+
+        // the face-off group, front to back: (rows out from the back, places across the row). Slot 0 is the kick-off.
+        private static readonly int[,] FaceOffShape =
+        {
+            { 3, 0 }, { 2, 1 }, { 2, -1 }, { 1, 0 }, { 1, 2 }, { 1, -2 }, { 0, 1 }, { 0, -1 },
+        };
+
+        /// <summary>
+        /// Where the <paramref name="slot"/>-th player of <paramref name="team"/> stands at a face-off: in a tight group just
+        /// in front of their own net, the kick-off (slot 0) at the front, nearest the puck. A slot that doesn't fit on the
+        /// map (off the floor, or in the boards) falls back to the map's own spawn for it.
+        /// </summary>
+        public SpawnDef FaceOffSpot(int team, int slot)
+        {
+            team &= 1;
+            // blue's group is red's reflected (or turned) the way the rink is, so neither side ever stands differently:
+            // the nets either side of the middle line (x or y) are a mirror image; opposite through the middle, turned
+            if (team == 1)
+            {
+                var c0 = Bot.GoalCentre(Map, 0);
+                var c1 = Bot.GoalCentre(Map, 1);
+                var red = FaceOffSpot(0, slot);
+                if (c1.X == -c0.X && c1.Y == c0.Y)
+                    return new SpawnDef { Team = 1, Pos = new FixVec2(-red.Pos.X, red.Pos.Y), Facing = new FixVec2(-red.Facing.X, red.Facing.Y) };
+                if (c1.Y == -c0.Y && c1.X == c0.X)
+                    return new SpawnDef { Team = 1, Pos = new FixVec2(red.Pos.X, -red.Pos.Y), Facing = new FixVec2(red.Facing.X, -red.Facing.Y) };
+                if (c1.X == -c0.X && c1.Y == -c0.Y)
+                    return new SpawnDef { Team = 1, Pos = -red.Pos, Facing = -red.Facing };
+            }
+            GoalDef net = null;
+            foreach (var g in Map.Goals) if (g.Team == team) { net = g; break; }
+            if (net == null || slot < 0 || slot >= FaceOffShape.GetLength(0)) return Map.SpawnFor(team, slot);
+            var centre = new FixVec2((net.Min.X + net.Max.X) / 2, (net.Min.Y + net.Max.Y) / 2);
+            FixVec2 front;
+            if (net.HasFacing) front = net.Facing;
+            else
+            {
+                var to = Map.PuckSpot - centre;
+                // a net with no facing opens along the axis that points most at the puck
+                front = Fix.Abs(to.X) >= Fix.Abs(to.Y) ? new FixVec2(to.X >= Fix.Zero ? Fix.One : -Fix.One, Fix.Zero)
+                                                      : new FixVec2(Fix.Zero, to.Y >= Fix.Zero ? Fix.One : -Fix.One);
+            }
+            var half = Fix.Abs(front.X) * (net.Max.X - net.Min.X) / 2 + Fix.Abs(front.Y) * (net.Max.Y - net.Min.Y) / 2;
+            var mouth = centre + front * half;
+            var across = new FixVec2(-front.Y, front.X);
+            var pos = mouth + front * (T.FaceOffBack + T.FaceOffRow * FaceOffShape[slot, 0])
+                            + across * (T.FaceOffSpacing * FaceOffShape[slot, 1] / 2);
+            if (!Map.Inside(pos) || !PlayerFits(pos)) return Map.SpawnFor(team, slot);
+            return new SpawnDef { Team = team, Pos = pos, Facing = front };
+        }
+
+        /// <summary>A plain-sized player at <paramref name="at"/> touches no wall.</summary>
+        private bool PlayerFits(FixVec2 at)
+        {
+            var r = T.PlayerRadius + WallHalf;
+            var r2 = r * r;
+            foreach (var seg in Map.Segments) if (!seg.FarFrom(at, r) && (at - Closest(seg, at)).SqrLength < r2) return false;
+            return true;
         }
 
         /// <summary>
@@ -381,7 +451,7 @@ namespace UltraPuck.Core
             team &= 1;
             var n = 0;
             foreach (var q in s.Players) if (q.Team == team) n++;
-            var sp = Map.SpawnFor(team, n);
+            var sp = FaceOffSpot(team, n);
             var players = new PlayerState[s.Players.Length + 1];
             Array.Copy(s.Players, players, s.Players.Length);
             players[players.Length - 1] = new PlayerState { Team = team, Pos = sp.Pos, Facing = sp.Facing, Bot = bot };
@@ -434,6 +504,25 @@ namespace UltraPuck.Core
                 shots.Add(x);
             }
             s.Shots = shots.ToArray();
+            // their portals and portal shots go with them
+            var portals = new System.Collections.Generic.List<Portal>();
+            foreach (var po in s.Portals)
+            {
+                if (po.Owner == index) continue;
+                var x = po;
+                x.Owner = Shift(x.Owner, index);
+                portals.Add(x);
+            }
+            s.Portals = portals.ToArray();
+            var pshots = new System.Collections.Generic.List<Shot>();
+            foreach (var sh in s.PortalShots)
+            {
+                if (sh.Owner == index) continue;
+                var x = sh;
+                x.Owner = Shift(x.Owner, index);
+                pshots.Add(x);
+            }
+            s.PortalShots = pshots.ToArray();
         }
 
         /// <summary>A player number after player <paramref name="gone"/> left: -1 if it was them, one less if after them.</summary>
@@ -499,6 +588,7 @@ namespace UltraPuck.Core
                 {
                     if (p.HitLag > Fix.Zero) continue; // frozen by a hit
                     p.Pos += p.Vel * sub;
+                    if (p.HeldBy < 0 && s.Portals.Length > 1) ThroughPortal(s, ref p.Pos, ref p.Vel, RadiusOf(p), ref p.PortalCool);
                     CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
                     if (s.Stones.Length > 0) CollideStones(s, ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
                     PushPylons(s, p);
@@ -512,10 +602,12 @@ namespace UltraPuck.Core
                 MovePuck(s, sub);
                 BouncePuckAndRocks(s); // rock ↔ puck (after both have moved)
                 MoveShots(s, sub);
+                if (s.PortalShots.Length > 0) MovePortalShots(s, sub);
                 if (s.Phase == Phase.Play) CheckGoal(s);
                 NoteTouch(s);
             }
 
+            s.PuckPortalCool = Fix.Max(Fix.Zero, s.PuckPortalCool - dt);
             // shots run out
             if (s.Shots.Length > 0)
             {
@@ -715,6 +807,8 @@ namespace UltraPuck.Core
             p.InvisibleTime = Fix.Max(Fix.Zero, p.InvisibleTime - dt);
             p.ShockCooldown = Fix.Max(Fix.Zero, p.ShockCooldown - dt);
             p.SwapCooldown = Fix.Max(Fix.Zero, p.SwapCooldown - dt);
+            p.PortalCooldown = Fix.Max(Fix.Zero, p.PortalCooldown - dt);
+            p.PortalCool = Fix.Max(Fix.Zero, p.PortalCool - dt);
             p.SlowTime = Fix.Max(Fix.Zero, p.SlowTime - dt);
             p.FastTime = Fix.Max(Fix.Zero, p.FastTime - dt);
             p.TossTime = Fix.Max(Fix.Zero, p.TossTime - dt);
@@ -770,6 +864,7 @@ namespace UltraPuck.Core
                 if (p.Stats.Invisibility > 0 && p.InvisCooldown <= Fix.Zero) { p.InvisibleTime = T.InvisTime; p.InvisCooldown = T.InvisCooldown; }
                 // Puck Gun (when you don't have the puck, a rock or a teammate)
                 if (p.Stats.PuckGun > 0 && p.GunCooldown <= Fix.Zero && !holding && !flying) FireGun(s, i);
+                if (p.Stats.PortalGun > 0 && p.PortalCooldown <= Fix.Zero && !flying) FirePortal(s, i);
                 if (p.Stats.Swap > 0 && !carrying && !holdingMate && !flying) UseSwap(s, i); // no throw/teleport while holding the puck or a teammate
             }
             // Shockwave: hold the utility button to grow it, let go to fire it (no cooldown)
@@ -1113,6 +1208,13 @@ namespace UltraPuck.Core
             {
                 var from = s.PuckPos;
                 s.PuckPos += s.PuckVel * part;
+                if (s.Portals.Length > 1 && ThroughPortal(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, ref s.PuckPortalCool))
+                {
+                    StopLaying(s, false); // an Ice Trail / Stone Wall being laid ends here (never one across the map)
+                    s.StoneLaying = Fix.Zero;
+                    before = s.PuckPos;
+                    continue;
+                }
                 // never through a wall: if the step crossed one, stop just before it and bounce
                 var hit = FirstWallHit(from, s.PuckPos);
                 if (hit < Fix.One) s.PuckPos = from;
@@ -1833,6 +1935,156 @@ namespace UltraPuck.Core
             s.Shots = shots;
         }
 
+        // ------------------------------------------------------------------ Portal Gun
+
+        /// <summary>Portal Gun: a shot from the player's middle, the way they face, in the colour that's next.</summary>
+        private void FirePortal(GameState s, int i)
+        {
+            var p = s.Players[i];
+            p.PortalCooldown = T.PortalCooldown;
+            var shots = new Shot[s.PortalShots.Length + 1];
+            Array.Copy(s.PortalShots, shots, s.PortalShots.Length);
+            shots[shots.Length - 1] = new Shot { Pos = p.Pos, Vel = p.Facing * T.PortalShotSpeed, Owner = i, Life = T.PortalShotLife, Kind = p.PortalNext & 1 };
+            s.PortalShots = shots;
+            p.PortalNext = 1 - (p.PortalNext & 1);
+        }
+
+        /// <summary>
+        /// Portal shots fly straight through players, the puck and everything else, until they reach a wall: a portal
+        /// goes up there. One that flies into a net (or off the ice) fizzles.
+        /// </summary>
+        private void MovePortalShots(GameState s, Fix sub)
+        {
+            var keep = new System.Collections.Generic.List<Shot>(s.PortalShots.Length);
+            foreach (var sh0 in s.PortalShots)
+            {
+                var sh = sh0;
+                var from = sh.Pos;
+                var to = sh.Pos + sh.Vel * sub;
+                sh.Life -= sub;
+                var gone = sh.Life <= Fix.Zero;
+                if (!gone)
+                {
+                    // the wall first (the back of a net from outside is a wall like any other); a shot that's got into a
+                    // net's box (through its mouth) fizzles
+                    var hit = FirstWallHit(from, to);
+                    var at = hit < Fix.One ? from + (to - from) * hit : to;
+                    foreach (var g in Map.Goals) if (g.Contains(from) || g.Contains(at)) gone = true;
+                    if (!gone && hit < Fix.One) { PlacePortal(s, sh, at, from); gone = true; }
+                    else if (!Map.Inside(to)) gone = true;
+                }
+                sh.Pos = to;
+                if (!gone) keep.Add(sh);
+            }
+            s.PortalShots = keep.ToArray();
+        }
+
+        /// <summary>
+        /// A portal shot reached the wall at <paramref name="hit"/> (coming from <paramref name="from"/>): the portal is centred
+        /// there on the wall line, slid along so all of it is on the wall (a wall too short for one: no portal). It replaces
+        /// the shooter's portal of the same colour.
+        /// </summary>
+        private void PlacePortal(GameState s, Shot sh, FixVec2 hit, FixVec2 from)
+        {
+            // the wall line it hit, and how far along it
+            int bw = -1;
+            var bu = Fix.Zero;
+            var bd = Fix.Zero;
+            var bdir = FixVec2.Right;
+            var bc = hit;
+            for (var w = 0; w < Map.WallLines.Count; w++)
+            {
+                var pts = Map.WallLines[w];
+                var n = Map.WallClosed[w] ? pts.Length : pts.Length - 1;
+                var along = Fix.Zero;
+                for (var k = 0; k < n; k++)
+                {
+                    var a = pts[k];
+                    var e = pts[(k + 1) % pts.Length] - a;
+                    var len = e.Length;
+                    if (len.Raw == 0) continue;
+                    var t = Fix.Clamp(FixVec2.Dot(hit - a, e) / (len * len), Fix.Zero, Fix.One);
+                    var c = a + e * t;
+                    var d = (hit - c).SqrLength;
+                    if (bw < 0 || d < bd) { bw = w; bd = d; bu = along + len * t; bdir = e / len; bc = c; }
+                    along += len;
+                }
+            }
+            if (bw < 0) return;
+            var total = Map.LineLength(bw);
+            var half = T.PortalLength * Fix.Half;
+            if (total < T.PortalLength) return; // too short for a portal
+            if (!Map.WallClosed[bw]) bu = Fix.Clamp(bu, half, total - half);
+            // which side of the line it came from: the portal faces that way (the same side all along the line)
+            var side = FixVec2.Dot(from - bc, new FixVec2(-bdir.Y, bdir.X)) >= Fix.Zero ? Fix.One : -Fix.One;
+            FixVec2 dir;
+            var centre = Map.PointAlong(bw, bu, out dir);
+            var normal = new FixVec2(-dir.Y, dir.X) * side;
+            // not on top of the shooter's other portal
+            foreach (var po in s.Portals)
+                if (po.Owner == sh.Owner && po.Colour != sh.Kind && (po.Pos - centre).SqrLength < T.PortalLength * T.PortalLength
+                    && FixVec2.Dot(po.Normal, normal) > Fix.Zero) return;
+            var list = new System.Collections.Generic.List<Portal>(s.Portals.Length + 1);
+            foreach (var po in s.Portals) if (po.Owner != sh.Owner || po.Colour != sh.Kind) list.Add(po);
+            list.Add(new Portal { Pos = centre, Normal = normal, Owner = sh.Owner, Colour = sh.Kind, Wall = bw, At = bu, Id = ++s.PortalsMade });
+            s.Portals = list.ToArray();
+        }
+
+        /// <summary>
+        /// Something (a circle of radius <paramref name="r"/>) moving into a portal comes out of its partner (the same
+        /// player's other colour), just off that wall, going the same speed at the same angle (turned the way the portals
+        /// are turned), never slower than PortalExitSpeed. Returns whether it went through.
+        /// </summary>
+        private bool ThroughPortal(GameState s, ref FixVec2 pos, ref FixVec2 vel, Fix r, ref Fix cool)
+        {
+            if (cool > Fix.Zero) return false;
+            var half = T.PortalLength * Fix.Half;
+            var reach = r + WallHalf + Fix.Ratio(1, 20);
+            for (var a = 0; a < s.Portals.Length; a++)
+            {
+                var P = s.Portals[a];
+                var far = half + reach;
+                if ((pos - P.Pos).SqrLength > far * far) continue;
+                if (FixVec2.Dot(vel, P.Normal) >= Fix.Zero) continue; // not going towards the wall
+                var b = -1;
+                for (var k = 0; k < s.Portals.Length; k++)
+                    if (k != a && s.Portals[k].Owner == P.Owner && s.Portals[k].Colour != P.Colour) { b = k; break; }
+                if (b < 0) continue;
+                // touching the wall, on the portal's side, within the portal
+                var found = false;
+                var best = Fix.Zero;
+                var c = pos;
+                foreach (var seg in Map.Segments)
+                {
+                    if (seg.FarFrom(pos, reach)) continue;
+                    var q = Closest(seg, pos);
+                    var d = (pos - q).SqrLength;
+                    if (d >= reach * reach) continue;
+                    if (!found || d < best) { found = true; best = d; c = q; }
+                }
+                if (!found || (c - P.Pos).SqrLength > half * half) continue;
+                var off = pos - c;
+                var dist = off.Length;
+                if (dist.Raw > 0 && FixVec2.Dot(off / dist, P.Normal) < Fix.Ratio(3, 10)) continue; // the other side of the wall
+                var Q = s.Portals[b];
+                var tP = new FixVec2(-P.Normal.Y, P.Normal.X);
+                var tQ = new FixVec2(-Q.Normal.Y, Q.Normal.X);
+                var room = Fix.Max(Fix.Zero, half - r);
+                var across = Fix.Clamp(FixVec2.Dot(pos - P.Pos, tP), -room, room);
+                var into = FixVec2.Dot(vel, P.Normal); // < 0
+                var sideways = FixVec2.Dot(vel, tP);
+                var exit = Q.Pos - tQ * across + Q.Normal * (r + WallHalf + Fix.Ratio(1, 20));
+                if (!Map.Inside(exit)) continue;
+                pos = exit;
+                vel = Q.Normal * Fix.Max(-into, T.PortalExitSpeed) - tQ * sideways;
+                cool = T.PortalRepeat;
+                P.Uses++; Q.Uses++;
+                s.Portals[a] = P; s.Portals[b] = Q;
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>Shots fly straight; the first player they touch (not the shooter) is knocked back like a check (lighter players further) and drops the puck; walls and pylons stop them.</summary>
         private void MoveShots(GameState s, Fix sub)
         {
@@ -2077,6 +2329,8 @@ namespace UltraPuck.Core
                     rk.Pos += rk.Vel * sub;
                     rk.Vel -= rk.Vel * Fix.Min(Fix.One, T.RockDrag * sub);
                     if (rk.Vel.SqrLength < Fix.Ratio(1, 400)) rk.Vel = FixVec2.Zero;
+                    rk.PortalCool = Fix.Max(Fix.Zero, rk.PortalCool - sub);
+                    if (s.Portals.Length > 1) ThroughPortal(s, ref rk.Pos, ref rk.Vel, T.RockRadius, ref rk.PortalCool);
                     CollideWalls(ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
                     if (s.Stones.Length > 0) CollideStones(s, ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
                     s.Rocks[k] = rk;

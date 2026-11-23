@@ -110,6 +110,7 @@ namespace UltraPuck.Game
                     _rows.Add(new Row { Label = "Play", Detail = "Local match: everyone on this PC", Press = () => Runner.GoLocalLobby() });
                     _rows.Add(new Row { Label = "Online", Detail = "Steam, or by IP address", Press = () => Show(Page.Online) });
                     _rows.Add(new Row { Label = "Free play", Detail = "Practice, bots optional", Press = () => Runner.StartFreePlayFrom(_lastDevice) });
+                    _rows.Add(new Row { Label = "Cards", Detail = "Every card, and which get picked most online", Press = () => Runner.OpenCards() });
                     _rows.Add(new Row { Label = "Settings", Press = () => Runner.OpenSettings() });
                     _rows.Add(new Row { Label = "Quit", Press = Application.Quit });
                     break;

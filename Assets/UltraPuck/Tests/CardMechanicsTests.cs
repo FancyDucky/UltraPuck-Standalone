@@ -561,6 +561,7 @@ namespace UltraPuck.Tests
         {
             var s = _sim.NewGame(new[] { 0, 1, 1, 0 }, 1u, new[] { false, false, true, true });
             Play(s);
+            s.Players[0].Pos = At(-10, 8); s.Players[2].Pos = At(10, -8); s.Players[3].Pos = At(-4, -5); s.Players[1].Pos = At(-3, -5);
             s.Carrier = 3;
             s.Players[1].HeldBy = 3;
             _sim.Step(s, new[] { new PlayerInput { Pick = (byte)(PlayerInput.RemoveBot + 1) }, default(PlayerInput), default(PlayerInput), default(PlayerInput) });
@@ -1294,8 +1295,8 @@ namespace UltraPuck.Tests
         public void TeamPlaySpeedsUpBothAfterACleanPass()
         {
             var s = Pass("ultrapuck.teamplay", At(10, 8));
-            Assert.AreEqual(0.8, s.Players[0].Fast.ToDouble(), 1e-3, "the passer is 80% faster");
-            Assert.AreEqual(0.8, s.Players[1].Fast.ToDouble(), 1e-3, "and the teammate");
+            Assert.AreEqual(0.5, s.Players[0].Fast.ToDouble(), 1e-3, "the passer is 50% faster");
+            Assert.AreEqual(0.5, s.Players[1].Fast.ToDouble(), 1e-3, "and the teammate");
             Assert.Greater(s.Players[0].FastTime.ToDouble(), 2.9, "for 3 s");
             Assert.AreEqual(Fix.Zero, s.Players[2].FastTime, "not the other team");
             for (var t = 0; t < 120 * 3 + 2; t++) _sim.Step(s, new PlayerInput[3]);
@@ -1532,7 +1533,7 @@ namespace UltraPuck.Tests
         {
             // close enough to the puck's path to touch it, too far to pick it up: still a pass
             var s = Pass("ultrapuck.teamplay", At(-3, -4.05));
-            Assert.AreEqual(0.8, s.Players[1].Fast.ToDouble(), 1e-3, "the teammate got the boost");
+            Assert.AreEqual(0.5, s.Players[1].Fast.ToDouble(), 1e-3, "the teammate got the boost");
         }
 
         /// <summary>
@@ -1595,6 +1596,159 @@ namespace UltraPuck.Tests
             var seen = false;
             for (var k = 0; k < 2000 && !seen; k++) seen = System.Array.IndexOf(_lib.DrawOffer(solo, 1, 3), tp) >= 0;
             Assert.IsTrue(seen, "blue (two players) can get Team Play");
+        }
+    
+
+        // ------------------------------------------------------------------ face-offs
+
+        /// <summary>The kick-off spot (the front of the group, nearest the puck) goes round the team, a face-off each.</summary>
+        [Test]
+        public void TheKickOffSpotRotatesRoundTheTeam()
+        {
+            var s = Game(0, 0, 1, 1);
+            int Front() { return s.Players[0].Pos.X > s.Players[1].Pos.X ? 0 : 1; }
+            var first = Front();
+            _sim.FaceOff(s);
+            Assert.AreNotEqual(first, Front(), "the other one takes the next kick-off");
+            _sim.FaceOff(s);
+            Assert.AreEqual(first, Front(), "and back again");
+            // tight together, just in front of their own net
+            Assert.Less((s.Players[0].Pos - s.Players[1].Pos).Length.ToDouble(), 1.4, "close together");
+            var net = Bot.GoalCentre(_sim.Map, 0);
+            foreach (var i in new[] { 0, 1 })
+                Assert.Less((s.Players[i].Pos - net).Length.ToDouble(), 9.0, "in front of their net");
+            // blue rotates too
+            int BlueFront() { return s.Players[2].Pos.X < s.Players[3].Pos.X ? 2 : 3; }
+            var b = BlueFront();
+            _sim.FaceOff(s);
+            Assert.AreNotEqual(b, BlueFront());
+        }
+
+        // ------------------------------------------------------------------ Portal Gun
+
+        private GameState PortalGame()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.portalgun");
+            Play(s);
+            s.PuckPos = At(-12, -4);
+            s.Players[0].Pos = At(0, 0); s.Players[0].Vel = FixVec2.Zero;
+            s.Players[1].Pos = At(-16, 5);
+            return s;
+        }
+
+        /// <summary>Shoot with the utility button: the portal goes up where the shot meets the wall.</summary>
+        private void ShootPortal(GameState s, FixVec2 from, FixVec2 facing)
+        {
+            s.Players[0].Pos = from; s.Players[0].Vel = FixVec2.Zero; s.Players[0].Facing = facing.Normalized;
+            _sim.Step(s, new[] { Press(PlayerInput.Utility), default(PlayerInput) });
+            for (var t = 0; t < 70; t++)
+            {
+                s.Players[0].Pos = from; s.Players[0].Vel = FixVec2.Zero;
+                _sim.Step(s, new PlayerInput[2]);
+            }
+        }
+
+        private static Portal PortalOf(GameState s, int colour)
+        {
+            foreach (var po in s.Portals) if (po.Colour == colour) return po;
+            Assert.Fail("no " + (colour == 0 ? "blue" : "orange") + " portal");
+            return default(Portal);
+        }
+
+        [Test]
+        public void PortalGunShootsBlueThenOrangeThenReplacesBlue()
+        {
+            var s = PortalGame();
+            var up = new FixVec2(Fix.Zero, Fix.One);
+            ShootPortal(s, At(0, 0), up);
+            Assert.AreEqual(1, s.Portals.Length, "blue is up");
+            var blue = PortalOf(s, 0);
+            Assert.Greater(blue.Pos.Y.ToDouble(), 5.0, "on the top wall");
+            Assert.Less(blue.Normal.Y.ToDouble(), -0.9, "facing down, into the rink");
+            ShootPortal(s, At(0, 0), -up);
+            Assert.AreEqual(2, s.Portals.Length, "then orange");
+            Assert.Less(PortalOf(s, 1).Pos.Y.ToDouble(), -5.0, "on the bottom wall");
+            ShootPortal(s, At(8, 0), up);
+            Assert.AreEqual(2, s.Portals.Length, "a third shot replaces blue");
+            Assert.AreEqual(8.0, PortalOf(s, 0).Pos.X.ToDouble(), 0.3, "blue moved");
+            Assert.Less(PortalOf(s, 1).Pos.Y.ToDouble(), -5.0, "orange stayed");
+        }
+
+        [Test]
+        public void APortalShotIntoANetFizzles()
+        {
+            var s = PortalGame();
+            ShootPortal(s, At(18, 0), FixVec2.Right);
+            Assert.AreEqual(0, s.Portals.Length, "no portal inside a net");
+        }
+
+        [Test]
+        public void APortalGoesOnACurvedCorner()
+        {
+            var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", "hockey-rink.json")));
+            _sim = new Simulation(map, null, _lib);
+            var s = PortalGame();
+            ShootPortal(s, At(-20, 2), new FixVec2(-Fix.One, Fix.One));
+            Assert.AreEqual(1, s.Portals.Length, "up on the corner");
+            var po = s.Portals[0];
+            Assert.Greater(po.Normal.X.ToDouble(), 0.2, "the corner's slant (not straight along a side)");
+            Assert.Less(po.Normal.Y.ToDouble(), -0.2);
+            Assert.IsTrue(map.Inside(po.Pos + po.Normal), "facing the ice");
+        }
+
+        [Test]
+        public void ThePuckGoesThroughAPortalAndComesOutTheOther()
+        {
+            var s = PortalGame();
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, Fix.One));
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, -Fix.One));
+            var blue = PortalOf(s, 0); var orange = PortalOf(s, 1);
+            s.Players[0].Pos = At(-12, 3);
+            s.Carrier = -1;
+            s.PuckPos = blue.Pos + blue.Normal * Fix.FromInt(3);
+            s.PuckVel = -blue.Normal * Fix.FromInt(12);
+            var speedIn = s.PuckVel.Length.ToDouble();
+            var through = false;
+            for (var t = 0; t < 60 && !through; t++)
+            {
+                _sim.Step(s, new PlayerInput[2]);
+                if ((s.PuckPos - orange.Pos).Length < Fix.Two) through = true;
+            }
+            Assert.IsTrue(through, "came out of orange");
+            Assert.Greater(FixVec2.Dot(s.PuckVel, orange.Normal).ToDouble(), 0.0, "going away from the wall");
+            Assert.AreEqual(speedIn, s.PuckVel.Length.ToDouble(), 2.0, "about as fast as it went in");
+            Assert.Greater(PortalOf(s, 0).Uses, 0, "counted (for the sparks)");
+        }
+
+        [Test]
+        public void PlayersGoThroughPortalsToo()
+        {
+            var s = PortalGame();
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, Fix.One));
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, -Fix.One));
+            var blue = PortalOf(s, 0); var orange = PortalOf(s, 1);
+            var p = s.Players[1];
+            p.Pos = orange.Pos + orange.Normal * Fix.FromInt(2);
+            p.Vel = -orange.Normal * Fix.FromInt(12);
+            var through = false;
+            for (var t = 0; t < 60 && !through; t++)
+            {
+                _sim.Step(s, new PlayerInput[2]);
+                if ((p.Pos - blue.Pos).Length < Fix.Two) through = true;
+            }
+            Assert.IsTrue(through, "came out of blue");
+        }
+
+        [Test]
+        public void AFaceOffClearsThePortals()
+        {
+            var s = PortalGame();
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, Fix.One));
+            Assert.AreEqual(1, s.Portals.Length);
+            _sim.FaceOff(s);
+            Assert.AreEqual(0, s.Portals.Length);
+            Assert.AreEqual(0, s.Players[0].PortalNext, "blue first again");
         }
     }
 }

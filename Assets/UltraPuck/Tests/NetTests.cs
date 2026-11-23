@@ -398,5 +398,40 @@ namespace UltraPuck.Tests
                 Assert.Greater(host.Match.Confirmed, 50);
             }
         }
+    
+
+        /// <summary>Card stats tables merge by the bigger count, survive the trip as bytes, and never overwrite this PC's own row.</summary>
+        [Test]
+        public void CardStatsTablesMergeByTheBiggerCount()
+        {
+            var a = new UltraPuck.Game.CardStatsTable();
+            var me = new UltraPuck.Game.CardStatsTable.Person { Name = "Me" };
+            me.Picks["ultrapuck.swap"] = 2;
+            a.People["me"] = me;
+            var friend = new UltraPuck.Game.CardStatsTable.Person { Name = "Friend" };
+            friend.Picks["ultrapuck.swap"] = 1;
+            a.People["friend"] = friend;
+
+            var b = new UltraPuck.Game.CardStatsTable();
+            var friend2 = new UltraPuck.Game.CardStatsTable.Person { Name = "Friend" };
+            friend2.Picks["ultrapuck.swap"] = 3;
+            friend2.Picks["ultrapuck.portalgun"] = 1;
+            b.People["friend"] = friend2;
+            var fakeMe = new UltraPuck.Game.CardStatsTable.Person { Name = "Me?" };
+            fakeMe.Picks["ultrapuck.swap"] = 99;
+            b.People["me"] = fakeMe;
+            var stranger = new UltraPuck.Game.CardStatsTable.Person { Name = "New" };
+            stranger.Picks["ultrapuck.portalgun"] = 4;
+            b.People["new"] = stranger;
+
+            var b2 = UltraPuck.Game.CardStatsTable.FromBytes(b.ToBytes());
+            Assert.IsTrue(a.Merge(b2, new[] { "me" }));
+            Assert.AreEqual(2, a.People["me"].Picks["ultrapuck.swap"], "this PC's own row isn't taken from others");
+            Assert.AreEqual(3, a.People["friend"].Picks["ultrapuck.swap"], "the bigger count");
+            Assert.AreEqual(1, a.People["friend"].Picks["ultrapuck.portalgun"]);
+            Assert.AreEqual(2 + 3, a.Total("ultrapuck.swap"));
+            Assert.AreEqual(1 + 4, a.Total("ultrapuck.portalgun"), "someone met through someone else counts too");
+            Assert.IsFalse(a.Merge(b2, new[] { "me" }), "the same again changes nothing");
+        }
     }
 }

@@ -240,6 +240,45 @@ namespace UltraPuck.Core
             return false;
         }
 
+        /// <summary>How long wall line <paramref name="w"/> is, all the way along (round the loop, for a closed one).</summary>
+        public Fix LineLength(int w)
+        {
+            var pts = WallLines[w];
+            var n = WallClosed[w] ? pts.Length : pts.Length - 1;
+            var total = Fix.Zero;
+            for (var k = 0; k < n; k++) total += (pts[(k + 1) % pts.Length] - pts[k]).Length;
+            return total;
+        }
+
+        /// <summary>
+        /// The point <paramref name="u"/> along wall line <paramref name="w"/> (from its first point), and the way the line
+        /// runs there. A closed line wraps round; an open one stops at its ends.
+        /// </summary>
+        public FixVec2 PointAlong(int w, Fix u, out FixVec2 dir)
+        {
+            var pts = WallLines[w];
+            var closed = WallClosed[w];
+            var n = closed ? pts.Length : pts.Length - 1;
+            dir = FixVec2.Right;
+            if (n <= 0) return pts[0];
+            if (closed)
+            {
+                var total = LineLength(w);
+                if (total > Fix.Zero) { while (u < Fix.Zero) u += total; while (u >= total) u -= total; }
+            }
+            for (var k = 0; k < n; k++)
+            {
+                var a = pts[k];
+                var e = pts[(k + 1) % pts.Length] - a;
+                var len = e.Length;
+                if (len.Raw == 0) continue;
+                dir = e / len;
+                if (u <= len || k == n - 1) return a + dir * Fix.Clamp(u, Fix.Zero, len);
+                u -= len;
+            }
+            return pts[0];
+        }
+
         /// <summary>The route point nearest <paramref name="p"/> (its index), or -1 with no route.</summary>
         public int NearestOnRoute(FixVec2 p)
         {

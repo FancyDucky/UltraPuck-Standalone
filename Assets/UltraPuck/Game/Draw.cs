@@ -181,6 +181,29 @@ namespace UltraPuck.Game
             return Build(v, t, c);
         }
 
+        /// <summary>
+        /// A band between two lines of points (the same number of each), coloured <paramref name="a"/> along the first
+        /// and <paramref name="b"/> along the second, blending across (glows that fade out from an edge).
+        /// </summary>
+        public static Mesh Strip(IList<Vector2> first, IList<Vector2> second, Color a, Color b)
+        {
+            var v = new List<Vector3>();
+            var t = new List<int>();
+            var n = Mathf.Min(first.Count, second.Count);
+            for (var k = 0; k < n; k++) { v.Add(first[k]); v.Add(second[k]); }
+            for (var k = 0; k + 1 < n; k++)
+            {
+                var i = k * 2;
+                t.Add(i); t.Add(i + 1); t.Add(i + 3);
+                t.Add(i); t.Add(i + 3); t.Add(i + 2);
+            }
+            var m = Build(v, t, a);
+            var cols = m.colors;
+            for (var k = 1; k < cols.Length; k += 2) cols[k] = b;
+            m.colors = cols;
+            return m;
+        }
+
         public static Mesh Triangle(Vector2 a, Vector2 b, Vector2 cc, Color c)
         {
             return Build(new List<Vector3> { a, b, cc }, new List<int> { 0, 2, 1 }, c);

@@ -129,6 +129,8 @@ namespace UltraPuck.Core
         public int PassSpeed;
         /// <summary>Stone Wall: a full charge raises a wall along the puck's path.</summary>
         public int StoneWall;
+        /// <summary>Utility: shoot a blue portal, then an orange one, onto the walls; anything going into one comes out the other.</summary>
+        public int PortalGun;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
@@ -142,7 +144,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
             GameState.Mix(ref h, Swap); GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
-            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall);
+            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun);
         }
     }
 
@@ -239,6 +241,11 @@ namespace UltraPuck.Core
         public int ShovedBy = -1;
         /// <summary>Sped up (a Team Play pass, your team's Ice Trail): for how long, and by how much (0.8 = 80% faster).</summary>
         public Fix FastTime, Fast;
+        /// <summary>Portal Gun: the colour the next shot makes (0 blue, 1 orange), and the wait before the next shot.</summary>
+        public int PortalNext;
+        public Fix PortalCooldown;
+        /// <summary>Just came out of a portal: can't go into one again until this runs out.</summary>
+        public Fix PortalCool;
 
         public PlayerState Clone()
         {
@@ -257,6 +264,29 @@ namespace UltraPuck.Core
         public FixVec2 Pos, Vel;
         public int Owner;
         public Fix Life;
+        /// <summary>Portal Gun shots: the portal it makes (0 blue, 1 orange).</summary>
+        public int Kind;
+    }
+
+    /// <summary>
+    /// A Portal Gun portal, on a wall. <see cref="Pos"/> is its middle, on the wall's centre line; <see cref="Normal"/>
+    /// points off the wall towards the side it was shot from. It runs <see cref="Tuning.PortalLength"/> along wall line
+    /// <see cref="Wall"/> (of the map), centred <see cref="At"/> along it, so it bends with a curved wall. Anything
+    /// going into it comes out of the same player's other portal, once both are up.
+    /// </summary>
+    [Serializable]
+    public struct Portal
+    {
+        public FixVec2 Pos, Normal;
+        public int Owner;
+        /// <summary>0 blue, 1 orange.</summary>
+        public int Colour;
+        public int Wall;
+        public Fix At;
+        /// <summary>Counts everything that's gone in or out (for the drawing side's sparks).</summary>
+        public int Uses;
+        /// <summary>Which portal this is (every new one gets the next number), so the drawing side can tell a new one.</summary>
+        public int Id;
     }
 
     /// <summary>
@@ -311,6 +341,8 @@ namespace UltraPuck.Core
         public int Carrier;
         /// <summary>Seconds left before it disappears (it flashes for the last few).</summary>
         public Fix Life;
+        /// <summary>Just came out of a portal: can't go into one again until this runs out.</summary>
+        public Fix PortalCool;
     }
 
     public enum Phase : byte
@@ -390,6 +422,14 @@ namespace UltraPuck.Core
         public int StoneWalls;
         /// <summary>Team Play: who last let go of the puck, while it hasn't been touched by an opponent since (-1 = no pass going).</summary>
         public int PassFrom = -1;
+        /// <summary>Counts face-offs: each one, the front spot (the kick-off) goes to the next player on each team.</summary>
+        public int KickOffTurn;
+        /// <summary>Portal Gun: the portals on the walls, the shots on their way, and how many portals have been made.</summary>
+        public Portal[] Portals = new Portal[0];
+        public Shot[] PortalShots = new Shot[0];
+        public int PortalsMade;
+        /// <summary>The loose puck just came out of a portal: it can't go into one again until this runs out.</summary>
+        public Fix PuckPortalCool;
 
         public GameState Clone()
         {
@@ -402,6 +442,8 @@ namespace UltraPuck.Core
             s.Rocks = (Rock[])Rocks.Clone();
             s.Ice = (IcePoint[])Ice.Clone();
             s.Stones = (Stone[])Stones.Clone();
+            s.Portals = (Portal[])Portals.Clone();
+            s.PortalShots = (Shot[])PortalShots.Clone();
             return s;
         }
 
@@ -420,10 +462,13 @@ namespace UltraPuck.Core
             ulong h = 14695981039346656037UL;
             Mix(ref h, Clock); Mix(ref h, Overtime ? 1 : 0); Mix(ref h, Paused ? 1 : 0);
             Mix(ref h, Tick); Mix(ref h, Carrier); Mix(ref h, PuckTeam); Mix(ref h, (int)Phase); Mix(ref h, PhaseTime); Mix(ref h, LastScorer); Mix(ref h, LastGoalPlayer); Mix(ref h, LastAssist); Mix(ref h, LastGoalBy); Mix(ref h, Touch1); Mix(ref h, Touch2); Mix(ref h, AutoCarrier); Mix(ref h, PuckHidden); Mix(ref h, PuckHiddenTeam); Mix(ref h, CannonTeam); Mix(ref h, (long)Rng);
-            Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom);
+            Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom); Mix(ref h, KickOffTurn);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); Mix(ref h, py.Radius); }
-            foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); Mix(ref h, rk.Life); }
+            foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); Mix(ref h, rk.Life); Mix(ref h, rk.PortalCool); }
+            foreach (var po in Portals) { Mix(ref h, po.Pos); Mix(ref h, po.Normal); Mix(ref h, po.Owner); Mix(ref h, po.Colour); Mix(ref h, po.Wall); Mix(ref h, po.At); Mix(ref h, po.Uses); Mix(ref h, po.Id); }
+            foreach (var sh in PortalShots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); Mix(ref h, sh.Kind); }
+            Mix(ref h, PortalsMade); Mix(ref h, PuckPortalCool);
             Mix(ref h, IceLaying); Mix(ref h, IceAge); Mix(ref h, IceTrails);
             Mix(ref h, CannonFrom); Mix(ref h, StoneLaying); Mix(ref h, StoneLeft); Mix(ref h, StoneTip); Mix(ref h, StoneDir); Mix(ref h, StoneWalls);
             foreach (var st in Stones) { Mix(ref h, st.A); Mix(ref h, st.B); Mix(ref h, st.Life); Mix(ref h, st.Wall); }
@@ -444,6 +489,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);
                 Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps); Mix(ref h, p.Shoved);
                 Mix(ref h, p.ShovedBy); Mix(ref h, p.FastTime); Mix(ref h, p.Fast); Mix(ref h, p.ShockHold);
+                Mix(ref h, p.PortalNext); Mix(ref h, p.PortalCooldown); Mix(ref h, p.PortalCool);
             }
             return h;
         }

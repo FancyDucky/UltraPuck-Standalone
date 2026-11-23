@@ -72,11 +72,11 @@ namespace UltraPuck.Core
             "MoveSpeed", "MoveSpeedWithPuck", "ShotPower", "QuickShotPower", "ChargeSpeed", "OverCharge", "DashCooldown",
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
             "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "Swap", "PassRefresh", "PassRefreshTeam", "IceTrail",
-            "QuickShotFull", "GhostShot", "CannonBall", "PassSpeed", "StoneWall",
+            "QuickShotFull", "GhostShot", "CannonBall", "PassSpeed", "StoneWall", "PortalGun",
         };
 
         /// <summary>Stats that need the utility button (Triangle / Y). Used to offer only one utility at a time.</summary>
-        public static readonly string[] UtilityStats = { "PuckGun", "Invisibility", "Shockwave", "Swap" };
+        public static readonly string[] UtilityStats = { "PuckGun", "Invisibility", "Shockwave", "Swap", "PortalGun" };
 
         public CardDef ById(string id) { CardDef c; return id != null && _byId.TryGetValue(id, out c) ? c : null; }
 
@@ -209,6 +209,7 @@ namespace UltraPuck.Core
                 case "FriendlyFire": st.FriendlyFire = Count(st.FriendlyFire, m); break;
                 case "Shockwave": st.Shockwave = Count(st.Shockwave, m); break;
                 case "Swap": st.Swap = Count(st.Swap, m); break;
+                case "PortalGun": st.PortalGun = Count(st.PortalGun, m); break;
                 case "IceTrail": st.IceTrail = Count(st.IceTrail, m); break;
                 case "QuickShotFull": st.QuickShotFull = Count(st.QuickShotFull, m); break;
                 case "GhostShot": st.GhostShot = Count(st.GhostShot, m); break;
