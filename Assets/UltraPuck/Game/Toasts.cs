@@ -9,21 +9,22 @@ namespace UltraPuck.Game
     /// </summary>
     public sealed class Toasts : MonoBehaviour
     {
-        private sealed class Toast { public string Text; public float At; }
+        private sealed class Toast { public string Text; public float At, Life; }
         private static readonly List<Toast> _shown = new List<Toast>();
-        private const float Life = 4f, Fade = 0.4f;
+        private const float DefaultLife = 4f, Fade = 0.4f;
 
-        public static void Show(string text)
+        /// <summary>Shows <paramref name="text"/> for <paramref name="seconds"/> (4 by default; longer for something to read and do).</summary>
+        public static void Show(string text, float seconds = DefaultLife)
         {
             if (string.IsNullOrEmpty(text)) return;
-            _shown.Add(new Toast { Text = text, At = Time.unscaledTime });
+            _shown.Add(new Toast { Text = text, At = Time.unscaledTime, Life = Mathf.Max(Fade * 2f, seconds) });
             if (_shown.Count > 4) _shown.RemoveAt(0);
         }
 
         private void OnGUI()
         {
             if (_shown.Count == 0) return;
-            _shown.RemoveAll(t => Time.unscaledTime - t.At > Life);
+            _shown.RemoveAll(t => Time.unscaledTime - t.At > t.Life);
             if (_shown.Count == 0) return;
             GUI.depth = -50;
             Ui.Begin();
@@ -33,7 +34,7 @@ namespace UltraPuck.Game
             foreach (var t in _shown)
             {
                 var age = Time.unscaledTime - t.At;
-                var a = Mathf.Clamp01(Mathf.Min(age / Fade, (Life - age) / Fade));
+                var a = Mathf.Clamp01(Mathf.Min(age / Fade, (t.Life - age) / Fade));
                 var slide = (1f - Mathf.Clamp01(age / Fade)) * 30f;
                 var h = Mathf.Max(44f, style.CalcHeight(new GUIContent(t.Text), w - 28f) + 18f);
                 var r = new Rect(Ui.W - w - 18f + slide, y, w, h);

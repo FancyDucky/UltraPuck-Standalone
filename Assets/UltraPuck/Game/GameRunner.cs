@@ -101,9 +101,10 @@ namespace UltraPuck.Game
             {
                 Debug.Log("Ultra Puck: input device " + change + ": " + d.displayName + " (" + d.layout + ")");
                 if (change == UnityEngine.InputSystem.InputDeviceChange.Added || change == UnityEngine.InputSystem.InputDeviceChange.Reconnected) _local.DeviceAdded(d);
-                // Steam Input grabs controllers a moment after Steam starts (while we run as Steam's test app): say what to do
+                // Steam Input grabs controllers a moment after Steam starts (while we run as Steam's test app, whose Steam Input
+                // settings we can't change): say what to do in a toast, top right, that doesn't block the menu
                 if (d is UnityEngine.InputSystem.Gamepad && change == UnityEngine.InputSystem.InputDeviceChange.Removed && SteamNet.Ready && Time.realtimeSinceStartup - SteamNet.StartedAt < 10f)
-                    _mainMenu.Message = "Steam took over your " + d.displayName + ". In Steam: Settings > Controller, turn off Steam Input for this kind of controller, then restart Ultra Puck. (Needed until the game has its own Steam page.)";
+                    Toasts.Show("Steam took your " + d.displayName + ". To play with it: Steam > Settings > Controller, turn Steam Input off, then restart Ultra Puck.", 12f);
             };
             Invoke("LogDevicesLater", 3f);
             SteamNet.OnJoined = host => StartOnline(NetSession.Join(SteamTransport.Join(host), MakeOnlineSim, _fingerprint));
@@ -1216,6 +1217,27 @@ namespace UltraPuck.Game
                 var steer = Simulation.Steers(_state, p); // swapped onto a bot teammate: aim from them
                 if (steer >= 0) p = steer;
                 return V.Of(_state.Players[p].Pos);
+            };
+            // controller pre-charge auto-aim: the way to the middle of the net this slot's skater attacks
+            _local.NetAim = i =>
+            {
+                var p = i;
+                if (_mode == Mode.Online && _session != null) p = _session.PlayerOf(i);
+                if (_state == null || _sim == null || p < 0 || p >= _state.Players.Length || _state.Phase != Phase.Play) return null;
+                var steer = Simulation.Steers(_state, p);
+                if (steer >= 0) p = steer;
+                if (_state.Carrier == p) return null;
+                var me = V.Of(_state.Players[p].Pos);
+                var team = _state.Players[p].Team;
+                Vector2? best = null;
+                foreach (var g in _sim.Map.Goals)
+                {
+                    if (g.Team == team) continue; // our own net
+                    var mid = (V.Of(g.Min) + V.Of(g.Max)) * 0.5f;
+                    if (best == null || (mid - me).sqrMagnitude < (best.Value - me).sqrMagnitude) best = mid;
+                }
+                if (best == null || (best.Value - me).sqrMagnitude < 0.0001f) return null;
+                return (best.Value - me).normalized;
             };
             // reticle in a match (KBM); system cursor for menus and the card pick
             var reticle = playing && !open && !InputMode.Pad && _local.AnyKeyboardHuman();

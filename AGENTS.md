@@ -85,6 +85,17 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.56, not released (Claude, 23 Nov 2026): **Controller pre-charge auto-aim; Steam Input warning as a
+  toast.** A controller player holding charge without the puck (and not pushing the aim stick past 0.2, the sim's
+  deadzone) aims at the middle of the nearest net they attack. Done on the input side only (`LocalPlayers.Sample`,
+  `NetAim` hook set in `GameRunner` next to `PlayerWorld`, `PadCharging`): it is just an aim value like the stick's,
+  so no rule change and no `NetSession.Version` bump. Keyboard/mouse and bots unchanged. Steam Input: can't be
+  switched off from our side while we run as Steam's test app (480): its Steam Input settings belong to that app, the
+  overlay isn't injected (so no virtual pad reaches us), and the only in-game route is reading pads through the
+  `ISteamInput` action API with our own manifest (`SetInputActionManifestFilePath`), a big input rework. The real fix
+  is our own app ID with Steam Input set to off/opt-out in Steamworks. Until then the warning is a 12 s toast
+  (`Toasts.Show(text, seconds)`, new optional length) instead of the main menu message. Checked: 195 tests (190
+  pass, 5 skipped), Windows build. Not tried with a controller or with Steam Input on.
 - After 0.1.56, not released (Claude, 23 Nov 2026): **Foil and Polychrome card finishes.** Optional card field
   `"finish": "foil" | "polychrome"` (`CardDef.Finish`; anything else is a load error). Display only, so no
   `NetSession.Version` bump. Card.shader `_Metal` (brushed-metal grain plus a bright sheen band that slides with the

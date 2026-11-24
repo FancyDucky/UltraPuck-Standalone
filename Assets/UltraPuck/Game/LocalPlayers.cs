@@ -31,6 +31,11 @@ namespace UltraPuck.Game
         public System.Func<Vector2?> MouseWorld;
         /// <summary>World position of player slot <c>i</c>. Set by <see cref="GameRunner"/> for mouse aiming.</summary>
         public System.Func<int, Vector2> PlayerWorld;
+        /// <summary>
+        /// Way from player slot <c>i</c>'s skater to the middle of the net they attack, or null (carrying the puck, no
+        /// match). Set by <see cref="GameRunner"/>: a controller player holding charge without the puck faces it.
+        /// </summary>
+        public System.Func<int, Vector2?> NetAim;
         /// <summary>Mouse left/right count as shoot/charge (only while a match is playable — not in menus).</summary>
         public bool AllowMouseButtons;
 
@@ -804,6 +809,13 @@ namespace UltraPuck.Game
                 if (!(Plugged(s.Device) || Plugged(s.Extra)) || Blocked) { inputs[i].Buttons = setting; continue; } // unplugged, or the Steam overlay is open: stands still
                 var m = StickOf(s);
                 var a = AimOfSlot(s, i);
+                // controllers: holding charge without the puck (a pre-charge) faces the middle of their net, unless
+                // the aim stick is pushed (the stick always wins). Just an aim like the stick's, so the rules don't change.
+                if (a.sqrMagnitude <= 0.04f && NetAim != null && PadCharging(s))
+                {
+                    var net = NetAim(i);
+                    if (net.HasValue) a = net.Value;
+                }
                 inputs[i] = new PlayerInput
                 {
                     MoveX = PlayerInput.Axis(m.x),
@@ -849,6 +861,13 @@ namespace UltraPuck.Game
             var x = (Controls.KeyHeld(kb, Controls.Act.MoveRight) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.MoveLeft) ? 1f : 0f);
             var y = (Controls.KeyHeld(kb, Controls.Act.MoveUp) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.MoveDown) ? 1f : 0f);
             return Vector2.ClampMagnitude(new Vector2(x, y), 1f);
+        }
+
+        /// <summary>Charge / brake held on one of the slot's controllers (not the keyboard or mouse).</summary>
+        private static bool PadCharging(Slot s)
+        {
+            return (Live(s.Device) is Gamepad && (Buttons(s.Device, false) & PlayerInput.ChargeBrake) != 0)
+                || (Live(s.Extra) is Gamepad && (Buttons(s.Extra, false) & PlayerInput.ChargeBrake) != 0);
         }
 
         /// <summary>Right stick on a controller only (keyboard aim is keys or mouse).</summary>
