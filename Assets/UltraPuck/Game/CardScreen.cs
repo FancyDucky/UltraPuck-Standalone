@@ -1514,7 +1514,7 @@ namespace UltraPuck.Game
             Special(body, fx, def.Finish, true);
             v.Finishes.Add(body);
             body.SetFloat("_Rim", fx ? (tier <= 1 ? 0.7f : 0.4f) : 0f);
-            body.SetFloat("_SweepStrength", fx ? 1f : 0.5f);
+            body.SetFloat("_SweepStrength", 0f); // no timed shine sweep (the owner preferred without it)
             v.BodyMat = body;
 
             // the picture
@@ -1531,7 +1531,7 @@ namespace UltraPuck.Game
                 poly: poly ? 0.65f : 0f);
             Special(art, fx, def.Finish, false);
             v.Finishes.Add(art);
-            art.SetFloat("_SweepStrength", fx ? 0.9f : 0.4f);
+            art.SetFloat("_SweepStrength", 0f);
             v.ArtMat = art;
             v.ArtT = v.Tilt.Find("Art");
             v.ArtHome = v.ArtT.localPosition;

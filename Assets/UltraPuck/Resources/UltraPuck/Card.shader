@@ -190,20 +190,27 @@ Shader "UltraPuck/Card"
                 }
 
                 // the special finishes (a card file's "finish"; 0 = none)
+                float spaceMask = 0; // starfield: how much of this spot is black space (the glare stays off it)
                 if (_SpecialAmt > 0.001)
                 {
                     float amt = _SpecialAmt;
                     float id = round(_Special);
                     float dark = 1.0 - smoothstep(0.12, 0.45, lum);
                     float frame = 1.0 - inside;
-                    if (id == 1) // starfield
+                    if (id == 1) // starfield: the dark parts become the black void of space, with stars in it
                     {
                         float2 q = i.uv - 0.5;
+                        // the card body (strength 1; the picture gets less) turns everything but its bright text black,
+                        // the picture only its darkest parts
+                        float wide = 1.0 - smoothstep(0.38, 0.7, lum);
+                        float space = saturate(amt * inside * (amt > 0.99 ? wide : dark));
+                        c.rgb = lerp(c.rgb, c.rgb * 0.03, space * 0.97); // near black
+                        spaceMask = space;
                         float3 neb = float3(0.25, 0.1, 0.45) * smoothstep(0.75, 0.0, length(q * float2(1.0, 0.8) + t * 0.08 + float2(0.15, -0.1)))
                                    + float3(0.05, 0.2, 0.4) * smoothstep(0.6, 0.0, length(q * float2(1.2, 0.9) + t * 0.12 - float2(0.2, 0.15)));
                         neb *= 0.6 + 0.4 * sin(_Time.y * 0.2 + q.x * 3.0);
                         float st = Stars(i.uv, t, 18.0, 0.02, 0.82) * 0.5 + Stars(i.uv, t, 32.0, 0.05, 0.86) * 0.8 + Stars(i.uv, t, 55.0, 0.1, 0.9);
-                        c.rgb += (neb * 0.55 + st * float3(0.9, 0.92, 1.0)) * amt * inside * dark;
+                        c.rgb += (neb * 0.12 + st * float3(0.9, 0.92, 1.0) * 1.2) * space; // only a faint hint of nebula
                     }
                     else if (id == 2) // gilded
                     {
@@ -315,7 +322,7 @@ Shader "UltraPuck/Card"
                 float2 dl = i.uv - light;
                 float streak = exp(-pow(dot(dl, normalize(float2(1.0, -0.55))) * 4.5, 2.0));
                 float spot = exp(-dot(dl * float2(1.0, 0.75), dl * float2(1.0, 0.75)) * 7.0);
-                c.rgb += (streak * 0.22 + spot * 0.28) * _Glare;
+                c.rgb += (streak * 0.22 + spot * 0.28) * _Glare * (1.0 - spaceMask * 0.8);
 
                 // sparkles: tiny glints in a grid of cells, each twinkling at its own moment
                 float2 grid = i.uv * float2(46.0, 64.0);
