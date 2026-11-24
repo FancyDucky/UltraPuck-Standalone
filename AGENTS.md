@@ -87,7 +87,11 @@ so whoever works next knows what changed.
 ## Handoff log (newest first; add an entry for every session)
 - After 0.1.56, not released (Claude, 23 Nov 2026): **Controller pre-charge auto-aim; Steam Input warning as a
   toast.** A controller player holding charge without the puck (and not pushing the aim stick past 0.2, the sim's
-  deadzone) aims at the middle of the nearest net they attack. Done on the input side only (`LocalPlayers.Sample`,
+  deadzone) aims at the nearest net they attack: at the nearest spot of its opening (between the posts, less the
+  puck's radius + 0.15) that a straight shot goes in through (`GameRunner.ScoreableSpot`, mouth side from the goal's
+  `facing`, or towards the rink's middle for the end-wall nets). Beside / behind the net, or more than ~70 degrees
+  off straight in, it aims at the middle of the net. Walls between the player and the net aren't checked (S / U
+  bends). Done on the input side only (`LocalPlayers.Sample`,
   `NetAim` hook set in `GameRunner` next to `PlayerWorld`, `PadCharging`): it is just an aim value like the stick's,
   so no rule change and no `NetSession.Version` bump. Keyboard/mouse and bots unchanged. Steam Input: can't be
   switched off from our side while we run as Steam's test app (480): its Steam Input settings belong to that app, the

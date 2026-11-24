@@ -1218,7 +1218,7 @@ namespace UltraPuck.Game
                 if (steer >= 0) p = steer;
                 return V.Of(_state.Players[p].Pos);
             };
-            // controller pre-charge auto-aim: the way to the middle of the net this slot's skater attacks
+            // controller pre-charge auto-aim: the way to a scoreable spot in the net this slot's skater attacks
             _local.NetAim = i =>
             {
                 var p = i;
@@ -1229,15 +1229,17 @@ namespace UltraPuck.Game
                 if (_state.Carrier == p) return null;
                 var me = V.Of(_state.Players[p].Pos);
                 var team = _state.Players[p].Team;
-                Vector2? best = null;
+                UltraPuck.Core.GoalDef net = null;
+                var near = float.MaxValue;
                 foreach (var g in _sim.Map.Goals)
                 {
                     if (g.Team == team) continue; // our own net
-                    var mid = (V.Of(g.Min) + V.Of(g.Max)) * 0.5f;
-                    if (best == null || (mid - me).sqrMagnitude < (best.Value - me).sqrMagnitude) best = mid;
+                    var d = ((V.Of(g.Min) + V.Of(g.Max)) * 0.5f - me).sqrMagnitude;
+                    if (d < near) { near = d; net = g; }
                 }
-                if (best == null || (best.Value - me).sqrMagnitude < 0.0001f) return null;
-                return (best.Value - me).normalized;
+                if (net == null) return null;
+                var at = ScoreableSpot(net, me, _sim.T.PuckRadius.ToFloat());
+                return (at - me).sqrMagnitude < 0.0001f ? (Vector2?)null : (at - me).normalized;
             };
             // reticle in a match (KBM); system cursor for menus and the card pick
             var reticle = playing && !open && !InputMode.Pad && _local.AnyKeyboardHuman();
@@ -1541,6 +1543,35 @@ namespace UltraPuck.Game
         public void StepMap(int d) { UseMap(_mapIndex + d); }
 
         /// <summary>A hash of the map and card files: everyone in an online game must have the same ones.</summary>
+        /// <summary>
+        /// Where a controller player's pre-charge aims in <paramref name="net"/>: the nearest spot of the opening (between
+        /// the posts, leaving room for the puck) that a straight shot from <paramref name="me"/> goes in through. From
+        /// behind or beside the net, or at too tight an angle, the middle of the net instead.
+        /// </summary>
+        private static Vector2 ScoreableSpot(UltraPuck.Core.GoalDef net, Vector2 me, float puckRadius)
+        {
+            Vector2 min = V.Of(net.Min), max = V.Of(net.Max), mid = (min + max) * 0.5f;
+            // which way the mouth opens: the map says, else (nets in the end walls) towards the middle of the rink
+            Vector2 f;
+            if (net.HasFacing) f = V.Of(net.Facing);
+            else f = Mathf.Abs(mid.x) >= Mathf.Abs(mid.y) ? new Vector2(-Mathf.Sign(mid.x), 0f) : new Vector2(0f, -Mathf.Sign(mid.y));
+            if (f.sqrMagnitude < 0.5f) return mid;
+            var alongX = Mathf.Abs(f.x) >= Mathf.Abs(f.y); // mouth faces along x: the opening runs along y
+            // the opening: the box's edge on the mouth side, posts at the box's sides
+            var mouth = alongX ? new Vector2(f.x > 0 ? max.x : min.x, mid.y) : new Vector2(mid.x, f.y > 0 ? max.y : min.y);
+            float lo = alongX ? min.y : min.x, hi = alongX ? max.y : max.x;
+            var room = puckRadius + 0.15f; // the puck's width plus a little for aim wobble
+            lo += room; hi -= room;
+            if (lo > hi) return mid;
+            var ahead = Vector2.Dot(me - mouth, f); // how far in front of the opening
+            if (ahead < 0.3f) return mid; // beside or behind the net: no straight way in
+            var across = Mathf.Clamp(alongX ? me.y : me.x, lo, hi);
+            var spot = alongX ? new Vector2(mouth.x, across) : new Vector2(across, mouth.y);
+            var shot = (spot - me).normalized;
+            if (Vector2.Dot(shot, -f) < 0.34f) return mid; // more than ~70 degrees off straight in: too tight
+            return spot;
+        }
+
         private uint Fingerprint()
         {
             var h = 2166136261u;
