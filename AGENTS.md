@@ -85,7 +85,7 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.57, not released (Claude, 24 Nov 2026): **Double Card reveal; clean grid exits.** Double Card records
+- 0.1.58 (Claude, 24 Nov 2026): **Double Card reveal; clean grid exits.** Double Card records
   the cards it gave (`PlayerState.Gifts`, cleared for everyone in `StartPicking`; `Gifted` counts them), and the
   countdown waits `Tuning.GiftRevealTime` (2.5 s) more on top of `PickOutroTime` when anyone has Gifts. CardScreen
   `Reveal`: once the picked cards are gone and the phase is Countdown, it deals those cards face down (flipping up),
