@@ -50,6 +50,8 @@ namespace UltraPuck.Game
             /// <summary>The lobby's online version, or null while Steam is still fetching it (a friend's lobby).</summary>
             public string Version;
             public bool Friend;
+            /// <summary>A match is on there (you join it part-way, once you ready up).</summary>
+            public bool Playing;
             public bool SameVersion { get { return string.IsNullOrEmpty(Version) || Version == NetSession.Version.ToString(); } }
         }
         public static readonly List<Listing> Found = new List<Listing>();
@@ -205,8 +207,9 @@ namespace UltraPuck.Game
         {
             if (!InLobby || SteamMatchmaking.GetLobbyOwner(Lobby) != SteamUser.GetSteamID()) return;
             SteamMatchmaking.SetLobbyData(Lobby, "players", players.ToString());
+            // a match in progress stays listed and joinable: anyone (someone who left, or someone new) can join part-way
             SteamMatchmaking.SetLobbyData(Lobby, "playing", playing ? "1" : "0");
-            SteamMatchmaking.SetLobbyJoinable(Lobby, !playing);
+            SteamMatchmaking.SetLobbyJoinable(Lobby, true);
         }
 
         /// <summary>Opens the Steam overlay's invite list for our lobby.</summary>
@@ -295,7 +298,6 @@ namespace UltraPuck.Game
             // Steam only lists lobbies near you by default: friends in another region wouldn't show up
             SteamMatchmaking.AddRequestLobbyListDistanceFilter(ELobbyDistanceFilter.k_ELobbyDistanceFilterWorldwide);
             SteamMatchmaking.AddRequestLobbyListStringFilter(GameKey, GameValue, ELobbyComparison.k_ELobbyComparisonEqual);
-            SteamMatchmaking.AddRequestLobbyListStringFilter("playing", "0", ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListResultCountFilter(50);
             _listed.Set(SteamMatchmaking.RequestLobbyList());
         }
@@ -341,6 +343,7 @@ namespace UltraPuck.Game
             if (!string.IsNullOrEmpty(name)) l.Name = name;
             l.Players = Math.Max(1, players);
             l.Version = SteamMatchmaking.GetLobbyData(l.Id, Key);
+            l.Playing = SteamMatchmaking.GetLobbyData(l.Id, "playing") == "1";
         }
 
         private static void LobbyData(LobbyDataUpdate_t r)

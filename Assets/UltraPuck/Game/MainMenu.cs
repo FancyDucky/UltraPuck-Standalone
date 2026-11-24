@@ -136,7 +136,7 @@ namespace UltraPuck.Game
                         _rows.Add(new Row
                         {
                             Label = l.Name,
-                            Detail = l.SameVersion ? l.Players + " / " + NetSession.MaxPlayers + " players" + (l.Friend ? " (friend)" : "") : "Different version: you both need the latest update",
+                            Detail = l.SameVersion ? l.Players + " / " + NetSession.MaxPlayers + " players" + (l.Playing ? ", match on" : "") + (l.Friend ? " (friend)" : "") : "Different version: you both need the latest update",
                             Press = () => Runner.JoinSteam(id),
                             Enabled = () => listing.SameVersion,
                         });

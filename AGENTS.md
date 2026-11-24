@@ -85,6 +85,10 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.64 (Claude, 24 Nov 2026): **games stay in Find games on Steam while a match is on.** The host's lobby used to
+  go unjoinable with "playing" = 1 and the search filtered those out, so anyone who left couldn't find the game again.
+  Now `SteamNet.Describe` keeps it joinable, the search keeps in-progress lobbies, and the listing says "match on"
+  (`Listing.Playing`); joining part-way (0.1.63) takes it from there.
 - 0.1.63 (Claude, 24 Nov 2026): **Carry-through, match settings for everyone, joining part-way,
   change team / watch, subtitle shadow, free play arrows, match song "Final Hit".** *Carry-through* (match setting, `Settings.CarryThrough` /
   `CarryPercent` 5-100%, default on at 40% (prefs `carry_through_v2` / `carry_percent_v2`), the % slider is temporary for tuning): any pass or shot (`PassFrom` set, caught by
