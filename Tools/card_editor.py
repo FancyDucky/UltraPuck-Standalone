@@ -39,11 +39,19 @@ def version():
     return open(os.path.join(ROOT, 'version.txt')).read().strip()
 
 
-def stat_names():
-    """The stats the game knows, read straight from Core/Cards.cs (CardLibrary.StatNames)."""
+def names(field):
+    """A list of names the game knows, read straight from Core/Cards.cs (StatNames, FinishNames)."""
     src = open(os.path.join(ROOT, 'Assets', 'UltraPuck', 'Core', 'Cards.cs'), encoding='utf-8').read()
-    m = re.search(r'StatNames\s*=\s*\{(.*?)\};', src, re.S)
+    m = re.search(field + r'\s*=\s*\{(.*?)\};', src, re.S)
     return re.findall(r'"(\w+)"', m.group(1)) if m else []
+
+
+def stat_names():
+    return names('StatNames')
+
+
+def finish_names():
+    return names('FinishNames')
 
 
 def lenient(text):
@@ -113,7 +121,7 @@ def file_text(header, data):
 
 def check(cards):
     """The same checks the game's loader makes (a broken file means no cards at all in game)."""
-    known = set(stat_names())
+    known, finishes = set(stat_names()), finish_names()
     ids, errors = set(), []
     for i, c in enumerate(cards):
         what = c.get('name') or c.get('id') or 'card %d' % (i + 1)
@@ -125,8 +133,8 @@ def check(cards):
         ids.add(cid)
         if c.get('tier', 'C') not in TIERS:
             errors.append('%s: tier must be S, A, B, C, D or F' % what)
-        if str(c.get('finish') or '').lower() not in ('', 'foil', 'polychrome', 'holo', 'pearl'):
-            errors.append('%s: finish must be foil, polychrome, holo or pearl' % what)
+        if c.get('finish') and str(c['finish']).lower() not in finishes:
+            errors.append('%s: finish must be one of: %s' % (what, ', '.join(finishes)))
         for k in ('max', 'maxTeam', 'minTeam'):
             if k in c and not isinstance(c[k], int):
                 errors.append('%s: %s must be a whole number' % (what, k))
@@ -254,7 +262,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send(open(os.path.join(ROOT, 'Tools', 'card_editor.html'), 'rb').read(), 'text/html; charset=utf-8')
         elif path == '/api/cards':
             header, data = load()
-            self.send({'cards': data['cards'], 'stats': stat_names(), 'art': art_files(), 'version': version(),
+            self.send({'cards': data['cards'], 'stats': stat_names(), 'finishes': finish_names(), 'art': art_files(), 'version': version(),
                        'header': header})
         elif path == '/api/status':
             self.send(job)

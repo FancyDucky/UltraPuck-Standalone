@@ -77,7 +77,7 @@ so whoever works next knows what changed.
   + art in `Cards/Art/<id>.jpg` (optional `"finish"`, looks only: `CardDef.FinishNames`). Every eligible card is offered as often as any other (tier is frame colour / bot
   preference only). S Rink nets stand on the ice; U Rink is upright (open at the top).
   Card editor: `Card Editor.bat` (`Tools/card_editor.py` + `card_editor.html`, a local page on 127.0.0.1:8765).
-  Its stat dropdown reads `CardLibrary.StatNames` from `Core/Cards.cs`, so new stats show up by themselves; new card
+  Its stat and finish dropdowns read `StatNames` / `CardDef.FinishNames` from `Core/Cards.cs`, so new ones show up by themselves; new card
   keys need adding to `ORDER` / the form in the html (unknown keys are kept as they are).
 - Button pictures: Kenney Input Prompts (CC0) in `StreamingAssets/InputPrompts/` (`Xbox`, `PlayStation`, `Switch`,
   `Keyboard`, `Generic`). Hints (`Glyphs`) and utility card footnotes (`Press {utility} to activate`) load PNGs via

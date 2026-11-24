@@ -63,7 +63,7 @@
 <script>
 const TIER = { S:'#F5C442', A:'#BA8CFF', B:'#5CA8F5', C:'#6BD68A', D:'#A1A1A1', F:'#C27A59' };
 const ORDER = ['id','name','tier','finish','max','maxTeam','minTeam','requires','noBots','art','color','flavor','face','text','stats'];
-let cards = [], stats = [], art = [], version = '', sel = -1, dirty = false;
+let cards = [], stats = [], finishes = [], art = [], version = '', sel = -1, dirty = false;
 
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const markup = s => esc(s).replace(/\[(good|bad|note|gold)\]/g, '<span class="$1">').replace(/\[\/\]/g, '</span>');
@@ -75,7 +75,7 @@ window.onbeforeunload = () => dirty ? 'unsaved' : undefined;
 
 async function load() {
   const r = await (await fetch('/api/cards')).json();
-  cards = r.cards; stats = r.stats; art = r.art; version = r.version;
+  cards = r.cards; stats = r.stats; finishes = r.finishes; art = r.art; version = r.version;
   document.getElementById('pub').textContent = 'Publish to GitHub v' + version;
   drawAll(); setDirty(false);
 }
@@ -141,8 +141,8 @@ function form() {
     ${txt('name', 'Name')}
     <label class="f">Tier (frame colour)</label>
     <select onchange="setField('tier', this.value)">${Object.keys(TIER).map(t => `<option${t === (c.tier || 'C') ? ' selected' : ''}>${t}</option>`).join('')}</select>
-    <label class="f">Finish (replaces the tier's look: holo = S sparkly rainbow, pearl = A shimmer)</label>
-    <select onchange="setField('finish', this.value)">${['', 'foil', 'polychrome', 'holo', 'pearl'].map(f => `<option value="${f}"${f === (c.finish || '').toLowerCase() ? ' selected' : ''}>${f ? f[0].toUpperCase() + f.slice(1) : 'None'}</option>`).join('')}</select>
+    <label class="f">Finish (replaces the tier's look; holo = S tier's, pearl = A tier's; neon lights the frame in the accent colour)</label>
+    <select onchange="setField('finish', this.value)">${['', ...finishes].map(f => `<option value="${f}"${f === (c.finish || '').toLowerCase() ? ' selected' : ''}>${f ? f[0].toUpperCase() + f.slice(1) : 'None'}</option>`).join('')}</select>
     <div class="nums">${num('max', 'Max each')}${num('maxTeam', 'Max a team')}${num('minTeam', 'Team size')}
       <div><label class="f">No bots</label><input type="checkbox" style="width:auto" ${c.noBots ? 'checked' : ''} onchange="setField('noBots', this.checked)"></div></div>
     <label class="f">Accent colour</label>
