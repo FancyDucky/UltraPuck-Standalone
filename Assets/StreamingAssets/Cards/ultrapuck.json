@@ -62,7 +62,7 @@
       "face": [
         { "label": "Knock Back", "value": "[good]+100%[/]" }
       ],
-      "text": "[note]Full charge shots. Opponents who catch it are carried along.[/]",
+      "text": "[note]Full charge shots. Opponents who catch it are knocked back.[/]",
       "stats": { "CannonBall": "+1" }
     },
     {
@@ -176,7 +176,7 @@
       "face": [
         { "label": "Pylon Goalie Size", "value": "[good]+55%[/]" }
       ],
-      "text": "[note]Can be shoved aside, but never into the net; back at every face-off.[/]",
+      "text": "[note]Can be shoved aside, but never into the net; resets position on face-off.[/]",
       "stats": { "Pylons": "+1" }
     },
     {
@@ -251,7 +251,7 @@
       "glare": false,
       "max": 1,
       "color": "#8FD3F5",
-      "flavor": "Friends call me Snow Miser",
+      "flavor": "\"Friends call me Snow Miser...\"",
       "face": [
         { "label": "Teammates on Ice", "value": "[good]+60%[/]" },
         { "label": "Enemies on Ice", "value": "[good]-10%[/]" },
@@ -336,19 +336,20 @@
         { "label": "Full Charge", "value": "[good]wall behind the puck[/]" },
         { "label": "Lasts", "value": "[good]5.5 s[/]" }
       ],
-      "text": "[note]Everyone bumps into it, even the puck.[/]",
+      "text": "[note]Summons a rock wall behind the path of the puck.[/]",
       "stats": { "StoneWall": "+1" }
     },
     {
       "id": "ultrapuck.choose",
       "name": "Choose",
       "tier": "S",
+      "finish": "prism",
       "color": "#FF5FA2",
       "flavor": "Pick a card, any card!",
       "face": [
         { "label": "Pick", "value": "[good]any card[/]" }
       ],
-      "text": "[note]Straight after, pick any card you could have from the whole deck.[/]",
+      "text": "[note]Chose any card from the deck![/]",
       "stats": { "Choose": "+1" }
     },
     {
@@ -357,7 +358,7 @@
       "tier": "B",
       "max": 1,
       "color": "#5FD4C8",
-      "flavor": "Shuffle up and deal.",
+      "flavor": "Run it back.",
       "face": [
         { "label": "Re-roll", "value": "[good]once a pick[/]" }
       ],
@@ -369,11 +370,11 @@
       "name": "Double Card",
       "tier": "A",
       "color": "#B47CFF",
-      "flavor": "Two for the price of one.",
+      "flavor": "Just give me whatever...",
       "face": [
         { "label": "Cards", "value": "[good]2 random[/]" }
       ],
-      "text": "[note]Never Choose or Double Card.[/]",
+      "text": "[note]Get two random cards from the deck..[/]",
       "stats": { "DoubleCard": "+1" }
     }
   ]
