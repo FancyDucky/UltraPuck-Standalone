@@ -85,6 +85,12 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.59, not released (Claude, 24 Nov 2026): **card pick log lines.** The owner sometimes gets no card
+  screen when scored on (their own pick, not just bots'), not found by reading the code (the sim waits for the
+  person; Route resets Pilot while picking). `CardScreen.LogPicks` writes "Ultra Puck cards: pick started / over
+  after N s" (tick, the card screen's stage, `_ready` count, each picker's offer / pick, here / away / bot), and
+  `Deal` writes "Ultra Puck cards: dealt ...". A pick that starts with the screen not Idle, or ends with no "dealt"
+  line, points at the cause. Display/log only, no protocol bump. Checked: Windows build.
 - After 0.1.58, not released (Claude, 24 Nov 2026): **goal explosion always shows; bots take a moment to pick.**
   The goal explosion/ripple fired only when a frame's two shown ticks straddled the goal (`a` not Scored, `b`
   Scored), but at 120 ticks/s a 60 fps frame (Steam Deck) runs ~2 ticks, so about half the goals were skipped.

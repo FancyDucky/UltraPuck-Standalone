@@ -130,6 +130,7 @@ namespace UltraPuck.Game
         {
             _state = s;
             var picking = s != null && s.Phase == Phase.Picking && Sim != null && Sim.Cards != null;
+            LogPicks(s, picking);
             if (!picking)
             {
                 // the picks are in: a shared draw still dives into this PC's first chooser
@@ -215,6 +216,30 @@ namespace UltraPuck.Game
                 _slot = -1;
                 if (browsed && OnBrowseClosed != null) OnBrowseClosed();
             }
+        }
+
+        // a line in the log when a pick starts and ends, and when cards are dealt (for working out a pick nobody saw)
+        private bool _logPicking;
+        private float _logPickAt;
+
+        private void LogPicks(GameState s, bool picking)
+        {
+            if (picking == _logPicking || s == null) return;
+            _logPicking = picking;
+            var who = new System.Text.StringBuilder();
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var p = s.Players[i];
+                if (picking && p.Offer.Length == 0) continue;
+                if (!picking && p.Cards.Length == 0) continue;
+                var slot = SlotOf(i);
+                var here = slot >= 0 && slot < Local.Slots.Count && !Local.Slots[slot].Demo;
+                who.Append(" P").Append(i + 1).Append(p.Bot ? "(bot)" : here ? "(here)" : "(away)")
+                   .Append(picking ? " offer " + p.Offer.Length + " picked " + p.Picked : " cards " + p.Cards.Length).Append(';');
+            }
+            if (picking) _logPickAt = Time.unscaledTime;
+            Debug.Log("Ultra Puck cards: pick " + (picking ? "started" : "over after " + (Time.unscaledTime - _logPickAt).ToString("0.00") + " s")
+                + " (tick " + s.Tick + ", screen " + _stage + (_editing ? " editing" : "") + ", ready " + _ready.Count + "):" + who);
         }
 
         /// <summary>Double Card: deal the cards it just gave (everyone's who took it, side by side), face down, flipping up.</summary>
@@ -548,6 +573,7 @@ namespace UltraPuck.Game
             _stage = Stage.Choosing;
             _stageAt = Time.unscaledTime;
             _dealt = (int[])offer.Clone();
+            Debug.Log("Ultra Puck cards: dealt " + offer.Length + " to P" + (slot + 1) + (_watching ? " (watching)" : "") + (_teamVote ? " (shared)" : ""));
             _deck = _state != null && slot >= 0 && slot < _state.Players.Length && _state.Players[slot].PickKind == 1;
             if (_deck)
             {
