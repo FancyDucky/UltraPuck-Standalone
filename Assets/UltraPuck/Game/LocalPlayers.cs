@@ -70,6 +70,8 @@ namespace UltraPuck.Game
             public float BackHeld;
             /// <summary>Readied up on the players screen: from then on their controls work the bots instead.</summary>
             public bool Ready;
+            /// <summary>Online, mid-match: chose to watch from the pause menu (gives up their seat until they pick a team).</summary>
+            public bool Watching;
             /// <summary>Which bot a readied player is working on (index among the bots).</summary>
             public int Cursor;
             /// <summary>The frame they joined on (the press that joined them mustn't also ready them).</summary>

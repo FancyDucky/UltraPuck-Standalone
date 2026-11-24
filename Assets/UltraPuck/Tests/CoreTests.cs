@@ -248,6 +248,44 @@ namespace UltraPuck.Tests
             Assert.Less(s.Players[1].HitPower.ToDouble(), 0.75);
         }
 
+        /// <summary>Knock-away (match setting): how hard a check pops the puck away from its carrier, changed by the host mid-match.</summary>
+        [Test]
+        public void KnockAwaySetsHowFarACheckSendsThePuck()
+        {
+            System.Func<int, double> popped = pct =>
+            {
+                var sim = new Simulation(LoadRink());
+                var s = sim.NewGame(new[] { 0, 1 });
+                PlayNow(s);
+                sim.HostCommand(s, (byte)(PlayerInput.KnockAway + pct / 25));
+                Assert.AreEqual(pct, s.KnockPercent);
+                s.Players[1].Pos = new FixVec2(Fix.FromInt(2), Fix.Zero);
+                s.Players[1].Facing = new FixVec2(Fix.Zero, Fix.One);
+                s.Carrier = 1;
+                s.Players[0].Pos = new FixVec2(Fix.FromInt(-1), Fix.Zero);
+                s.Players[0].Facing = FixVec2.Right;
+                sim.Step(s, new[] { new PlayerInput { Buttons = PlayerInput.ShootCheck }, default(PlayerInput) });
+                for (var t = 0; t < 60 && s.Carrier == 1; t++) sim.Step(s, new[] { new PlayerInput { MoveX = 127 }, default(PlayerInput) });
+                Assert.AreEqual(-1, s.Carrier, "knocked loose");
+                return (s.PuckVel - s.Players[1].Vel).X.ToDouble(); // how fast it leaves the old carrier
+            };
+            var none = popped(0);
+            var usual = popped(100);
+            var big = popped(300);
+            Assert.Greater(usual, none + 2.0, "the usual pop");
+            Assert.Greater(big, usual + 6.0, "300% sends it much further");
+            // the rules start it, and the checksum and Clone see it
+            var sim2 = new Simulation(LoadRink(), new Tuning { KnockAwayPercent = 250 });
+            var g = sim2.NewGame(new[] { 0, 1 });
+            Assert.AreEqual(250, g.KnockPercent);
+            Assert.AreEqual(100, new Simulation(LoadRink()).NewGame(new[] { 0, 1 }).KnockPercent, "100% unless the rules say otherwise");
+            var before = g.Checksum();
+            sim2.HostCommand(g, (byte)(PlayerInput.KnockAway + 2));
+            Assert.AreEqual(50, g.KnockPercent);
+            Assert.AreNotEqual(before, g.Checksum());
+            Assert.AreEqual(50, g.Clone().KnockPercent);
+        }
+
         [Test]
         public void ReachingTheCarriedPuckWithYourWedgeStealsIt()
         {

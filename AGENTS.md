@@ -85,6 +85,34 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.62, not released (Claude, 24 Nov 2026): **Carry-through, match settings for everyone, joining part-way,
+  change team / watch, subtitle shadow, free play arrows, match song "Final Hit".** *Carry-through* (match setting, `Settings.CarryThrough` /
+  `CarryPercent` 5-100%, default on at 40% (prefs `carry_through_v2` / `carry_percent_v2`), the % slider is temporary for tuning): any pass or shot (`PassFrom` set, caught by
+  someone else, either team) carries the catcher along like a gentle Cannon Ball (`Simulation.CarryThrough`: speed along
+  the shot replaced by puck speed × % × weight / Knockback Taken if faster; no Shoved, no loss of control; not on top of
+  a Cannon Ball). State `GameState.CarryOn` / `CarryPercent` (from `Tuning.CarryThrough` / `CarryPercent`, rules byte
+  after the card list); the host changes it mid-match from the pause Match settings with host commands Pick 224 off /
+  225 on / 226+n strength n×5% (`GameRunner.HostCommand` keeps only the newest strength queued). *Knock-away* (match
+  setting, `Settings.KnockAwayPercent` 0-500% in 25s, default 350 (pref `knock_away_v2`; 100 = the old pop), a tuning slider): how hard a check (a `Knock`, or a
+  dash into the carried puck) pops the puck away from its carrier (`KnockLoose(..., check: true)` scales
+  `KnockLooseSpeed`; Shockwave / Puck Gun / rock knocks are unchanged). State `GameState.KnockPercent`, rules byte after
+  Carry-through (% / 5), host command Pick 100+n = n×25%; NetSession.Version 76. *Match settings for
+  everyone*: the lobby message carries the host's current rules (`NetSession.LobbyRules`, set by the host's game each
+  frame); non-hosts get a read-only Match settings page in the pause menu (`Menus.ShownRules` / `RulesView` in
+  Settings.cs, Carry-through shown live from the state) and read-only rows in the lobby Options (`MainMenu.Shown`).
+  *Join part-way / change team / watch*: Hello is no longer refused mid-match; a newcomer waits in the lobby ("A match
+  is on: ready up to join it") and gets a seat once ready. Pause menu has **Change team** (under Match settings,
+  `Menus.Page.Team`): a row per person on this PC, red / blue / Just watching (online only; `Slot.Watching`, look bit 128
+  `NetSession.Watching`). Locally it's `Simulation.ChangeTeam` at once. Online the host *re-seats* the match
+  (`NetSession.Reseat`): on a settled tick it changes the game (RemovePlayer / ChangeTeam / AddPlayer, bots added
+  mid-match get seats), bumps `Layout`, builds a new Rollback copying everyone's inputs, plays back to where it was,
+  and hands every PC the state plus all inputs from that tick (`Msg.Rejoin`, now also used for this; clients keep their
+  own newer inputs by seat, then catch up). Inputs / Away / Checksum carry the layout, stale ones are ignored; waits
+  for card picks and for a bot removal to settle (`_botLeftTick`). Host commands / pause go with the host's first
+  seated player. `BotLeftMatch` counts bots before the player (people can now come after bots). **NetSession.Version
+  75.** Main menu subtitle shadow offset 0.6 / 0.8 (new `Ui.Label` overload with an offset). Free play pause: small ‹ ›
+  arrows either side of the Bots and Rink values. Tests `CarryThroughTakesWhoeverGetsThePuckAlong`,
+  `ChangingTeamMidMatch`, `JoiningChangingTeamAndWatchingMidMatch`. Not checked on screen or with real PCs.
 - After 0.1.61, not released (Claude, 24 Nov 2026): **cards per row in the grid.** LB / RB (Q / E) in free play's
   card editor and Choose's deck change the cards a row, 2 to 5 (default 3, was a fixed 4), remembered in
   PlayerPrefs `card_grid_cols` (`CardScreen.ResizeGrid`). `EditCols` / `EditRows` / `EditScale` / pitches / top

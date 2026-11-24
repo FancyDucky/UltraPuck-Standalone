@@ -134,6 +134,16 @@ namespace UltraPuck.Game
             _menus.CanAddBot = () => _state != null && _state.Players.Length < LocalPlayers.MaxPlayers && _state.Phase != Phase.Picking
                 && (_mode != Mode.Online || (_session != null && _session.IsHost && _local.Slots.Count > 0));
             _menus.HostCommand = HostCommand;
+            // everyone online can look at the match settings; only the host changes them (the others see the host's)
+            _menus.CanViewMatch = () => _mode == Mode.Online && OnlinePlaying;
+            _menus.ShownRules = () => _mode == Mode.Online && _session != null && !_session.IsHost ? _session.LobbyRules : null;
+            _menus.LiveState = () => InMatch ? _state : null;
+            // changing team (or watching, online) from the pause menu
+            _menus.TeamPlayers = TeamPlayers;
+            _menus.TeamPlayerName = k => { var at = TeamPlayers(); return k < at.Count ? SlotName(at[k]) : ""; };
+            _menus.TeamOfPlayer = k => { var at = TeamPlayers(); return k < at.Count ? SlotTeam(at[k]) : 0; };
+            _menus.SetTeamOf = (k, team) => { var at = TeamPlayers(); if (k < at.Count) SetSlotTeam(at[k], team); };
+            _menus.CanWatch = () => _mode == Mode.Online;
             _menus.Score = t => _state != null ? _state.Score[t & 1] + PendingScore(t) : 0;
             _menus.AddBotNow = AddBotNow;
             _menus.RemoveBotNow = RemoveBotNow;
@@ -1482,6 +1492,10 @@ namespace UltraPuck.Game
             if (_cards != null) foreach (var c in _cards.Cards) if (!Settings.CardOn(c.Id) && c.Index < 256) off.Add((byte)c.Index);
             b.Add((byte)off.Count);
             b.AddRange(off);
+            // after the card list (older rules simply end there): Carry-through, 0 = off, else its strength in %
+            b.Add((byte)(Settings.CarryThrough ? Settings.CarryPercent : 0));
+            // then Knock-away, in 5% steps (0..100 = 0..500%)
+            b.Add((byte)(Settings.KnockAwayPercent / 5));
             return b.ToArray();
         }
 
@@ -1506,6 +1520,8 @@ namespace UltraPuck.Game
             var n = Mathf.Min(rules[6], rules.Length - 7);
             t.CardsOff = new int[n];
             for (var k = 0; k < n; k++) t.CardsOff[k] = rules[7 + k];
+            if (rules.Length > 7 + n && rules[7 + n] > 0) { t.CarryThrough = true; t.CarryPercent = Mathf.Clamp(rules[7 + n], 1, 100); }
+            if (rules.Length > 8 + n) t.KnockAwayPercent = Mathf.Clamp(rules[8 + n] * 5, 0, 500);
             return t;
         }
 
@@ -1701,14 +1717,9 @@ namespace UltraPuck.Game
                         foreach (var seat in s.Seats)
                             if (!seat.Bot && seat.Peer == s.MyPeer && seat.Local == k) { _local.Slots[k].Colour = s.TeamColours[seat.Team & 1]; break; }
                 }
-                var mine = new List<KeyValuePair<string, int>>();
-                for (var k = 0; k < _local.Slots.Count; k++)
-                {
-                    var sl = _local.Slots[k];
-                    var nm = !string.IsNullOrEmpty(sl.Name) ? sl.Name : Settings.PlayerName + (k > 0 ? " (" + (k + 1) + ")" : "");
-                    mine.Add(new KeyValuePair<string, int>(nm, NetSession.Look(sl.Colour, sl.Symbol, sl.Ready)));
-                }
-                s.SetLocalPlayers(mine);
+                foreach (var sl in _local.Slots) sl.Watching = false; // (watching is for the match that's on)
+                SendLocalPlayers(s);
+                if (s.IsHost) s.LobbyRules = PackRules();
                 if (!busy && s.IsHost && _local.Slots.Count > 0 && _local.StartPressed() && s.Seats.Count >= 2 && !s.TooManyTeams && s.AllReady) { Sound.Select(); StartOnlineMatch(); }
                 AttractUpdate();
                 return;
@@ -1717,6 +1728,8 @@ namespace UltraPuck.Game
             // the match (everyone readies up again in the lobby afterwards)
             if (_mainMenu.Current != MainMenu.Page.None) _mainMenu.Show(MainMenu.Page.None);
             _local.UnreadyAll();
+            SendLocalPlayers(s); // (someone changing team or going to watch)
+            if (s.IsHost) s.LobbyRules = PackRules();
             var match = s.Match;
             if (s.MatchId != _onlineMatchId) { _onlineMatchId = s.MatchId; _onlineAcc = 0f; foreach (var sl in _local.Slots) sl.Latched = 0; }
             _sim = match.Sim;
@@ -1751,8 +1764,11 @@ namespace UltraPuck.Game
                 // (everyone else would otherwise sit waiting for this PC)
                 try { inputs = _menus.IsOpen ? new PlayerInput[_local.Slots.Count] : _local.Sample(_sim, _state); }
                 catch (System.Exception ex) { inputs = new PlayerInput[_local.Slots.Count]; if (!_sampleFailed) { _sampleFailed = true; Debug.LogException(ex); } }
-                if (s.IsHost && _menus.IsOpen && inputs.Length > 0) inputs[0].Buttons |= PlayerInput.Pause; // the host's menu pauses everyone
-                var sendCmd = _pendingCmds.Count > 0 && inputs.Length > 0 && _state.Phase != Phase.Picking;
+                // the host's commands and pause go with the first of the host's people who has a seat (not one watching)
+                var cmdSlot = -1;
+                for (var k = 0; k < inputs.Length && cmdSlot < 0; k++) if (s.PlayerOf(k) >= 0) cmdSlot = k;
+                if (s.IsHost && _menus.IsOpen && cmdSlot >= 0) inputs[cmdSlot].Buttons |= PlayerInput.Pause; // the host's menu pauses everyone
+                var sendCmd = _pendingCmds.Count > 0 && cmdSlot >= 0 && _state.Phase != Phase.Picking;
                 var leaving = -1; // a bot being taken out: which player (worked out now, as the game stands)
                 if (sendCmd)
                 {
@@ -1763,7 +1779,7 @@ namespace UltraPuck.Game
                         if (leaving < 0) { _pendingCmds.Dequeue(); sendCmd = false; }
                         else cmd = (byte)(PlayerInput.RemoveBot + leaving);
                     }
-                    if (sendCmd) inputs[0].Pick = cmd;
+                    if (sendCmd) inputs[cmdSlot].Pick = cmd;
                 }
                 if (!s.Step(inputs))
                 {
@@ -2023,6 +2039,16 @@ namespace UltraPuck.Game
             if (_mode == Mode.Online)
             {
                 if (_session == null || !_session.IsHost) return;
+                var range = cmd >= PlayerInput.CarryStrength && cmd <= PlayerInput.CarryStrength + 20 ? PlayerInput.CarryStrength
+                    : cmd >= PlayerInput.KnockAway && cmd <= PlayerInput.KnockAway + 20 ? PlayerInput.KnockAway : -1;
+                if (range >= 0)
+                {
+                    // dragging a slider: only its newest value needs to go
+                    var keep = new List<byte>(_pendingCmds);
+                    keep.RemoveAll(c => c >= range && c <= range + 20);
+                    _pendingCmds.Clear();
+                    foreach (var c in keep) _pendingCmds.Enqueue(c);
+                }
                 _pendingCmds.Enqueue(cmd);
                 return;
             }
@@ -2109,6 +2135,74 @@ namespace UltraPuck.Game
                 if ((_state.Players[i].Team & 1) == (team & 1)) return i;
             }
             return -1;
+        }
+
+        /// <summary>Online: tell the session who plays on this PC (names, colours, ready, watching).</summary>
+        private void SendLocalPlayers(NetSession s)
+        {
+            var mine = new List<KeyValuePair<string, int>>();
+            for (var k = 0; k < _local.Slots.Count; k++)
+            {
+                var sl = _local.Slots[k];
+                mine.Add(new KeyValuePair<string, int>(SlotName(k), NetSession.Look(sl.Colour, sl.Symbol, sl.Ready, sl.Watching)));
+            }
+            s.SetLocalPlayers(mine);
+        }
+
+        /// <summary>The name of the person on this PC's slot <paramref name="k"/>.</summary>
+        private string SlotName(int k)
+        {
+            if (k < 0 || k >= _local.Slots.Count) return "";
+            var sl = _local.Slots[k];
+            return !string.IsNullOrEmpty(sl.Name) ? sl.Name : Settings.PlayerName + (k > 0 ? " (" + (k + 1) + ")" : "");
+        }
+
+        /// <summary>The people on this PC who can change team from the pause menu (their slots).</summary>
+        private List<int> TeamPlayers()
+        {
+            var list = new List<int>();
+            if (!InMatch || _free) return list;
+            for (var k = 0; k < _local.Slots.Count; k++) if (!_local.Slots[k].Demo) list.Add(k);
+            return list;
+        }
+
+        /// <summary>Slot <paramref name="k"/>'s team in the match (-1 watching). Online, what they asked for until the host has done it.</summary>
+        private int SlotTeam(int k)
+        {
+            var sl = _local.Slots[k];
+            if (_mode == Mode.Online && _session != null)
+            {
+                if (sl.Watching) return -1;
+                var t = _session.TeamColours[0] == sl.Colour ? 0 : _session.TeamColours[1] == sl.Colour ? 1 : -1;
+                if (t >= 0) return t;
+                var p = _session.PlayerOf(k);
+                return p >= 0 && p < _session.Seats.Count ? _session.Seats[p].Team : 0;
+            }
+            return k < _state.Players.Length ? _state.Players[k].Team : sl.Team;
+        }
+
+        /// <summary>
+        /// Pause menu: slot <paramref name="k"/> goes to <paramref name="team"/> (-1 = watch, online only). Online the host
+        /// re-seats the match (soon, once any card pick is over); here it's straight away.
+        /// </summary>
+        private void SetSlotTeam(int k, int team)
+        {
+            if (k < 0 || k >= _local.Slots.Count || _state == null) return;
+            var sl = _local.Slots[k];
+            if (_mode == Mode.Online && _session != null)
+            {
+                if (team < 0) { sl.Watching = true; return; }
+                sl.Watching = false;
+                sl.Colour = _session.TeamColours[team & 1];
+                return;
+            }
+            if (team < 0 || k >= _state.Players.Length || _state.Phase == Phase.Picking) { Sound.Deny(); return; }
+            if (_state.Players[k].Team == (team & 1)) return;
+            sl.Team = team & 1;
+            sl.Colour = Palette.TeamColour(team & 1);
+            _sim.ChangeTeam(_state, k, team & 1);
+            if (_cards != null) _cards.Recompute(_state);
+            _prev = _state.Clone();
         }
 
         /// <summary>Free play: add or remove computer players until there are <paramref name="want"/>.</summary>

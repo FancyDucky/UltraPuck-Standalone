@@ -88,6 +88,17 @@ namespace UltraPuck.Core
         public Fix GhostShotTime = Fix.Half;
         /// <summary>Cannon Ball: the catcher is sent off along the shot at this share of the puck's speed, gliding (little control) this long.</summary>
         public Fix CannonCarry = Fix.Ratio(8, 10), CannonTime = Fix.Half;
+        /// <summary>
+        /// Carry-through (match setting, starting values): every pass or shot that reaches another player takes them
+        /// along like a small Cannon Ball, at this percentage of the puck's speed (by weight / Knockback Taken).
+        /// </summary>
+        public bool CarryThrough;
+        public int CarryPercent = 40;
+        /// <summary>
+        /// Knock-away (match setting, its starting value): how hard a check knocks the puck away from its carrier, in % of
+        /// <see cref="KnockLooseSpeed"/> (0..500).
+        /// </summary>
+        public int KnockAwayPercent = 100;
         /// <summary>Team Play: after a clean pass the passer and the teammate are this much faster (0.8 = 80%) for this long.</summary>
         public Fix PassSpeedBoost = Fix.Ratio(5, 10), PassSpeedTime = Fix.FromInt(3);
         /// <summary>

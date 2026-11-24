@@ -347,6 +347,33 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("multi_utility", value ? 1 : 0); }
         }
 
+        /// <summary>
+        /// Carry-through: a pass or shot that reaches another player takes them along with some of the puck's speed
+        /// (like Cannon Ball, for every shot). <see cref="CarryPercent"/> is how much (5..100%, a temporary tuning slider).
+        /// On at 40% unless changed (the "_v2" keys start everyone, older saves too, on those defaults).
+        /// </summary>
+        public static bool CarryThrough
+        {
+            get { return PlayerPrefs.GetInt("carry_through_v2", 1) != 0; }
+            set { PlayerPrefs.SetInt("carry_through_v2", value ? 1 : 0); }
+        }
+
+        public static int CarryPercent
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("carry_percent_v2", 40) / 5 * 5, 5, 100); }
+            set { PlayerPrefs.SetInt("carry_percent_v2", Mathf.Clamp(value / 5 * 5, 5, 100)); }
+        }
+
+        /// <summary>
+        /// Knock-away: how hard a check knocks the puck away from its carrier, in % of the usual (0..500% in steps of 25,
+        /// default 350; 100 is the plain check: a tuning slider).
+        /// </summary>
+        public static int KnockAwayPercent
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("knock_away_v2", 350) / 25 * 25, 0, 500); }
+            set { PlayerPrefs.SetInt("knock_away_v2", Mathf.Clamp(value / 25 * 25, 0, 500)); }
+        }
+
         /// <summary>How a match is won: 0 = first to <see cref="GoalsToWin"/> goals, 1 = most goals when <see cref="MatchMinutes"/> run out.</summary>
         public static int MatchMode
         {
@@ -449,5 +476,33 @@ namespace UltraPuck.Game
             get { return Mathf.Clamp01(PlayerPrefs.GetFloat("camera_smooth", 0.4f)); }
             set { PlayerPrefs.SetFloat("camera_smooth", Mathf.Clamp01(value)); }
         }
+    }
+
+    /// <summary>
+    /// The host's match rules as they're sent online (GameRunner.PackRules), read back so everyone else can see them.
+    /// </summary>
+    internal sealed class RulesView
+    {
+        public bool Rounds, Replays, MultiUtility, Carry;
+        public int PickMode, CardsOffered, PickTime, MatchMode, GoalsToWin, MatchMinutes, CardsOff, CarryPercent, KnockPercent = 100;
+
+        /// <summary>Null when there's nothing (yet) to read.</summary>
+        public static RulesView Read(byte[] r)
+        {
+            if (r == null || r.Length < 7) return null;
+            var v = new RulesView
+            {
+                Rounds = (r[0] & 1) != 0, Replays = (r[0] & 4) != 0, MultiUtility = (r[0] & 8) != 0,
+                PickMode = (r[0] & 2) != 0 ? 2 : (r[0] & 16) != 0 ? 1 : 0,
+                CardsOffered = r[1], PickTime = r[2], MatchMode = r[3], GoalsToWin = r[4], MatchMinutes = r[5],
+            };
+            var n = Mathf.Min(r[6], r.Length - 7);
+            v.CardsOff = n;
+            if (r.Length > 7 + n && r[7 + n] > 0) { v.Carry = true; v.CarryPercent = r[7 + n]; }
+            if (r.Length > 8 + n) v.KnockPercent = r[8 + n] * 5;
+            return v;
+        }
+
+        public string MatchText { get { return MatchMode == 0 ? "First to " + GoalsToWin : MatchMinutes + (MatchMinutes == 1 ? " minute" : " minutes"); } }
     }
 }

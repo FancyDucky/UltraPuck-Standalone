@@ -14,7 +14,7 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class Menus : MonoBehaviour
     {
-        public enum Page { None, Pause, Settings, Cards, Match }
+        public enum Page { None, Pause, Settings, Cards, Match, Team }
 
         /// <summary>The card list for the Toggle Cards page (set by GameRunner).</summary>
         public UltraPuck.Core.CardLibrary Cards;
@@ -63,6 +63,22 @@ namespace UltraPuck.Game
         public Func<int, string> MapName;
         /// <summary>Restart the match with the match settings as they are now, on this rink.</summary>
         public Action<int> OnRestart;
+        /// <summary>The pause menu shows the match settings to look at (online, for everyone who isn't the host).</summary>
+        public Func<bool> CanViewMatch;
+        /// <summary>
+        /// Not null: the match settings are someone else's (the online host's, as sent), shown but not changed here.
+        /// </summary>
+        public Func<byte[]> ShownRules;
+        /// <summary>The match being played (null in the menus): Carry-through as it is right now.</summary>
+        public Func<UltraPuck.Core.GameState> LiveState;
+        /// <summary>Change team: this PC's people (by number), their names, teams (-1 watching), and changing it.</summary>
+        public Func<List<int>> TeamPlayers;
+        public Func<int, string> TeamPlayerName;
+        public Func<int, int> TeamOfPlayer;
+        public Action<int, int> SetTeamOf;
+        /// <summary>Watching instead of playing is offered (online).</summary>
+        public Func<bool> CanWatch;
+        private int _sentCarry = -1, _sentKnock = -1;
         private int _pendingMap;
 
         private bool _settingsFromLobby;
@@ -153,9 +169,25 @@ namespace UltraPuck.Game
                     }
                     _rows.Add(Button("Cards", () => { Close(); if (OnGetCard != null) OnGetCard(); }));
                 }
-                if (!FreePlay && CanEditMatch != null && CanEditMatch()) _rows.Add(Button("Match settings", OpenMatch));
+                if (!FreePlay && ((CanEditMatch != null && CanEditMatch()) || (CanViewMatch != null && CanViewMatch()))) _rows.Add(Button("Match settings", OpenMatch));
+                if (!FreePlay && TeamPlayers != null && TeamPlayers().Count > 0) _rows.Add(Button("Change team", OpenTeam));
                 _rows.Add(Button("Settings", () => OpenSettings(false)));
                 _rows.Add(Button("Main menu", () => { Close(); if (OnMainMenu != null) OnMainMenu(); }));
+                return;
+            }
+            if (Current == Page.Team)
+            {
+                TeamRows();
+                _rows.Add(Button("Back", ToPause));
+                return;
+            }
+            if (Current == Page.Match && ReadOnly)
+            {
+                // someone else's (the host's): to look at
+                if (MapCount != null && MapCount() > 0 && CurrentMap != null)
+                    _rows.Add(new Row { Label = "Rink", Value = () => MapName(CurrentMap()), Hint = "Only the host can change the match settings." });
+                MatchRows();
+                _rows.Add(Button("Back", ToPause));
                 return;
             }
             if (Current == Page.Match)
@@ -211,7 +243,7 @@ namespace UltraPuck.Game
                         });
                     }
                 MatchRows();
-                _rows.Add(Button("Back", () => { Current = Page.Pause; _focus = 0; _first = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }));
+                _rows.Add(Button("Back", ToPause));
                 return;
             }
             if (Current == Page.Cards)
@@ -350,9 +382,92 @@ namespace UltraPuck.Game
             });
         }
 
+        /// <summary>The match settings are the online host's: shown, not changed here.</summary>
+        private bool ReadOnly { get { return ShownRules != null && ShownRules() != null; } }
+
+        private void ToPause() { Current = Page.Pause; _focus = 0; _first = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }
+
+        public void OpenTeam()
+        {
+            Current = Page.Team;
+            _focus = 0; _first = 0; _focusY = -1f;
+            _openedAt = Time.unscaledTime;
+        }
+
+        /// <summary>Change team: a row for each person on this PC (left / right picks a side, or watching online).</summary>
+        private void TeamRows()
+        {
+            var people = TeamPlayers != null ? TeamPlayers() : new List<int>();
+            var watch = CanWatch != null && CanWatch();
+            for (var n = 0; n < people.Count; n++)
+            {
+                var k = n;
+                Func<int> get = () => TeamOfPlayer(k);
+                Func<int, string> name = t => t < 0 ? "Just watching" : TeamName != null ? TeamName(t) : t == 0 ? "Red" : "Blue";
+                // the choices in order: red, blue, (watching)
+                var count = watch ? 3 : 2;
+                Func<int> at = () => get() < 0 ? 2 : get();
+                Action<int> pick = i => { var team = i == 2 ? -1 : i; if (team != get()) SetTeamOf(k, team); };
+                _rows.Add(new Row
+                {
+                    Label = people.Count == 1 ? "Your team" : TeamPlayerName(k),
+                    Value = () => name(get()),
+                    Step = d => pick(((at() + d) % count + count) % count),
+                    Press = () => pick((at() + 1) % count),
+                    Hint = watch ? "Left / right: the other team, or just watch the match (pick a team again to come back in)." : "Left / right: play for the other team.",
+                });
+            }
+        }
+
+        private static string OnOff(bool v) { return v ? "On" : "Off"; }
+
+        /// <summary>The host's settings, to look at: plain rows (nothing to change).</summary>
+        private void ShownMatchRows()
+        {
+            var r = RulesView.Read(ShownRules());
+            const string hint = "Only the host can change the match settings.";
+            if (r == null) { _rows.Add(new Row { Label = "Waiting for the host's settings...", Hint = hint }); return; }
+            _rows.Add(new Row { Label = "Match", Value = () => r.MatchText, Hint = hint });
+            _rows.Add(new Row { Label = "Rounds mode", Value = () => OnOff(r.Rounds), Hint = hint });
+            _rows.Add(new Row { Label = "Goal replays", Value = () => OnOff(r.Replays), Hint = hint });
+            _rows.Add(new Row { Label = "Picking", Value = () => Settings.PickModes[Mathf.Clamp(r.PickMode, 0, Settings.PickModes.Length - 1)], Hint = hint });
+            _rows.Add(new Row { Label = "Cards offered", Value = () => r.CardsOffered.ToString(), Hint = hint });
+            _rows.Add(new Row { Label = "Pick time", Value = () => r.PickTime == 0 ? "No limit" : r.PickTime + " s", Hint = hint });
+            _rows.Add(new Row { Label = "Multiple utilities", Value = () => OnOff(r.MultiUtility), Hint = hint });
+            if (Cards != null) _rows.Add(new Row { Label = "Cards", Value = () => Mathf.Max(0, Cards.Cards.Count - r.CardsOff) + " of " + Cards.Cards.Count + " on", Hint = hint });
+            // Carry-through can change mid-match: the match's own when there is one
+            _rows.Add(new Row { Label = "Carry-through", Value = () => { var s = Live(); return OnOff(s != null ? s.CarryOn : r.Carry); }, Hint = hint });
+            _rows.Add(new Row { Label = "Carry-through strength", Value = () => { var s = Live(); return (s != null ? s.CarryPercent : r.Carry ? r.CarryPercent : Settings.CarryPercent) + "%"; }, Hint = hint });
+            _rows.Add(new Row { Label = "Knock-away", Value = () => { var s = Live(); return (s != null ? s.KnockPercent : r.KnockPercent) + "%"; }, Hint = hint });
+        }
+
+        private UltraPuck.Core.GameState Live() { return LiveState != null ? LiveState() : null; }
+
+        /// <summary>Pause menu's match settings, mid-match: Carry-through changes for everyone straight away (a host command).</summary>
+        private void SendCarry(bool strength)
+        {
+            if (Current != Page.Match || HostCommand == null || Live() == null) return;
+            if (!strength) { HostCommand(Settings.CarryThrough ? PlayerInput.CarryOn : PlayerInput.CarryOff); return; }
+            var pct = Settings.CarryPercent;
+            if (pct == _sentCarry && Live().CarryPercent == pct) return;
+            _sentCarry = pct;
+            HostCommand((byte)(PlayerInput.CarryStrength + pct / 5));
+        }
+
+        /// <summary>Pause menu's match settings, mid-match: Knock-away changes for everyone straight away (a host command).</summary>
+        private void SendKnock()
+        {
+            if (Current != Page.Match || HostCommand == null || Live() == null) return;
+            var pct = Settings.KnockAwayPercent;
+            if (pct == _sentKnock && Live().KnockPercent == pct) return;
+            _sentKnock = pct;
+            HostCommand((byte)(PlayerInput.KnockAway + pct / 25));
+        }
+
         /// <summary>The match's rules (the Match tab, and the pause menu's match settings).</summary>
         private void MatchRows()
         {
+            if (ReadOnly) { ShownMatchRows(); return; }
             _rows.Add(Switch("Rounds mode", () => Settings.Rounds, v => Settings.Rounds = v, "After each goal, the team that conceded picks a card that powers them up for the rest of the match."));
             _rows.Add(Switch("Goal replays", () => Settings.Replays, v => Settings.Replays = v, "Every goal is shown again, up to 10 seconds back, in slow motion on the big moments. Everyone pressing A skips it (bots always agree)."));
             var vote = Choice("Picking", Settings.PickModes, () => Settings.PickMode, v => Settings.PickMode = v,
@@ -370,6 +485,21 @@ namespace UltraPuck.Game
                 "Off: you can only hold one utility card (Puck Gun, Invisibility, Shockwave, Swap). Taking another replaces the one you have. On: you can hold several."));
             _rows.Add(new Row { Label = "Toggle cards", Value = CardsOnText, Press = () => { _cardsFrom = Current; Current = Page.Cards; _focus = 0; _first = 0; _focusY = -1f; },
                 Hint = "Choose which cards can be offered. Online, the host's choices apply." });
+            _rows.Add(Switch("Carry-through", () => Settings.CarryThrough, v => { Settings.CarryThrough = v; SendCarry(false); },
+                "A pass or shot that reaches another player (on either team) takes them along with some of the puck's speed, like Cannon Ball. Mid-match it changes straight away."));
+            var carry = Slider("Carry-through strength", () => (Settings.CarryPercent - 5) / 95f,
+                v => { Settings.CarryPercent = Mathf.RoundToInt((5f + v * 95f) / 5f) * 5; SendCarry(true); },
+                v => Settings.CarryPercent + "%",
+                "How much of the puck's speed goes into the player who gets it (for trying out values).");
+            carry.Step = d => { Settings.CarryPercent = Mathf.Clamp(Settings.CarryPercent + d * 5, 5, 100); SendCarry(true); };
+            carry.Enabled = () => Settings.CarryThrough;
+            _rows.Add(carry);
+            var knock = Slider("Knock-away", () => Settings.KnockAwayPercent / 500f,
+                v => { Settings.KnockAwayPercent = Mathf.RoundToInt(v * 20f) * 25; SendKnock(); },
+                v => Settings.KnockAwayPercent + "%",
+                "How far the puck flies away from its carrier when they get checked (100% is a plain check, 350% the default; for trying out values). Mid-match it changes straight away.");
+            knock.Step = d => { Settings.KnockAwayPercent = Mathf.Clamp(Settings.KnockAwayPercent + d * 25, 0, 500); SendKnock(); };
+            _rows.Add(knock);
         }
 
         private Page _cardsFrom = Page.Settings;
@@ -391,6 +521,7 @@ namespace UltraPuck.Game
 
         public void OpenMatch()
         {
+            _sentCarry = -1; _sentKnock = -1;
             Current = Page.Match;
             _pendingMap = CurrentMap != null ? CurrentMap() : 0;
             _focus = 0; _first = 0; _focusY = -1f;
@@ -557,7 +688,7 @@ namespace UltraPuck.Game
             {
                 Sound.Back();
                 if (Current == Page.Cards) { Current = _cardsFrom; _focus = 0; _first = 0; _focusY = -1f; }
-                else if (Current == Page.Match) { Current = Page.Pause; _focus = 0; _first = 0; _openedAt = Time.unscaledTime; _focusY = -1f; }
+                else if (Current == Page.Match || Current == Page.Team) ToPause();
                 else Back();
                 return;
             }
@@ -630,7 +761,8 @@ namespace UltraPuck.Game
             var panelW = pause ? 440f : 780f;
             var top = pause ? 110f : 150f;
             // the settings panel is as tall as its longest tab, so it doesn't jump about between tabs
-            var matchPage = Current == Page.Match;
+            var matchPage = Current == Page.Match || Current == Page.Team;
+            var teamPage = Current == Page.Team;
             var panelH = top + (pause ? _rows.Count : matchPage ? Mathf.Min(MaxVisible, _rows.Count) : Mathf.Min(MaxVisible, SettingsRows())) * (rowH + 8f) + (pause ? 30f : 92f);
             // long pages (the card list) scroll: keep the focused row in view
             var visible = pause ? _rows.Count : Mathf.Min(MaxVisible, _rows.Count);
@@ -647,10 +779,12 @@ namespace UltraPuck.Game
             Ui.Box(new Rect(x, y, panelW, panelH), Ui.Panel, 21f);
 
             var cardsPage = Current == Page.Cards;
-            Ui.Label(new Rect(x, y + 22f, panelW, 50f), pause ? "Paused" : cardsPage ? "Toggle cards" : matchPage ? "Match settings" : "Settings", Ui.Font(38, true, TextAnchor.MiddleCenter), Ui.Text);
+            Ui.Label(new Rect(x, y + 22f, panelW, 50f), pause ? "Paused" : cardsPage ? "Toggle cards" : teamPage ? "Change team" : matchPage ? "Match settings" : "Settings", Ui.Font(38, true, TextAnchor.MiddleCenter), Ui.Text);
             if (pause && _subtitle.Length > 0) Ui.Label(new Rect(x, y + 66f, panelW, 26f), _subtitle, Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
             if (cardsPage) Ui.Label(new Rect(x, y + 82f, panelW, 40f), "Which cards can be offered   (" + CardsOnCount() + ")", Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
-            else if (matchPage) Ui.Label(new Rect(x, y + 82f, panelW, 40f), "Restart the match to use new settings", Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
+            else if (matchPage) Ui.Label(new Rect(x, y + 82f, panelW, 40f),
+                teamPage ? "Pick a side for each of you" : ReadOnly ? "The host's settings (only the host can change them)" : "Restart the match to use new settings",
+                Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
             else if (!pause) Tabs_(x, y + 82f, panelW);
 
             var mouse = Ui.Mouse;
@@ -700,7 +834,7 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(x, y + panelH - 70f, panelW, 24f), hint, Ui.Font(16, false, TextAnchor.MiddleCenter), Ui.TextDim);
                 Glyphs.Hint(new Rect(x, y + panelH - 40f, panelW, 24f),
                     _typing ? (InputMode.Pad ? "Type on the keyboard    {confirm} Done    {back} Cancel" : "Type your name    {confirm} Done    {back} Cancel")
-                            : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : matchPage ? "{nav} Choose      {side} Change      {back} Back" : "{tabs} Tabs      {back} Back      Changes save straight away",
+                            : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : matchPage && ReadOnly && !teamPage ? "{nav} Scroll      {back} Back" : matchPage ? "{nav} Choose      {side} Change      {back} Back" : "{tabs} Tabs      {back} Back      Changes save straight away",
                     14, new Color(1f, 1f, 1f, 0.45f));
             }
             GUI.matrix = oldMatrix;
@@ -732,6 +866,24 @@ namespace UltraPuck.Game
             // TakeClick: once per frame, so Layout + Repaint can't double-fire a button
             var clicked = enabled && r.Contains(mouse) && Ui.TakeClick();
 
+            if (pause && row.Value != null && row.Step != null)
+            {
+                // (free play's bots and rink) "Bots:  ‹ 3 ›": small arrows either side of the value, so it's clear it changes
+                var style = Ui.Font(21, focused, TextAnchor.MiddleLeft);
+                var lab = row.Label + ":  ";
+                var val = row.Value();
+                var wl = style.CalcSize(new GUIContent(lab)).x;
+                var wv = style.CalcSize(new GUIContent(val)).x;
+                const float arrowW = 16f, gapA = 8f;
+                var x0 = r.center.x - (wl + arrowW + gapA + wv + gapA + arrowW) / 2f;
+                var arrowCol = new Color(textCol.r, textCol.g, textCol.b, textCol.a * 0.6f);
+                Ui.Label(new Rect(x0, r.y, wl + 4f, r.height), lab, style, textCol);
+                Ui.Label(new Rect(x0 + wl, r.y - 1f, arrowW, r.height), "‹", Ui.Font(24, false, TextAnchor.MiddleCenter), arrowCol);
+                Ui.Label(new Rect(x0 + wl + arrowW + gapA, r.y, wv + 4f, r.height), val, style, textCol);
+                Ui.Label(new Rect(x0 + wl + arrowW + gapA + wv + gapA, r.y - 1f, arrowW, r.height), "›", Ui.Font(24, false, TextAnchor.MiddleCenter), arrowCol);
+                if (clicked) { var d = mouse.x < r.center.x ? -1 : 1; row.Step(d); Sound.Step(d); }
+                return;
+            }
             if (pause)
             {
                 Ui.Label(r, row.Label + (row.Value != null ? ":  " + row.Value() : ""), Ui.Font(21, focused, TextAnchor.MiddleCenter), textCol);

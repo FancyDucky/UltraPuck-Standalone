@@ -154,6 +154,18 @@ namespace UltraPuck.Core.Net
             if (tick < _tick && !_used[k, p].Equals(input)) _rewindTo = Math.Min(_rewindTo, tick);
         }
 
+        /// <summary>
+        /// A handed-over input (the host's copy, or this PC's own from before the match was re-seated): stored even if
+        /// this PC already put something at that tick (its first ticks are "no input" until then).
+        /// </summary>
+        public void Load(int p, int tick, PlayerInput input)
+        {
+            if (p < 0 || p >= Players || _bot[p]) return;
+            if (tick < _tick || tick >= _tick + Ring - 1) return;
+            Store(p, tick, input);
+            while (_inputTick[(_known[p] + 1) & (Ring - 1), p] == _known[p] + 1) _known[p]++;
+        }
+
         private void Store(int p, int tick, PlayerInput input)
         {
             var k = tick & (Ring - 1);

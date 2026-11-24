@@ -530,6 +530,71 @@ namespace UltraPuck.Tests
             Assert.Greater(cannon, 3.0, "carried off the way the shot was going, even skating against it");
         }
 
+        /// <summary>
+        /// Carry-through (match setting): any pass or shot that reaches another player takes them along the puck's way,
+        /// a teammate or an opponent alike, and the host can switch it and its strength mid-match.
+        /// </summary>
+        [Test]
+        public void CarryThroughTakesWhoeverGetsThePuckAlong()
+        {
+            // player 0 quick-shoots along +x at player `to` standing still: how fast is `to` going along +x once they have it?
+            System.Func<bool, int, int, double> caught = (on, pct, to) =>
+            {
+                Make();
+                var s = Game(0, 0, 1);
+                Play(s);
+                if (on) _sim.HostCommand(s, PlayerInput.CarryOn);
+                _sim.HostCommand(s, (byte)(PlayerInput.CarryStrength + pct / 5));
+                Assert.AreEqual(on, s.CarryOn);
+                Assert.AreEqual(pct, s.CarryPercent);
+                s.Players[0].Pos = At(-8, 0); s.Players[0].Facing = FixVec2.Right;
+                s.Players[1].Pos = At(-8, 8); s.Players[2].Pos = At(-8, -8);
+                s.Players[to].Pos = At(4, 0); s.Players[to].Facing = new FixVec2(-Fix.One, Fix.Zero);
+                s.Carrier = 0;
+                var inputs = new PlayerInput[3];
+                inputs[0] = Press(PlayerInput.ShootCheck);
+                _sim.Step(s, inputs);
+                inputs[0] = default(PlayerInput);
+                for (var t = 0; t < 120 && s.Carrier != to; t++) { s.Players[to].Pos = At(4, 0); s.Players[to].Vel = FixVec2.Zero; _sim.Step(s, inputs); }
+                Assert.AreEqual(to, s.Carrier, "caught it");
+                return s.Players[to].Vel.X.ToDouble();
+            };
+            foreach (var to in new[] { 1, 2 })
+            {
+                var who = to == 1 ? "a teammate" : "an opponent";
+                var off = caught(false, 50, to);
+                var half = caught(true, 50, to);
+                var full = caught(true, 100, to);
+                Assert.Greater(half, off + 3.0, who + " is carried along with it");
+                Assert.Greater(full, half + 3.0, who + ": a stronger setting carries them further");
+            }
+            // the rules start it (and the checksum sees it)
+            var sim = new Simulation(Rink(), new Tuning { CarryThrough = true, CarryPercent = 35 }, _lib);
+            var g = sim.NewGame(new[] { 0, 1 }, 1u);
+            Assert.IsTrue(g.CarryOn);
+            Assert.AreEqual(35, g.CarryPercent);
+            var before = g.Checksum();
+            sim.HostCommand(g, PlayerInput.CarryOff);
+            Assert.IsFalse(g.CarryOn);
+            Assert.AreNotEqual(before, g.Checksum());
+            Assert.IsFalse(g.Clone().CarryOn);
+        }
+
+        /// <summary>Changing team mid-match: the player goes to the other side, lets go of the puck, and keeps their cards.</summary>
+        [Test]
+        public void ChangingTeamMidMatch()
+        {
+            var s = Game(0, 0, 1);
+            Give(s, 0, "ultrapuck.cannonball");
+            Play(s);
+            s.Carrier = 0;
+            _sim.ChangeTeam(s, 0, 1);
+            Assert.AreEqual(1, s.Players[0].Team);
+            Assert.AreEqual(-1, s.Carrier, "the puck is let go");
+            Assert.AreEqual(1, s.Players[0].Cards.Length, "cards stay with them");
+            Run(s, 30, new PlayerInput[3]);
+        }
+
         [Test]
         public void TheHostCanAddABotMidMatch()
         {

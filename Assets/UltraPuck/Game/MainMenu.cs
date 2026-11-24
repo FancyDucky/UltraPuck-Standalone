@@ -36,6 +36,7 @@ namespace UltraPuck.Game
             public Action Press;
             public Action<int> Step;
             public Func<string> Value;            // a choice's current value, shown as  ‹ value ›
+            public Func<string> Shown;            // a setting to look at (no arrows: only the host changes it)
             public Func<bool> Enabled = () => true;
             public bool TextField;
         }
@@ -170,9 +171,43 @@ namespace UltraPuck.Game
                         for (var k = 0; k < times.Length; k++) times[k] = Settings.PickTimes[k] == 0 ? "No limit" : Settings.PickTimes[k] + " s";
                         _rows.Add(Cycle("Pick time", times, () => Mathf.Max(0, Array.IndexOf(Settings.PickTimes, Settings.PickTime)), v => Settings.PickTime = Settings.PickTimes[v]));
                         _rows.Add(Cycle("Multiple utilities", new[] { "Off", "On" }, () => Settings.MultiUtility ? 1 : 0, v => Settings.MultiUtility = v == 1));
+                        _rows.Add(Cycle("Carry-through", new[] { "Off", "On" }, () => Settings.CarryThrough ? 1 : 0, v => Settings.CarryThrough = v == 1));
+                        var carry = new Row
+                        {
+                            Label = "Carry-through strength", Value = () => Settings.CarryPercent + "%",
+                            Step = d => Settings.CarryPercent = Mathf.Clamp(Settings.CarryPercent + d * 5, 5, 100),
+                            Press = () => Settings.CarryPercent = Settings.CarryPercent >= 100 ? 5 : Settings.CarryPercent + 5,
+                        };
+                        carry.Enabled = () => Settings.CarryThrough;
+                        _rows.Add(carry);
+                        _rows.Add(new Row
+                        {
+                            Label = "Knock-away", Value = () => Settings.KnockAwayPercent + "%",
+                            Step = d => Settings.KnockAwayPercent = Mathf.Clamp(Settings.KnockAwayPercent + d * 25, 0, 500),
+                            Press = () => Settings.KnockAwayPercent = Settings.KnockAwayPercent >= 500 ? 0 : Settings.KnockAwayPercent + 25,
+                        });
                         _rows.Add(new Row { Label = "Bots", Value = () => s.Bots.ToString(), Step = d => s.Bots = Mathf.Clamp(s.Bots + d, 0, NetSession.MaxPlayers), Press = () => s.Bots = s.Bots >= NetSession.MaxPlayers - 1 ? 0 : s.Bots + 1 });
                     }
-                    else if (SteamNet.InLobby) _rows.Add(new Row { Label = "Invite Steam friends", Press = InviteFriends });
+                    else
+                    {
+                        if (SteamNet.InLobby) _rows.Add(new Row { Label = "Invite Steam friends", Press = InviteFriends });
+                        // everyone sees the host's match settings (only the host changes them)
+                        var r = RulesView.Read(s.LobbyRules);
+                        if (r != null)
+                        {
+                            _rows.Add(Shown("Match", () => r.MatchText));
+                            if (Runner.MapCount > 1) _rows.Add(Shown("Rink", () => Runner.MapName(s.Map)));
+                            _rows.Add(Shown("Rounds mode", () => r.Rounds ? "On" : "Off"));
+                            _rows.Add(Shown("Goal replays", () => r.Replays ? "On" : "Off"));
+                            _rows.Add(Shown("Picking", () => Settings.PickModes[Mathf.Clamp(r.PickMode, 0, Settings.PickModes.Length - 1)]));
+                            _rows.Add(Shown("Cards offered", () => r.CardsOffered.ToString()));
+                            _rows.Add(Shown("Pick time", () => r.PickTime == 0 ? "No limit" : r.PickTime + " s"));
+                            _rows.Add(Shown("Multiple utilities", () => r.MultiUtility ? "On" : "Off"));
+                            if (r.CardsOff > 0) _rows.Add(Shown("Cards switched off", () => r.CardsOff.ToString()));
+                            _rows.Add(Shown("Carry-through", () => r.Carry ? "On, " + r.CarryPercent + "%" : "Off"));
+                            _rows.Add(Shown("Knock-away", () => r.KnockPercent + "%"));
+                        }
+                    }
                     _rows.Add(new Row { Label = "Leave the game", Press = () => Runner.LeaveOnline(null) });
                     _rows.Add(new Row { Label = "Back", Press = () => OpenOptions(false) });
                     break;
@@ -194,6 +229,9 @@ namespace UltraPuck.Game
                     break;
             }
         }
+
+        /// <summary>A setting to look at (the host's, on someone else's PC): its value, nothing to change.</summary>
+        private static Row Shown(string label, Func<string> value) { return new Row { Label = label, Shown = value }; }
 
         /// <summary>A row that steps through a few named values (left / right, or press for the next).</summary>
         private static Row Cycle(string label, string[] names, Func<int> get, Action<int> set)
@@ -308,7 +346,8 @@ namespace UltraPuck.Game
 
             var x = TitleScreen.MenuX;
             if (!arriving) TitleScreen.Logo(x, TitleScreen.MenuY, 1f, 1f);
-            Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim);
+            // the shadow as tight to these small letters as the name's is to its big ones (the usual 1.5 / 2 sat apart from them)
+            Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim, new Vector2(0.6f, 0.8f));
 
             // the main page's choices sit right under the title (the other pages have a line of subtitle there)
             Rows(x, Current == Page.Main ? 160f : 220f, 460f, 64f, 10f, 26, t, Current == Page.Friends ? Ui.H - 130f : float.MaxValue);
@@ -460,6 +499,7 @@ namespace UltraPuck.Game
                 if (row.TextField) { AddressField(r, i == _focus); continue; }
                 var label = row.LabelNow != null ? row.LabelNow() : row.Label;
                 if (row.Value != null) label += ":   ‹  " + row.Value() + "  ›";
+                else if (row.Shown != null) { label += ":   " + row.Shown(); col.a *= 0.8f; }
                 var detail = row.Detail != null && rowH >= 60f;
                 var pad = rowH >= 60f ? 26f : 16f;
                 Ui.Label(new Rect(r.x + pad, r.y + (detail ? 6f : 0f), r.width - pad - 10f, detail ? 36f : r.height), label, Ui.Font(font, i == _focus), col);
@@ -529,6 +569,12 @@ namespace UltraPuck.Game
                     if (Runner.MapCount > 1) s += ".   Rink: " + Runner.MapName(Session.Map);
                     if (Session.TooManyTeams) s += ".   Only two teams: red and blue";
                     if (Session.IsHost) s += ".   " + Settings.MatchText;
+                    else
+                    {
+                        var rules = RulesView.Read(Session.LobbyRules);
+                        if (rules != null) s += ".   " + rules.MatchText;
+                        if (Session.HostPlaying) s += ".   A match is on: ready up to join it";
+                    }
                     return s;
                 default: return "";
             }

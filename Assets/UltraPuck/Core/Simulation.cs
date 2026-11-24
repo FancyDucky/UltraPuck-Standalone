@@ -376,7 +376,7 @@ namespace UltraPuck.Core
         /// </summary>
         public GameState NewGame(int[] teams, uint seed = 0, bool[] bots = null)
         {
-            var s = new GameState { Players = new PlayerState[teams.Length] };
+            var s = new GameState { Players = new PlayerState[teams.Length], CarryOn = T.CarryThrough, CarryPercent = Math.Max(0, Math.Min(100, T.CarryPercent)), KnockPercent = Math.Max(0, Math.Min(500, T.KnockAwayPercent)) };
             if (seed != 0) s.Rng = seed;
             for (var i = 0; i < teams.Length; i++) s.Players[i] = new PlayerState { Team = teams[i] & 1, Bot = bots != null && i < bots.Length && bots[i] };
             s.Clock = T.TimeLimit;
@@ -781,6 +781,35 @@ namespace UltraPuck.Core
             return players.Length - 1;
         }
 
+        /// <summary>
+        /// Someone changes team mid-match: they let go of the puck (and anyone they carry), stop steering a bot, and
+        /// skate on from a spot on their new side. Cards stay with them.
+        /// </summary>
+        public void ChangeTeam(GameState s, int index, int team)
+        {
+            if (index < 0 || index >= s.Players.Length) return;
+            team &= 1;
+            var p = s.Players[index];
+            if (p.Team == team) return;
+            if (s.Carrier == index) { s.Carrier = -1; s.PassFrom = -1; s.PuckVel = p.Vel; }
+            if (s.PassFrom == index) s.PassFrom = -1;
+            foreach (var q in s.Players)
+            {
+                if (q.HeldBy == index) { q.HeldBy = -1; q.HeldTime = Fix.Zero; }
+                if (q.Pilot == index) q.Pilot = -1;
+            }
+            p.HeldBy = -1; p.HeldTime = Fix.Zero;
+            p.Pilot = -1;
+            for (var k = 0; k < s.Rocks.Length; k++) if (s.Rocks[k].Carrier == index) s.Rocks[k].Carrier = -1;
+            var n = 0;
+            foreach (var q in s.Players) if (q.Team == team) n++;
+            p.Team = team;
+            var sp = FaceOffSpot(team, n);
+            p.Pos = sp.Pos;
+            p.Facing = sp.Facing;
+            p.Vel = FixVec2.Zero;
+        }
+
         /// <summary>Someone leaves mid-game (free play). Everyone after them moves down one place.</summary>
         public void RemovePlayer(GameState s, int index)
         {
@@ -985,9 +1014,29 @@ namespace UltraPuck.Core
             }
         }
 
+        /// <summary>
+        /// Carry-through: a pass or shot that reaches <paramref name="p"/> takes them along the puck's way at the match's
+        /// share of its speed (lighter players and Knockback Taken further), like a gentle Cannon Ball for every shot:
+        /// the speed along the shot is replaced by the push if that's faster, sideways speed is kept, no loss of control.
+        /// </summary>
+        private void CarryThrough(GameState s, PlayerState p)
+        {
+            var speed = s.PuckVel.Length;
+            if (speed.Raw <= 0) return;
+            var light = Fix.One / WeightOf(p) * Fix.Clamp(p.Stats.KnockbackTaken, Fix.Ratio(1, 20), Fix.FromInt(10));
+            var dir = s.PuckVel / speed;
+            var along = FixVec2.Dot(p.Vel, dir);
+            var push = speed * Fix.Ratio(s.CarryPercent, 100) * light;
+            if (push > along) p.Vel = p.Vel + dir * (push - along);
+        }
+
         /// <summary>A match-settings command from the host (see <see cref="PlayerInput.AddBotRed"/> and the rest); anything else is ignored.</summary>
         public void HostCommand(GameState s, byte cmd)
         {
+            if (cmd == PlayerInput.CarryOff) { s.CarryOn = false; return; }
+            if (cmd == PlayerInput.CarryOn) { s.CarryOn = true; return; }
+            if (cmd >= PlayerInput.CarryStrength && cmd <= PlayerInput.CarryStrength + 20) { s.CarryPercent = (cmd - PlayerInput.CarryStrength) * 5; return; }
+            if (cmd >= PlayerInput.KnockAway && cmd <= PlayerInput.KnockAway + 20) { s.KnockPercent = (cmd - PlayerInput.KnockAway) * 25; return; }
             switch (cmd)
             {
                 case PlayerInput.AddBotRed:
@@ -1531,7 +1580,7 @@ namespace UltraPuck.Core
                     if ((s.PuckPos - q.Pos).SqrLength >= reach * reach) continue;
                     Hit(c, (q.Pos - c.Pos).Normalized, Fix.Half);
                     var dir = q.Vel.SqrLength.Raw > 0 ? q.Vel.Normalized : q.Facing;
-                    KnockLoose(s, s.Carrier, dir, j);
+                    KnockLoose(s, s.Carrier, dir, j, true);
                     q.DashTime = Fix.Zero; // that was the check
                     return;
                 }
@@ -1597,6 +1646,7 @@ namespace UltraPuck.Core
                 if (best >= 0)
                 {
                     var p = s.Players[best];
+                    var shotFrom = s.PassFrom; // a pass or shot on its way (anyone's), for Carry-through below
                     if (IsSave(s, best)) s.Players[Credit(s, best)].Saves++;
                     if (s.PassFrom >= 0 && s.PassFrom != best && s.PassFrom < s.Players.Length && s.Players[s.PassFrom].Team == p.Team)
                     {
@@ -1622,6 +1672,7 @@ namespace UltraPuck.Core
                         p.Shoved = T.CannonTime;
                         p.ShovedBy = s.CannonFrom;
                     }
+                    else if (s.CarryOn && s.CarryPercent > 0 && shotFrom >= 0 && shotFrom != best) CarryThrough(s, p);
                     s.CannonTeam = -1;
                     s.PuckPos = CarrySpot(p); // (a pre-charge carries on: see Control)
                     s.PuckVel = p.Vel;
@@ -2179,7 +2230,7 @@ namespace UltraPuck.Core
             {
                 // checking the carrier knocks the puck loose: it pops out the way the check was going, and nobody
                 // owns it until someone picks it up (the checker has to wait a moment, so it doesn't just change hands)
-                KnockLoose(s, to, n, from);
+                KnockLoose(s, to, n, from, true);
             }
         }
 
@@ -2309,14 +2360,16 @@ namespace UltraPuck.Core
 
         /// <summary>
         /// The carrier <paramref name="carrier"/> loses the puck: it pops loose in direction <paramref name="dir"/>.
-        /// <paramref name="by"/> (the checker, or -1) can't grab it for a moment.
+        /// <paramref name="by"/> (the checker, or -1) can't grab it for a moment. A <paramref name="check"/> pops it out as
+        /// hard as the match's Knock-away setting says.
         /// </summary>
-        private void KnockLoose(GameState s, int carrier, FixVec2 dir, int by)
+        private void KnockLoose(GameState s, int carrier, FixVec2 dir, int by, bool check = false)
         {
             var c = s.Players[carrier];
             s.Carrier = -1;
             s.PassFrom = -1;
-            s.PuckVel = c.Vel * Fix.Half + dir * T.KnockLooseSpeed;
+            var pop = check ? T.KnockLooseSpeed * Fix.Ratio(s.KnockPercent, 100) : T.KnockLooseSpeed;
+            s.PuckVel = c.Vel * Fix.Half + dir * pop;
             c.NoPickup = T.StolenPickupDelay;
             c.Charge = Fix.Zero;
             if (by >= 0) s.Players[by].NoPickup = Fix.Max(s.Players[by].NoPickup, T.CheckerPickupDelay);

@@ -36,6 +36,16 @@ namespace UltraPuck.Core
         /// you, shot at the other team's net, shot at your own.
         /// </summary>
         public const byte PuckToMe = 220, PuckAtMe = 221, PuckAtTheirNet = 222, PuckAtOurNet = 223;
+        /// <summary>
+        /// The host's Carry-through match setting, mid-match: <c>CarryOff</c> / <c>CarryOn</c>, and
+        /// <c>CarryStrength + n</c> (n = 0..20) for a strength of n × 5% of the puck's speed.
+        /// </summary>
+        public const byte CarryOff = 224, CarryOn = 225, CarryStrength = 226;
+        /// <summary>
+        /// The host's Knock-away match setting, mid-match: <c>KnockAway + n</c> (n = 0..20) for a check knocking the puck
+        /// loose at n × 25% of its usual speed. (Picks 100..200 are free outside the card screen.)
+        /// </summary>
+        public const byte KnockAway = 100;
 
         public sbyte MoveX, MoveY;   // -127..127, the left stick
         /// <summary>The right stick: when pushed, you face where it points (twin-stick aiming).</summary>
@@ -461,6 +471,17 @@ namespace UltraPuck.Core
         public int PortalsMade;
         /// <summary>The loose puck going through a portal: the Id of the portal it's in (0 = none).</summary>
         public int PuckPortal;
+        /// <summary>
+        /// Carry-through (a match setting the host can change mid-match): a pass or shot that reaches another player
+        /// takes them along at <see cref="CarryPercent"/>% of the puck's speed. Starts from the match rules.
+        /// </summary>
+        public bool CarryOn;
+        public int CarryPercent;
+        /// <summary>
+        /// Knock-away (a match setting the host can change mid-match): a check knocks the carried puck loose at this % of
+        /// its usual speed. Starts from the match rules.
+        /// </summary>
+        public int KnockPercent;
 
         public GameState Clone()
         {
@@ -499,7 +520,7 @@ namespace UltraPuck.Core
             foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); Mix(ref h, rk.Life); Mix(ref h, rk.PortalVia); }
             foreach (var po in Portals) { Mix(ref h, po.Pos); Mix(ref h, po.Normal); Mix(ref h, po.Owner); Mix(ref h, po.Colour); Mix(ref h, po.Wall); Mix(ref h, po.At); Mix(ref h, po.Uses); Mix(ref h, po.Id); }
             foreach (var sh in PortalShots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); Mix(ref h, sh.Kind); }
-            Mix(ref h, PortalsMade); Mix(ref h, PuckPortal);
+            Mix(ref h, PortalsMade); Mix(ref h, PuckPortal); Mix(ref h, CarryOn ? 1 : 0); Mix(ref h, CarryPercent); Mix(ref h, KnockPercent);
             Mix(ref h, IceLaying); Mix(ref h, IceAge); Mix(ref h, IceTrails);
             Mix(ref h, CannonFrom); Mix(ref h, StoneLaying); Mix(ref h, StoneLeft); Mix(ref h, StoneTip); Mix(ref h, StoneDir); Mix(ref h, StoneWalls);
             foreach (var st in Stones) { Mix(ref h, st.A); Mix(ref h, st.B); Mix(ref h, st.Life); Mix(ref h, st.Wall); }

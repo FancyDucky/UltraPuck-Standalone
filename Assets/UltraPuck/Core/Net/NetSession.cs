@@ -17,7 +17,7 @@ namespace UltraPuck.Core.Net
     /// </summary>
     public sealed class NetSession : IDisposable
     {
-        public const int Version = 74;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card. 43: swapping onto bots is part of the game (input bits 64/128, Pilot), mid-match bots (Pick 201/202), match stats, Puck Gun knockback (no stun, 1 s), 30% slower while charging, puck drag 7/11, bot pass/positioning, Team Vote people draw first, lobby/start messages ordered. 44: countdown waits 1.5 s after picks, leave/rejoin mid-match (Away / Rejoin messages, state hand-over), host kick-off and score commands (Pick 203-207). 45: bot-run players wait between Swap uses, bots throw a carried teammate at the puck. 46: Power Shot = full charge quick shot (QuickShotFull), Invisible Quick Shot (PuckHidden), Cannon Ball (CannonTeam). 47: Cannon Ball shoves the catcher along the shot (Shoved), no hit lag. 48: Swap rock gone once stopped / no swap to a held rock, Ice Trail on every shot (teammates +, 3x longer), Team Play = pass speed boost (Fast), Cannon Ball shove into your own net scores (ShovedBy), Stone Wall (Stones). 49: Same Draw picking (rules bit 16), Stone Wall up to 30 long / 3 s. 50: Swap rock glides 35% less (RockDrag 0.277), Ice Trail 15 s, teammates +60% (IceBoost), RockDrag 0.326, swapping gives you the rock's momentum and the rock keeps its own. 51: Friendly Fire grabs only while holding charge/brake, throws like a shot (MateTossDrag, TossEndSpeed), +15% speed 4 s after. 52: Invisible Shot 0.5 s. 53: host takes a bot out mid-match (Pick 208 + player). 54: Stone Wall stands 6 s. 55: no charging slow-down while carrying a teammate. 56: Shockwave held to grow (ShockHold, 1.5-6 units over 6 s, no cooldown), Stone Wall goes on after bounces and stands 5.5 s, Heavyweight size x1.16. 57: Shockwave grows from 0. 58: Swap rock lasts 10 s (Rock.Life), passes only end when an opponent takes the puck. 59: side colours in the lobby message, Recolour message. 60: bots pass more / quick shots / go round nets; Hockey and Big Rink nets say which way they open. 61: cards go with the person on a swap. 62: Puck Gun on the utility button, 0.85 s cooldown, +3 s for bots. 63: kick-off spot rotates, tight face-off groups in front of the nets, Portal Gun, Team Play +50%. 64: portals only on the back of nets, one Portal Gun a team (maxTeam), going through a portal a bit at a time (PortalVia), Invisible Shot gone. 65: one-a-team cards to one picker in shared hands (Swap too), portals replace the other team's, free play puck drills (Pick 220-223), Slot Machine. 66: Shockwave charges faster (3.6 s), pushes up to 3.5x harder at a full charge. 67: Swap trades momentum again (you take the rock's, it takes yours). 68: own goal only if nobody on the scoring team touched it (TeamTouch0/1), at most two portals a team, slot reels only prize symbols. 69: Choose (pick from the deck), New Hand (re-roll a pick), Double Card (two random cards). 70: a dash counts as a check for 0.4 s (DashHitTime, was 0.25). 71: the Portal Gun keeps its colour until a portal sticks. 72: Double Card shows its two cards before the countdown (Gifts, GiftRevealTime). 73: bots look over their cards for 1.8 s before taking one (BotPickDelay). 74: after new cards (Choose deck, re-roll) a pick waits until the old one is let go (PickHeld).
+        public const int Version = 76;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card. 43: swapping onto bots is part of the game (input bits 64/128, Pilot), mid-match bots (Pick 201/202), match stats, Puck Gun knockback (no stun, 1 s), 30% slower while charging, puck drag 7/11, bot pass/positioning, Team Vote people draw first, lobby/start messages ordered. 44: countdown waits 1.5 s after picks, leave/rejoin mid-match (Away / Rejoin messages, state hand-over), host kick-off and score commands (Pick 203-207). 45: bot-run players wait between Swap uses, bots throw a carried teammate at the puck. 46: Power Shot = full charge quick shot (QuickShotFull), Invisible Quick Shot (PuckHidden), Cannon Ball (CannonTeam). 47: Cannon Ball shoves the catcher along the shot (Shoved), no hit lag. 48: Swap rock gone once stopped / no swap to a held rock, Ice Trail on every shot (teammates +, 3x longer), Team Play = pass speed boost (Fast), Cannon Ball shove into your own net scores (ShovedBy), Stone Wall (Stones). 49: Same Draw picking (rules bit 16), Stone Wall up to 30 long / 3 s. 50: Swap rock glides 35% less (RockDrag 0.277), Ice Trail 15 s, teammates +60% (IceBoost), RockDrag 0.326, swapping gives you the rock's momentum and the rock keeps its own. 51: Friendly Fire grabs only while holding charge/brake, throws like a shot (MateTossDrag, TossEndSpeed), +15% speed 4 s after. 52: Invisible Shot 0.5 s. 53: host takes a bot out mid-match (Pick 208 + player). 54: Stone Wall stands 6 s. 55: no charging slow-down while carrying a teammate. 56: Shockwave held to grow (ShockHold, 1.5-6 units over 6 s, no cooldown), Stone Wall goes on after bounces and stands 5.5 s, Heavyweight size x1.16. 57: Shockwave grows from 0. 58: Swap rock lasts 10 s (Rock.Life), passes only end when an opponent takes the puck. 59: side colours in the lobby message, Recolour message. 60: bots pass more / quick shots / go round nets; Hockey and Big Rink nets say which way they open. 61: cards go with the person on a swap. 62: Puck Gun on the utility button, 0.85 s cooldown, +3 s for bots. 63: kick-off spot rotates, tight face-off groups in front of the nets, Portal Gun, Team Play +50%. 64: portals only on the back of nets, one Portal Gun a team (maxTeam), going through a portal a bit at a time (PortalVia), Invisible Shot gone. 65: one-a-team cards to one picker in shared hands (Swap too), portals replace the other team's, free play puck drills (Pick 220-223), Slot Machine. 66: Shockwave charges faster (3.6 s), pushes up to 3.5x harder at a full charge. 67: Swap trades momentum again (you take the rock's, it takes yours). 68: own goal only if nobody on the scoring team touched it (TeamTouch0/1), at most two portals a team, slot reels only prize symbols. 69: Choose (pick from the deck), New Hand (re-roll a pick), Double Card (two random cards). 70: a dash counts as a check for 0.4 s (DashHitTime, was 0.25). 71: the Portal Gun keeps its colour until a portal sticks. 72: Double Card shows its two cards before the countdown (Gifts, GiftRevealTime). 73: bots look over their cards for 1.8 s before taking one (BotPickDelay). 74: after new cards (Choose deck, re-roll) a pick waits until the old one is let go (PickHeld). 75: Carry-through (CarryOn / CarryPercent, Pick 224-246, rules byte after the card list), the host's rules in the lobby message, joining a match in progress, changing team and watching mid-match (the match is re-seated: Layout in Inputs / Away / Checksum, inputs in the hand-over, look bit 128 = watching). 76: Knock-away (KnockPercent, Pick 100-120, rules byte after Carry-through).
         public const int MaxPlayers = 8;
         /// <summary>Your own controls take effect this many ticks later (25 ms at 120 a second), which hides a little lag for free.</summary>
         public const int InputDelay = 3;
@@ -56,7 +56,10 @@ namespace UltraPuck.Core.Net
         /// A player's look, as sent around: colour in the low 3 bits, symbol in the next 3. Players who picked the same
         /// colour are a team; the first colour (in seat order) is team 0, the next team 1.
         /// </summary>
-        public static int Look(int colour, int symbol, bool ready = false) { return (colour & 7) | ((symbol & 7) << 3) | (ready ? 64 : 0); }
+        public static int Look(int colour, int symbol, bool ready = false, bool watching = false) { return (colour & 7) | ((symbol & 7) << 3) | (ready ? 64 : 0) | (watching ? 128 : 0); }
+
+        /// <summary>A player's look says they only want to watch the match that's on (they keep no seat in it).</summary>
+        public static bool Watching(int look) { return (look & 128) != 0; }
 
         /// <summary>Everyone (not counting bots) has readied up.</summary>
         public bool AllReady { get { foreach (var s in Seats) if (!s.Bot && !s.Ready) return false; return Seats.Count > 0; } }
@@ -169,6 +172,8 @@ namespace UltraPuck.Core.Net
             /// <summary>Host: the seats this PC took back mid-match, and when the last hand-over was sent.</summary>
             public readonly List<int> Rejoined = new List<int>();
             public double RejoinSent = -10;
+            /// <summary>Host: the newest seating of this match this PC has said it plays (-1: none yet).</summary>
+            public int LayoutAcked = -1;
             public readonly int[] Acked = new int[8];
             public double LastRepair;
             public readonly List<KeyValuePair<string, int>> Players = new List<KeyValuePair<string, int>>();
@@ -217,7 +222,8 @@ namespace UltraPuck.Core.Net
             if (same) return;
             _localPlayers.Clear();
             _localPlayers.AddRange(players);
-            if (IsHost) RebuildSeats();
+            if (IsHost && Current == Stage.Playing) _seatsDirty = true; // the seats are the match's: re-seat it if need be
+            else if (IsHost) RebuildSeats();
             else SendPlayers();
         }
 
@@ -232,6 +238,24 @@ namespace UltraPuck.Core.Net
 
         /// <summary>The host's match rules (rounds, picking, which cards...), packed by the game; sent with every match start.</summary>
         public byte[] Rules = new byte[0];
+
+        /// <summary>
+        /// The host's match settings as they are now (the host's game sets them; everyone else gets them in the lobby
+        /// message), so every player can see them. Not the rules of the match being played (that's <see cref="Rules"/>).
+        /// </summary>
+        public byte[] LobbyRules = new byte[0];
+
+        /// <summary>Client: the host has a match on (from the lobby message; ready up in the lobby to join it).</summary>
+        public bool HostPlaying { get; private set; }
+
+        /// <summary>
+        /// How many times the match being played has been re-seated (someone joined, changed team or went to watch).
+        /// Controls, checks and away lists say which seating they're for, so none from an older one is used by mistake.
+        /// </summary>
+        public int Layout { get { return _layout; } }
+        private int _layout;
+        /// <summary>Host: the seats need comparing with what everyone's players want (a team, or to watch).</summary>
+        private bool _seatsDirty;
 
         public int Bots
         {
@@ -276,11 +300,13 @@ namespace UltraPuck.Core.Net
         public void BotLeftMatch(int player)
         {
             if (!IsHost) return;
-            var people = 0;
-            foreach (var s in Seats) if (!s.Bot) people++;
-            var b = player - people;
+            // the lobby's bots are in the match's order: count the bots before them (players past the seats are bots
+            // added during the match)
+            var b = 0;
+            for (var i = 0; i < player; i++) if (i >= Seats.Count || Seats[i].Bot) b++;
             if (b >= 0 && b < _bots.Count) _bots.RemoveAt(b);
             if (player >= 0 && player < Seats.Count && Seats[player].Bot) Seats.RemoveAt(player);
+            if (Match != null) _botLeftTick = Match.Tick + InputDelay; // (no re-seating until it's gone on that tick)
         }
 
         /// <summary>Host: take a bot out.</summary>
@@ -337,7 +363,8 @@ namespace UltraPuck.Core.Net
             RebuildSeats(); // (bots added during the last match get their seats; anyone away is dropped)
             MatchId++;
             Seed = seed == 0 ? 1u : seed;
-            foreach (var l in _links.Values) { l.StartAcked = false; for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = -1; }
+            foreach (var l in _links.Values) { l.StartAcked = false; l.LayoutAcked = -1; for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = -1; }
+            _seatsDirty = false;
             Begin();
             _lobbyVersion++;
             SendStartToAll();
@@ -364,6 +391,7 @@ namespace UltraPuck.Core.Net
             var bots = new bool[Seats.Count];
             for (var k = 0; k < Seats.Count; k++) { teams[k] = Seats[k].Team; bots[k] = Seats[k].Bot; local[k] = !Seats[k].Bot && Seats[k].Peer == MyPeer; }
             Match = new Rollback(sim, sim.NewGame(teams, Seed, bots), local, bots, InputDelay);
+            _layout = 0;
             _myChecks.Clear(); _theirChecks.Clear(); _lastChecked = 0;
             DesyncTick = -1;
             Current = Stage.Playing;
@@ -459,15 +487,17 @@ namespace UltraPuck.Core.Net
             if (IsHost && Current != Stage.Closed)
             {
                 if (_now - _lastLobby >= LobbyEvery || _seenLobbyVersion != _lobbyVersion) { _lastLobby = _now; _seenLobbyVersion = _lobbyVersion; SendLobby(); }
+                if (Current == Stage.Playing && Match != null) Reseat();
                 if (Current == Stage.Playing && _now - _lastHello >= 0.25)
                 {
                     _lastHello = _now;
-                    SendStartToAll(_now - _lastStartToAll >= 1.0);
+                    if (_layout == 0) SendStartToAll(_now - _lastStartToAll >= 1.0); // (once re-seated, the hand-over does it)
                     if (AnyAway() || _anyBack) SendAway();
-                    foreach (var l in _links.Values) if (l.MidMatch && l.Rejoined.Count > 0 && !l.StartAcked && _now - l.RejoinSent >= 0.5) SendRejoin(l);
+                    foreach (var l in _links.Values) if (NeedsHandOver(l) && _now - l.RejoinSent >= 0.5) SendRejoin(l);
                 }
             }
-            if (!IsHost && Current == Stage.Lobby && _now - _lastHello >= 1.0) { _lastHello = _now; SendPlayers(); }
+            // (mid-match too: someone changing team, or going to watch, keeps asking until the host has it)
+            if (!IsHost && (Current == Stage.Lobby || Current == Stage.Playing) && _now - _lastHello >= 1.0) { _lastHello = _now; SendPlayers(); }
             if (Current == Stage.Lobby && CardStatsOut != null && _now - _lastStats >= StatsEvery) { _lastStats = _now; SendCardStats(); }
 
             if (Current == Stage.Playing && Match != null)
@@ -476,7 +506,7 @@ namespace UltraPuck.Core.Net
                 if (_now >= _nextSend - 0.25 / SendRate)
                 {
                     _nextSend = Math.Max(_nextSend + 1.0 / SendRate, _now - 1.0 / SendRate);
-                    foreach (var l in _links.Values) if (l.Peer >= 0) SendInputs(l);
+                    foreach (var l in _links.Values) if (l.Peer >= 0 && !(IsHost && NeedsHandOver(l))) SendInputs(l);
                 }
                 Checksums();
             }
@@ -497,8 +527,7 @@ namespace UltraPuck.Core.Net
                     string why = null;
                     if (version != Version) why = "The host is running a different version of the game.";
                     else if (fp != _fingerprint) why = "The host has different maps or cards. Make sure you both have the same game files and mods.";
-                    else if (Current == Stage.Playing && !AnyAway()) why = "That game has already started. Ask the host to go back to the lobby.";
-                    else if (Seats.Count >= MaxPlayers) why = "That game is full.";
+                    else if (Seats.Count >= MaxPlayers && !AnyAway()) why = "That game is full.";
                     if (why != null) { Send(conn, new Writer(Msg.Refuse).Str(why).ToArray()); _t.Drop(conn); return; }
                     l = new Link { Conn = conn, Peer = _nextPeer++, LastHeard = _now, MidMatch = Current == Stage.Playing };
                     _links[conn] = l;
@@ -523,13 +552,14 @@ namespace UltraPuck.Core.Net
                     if (!IsHost) return;
                     var n = r.U8();
                     l.Players.Clear();
-                    for (var k = 0; k < n && k < MaxPlayers; k++) { var name = r.Str(); l.Players.Add(new KeyValuePair<string, int>(name, r.U8() & 127)); }
+                    for (var k = 0; k < n && k < MaxPlayers; k++) { var name = r.Str(); l.Players.Add(new KeyValuePair<string, int>(name, r.U8())); }
                     // sent before it heard of the latest recolours: put its players right
                     for (var v = Math.Max(0, r.I32()); v < _remaps.Count; v++)
                         for (var k = 0; k < l.Players.Count; k++)
                             if ((l.Players[k].Value & 7) == _remaps[v].Key) l.Players[k] = new KeyValuePair<string, int>(l.Players[k].Key, (l.Players[k].Value & ~7) | _remaps[v].Value);
                     if (Current == Stage.Playing && l.MidMatch) TakeBackSeats(l);
-                    else if (Current != Stage.Playing) RebuildSeats();
+                    if (Current == Stage.Playing) _seatsDirty = true;
+                    else RebuildSeats();
                     break;
                 case Msg.Lobby:
                     if (IsHost) return;
@@ -567,7 +597,7 @@ namespace UltraPuck.Core.Net
                     ReadRejoin(r);
                     break;
                 case Msg.Checksum:
-                    if (r.I32() != MatchId) return;
+                    if (r.I32() != MatchId || r.I32() != _layout) return;
                     var tick = r.I32();
                     var hash = r.U64();
                     _theirChecks[tick] = hash;
@@ -661,6 +691,7 @@ namespace UltraPuck.Core.Net
         private void SendLobby()
         {
             var w = new Writer(Msg.Lobby).I32(_lobbyVersion).U8(Current == Stage.Playing ? 1 : 0).I32(MatchId);
+            w.Bytes(LobbyRules);
             WriteSeats(w);
             w.U8(_map);
             w.U8(TeamColours[0]).U8(TeamColours[1]).I32(Recolours);
@@ -673,10 +704,13 @@ namespace UltraPuck.Core.Net
             var version = r.I32();
             var playing = r.U8() != 0;
             var match = r.I32();
+            var rules = r.Bytes();
             // messages can arrive late and out of order: an old one mustn't undo a newer one (an old "in the lobby"
             // landing after the start used to drop this PC out of the match while everyone else waited for it)
             if (version < _theirLobby) return;
             _theirLobby = version;
+            LobbyRules = rules;
+            HostPlaying = playing;
             if (Current == Stage.Playing && !playing && match >= MatchId) { Match = null; Current = Stage.Lobby; } // the host went back to the lobby
             if (Current == Stage.Playing) return; // the seats are fixed for the match
             ReadSeats(r);
@@ -722,7 +756,7 @@ namespace UltraPuck.Core.Net
 
         private void SendInputs(Link l)
         {
-            var w = new Writer(Msg.Inputs).I32(MatchId).I32(Match.Tick);
+            var w = new Writer(Msg.Inputs).I32(MatchId).I32(_layout).I32(Match.Tick);
             var blocks = 0;
             var players = Match.Players;
             var body = new List<int>();
@@ -763,6 +797,8 @@ namespace UltraPuck.Core.Net
         private void ReadInputs(Link l, Reader r)
         {
             if (r.I32() != MatchId || Match == null) return;
+            if (r.I32() != _layout) return; // for another seating of the match (player numbers may differ)
+            if (IsHost) l.LayoutAcked = _layout;
             l.RemoteTick = r.I32();
             var blocks = r.U8();
             for (var b = 0; b < blocks; b++)
@@ -795,52 +831,215 @@ namespace UltraPuck.Core.Net
         /// <summary>Host: someone joined mid-match: give them back seats left empty (their own name first) and hand them the game.</summary>
         private void TakeBackSeats(Link l)
         {
-            if (Match == null) return;
-            if (l.Rejoined.Count == 0)
+            if (Match == null || l.Rejoined.Count > 0) return;
+            // back on the tick a moment from now, so their controls have time to reach everyone
+            var back = Match.Tick + 60;
+            for (var k = 0; k < l.Players.Count; k++)
             {
-                // back on the tick a moment from now, so their controls have time to reach everyone
-                var back = Match.Tick + 60;
-                for (var k = 0; k < l.Players.Count; k++)
-                {
-                    var want = l.Players[k].Key;
-                    var seat = -1;
-                    for (var p = 0; p < Seats.Count && p < Match.Players; p++) if (Seats[p].Away && Seats[p].Name == want) { seat = p; break; }
-                    if (seat < 0) for (var p = 0; p < Seats.Count && p < Match.Players; p++) if (Seats[p].Away) { seat = p; break; }
-                    if (seat < 0) break;
-                    var s = Seats[seat];
-                    s.Away = false; s.Peer = l.Peer; s.Local = k; s.Name = want;
-                    Match.SetAway(seat, Match.AwayFrom(seat), back);
-                    l.Rejoined.Add(seat);
-                }
-                if (l.Rejoined.Count == 0)
-                {
-                    Send(l.Conn, new Writer(Msg.Refuse).Str("That game has already started and every seat is taken. Ask the host to go back to the lobby.").ToArray());
-                    _links.Remove(l.Conn);
-                    _t.Drop(l.Conn);
-                    return;
-                }
-                Notice = Seats[l.Rejoined[0]].Name + " is back.";
-                _anyBack = true;
-                SendAway();
+                if (Watching(l.Players[k].Value) || SeatOf(Seats, l.Peer, k) >= 0) continue;
+                var want = l.Players[k].Key;
+                var seat = -1;
+                for (var p = 0; p < Seats.Count && p < Match.Players; p++) if (Seats[p].Away && Seats[p].Name == want) { seat = p; break; }
+                if (seat < 0) for (var p = 0; p < Seats.Count && p < Match.Players; p++) if (Seats[p].Away) { seat = p; break; }
+                if (seat < 0) break;
+                var s = Seats[seat];
+                s.Away = false; s.Peer = l.Peer; s.Local = k; s.Name = want;
+                Match.SetAway(seat, Match.AwayFrom(seat), back);
+                l.Rejoined.Add(seat);
             }
+            // nobody's seat waiting: they're given a new one once they ready up (see Reseat)
+            if (l.Rejoined.Count == 0) return;
+            Notice = Seats[l.Rejoined[0]].Name + " is back.";
+            _anyBack = true;
+            SendAway();
             SendRejoin(l);
         }
 
-        /// <summary>Host: the game as it is now (a settled tick), to someone coming back. Sent until their controls arrive.</summary>
+        /// <summary>The seat of <paramref name="peer"/>'s <paramref name="local"/>-th person (not away), or -1.</summary>
+        private static int SeatOf(List<Seat> seats, int peer, int local)
+        {
+            for (var p = 0; p < seats.Count; p++) if (!seats[p].Bot && !seats[p].Away && seats[p].Peer == peer && seats[p].Local == local) return p;
+            return -1;
+        }
+
+        /// <summary>Host: this PC should be handed the match as it is (it's coming in part-way, or the match was re-seated).</summary>
+        private bool NeedsHandOver(Link l)
+        {
+            if (!IsHost || l.Peer <= 0 || Current != Stage.Playing || Match == null || l.LayoutAcked == _layout) return false;
+            if (!l.MidMatch) return _layout > 0;
+            // joined part-way: once they have a seat (or have been watching)
+            if (l.LayoutAcked >= 0) return true;
+            foreach (var s in Seats) if (!s.Bot && !s.Away && s.Peer == l.Peer) return true;
+            return false;
+        }
+
+        private List<KeyValuePair<string, int>> PlayersOf(int peer)
+        {
+            if (peer == 0) return _localPlayers;
+            foreach (var l in _links.Values) if (l.Peer == peer) return l.Players;
+            return null;
+        }
+
+        private Link LinkOf(int peer)
+        {
+            foreach (var l in _links.Values) if (l.Peer == peer) return l;
+            return null;
+        }
+
+        /// <summary>The team a colour is (-1: neither side's).</summary>
+        private int TeamOfColour(int colour)
+        {
+            colour &= 7;
+            return TeamColours[0] == colour ? 0 : TeamColours[1] == colour ? 1 : -1;
+        }
+
+        /// <summary>Host: a bot was taken out on this tick or later; seats can't be moved about until then.</summary>
+        private int _botLeftTick = -1;
+
+        /// <summary>
+        /// Host, mid-match: give the match the seats everyone's players want now. Someone in the lobby who has readied up
+        /// gets a new seat (joining the match part-way); someone whose colour is now the other side's changes team;
+        /// someone who chose to watch gives up their seat. It's done on a settled tick: the game there is changed, every
+        /// PC is handed it (with everyone's controls from then on), and plays on from it to where it was.
+        /// </summary>
+        private void Reseat()
+        {
+            if (!_seatsDirty || !IsHost || Match == null) return;
+            var at = Math.Min(Match.Confirmed + 1, Match.Tick - 1);
+            if (at <= _botLeftTick) return;
+            var saved = Match.SavedAt(at);
+            if (saved == null) return; // not settled yet: next frame
+            if (saved.Phase == Phase.Picking || Match.State.Phase == Phase.Picking) return; // after the card pick
+            var st = saved.Clone();
+            var sim = Match.Sim;
+            var seats = new List<Seat>();
+            foreach (var s0 in Seats)
+                seats.Add(new Seat { Peer = s0.Peer, Local = s0.Local, Team = s0.Team, Colour = s0.Colour, Symbol = s0.Symbol, Bot = s0.Bot, Away = s0.Away, Ready = s0.Ready, Name = s0.Name });
+            // bots added during the match have no seats yet
+            var bot = 0;
+            foreach (var s0 in seats) if (s0.Bot) bot++;
+            for (var i = seats.Count; i < st.Players.Length; i++)
+            {
+                var t = st.Players[i].Team & 1;
+                seats.Add(new Seat { Peer = 0, Local = -1, Bot = true, Ready = true, Team = t, Colour = TeamColours[t], Symbol = (BotLook(bot++) >> 3) & 7, Name = "Bot" });
+            }
+            if (seats.Count != st.Players.Length) return; // (shouldn't happen: a bot's seat taken away before its tick)
+            var map = new List<int>();
+            for (var i = 0; i < seats.Count; i++) map.Add(i);
+            var news = new List<string>();
+
+            // changing team, or going to watch
+            for (var i = seats.Count - 1; i >= 0; i--)
+            {
+                var seat = seats[i];
+                if (seat.Bot || seat.Away) continue;
+                var list = PlayersOf(seat.Peer);
+                if (list == null) continue; // (their PC is gone: Lost marks them away)
+                if (seat.Local < 0 || seat.Local >= list.Count || Watching(list[seat.Local].Value))
+                {
+                    news.Add(seat.Name + " is watching.");
+                    sim.RemovePlayer(st, i);
+                    seats.RemoveAt(i);
+                    map.RemoveAt(i);
+                    continue;
+                }
+                var team = TeamOfColour(list[seat.Local].Value);
+                if (team >= 0 && team != seat.Team)
+                {
+                    sim.ChangeTeam(st, i, team);
+                    seat.Team = team;
+                    seat.Colour = TeamColours[team];
+                    news.Add(seat.Name + " changed team.");
+                }
+            }
+
+            // joining: people with no seat who want one
+            var peers = new List<int> { 0 };
+            foreach (var l in _links.Values) if (l.Peer > 0) peers.Add(l.Peer);
+            peers.Sort();
+            foreach (var peer in peers)
+            {
+                var list = PlayersOf(peer);
+                var link = LinkOf(peer);
+                var inMatch = peer == 0 || (link != null && link.LayoutAcked >= 0);
+                for (var k = 0; list != null && k < list.Count; k++)
+                {
+                    var look = list[k].Value;
+                    if (Watching(look) || SeatOf(seats, peer, k) >= 0) continue;
+                    if (!inMatch && (look & 64) == 0) continue; // still in the lobby: in once they're ready
+                    if (seats.Count >= MaxPlayers) break;
+                    var team = TeamOfColour(look);
+                    if (team < 0)
+                    {
+                        var red = 0;
+                        foreach (var s0 in seats) if (s0.Team == 0) red++;
+                        team = red * 2 <= seats.Count ? 0 : 1;
+                    }
+                    sim.AddPlayer(st, team, false);
+                    seats.Add(new Seat { Peer = peer, Local = k, Team = team, Colour = TeamColours[team], Symbol = (look >> 3) & 7, Name = list[k].Key });
+                    map.Add(-1);
+                    news.Add(list[k].Key + (inMatch ? " is playing." : " joined the match."));
+                }
+            }
+
+            if (news.Count == 0) { _seatsDirty = false; return; }
+            if (sim.Cards != null) sim.Cards.Recompute(st);
+
+            var old = Match;
+            var oldTick = old.Tick;
+            Seats.Clear();
+            Seats.AddRange(seats);
+            _layout++;
+            var local = new bool[st.Players.Length];
+            var bots = new bool[st.Players.Length];
+            for (var p = 0; p < st.Players.Length; p++) { bots[p] = Seats[p].Bot; local[p] = !Seats[p].Bot && Seats[p].Peer == MyPeer; }
+            Match = new Rollback(sim, st, local, bots, InputDelay, at);
+            for (var p = 0; p < Match.Players; p++)
+            {
+                var o = map[p];
+                if (bots[p]) continue;
+                if (o >= 0)
+                {
+                    PlayerInput i;
+                    for (var t = at; t < at + Rollback.Ring - 2; t++) if (old.TryGetInput(o, t, out i)) Match.Load(p, t, i);
+                    Match.SetAway(p, old.AwayFrom(o), old.AwayUntil(o));
+                }
+                else Match.SetAway(p, at, oldTick + 60); // new: the bot plays them until their controls have had time to arrive
+            }
+            while (Match.Tick < oldTick) Match.Advance();
+            foreach (var l in _links.Values) for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = at - 1;
+            _myChecks.Clear(); _theirChecks.Clear(); _lastChecked = at - at % ChecksumEvery;
+            Notice = string.Join(" ", news.ToArray());
+            _lobbyVersion++;
+            foreach (var l in _links.Values) if (NeedsHandOver(l)) SendRejoin(l);
+            // (and again next frame, in case someone else wants a change too)
+        }
+
+        /// <summary>
+        /// Host: the game as it is now (a settled tick) and everyone's controls from then on, to a PC coming in part-way
+        /// or after the match was re-seated. Sent until their controls for this seating arrive.
+        /// </summary>
         private void SendRejoin(Link l)
         {
-            if (l.StartAcked || Match == null) return;
+            if (Match == null) return;
             var at = Math.Min(Match.Confirmed + 1, Match.Tick - 1);
             var state = Match.SavedAt(at);
             if (state == null) return; // not settled yet: next time
             l.RejoinSent = _now;
-            var w = new Writer(Msg.Rejoin).I32(MatchId).U32(Seed);
+            var w = new Writer(Msg.Rejoin).I32(MatchId).U32(Seed).I32(_layout);
             WriteSeats(w);
             w.U8(_map);
             w.Bytes(Rules);
             w.I32(at);
             WriteAway(w);
             w.BigBytes(StateCodec.Write(state));
+            w.U8(Match.Players);
+            for (var p = 0; p < Match.Players; p++)
+            {
+                var to = Match.IsBot(p) ? at - 1 : Math.Min(Match.KnownUpTo(p), at + Rollback.Ring - 3);
+                w.I32(Math.Max(0, to - at + 1));
+                for (var t = at; t <= to; t++) { PlayerInput i; Match.TryGetInput(p, t, out i); w.Input(i); }
+            }
             // their copy of everyone's controls starts from that tick
             for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = at - 1;
             Send(l.Conn, w.ToArray());
@@ -855,15 +1054,15 @@ namespace UltraPuck.Core.Net
         private void SendAway()
         {
             if (Match == null) return;
-            var w = new Writer(Msg.Away).I32(MatchId);
+            var w = new Writer(Msg.Away).I32(MatchId).I32(_layout);
             WriteAway(w);
             var bytes = w.ToArray();
-            foreach (var l in _links.Values) if (l.Peer > 0 && (!l.MidMatch || l.StartAcked)) Send(l.Conn, bytes);
+            foreach (var l in _links.Values) if (l.Peer > 0 && !NeedsHandOver(l)) Send(l.Conn, bytes);
         }
 
         private void ReadAway(Reader r)
         {
-            if (r.I32() != MatchId || Match == null) return;
+            if (r.I32() != MatchId || Match == null || r.I32() != _layout) return;
             ReadAwayList(r);
         }
 
@@ -879,33 +1078,67 @@ namespace UltraPuck.Core.Net
             }
         }
 
-        /// <summary>Client: back in a match that was going on: start from the game the host handed over.</summary>
+        /// <summary>
+        /// Client: handed the match as it is: coming back or joining part-way, or the host re-seated it (someone joined,
+        /// changed team or went to watch). Start from that game with everyone's controls from then on (and, if this PC
+        /// was already playing, its own controls it had made since), then catch up to where it was.
+        /// </summary>
         private void ReadRejoin(Reader r)
         {
             var id = r.I32();
             var seed = r.U32();
-            if (id == MatchId && Match != null) return; // already back in
+            var layout = r.I32();
+            if (id == MatchId && Match != null && layout <= _layout) return; // already have this one
+            var oldSeats = new List<Seat>(Seats);
             ReadSeats(r);
             _map = r.U8();
-            Rules = r.Bytes();
+            var rules = r.Bytes();
             var at = r.I32();
             // the away list needs the match first: read it into a buffer, then the state
             var n = r.U8();
             var spans = new int[n, 3];
             for (var p = 0; p < n; p++) { spans[p, 0] = r.I32(); spans[p, 1] = r.I32(); spans[p, 2] = r.U8(); }
             var state = StateCodec.Read(r.BigBytes());
+            var np = r.U8();
+            var inputs = new List<PlayerInput[]>();
+            for (var p = 0; p < np; p++)
+            {
+                var count = r.I32();
+                if (count < 0 || count > Rollback.Ring) throw new FormatException("bad input count");
+                var arr = new PlayerInput[count];
+                for (var k = 0; k < count; k++) arr[k] = r.Input();
+                inputs.Add(arr);
+            }
+            var old = id == MatchId ? Match : null;
             MatchId = id; Seed = seed;
-            var sim = _makeSim();
-            var local = new bool[Seats.Count];
-            var bots = new bool[Seats.Count];
-            for (var k = 0; k < Seats.Count; k++) { bots[k] = Seats[k].Bot; local[k] = !Seats[k].Bot && Seats[k].Peer == MyPeer; }
+            _layout = layout;
+            Rules = rules;
+            var sim = old != null ? old.Sim : _makeSim();
+            var players = state.Players.Length;
+            var local = new bool[players];
+            var bots = new bool[players];
+            for (var k = 0; k < players; k++) { bots[k] = k >= Seats.Count || Seats[k].Bot; local[k] = !bots[k] && Seats[k].Peer == MyPeer; }
             Match = new Rollback(sim, state, local, bots, InputDelay, at);
+            for (var p = 0; p < inputs.Count && p < players; p++)
+                for (var k = 0; k < inputs[p].Length; k++) Match.Load(p, at + k, inputs[p][k]);
+            // this PC's own controls the host hasn't had yet (it was already playing): kept
+            if (old != null)
+                for (var p = 0; p < players; p++)
+                {
+                    if (!local[p]) continue;
+                    var o = SeatOf(oldSeats, MyPeer, Seats[p].Local);
+                    if (o < 0 || o >= old.Players) continue;
+                    var from = at + (p < inputs.Count ? inputs[p].Length : 0);
+                    PlayerInput i;
+                    for (var t = from; t < at + Rollback.Ring - 2; t++) if (old.TryGetInput(o, t, out i)) Match.Load(p, t, i);
+                }
             for (var p = 0; p < n; p++) { Match.SetAway(p, spans[p, 0], spans[p, 1]); if (p < Seats.Count) Seats[p].Away = spans[p, 2] != 0; }
             foreach (var l in _links.Values) for (var k = 0; k < l.Acked.Length; k++) l.Acked[k] = -1;
-            _myChecks.Clear(); _theirChecks.Clear(); _lastChecked = at;
+            _myChecks.Clear(); _theirChecks.Clear(); _lastChecked = at - at % ChecksumEvery;
             DesyncTick = -1;
             Current = Stage.Playing;
             _started = _now;
+            if (old != null) while (Match.Tick < old.Tick) Match.Advance();
         }
 
         // ------------------------------------------------------------------ desync check
@@ -921,7 +1154,7 @@ namespace UltraPuck.Core.Net
                 _lastChecked = t;
                 var hash = s.Checksum();
                 _myChecks[t] = hash;
-                var bytes = new Writer(Msg.Checksum).I32(MatchId).I32(t).U64(hash).ToArray();
+                var bytes = new Writer(Msg.Checksum).I32(MatchId).I32(_layout).I32(t).U64(hash).ToArray();
                 foreach (var l in _links.Values) if (l.Peer >= 0) Send(l.Conn, bytes);
                 Compare(t);
             }
