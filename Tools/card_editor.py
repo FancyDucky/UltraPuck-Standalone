@@ -4,7 +4,7 @@
 #   Save       writes ultrapuck.json (header comments and layout kept) and copies the cards + art into the
 #              local builds (Builds/Windows and Builds/Linux, StreamingAssets/Cards). No Unity compile.
 #   Publish    patches the cards into dist/UltraPuck-Windows.zip and dist/UltraPuck-Linux.tar.gz and re-uploads
-#              them to the current GitHub release (gh release upload --clobber). The version number stays the same.
+#              them to the live (latest) GitHub release (gh release upload --clobber). The version number stays the same.
 #
 # Standard library only. Serves on 127.0.0.1 (this PC only).
 import io
@@ -12,10 +12,13 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tarfile
 import threading
+import time
+import urllib.request
 import webbrowser
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -211,10 +214,15 @@ def publish():
     def log(s):
         job['log'] += s + '\n'
     try:
-        ver = version()
+        r = subprocess.run(['gh', 'release', 'view', '--repo', REPO, '--json', 'tagName', '-q', '.tagName'],
+                           capture_output=True, text=True)
+        if r.returncode != 0 or not r.stdout.strip():
+            raise RuntimeError("couldn't find the live release: " + (r.stderr.strip() or 'no releases'))
+        tag = r.stdout.strip()
+        ver = tag.lstrip('v')
         dist_ver = open(os.path.join(DIST, 'version.txt')).read().strip()
         if dist_ver != ver:
-            raise RuntimeError('dist/ holds version %s but version.txt says %s: make the release first' % (dist_ver, ver))
+            raise RuntimeError('the live release is %s but dist/ holds the %s zips. Make the release first (Release.bat).' % (tag, dist_ver))
         zip_path = os.path.join(DIST, 'UltraPuck-Windows.zip')
         tar_path = os.path.join(DIST, 'UltraPuck-Linux.tar.gz')
         sync_builds()
@@ -226,12 +234,12 @@ def publish():
         loose = os.path.join(DIST, 'UltraPuck', 'UltraPuck_Data', 'StreamingAssets', 'Cards')
         if os.path.isdir(loose):
             shutil.copytree(BUILDS[0], loose, dirs_exist_ok=True)
-        log('Uploading to GitHub release v%s (about 130 MB) ...' % ver)
-        r = subprocess.run(['gh', 'release', 'upload', 'v' + ver, zip_path, tar_path, '--clobber', '--repo', REPO],
+        log('Uploading to the live GitHub release, %s (about 130 MB) ...' % tag)
+        r = subprocess.run(['gh', 'release', 'upload', tag, zip_path, tar_path, '--clobber', '--repo', REPO],
                            capture_output=True, text=True)
         if r.returncode != 0:
             raise RuntimeError(r.stderr.strip() or 'gh release upload failed')
-        log('Done: https://github.com/%s/releases/tag/v%s now has these cards.' % (REPO, ver))
+        log('Done: https://github.com/%s/releases/tag/%s now has these cards.' % (REPO, tag))
     except Exception as ex:
         log('Failed: %s' % ex)
     finally:
@@ -294,8 +302,21 @@ class Handler(BaseHTTPRequestHandler):
             job.update(busy=True, log='')
             threading.Thread(target=publish, daemon=True).start()
             self.send({'ok': True})
+        elif self.path == '/api/quit':  # a newer copy of the editor is starting: make way for it
+            self.send({'ok': True})
+            threading.Thread(target=self.server.shutdown, daemon=True).start()
         else:
             self.send({'error': 'not found'}, code=404)
+
+
+class Server(ThreadingHTTPServer):
+    # Only one editor on the port: Windows otherwise lets two share it, and requests go to either one at random.
+    allow_reuse_address = False
+
+    def server_bind(self):
+        if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 def main():
@@ -305,8 +326,17 @@ def main():
         print('round trip identical' if same else 'round trip DIFFERS', '|', len(data['cards']), 'cards |',
               'problems:', check(data['cards']) or 'none')
         return
-    server = ThreadingHTTPServer(('127.0.0.1', PORT), Handler)
     url = 'http://127.0.0.1:%d/' % PORT
+    try:  # an editor already open (an older window)? ask it to close so only this one answers
+        urllib.request.urlopen(urllib.request.Request(url + 'api/quit', b'{}', method='POST'), timeout=1)
+        time.sleep(0.5)
+    except Exception:
+        pass
+    try:
+        server = Server(('127.0.0.1', PORT), Handler)
+    except OSError:
+        print('Another card editor is already running. Close its window, then start this again.')
+        sys.exit(1)
     print('Ultra Puck card editor on', url, '(close this window to stop it)')
     if '--no-browser' not in sys.argv:
         webbrowser.open(url)

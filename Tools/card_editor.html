@@ -52,7 +52,7 @@
     <h1>Ultra Puck cards</h1>
     <button class="main" onclick="save()">Save</button>
     <button onclick="addCard()">New card</button>
-    <button onclick="publish()" id="pub">Publish to GitHub</button>
+    <button onclick="publish()" id="pub">Publish to GitHub (live)</button>
     <span id="dirty" class="hint"></span>
     <div id="msg"></div>
   </div>
@@ -75,8 +75,7 @@ window.onbeforeunload = () => dirty ? 'unsaved' : undefined;
 
 async function load() {
   const r = await (await fetch('/api/cards')).json();
-  cards = r.cards; stats = r.stats; finishes = r.finishes; art = r.art; version = r.version;
-  document.getElementById('pub').textContent = 'Publish to GitHub v' + version;
+  cards = r.cards; stats = r.stats; finishes = r.finishes || []; art = r.art; version = r.version;
   drawAll(); setDirty(false);
 }
 
@@ -221,8 +220,8 @@ async function save() {
 
 async function publish() {
   if (dirty) { msg('Save first.', true); return; }
-  if (!confirm('Re-upload the game zips to GitHub release v' + version + ' with these cards?\n\n' +
-      'New downloads get them. People who already have ' + version + ' do NOT (the updater only looks at the version number), ' +
+  if (!confirm('Re-upload the game zips on the live GitHub release with these cards? The version number stays the same.\n\n' +
+      'New downloads get them. People who already have that version do NOT (the updater only looks at the version number), ' +
       'and players with different card files can\'t play online together.')) return;
   const r = await (await fetch('/api/publish', { method: 'POST' })).json();
   if (r.error) { msg(r.error, true); return; }
