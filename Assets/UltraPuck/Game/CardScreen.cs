@@ -641,6 +641,7 @@ namespace UltraPuck.Game
                 }
             }
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, _cards.Count - 1));
+            if (_deck && m.Tab != 0) ResizeGrid(m.Tab);
             if (_deck && m.Y != 0)
             {
                 var to = _focus - m.Y * EditCols;
@@ -976,8 +977,8 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(0f, y + 110f, Ui.W, 26f), replace, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 0.85f, 0.45f, 0.95f * a)); // above the cards, under the timer line
 
             var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
-            var hint = device is UnityEngine.InputSystem.Keyboard ? (_deck ? "{look} {nav} Look      {join} Take it  (or click)" : "{look} Look      {join} Take it  (or click)")
-                : _deck ? "{side} {nav} Look      {aim} Tilt      {confirm} Take it" : "{side} Look      {aim} Tilt      {confirm} Take it";
+            var hint = device is UnityEngine.InputSystem.Keyboard ? (_deck ? "{look} {nav} Look      {tabs} Size      {join} Take it  (or click)" : "{look} Look      {join} Take it  (or click)")
+                : _deck ? "{side} {nav} Look      {tabs} Size      {confirm} Take it" : "{side} Look      {aim} Tilt      {confirm} Take it";
             // New Hand: under the cards, how to re-roll them (while a re-roll is left this pick)
             var roller = Roller();
             if (roller >= 0 && _stage == Stage.Choosing)
@@ -1096,8 +1097,38 @@ namespace UltraPuck.Game
 
         // every card, four to a row and three rows on screen (scrolling); A adds a copy, B takes one away,
         // Start applies, holding B cancels. LB / RB: another person on this PC.
-        private const int EditCols = 4, EditRows = 3;
-        private const float EditScale = 0.54f, EditPitchX = 1.62f, EditPitchY = 2.06f, EditTopY = 1.32f;
+        // the grid (free play's editor, the Cards page, Choose's deck): 2 to 5 cards a row, changed with LB / RB
+        // (remembered); fewer a row means bigger cards and fewer rows on screen, centred where 4 a row always sat
+        private const int MinCols = 2, MaxCols = 5, DefaultCols = 3;
+        private const float EditCentreY = -0.74f;
+        private static readonly float[] GridScales = { 0f, 0f, 0.8f, 0.68f, 0.54f, 0.45f };
+        private static readonly int[] GridRows = { 0, 0, 2, 2, 3, 3 };
+        private int _cols = LoadCols();
+        private int EditCols { get { return _cols; } }
+        private int EditRows { get { return GridRows[_cols]; } }
+        private float EditScale { get { return GridScales[_cols]; } }
+        private float EditPitchX { get { return EditScale * 3f; } }
+        private float EditPitchY { get { return EditScale * 3.815f; } }
+        private float EditTopY { get { return EditCentreY + (EditRows - 1) * EditPitchY / 2f; } }
+
+        private static int LoadCols()
+        {
+            try { return Mathf.Clamp(PlayerPrefs.GetInt("card_grid_cols", DefaultCols), MinCols, MaxCols); }
+            catch { return DefaultCols; }
+        }
+
+        /// <summary>LB / RB on a grid: one card fewer / more a row (kept on the focused card), remembered for next time.</summary>
+        private void ResizeGrid(int d)
+        {
+            var to = Mathf.Clamp(_cols + d, MinCols, MaxCols);
+            if (to == _cols) { Sound.Deny(); return; }
+            _cols = to;
+            try { PlayerPrefs.SetInt("card_grid_cols", _cols); } catch { }
+            _editTop = 0;
+            EditHomes();
+            foreach (var c in _cards) c.ScaleVel += 1.2f;
+            Sound.Move();
+        }
         private const float CancelWait = 0.35f, CancelFill = 0.6f;
         private bool _editing;
         private Simulation _editSim;
@@ -1188,7 +1219,12 @@ namespace UltraPuck.Game
             // Start (or Enter) applies, first: in the menus it also counts as Back (or Confirm), which here would
             // take a card away (or add one) just before saving
             if (ready && Local.StartPressed()) { EditClose(true); return; }
-            if (m.Tab != 0 && _people.Count > 1) { _who = (_who + m.Tab + _people.Count) % _people.Count; _slot = _people[_who]; foreach (var c in _cards) c.ScaleVel += 1.5f; Sound.Move(); }
+            if (m.Tab != 0) ResizeGrid(m.Tab);
+            // Y / Triangle (Tab on a keyboard): another person on this PC
+            var next = false;
+            foreach (var s in Local.Slots)
+                if (!s.Demo && Local.AnyHeld(s, g => g.buttonNorth.wasPressedThisFrame, k => k.tabKey.wasPressedThisFrame)) next = true;
+            if (next && _people.Count > 1) { _who = (_who + 1) % _people.Count; _slot = _people[_who]; foreach (var c in _cards) c.ScaleVel += 1.5f; Sound.Move(); }
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, EditCount - 1));
             if (m.Y != 0)
             {
@@ -1349,7 +1385,7 @@ namespace UltraPuck.Game
             var total = 0;
             foreach (var n in _counts[_who]) total += n;
             Ui.Label(new Rect(0f, y, w, 46f), leaving ? (_applied ? "Cards applied" : "No changes") : "Your cards", Ui.Font(36, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
-            var sub = name + "  ·  " + (total == 1 ? "1 card" : total + " cards") + (_people.Count > 1 ? "  ·  LB / RB: another player" : "");
+            var sub = name + "  ·  " + (total == 1 ? "1 card" : total + " cards") + (_people.Count > 1 ? "  ·  Y / Tab: another player" : "");
             Ui.Label(new Rect(0f, y + 42f, w, 26f), sub, Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.7f * a));
             if (leaving) return;
 
@@ -1382,7 +1418,7 @@ namespace UltraPuck.Game
             var focusDef = _editSim.Cards.Cards[_focus];
             var max = focusDef.MaxPerPlayer > 0 ? " of " + focusDef.MaxPerPlayer : "";
             Ui.Label(new Rect(0f, h - 70f, w, 24f), focusDef.Name + ":  " + _counts[_who][_focus] + max, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.8f));
-            Glyphs.Hint(new Rect(0f, h - 44f, w, 30f), "{nav} Card      {confirm} Add      {back} Remove      {start} Apply      Hold {back} Cancel", 16, new Color(1f, 1f, 1f, 0.7f));
+            Glyphs.Hint(new Rect(0f, h - 44f, w, 30f), "{nav} Card      {tabs} Size      {confirm} Add      {back} Remove      {start} Apply      Hold {back} Cancel", 16, new Color(1f, 1f, 1f, 0.7f));
             var cancel = CancelProgress;
             if (cancel > 0f) Hud.LeavingBar(new Rect(w / 2f - 150f, h - 104f, 300f, 24f), cancel, "Cancel the changes");
         }

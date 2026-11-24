@@ -85,6 +85,13 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.61, not released (Claude, 24 Nov 2026): **cards per row in the grid.** LB / RB (Q / E) in free play's
+  card editor and Choose's deck change the cards a row, 2 to 5 (default 3, was a fixed 4), remembered in
+  PlayerPrefs `card_grid_cols` (`CardScreen.ResizeGrid`). `EditCols` / `EditRows` / `EditScale` / pitches / top
+  are now properties from `_cols` (`GridScales` 0.8 / 0.68 / 0.54 / 0.45 for 2-5, `GridRows` 2 / 2 / 3 / 3,
+  centred on y -0.74 where 4 a row sat); the Cards page uses the same size but keeps LB / RB for sorting. The
+  editor's "another person on this PC" moved from LB / RB to Y / Triangle (Tab on a keyboard). Display only.
+  Checked: Windows build; not looked at on screen (the owner tries it on the Deck).
 - After 0.1.60, not released (Claude, 24 Nov 2026): **button pictures on the Steam Deck.** The Deck's pad is
   `InputMode.Family.Generic`, whose pictures were looked up in `InputPrompts/Generic` (only plain shapes, no
   `xbox_*` files), so the card footnote "Press {utility} to use" showed an empty square and hints fell back to text
