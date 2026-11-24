@@ -112,7 +112,7 @@ namespace UltraPuck.Tests
             sim.Step(s, press);
             Assert.Greater(s.Players[0].DashTime.ToDouble(), 0.0, "second check straight after");
             sim.Step(s, none);
-            for (var t = 0; t < 40; t++) sim.Step(s, none);
+            for (var t = 0; t < 60; t++) sim.Step(s, none); // past the second check (0.4 s), well before a recharge
             sim.Step(s, press);
             Assert.AreEqual(0.0, s.Players[0].DashTime.ToDouble(), "no third check until it recharges");
         }

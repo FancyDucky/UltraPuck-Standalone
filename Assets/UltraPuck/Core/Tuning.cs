@@ -42,7 +42,8 @@ namespace UltraPuck.Core
         public Fix DashSpeed = Fix.FromInt(10);
         /// <summary>Seconds to refill one stored check (10% longer than the old 1.5 s).</summary>
         public Fix DashCooldown = Fix.Ratio(33, 20); // 1.65
-        public Fix DashHitTime = Fix.Ratio(1, 4);
+        /// <summary>How long a dash counts as a check (was 0.25 s: people still gliding fast after it didn't check).</summary>
+        public Fix DashHitTime = Fix.Ratio(2, 5); // 0.4 s
         /// <summary>After a dash: this long of lighter drag so you keep more speed when chaining checks.</summary>
         public Fix DashCoast = Fix.Ratio(11, 20); // 0.55 s
         /// <summary>Drag while <see cref="DashCoast"/> is active (normal skating drag is <see cref="Drag"/> = 3).</summary>
