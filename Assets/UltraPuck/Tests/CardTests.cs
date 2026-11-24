@@ -50,7 +50,9 @@ namespace UltraPuck.Tests
         public void CardsCanHaveAFinish()
         {
             var lib = new CardLibrary();
-            lib.AddJson("{\"cards\":[{\"id\":\"a\",\"finish\":\"Foil\"},{\"id\":\"b\",\"finish\":\"polychrome\"},{\"id\":\"c\"}]}", "test");
+            lib.AddJson("{\"cards\":[{\"id\":\"a\",\"finish\":\"Foil\"},{\"id\":\"b\",\"finish\":\"polychrome\"},{\"id\":\"c\"},{\"id\":\"e\",\"finish\":\"HOLO\"},{\"id\":\"f\",\"finish\":\"pearl\"}]}", "test");
+            Assert.AreEqual("holo", lib.ById("e").Finish);
+            Assert.AreEqual("pearl", lib.ById("f").Finish);
             Assert.AreEqual("foil", lib.ById("a").Finish);
             Assert.AreEqual("polychrome", lib.ById("b").Finish);
             Assert.IsNull(lib.ById("c").Finish);

@@ -1498,15 +1498,17 @@ namespace UltraPuck.Game
             body.SetFloat("_Border", 0.075f);
             body.SetColor("_BorderColor", accent);
             // S: rainbow holo + sparkles. A: pearlescent (no holo). Lower tiers: soft glare only.
-            // A card file's "finish" (foil / polychrome) takes the place of the tier's holo / pearl.
+            // A card file's "finish" (foil / polychrome / holo / pearl) takes the place of the tier's holo / pearl.
+            // "holo" / "pearl" give any card the S / A tier's look; no finish = the tier's own.
             var metal = def.Finish == "foil";
             var poly = def.Finish == "polychrome";
-            var plain = !metal && !poly;
+            var holo = def.Finish == "holo" || (def.Finish == null && tier == 0);
+            var pearl = def.Finish == "pearl" || (def.Finish == null && tier == 1);
             Finish(body, fx,
-                foil: tier == 0 && plain ? 0.55f : 0f,
+                foil: holo ? 0.55f : 0f,
                 glare: tier == 1 ? 0.55f : 0.45f,
-                sparkle: tier == 0 ? 0.45f : 0f,
-                pearl: tier == 1 && plain ? 1f : 0f,
+                sparkle: holo ? 0.45f : 0f,
+                pearl: pearl ? 1f : 0f,
                 metal: metal ? 0.85f : 0f,
                 poly: poly ? 0.8f : 0f);
             v.Finishes.Add(body);
@@ -1520,10 +1522,10 @@ namespace UltraPuck.Game
             art.SetFloat("_Border", 0.018f);
             art.SetColor("_BorderColor", new Color(0f, 0f, 0f, 1f));
             Finish(art, fx,
-                foil: tier == 0 && plain ? 0.75f : 0f,
+                foil: holo ? 0.75f : 0f,
                 glare: tier == 1 ? 0.5f : tier == 0 ? 0.42f : 0.28f,
-                sparkle: tier == 0 ? 0.9f : 0f,
-                pearl: tier == 1 && plain ? 1f : 0f,
+                sparkle: holo ? 0.9f : 0f,
+                pearl: pearl ? 1f : 0f,
                 metal: metal ? 0.6f : 0f,
                 poly: poly ? 0.65f : 0f);
             v.Finishes.Add(art);

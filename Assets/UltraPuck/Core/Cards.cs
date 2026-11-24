@@ -36,7 +36,7 @@ namespace UltraPuck.Core
         /// <summary>The card's accent colour as "#RRGGBB" (for its frame), or null for the default.</summary>
         public string Color;
         public CardTier Tier = CardTier.C;
-        /// <summary>Optional special look, display only: "foil" (metal sheen) or "polychrome" (shifting rainbow), else null.</summary>
+        /// <summary>Optional special look, display only: "foil" (metal sheen), "polychrome" (shifting rainbow), "holo" (the S tier's rainbow holo + sparkles) or "pearl" (the A tier's pearlescent), else null (the tier's own look).</summary>
         public string Finish;
         /// <summary>Most copies one player can hold (0 = no limit).</summary>
         public int MaxPerPlayer;
@@ -116,7 +116,7 @@ namespace UltraPuck.Core
                 if (!string.IsNullOrEmpty(finish))
                 {
                     finish = finish.ToLowerInvariant();
-                    if (finish != "foil" && finish != "polychrome") throw new FormatException(what + ": finish must be foil or polychrome");
+                    if (finish != "foil" && finish != "polychrome" && finish != "holo" && finish != "pearl") throw new FormatException(what + ": finish must be foil, polychrome, holo or pearl");
                     c.Finish = finish;
                 }
                 if (c.Art == null) c.Art = c.Id;
