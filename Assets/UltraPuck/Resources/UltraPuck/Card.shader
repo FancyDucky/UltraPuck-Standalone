@@ -325,14 +325,14 @@ Shader "UltraPuck/Card"
                     }
                     else if (id == 9) // glass: see-through, bright edges, a streak of light that moves with the tilt
                     {
-                        float fres = exp(-max(0.0, -d) * 9.0);
+                        float fres = exp(-max(0.0, -d) * 16.0);
                         float3 tint = float3(0.85, 0.95, 1.0);
                         float across = dot(uv - 0.5, normalize(float2(1.0, 0.7)));
                         float at = t.x * 0.6 + t.y * 0.4;
                         float streak = exp(-pow((across - at) * 6.0, 2.0)) + 0.5 * exp(-pow((across - at + 0.3) * 14.0, 2.0));
                         c.rgb = lerp(c.rgb, c.rgb * 0.6 + tint * 0.25, amt * 0.6);
-                        c.rgb += tint * (fres * 0.55 + streak * 0.35) * amt;
-                        glass = lerp(1.0, saturate(0.1 + fres * 0.75 + streak * 0.3 + frame * 0.5 + lum * 0.6), amt);
+                        c.rgb += tint * (fres * 0.22 + streak * 0.12) * amt;
+                        glass = lerp(1.0, saturate(0.1 + fres * 0.45 + streak * 0.12 + frame * 0.5 + lum * 0.6), amt);
                     }
                 }
 

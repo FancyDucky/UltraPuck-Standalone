@@ -1418,6 +1418,8 @@ namespace UltraPuck.Game
             public Material ShadowMat;
             // effects
             public Material Glow, BodyMat, ArtMat;
+            /// <summary>How strong the border glow is (low on a glass card, where it would shine through).</summary>
+            public float GlowScale = 1f;
             public Transform ArtT;
             public Vector3 ArtHome;
             /// <summary>Kenney button picture on "Press … to activate" (utility cards); updated when the input device changes.</summary>
@@ -1482,7 +1484,7 @@ namespace UltraPuck.Game
                 // the border glow breathes, and brightens on the focused card
                 GlowBoost = Mathf.Lerp(GlowBoost, GlowTarget, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 8f));
                 var breathe = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 2.4f + Phase);
-                Glow.SetFloat("_Alpha", Settings.CardEffects ? (Rare ? 0.42f : 0.28f) + 0.12f * breathe + GlowBoost : 0f);
+                Glow.SetFloat("_Alpha", Settings.CardEffects ? ((Rare ? 0.42f : 0.28f) + 0.12f * breathe + GlowBoost) * GlowScale : 0f);
             }
         }
 
@@ -1514,6 +1516,7 @@ namespace UltraPuck.Game
             v.Glow = glow;
             v.Accent = accent;
             v.Rare = tier == 0;
+            if (def.Finish == "glass") v.GlowScale = 0.2f;
 
             // body: dark card stock with a border in the card's colour
             var body = Part(v, "Body", new Vector2(2.5f, 3.5f), Vector3.zero, 0, 0.17f);
