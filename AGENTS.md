@@ -85,7 +85,7 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.62, not released (Claude, 24 Nov 2026): **Carry-through, match settings for everyone, joining part-way,
+- 0.1.63 (Claude, 24 Nov 2026): **Carry-through, match settings for everyone, joining part-way,
   change team / watch, subtitle shadow, free play arrows, match song "Final Hit".** *Carry-through* (match setting, `Settings.CarryThrough` /
   `CarryPercent` 5-100%, default on at 40% (prefs `carry_through_v2` / `carry_percent_v2`), the % slider is temporary for tuning): any pass or shot (`PassFrom` set, caught by
   someone else, either team) carries the catcher along like a gentle Cannon Ball (`Simulation.CarryThrough`: speed along
