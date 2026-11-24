@@ -1698,6 +1698,10 @@ namespace UltraPuck.Tests
             var s = PortalGame();
             ShootPortal(s, At(18, 0), FixVec2.Right);
             Assert.AreEqual(0, s.Portals.Length, "no portal inside a net");
+            Assert.AreEqual(0, s.Players[0].PortalNext, "it didn't stick: still blue next");
+            ShootPortal(s, At(0, 0), new FixVec2(Fix.Zero, Fix.One));
+            Assert.AreEqual(0, PortalOf(s, 0).Colour, "the next shot is blue");
+            Assert.AreEqual(1, s.Players[0].PortalNext, "blue stuck: orange next");
         }
 
         [Test]

@@ -88,6 +88,7 @@ so whoever works next knows what changed.
 - After 0.1.56, not released (Claude, 23 Nov 2026): a dash counts as a check for 0.4 s (`Tuning.DashHitTime`, was
   0.25 s; players still gliding fast after it weren't checking). Protocol 70. Trying it out; the alternatives were a
   speed-based check window or a short grace period. Card art for Choose, New Hand, Double Card added.
+  Portal Gun keeps its colour until a portal sticks (`PortalNext` flips in `PlacePortal`, not on firing). Protocol 71.
 - After 0.1.56, not released (Claude, 23 Nov 2026): **Choose, New Hand, Double Card cards.** New stats (no `Stats`
   fields; looked up on the card: `CardLibrary.IsChoose` / `IsDouble` / `NewHands`): `"Choose"`, `"DoubleCard"`,
   `"NewHand"`. **Choose** (S): once the pick resolves, that player goes straight on to a second pick

@@ -2400,7 +2400,8 @@ namespace UltraPuck.Core
 
         // ------------------------------------------------------------------ Portal Gun
 
-        /// <summary>Portal Gun: a shot from the player's middle, the way they face, in the colour that's next.</summary>
+        /// <summary>Portal Gun: a shot from the player's middle, the way they face, in the colour that's next (it only
+        /// moves on to the other colour once this one sticks, see <see cref="PlacePortal"/>).</summary>
         private void FirePortal(GameState s, int i)
         {
             var p = s.Players[i];
@@ -2409,7 +2410,6 @@ namespace UltraPuck.Core
             Array.Copy(s.PortalShots, shots, s.PortalShots.Length);
             shots[shots.Length - 1] = new Shot { Pos = p.Pos, Vel = p.Facing * T.PortalShotSpeed, Owner = i, Life = T.PortalShotLife, Kind = p.PortalNext & 1 };
             s.PortalShots = shots;
-            p.PortalNext = 1 - (p.PortalNext & 1);
         }
 
         /// <summary>
@@ -2539,6 +2539,8 @@ namespace UltraPuck.Core
             }
             list.Add(new Portal { Pos = centre, Normal = normal, Owner = sh.Owner, Colour = sh.Kind, Wall = bw, At = bu, Id = ++s.PortalsMade });
             s.Portals = list.ToArray();
+            // it stuck: the gun moves on to the other colour (a shot that doesn't stick leaves it on this one)
+            if (sh.Owner >= 0 && sh.Owner < s.Players.Length) s.Players[sh.Owner].PortalNext = 1 - (sh.Kind & 1);
         }
 
         /// <summary>
