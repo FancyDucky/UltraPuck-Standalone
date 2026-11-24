@@ -134,7 +134,7 @@ namespace UltraPuck.Game
                 case InputMode.Family.PlayStation: return "PlayStation";
                 case InputMode.Family.Switch: return "Switch";
                 case InputMode.Family.Keyboard: return "Keyboard";
-                case InputMode.Family.Generic: return "Generic";
+                case InputMode.Family.Generic: return "Xbox"; // (Steam Deck, unknown pads) A/B/X/Y like an Xbox pad; the Generic folder has only plain shapes
                 default: return "Xbox";
             }
         }

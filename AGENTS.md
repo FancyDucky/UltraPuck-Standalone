@@ -85,6 +85,11 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.60, not released (Claude, 24 Nov 2026): **button pictures on the Steam Deck.** The Deck's pad is
+  `InputMode.Family.Generic`, whose pictures were looked up in `InputPrompts/Generic` (only plain shapes, no
+  `xbox_*` files), so the card footnote "Press {utility} to use" showed an empty square and hints fell back to text
+  ("Y"). `InputIcons.Subfolder` now sends Generic to the Xbox pictures (A/B/X/Y). Display only. Checked: Windows
+  build; not seen on the Deck.
 - After 0.1.59, not released (Claude, 24 Nov 2026): **Choose's deck no longer picked for you.** Taking Choose went
   straight on: the card screen keeps sending the pick (`_ready`) until its next `Frame`, and a frame runs several
   ticks, so the next tick took that same number from the deck. New `PlayerState.PickHeld` (set when a player is
