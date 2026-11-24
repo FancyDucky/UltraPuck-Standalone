@@ -65,6 +65,9 @@ namespace UltraPuck.Tests
             Assert.IsFalse(glare.ById("g").Glare);
             Assert.IsTrue(glare.ById("h").Glare);
             Assert.IsTrue(glare.ById("i").Glare);
+            glare.AddJson("{\"cards\":[{\"id\":\"j\",\"textBoxes\":true}]}", "test");
+            Assert.IsTrue(glare.ById("j").TextBoxes);
+            Assert.IsFalse(glare.ById("i").TextBoxes);
             Assert.Throws<System.FormatException>(() => lib.AddJson("{\"cards\":[{\"id\":\"d\",\"finish\":\"gold\"}]}", "test"));
         }
 

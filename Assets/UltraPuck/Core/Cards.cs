@@ -40,6 +40,8 @@ namespace UltraPuck.Core
         public string Finish;
         /// <summary>The light sweep across the card as it tilts, display only; "glare": false turns it off.</summary>
         public bool Glare = true;
+        /// <summary>A black box behind each piece of the card's text, display only: "textBoxes": true.</summary>
+        public bool TextBoxes;
         /// <summary>Every "finish" a card file may use (see Card.shader for what each looks like).</summary>
         public static readonly string[] FinishNames =
             { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch" };
@@ -112,6 +114,7 @@ namespace UltraPuck.Core
                     MaxPerTeam = Json.Get(o, "maxTeam") != null ? Json.Int(Json.Get(o, "maxTeam"), what + ".maxTeam") : 0,
                     NoBots = Json.Get(o, "noBots") is bool && (bool)Json.Get(o, "noBots"),
                     Glare = !(Json.Get(o, "glare") is bool) || (bool)Json.Get(o, "glare"),
+                    TextBoxes = Json.Get(o, "textBoxes") is bool && (bool)Json.Get(o, "textBoxes"),
                 };
                 if (string.IsNullOrEmpty(c.Id)) throw new FormatException(what + ": needs an id");
                 if (_byId.ContainsKey(c.Id)) throw new FormatException(what + ": a card with the id \"" + c.Id + "\" already exists");

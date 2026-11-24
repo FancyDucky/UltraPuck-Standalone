@@ -85,6 +85,10 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.56, not released (Claude, 23 Nov 2026): **per-card text boxes.** Card json `"textBoxes": true`
+  (`CardDef.TextBoxes`) puts a snug black box (85%) behind each piece of the card's text (`CardScreen.TextBox`, sized
+  from the TextMesh's `localBounds` every frame since the text is laid out late). Meant for busy finishes like
+  starfield. Card editor: "Text boxes" tick box. Display only. Checked: tests, Windows build, cards screenshot.
 - After 0.1.56, not released (Claude, 23 Nov 2026): **starfield is black space; no shine sweep.** Card.shader
   starfield turns the card body black except its bright text (the picture only its darkest parts) with stars on top
   and a faint nebula; the tilt glare is mostly kept off that black (`spaceMask`). The timed diagonal shine sweep is off

@@ -138,8 +138,9 @@ def check(cards):
             errors.append('%s: tier must be S, A, B, C, D or F' % what)
         if c.get('finish') and str(c['finish']).lower() not in finishes:
             errors.append('%s: finish must be one of: %s' % (what, ', '.join(finishes)))
-        if 'glare' in c and not isinstance(c['glare'], bool):
-            errors.append('%s: glare must be true or false' % what)
+        for k in ('glare', 'textBoxes', 'noBots'):
+            if k in c and not isinstance(c[k], bool):
+                errors.append('%s: %s must be true or false' % (what, k))
         for k in ('max', 'maxTeam', 'minTeam'):
             if k in c and not isinstance(c[k], int):
                 errors.append('%s: %s must be a whole number' % (what, k))

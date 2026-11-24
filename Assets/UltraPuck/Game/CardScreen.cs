@@ -1382,6 +1382,27 @@ namespace UltraPuck.Game
             new Color(0.76f, 0.48f, 0.35f), // F copper
         };
 
+        /// <summary>A black box sized to one piece of text (its size is only known once Unity has laid the text out).</summary>
+        private sealed class TextBox
+        {
+            public Renderer Text;
+            public Transform Box;
+            public Material Mat;
+            private Vector2 _size;
+
+            public void Fit()
+            {
+                var b = Text.localBounds;
+                var size = b.size.x < 0.001f ? Vector2.zero : new Vector2(b.size.x + 0.07f, b.size.y + 0.035f);
+                if (size == _size) return;
+                _size = size;
+                var at = Text.transform.localPosition + b.center;
+                Box.localPosition = new Vector3(at.x, at.y, -0.0055f);
+                Box.localScale = new Vector3(size.x, size.y, 1f);
+                Mat.SetVector("_Size", new Vector4(Mathf.Max(size.x, 0.001f), Mathf.Max(size.y, 0.001f), 0.035f, 0f));
+            }
+        }
+
         private sealed class CardView
         {
             public Transform Root, Tilt;
@@ -1406,6 +1427,8 @@ namespace UltraPuck.Game
             public InputMode.Family PromptFamily = (InputMode.Family)(-1);
             public Color Accent;
             public bool Rare;
+            /// <summary>"textBoxes" cards: a snug black box behind each piece of text.</summary>
+            public readonly List<TextBox> TextBoxes = new List<TextBox>();
             public float SweepAt = -10f, NextSweep, GlowBoost, GlowTarget, MoteTimer;
             public bool Landed;
             /// <summary>Has left the deck (its deal sound has played).</summary>
@@ -1441,6 +1464,7 @@ namespace UltraPuck.Game
                 // the finishes follow the tilt (and a little of the movement), like light on a real card
                 var tilt = new Vector4(Mathf.DeltaAngle(0f, Rot.y) / 22f + PosVel.x * 0.04f, -Mathf.DeltaAngle(0f, Rot.x) / 22f + PosVel.y * 0.03f, 0f, 0f);
                 foreach (var m in Finishes) m.SetVector("_Tilt", tilt);
+                foreach (var b in TextBoxes) b.Fit();
                 // the shadow stays flat on the "table" and softens as the card lifts
                 Shadow.transform.localPosition = new Vector3(Pos.x + 0.18f, Pos.y - 0.3f, 1.2f);
                 Shadow.transform.localScale = Vector3.one * Scale * (1f + Mathf.Max(0f, -Pos.z) * 0.08f);
@@ -1576,6 +1600,18 @@ namespace UltraPuck.Game
             }
             else if (!string.IsNullOrEmpty(def.Text))
                 Footnote(v, def.Text, -0.95f, 120, 0.0099f, new Color(0.88f, 0.88f, 0.9f));
+
+            // "textBoxes": a black box behind each piece of text, just around the words (easier to read over a busy
+            // finish like starfield)
+            if (def.TextBoxes)
+                foreach (var t in v.Texts)
+                {
+                    var m = Part(v, "TextBox", Vector2.one, Vector3.zero, 4, 0.035f);
+                    m.SetColor("_Color", new Color(0f, 0f, 0f, 0.85f));
+                    m.SetColor("_Color2", new Color(0f, 0f, 0f, 0.85f));
+                    m.SetFloat("_Glare", 0f);
+                    v.TextBoxes.Add(new TextBox { Text = t, Box = v.Tilt.GetChild(v.Tilt.childCount - 1), Mat = m });
+                }
 
             // the back: dark with the game's name
             var back = Part(v, "Back", new Vector2(2.5f, 3.5f), Vector3.zero, 1, 0.17f, true);
