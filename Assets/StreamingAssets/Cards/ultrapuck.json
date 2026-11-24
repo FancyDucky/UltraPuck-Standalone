@@ -306,6 +306,43 @@
       ],
       "text": "[note]Everyone bumps into it, even the puck.[/]",
       "stats": { "StoneWall": "+1" }
+    },
+    {
+      "id": "ultrapuck.choose",
+      "name": "Choose",
+      "tier": "S",
+      "color": "#FF5FA2",
+      "flavor": "Pick a card, any card!",
+      "face": [
+        { "label": "Pick", "value": "[good]any card[/]" }
+      ],
+      "text": "[note]Straight after, pick any card you could have from the whole deck.[/]",
+      "stats": { "Choose": "+1" }
+    },
+    {
+      "id": "ultrapuck.newhand",
+      "name": "New Hand",
+      "tier": "B",
+      "max": 1,
+      "color": "#5FD4C8",
+      "flavor": "Shuffle up and deal.",
+      "face": [
+        { "label": "Re-roll", "value": "[good]once a pick[/]" }
+      ],
+      "text": "[note]From now on, press your utility button on the card screen for new cards.[/]",
+      "stats": { "NewHand": "+1" }
+    },
+    {
+      "id": "ultrapuck.doublecard",
+      "name": "Double Card",
+      "tier": "A",
+      "color": "#B47CFF",
+      "flavor": "Two for the price of one.",
+      "face": [
+        { "label": "Cards", "value": "[good]2 random[/]" }
+      ],
+      "text": "[note]Never Choose or Double Card.[/]",
+      "stats": { "DoubleCard": "+1" }
     }
   ]
 }

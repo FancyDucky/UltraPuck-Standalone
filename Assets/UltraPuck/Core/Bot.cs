@@ -19,6 +19,10 @@ namespace UltraPuck.Core
             {
                 byte hover, pick;
                 PickCard(sim, s, me, out hover, out pick);
+                // New Hand: a poor hand (nothing better than C) gets re-rolled first, when it's theirs alone to re-roll
+                if (pick > 0 && me.PickKind == 0 && !sim.T.TeamVote && !sim.T.SameDraw && sim.Cards != null
+                    && me.Rerolls < sim.Cards.NewHands(me) && sim.Cards.Cards[me.Offer[pick - 1]].Tier > CardTier.B)
+                    return new PlayerInput { Buttons = PlayerInput.Utility, Hover = hover };
                 return new PlayerInput { Pick = pick, Hover = hover };
             }
             var pos = me.Pos;
@@ -255,7 +259,7 @@ namespace UltraPuck.Core
             hover = 0;
             pick = 0;
             if (me.Offer.Length == 0 || me.Picked >= 0 || sim.Cards == null) return;
-            if (sim.T.TeamVote)
+            if (sim.T.TeamVote && me.PickKind == 0)
             {
                 var humans = false;
                 var anyLocked = false;

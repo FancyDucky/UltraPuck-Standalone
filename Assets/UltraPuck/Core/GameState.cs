@@ -210,6 +210,10 @@ namespace UltraPuck.Core
         public int Picked = -1;
         /// <summary>While picking: the offered card this player is looking at (1-based, 0 = none). Only for showing.</summary>
         public byte Hover;
+        /// <summary>While picking: 0 = a normal offer, 1 = Choose (the offer is the whole deck).</summary>
+        public byte PickKind;
+        /// <summary>New Hand: re-rolls used in this pick.</summary>
+        public int Rerolls;
 
         // card effects (seconds left, 0 = ready / not active)
         public Fix GunCooldown, InvisCooldown, InvisibleTime, ShockCooldown;
@@ -501,7 +505,7 @@ namespace UltraPuck.Core
                 p.Stats.Hash(ref h);
                 Mix(ref h, p.Cards.Length); foreach (var c in p.Cards) Mix(ref h, c);
                 Mix(ref h, p.Offer.Length); foreach (var c in p.Offer) Mix(ref h, c);
-                Mix(ref h, p.Picked);
+                Mix(ref h, p.Picked); Mix(ref h, p.PickKind); Mix(ref h, p.Rerolls);
                 Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);

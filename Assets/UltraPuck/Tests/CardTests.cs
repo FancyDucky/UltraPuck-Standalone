@@ -24,6 +24,12 @@ namespace UltraPuck.Tests
 
         private static int Card(CardLibrary lib, string id) { return lib.ById(id).Index; }
 
+        /// <summary>Cards with no picture yet (take an id out once its art is in Cards/Art).</summary>
+        private static readonly string[] AwaitingArt = { "ultrapuck.choose", "ultrapuck.newhand", "ultrapuck.doublecard" };
+
+        /// <summary>Plain one-card picks: Choose (a second pick) and Double Card (two more cards) switched off.</summary>
+        private static Tuning OneCardPicks(CardLibrary lib) { return new Tuning { CardsOff = lib.CardGivers() }; }
+
         [Test]
         public void CardsLoadWithArt()
         {
@@ -32,7 +38,9 @@ namespace UltraPuck.Tests
             foreach (var c in lib.Cards)
             {
                 var art = Path.Combine(Application.streamingAssetsPath, "Cards", "Art", c.Art);
-                Assert.IsTrue(File.Exists(art + ".jpg") || File.Exists(art + ".png"), c.Id + " has art");
+                // (new cards waiting for their pictures show the card without one until then)
+                if (System.Array.IndexOf(AwaitingArt, c.Id) < 0)
+                    Assert.IsTrue(File.Exists(art + ".jpg") || File.Exists(art + ".png"), c.Id + " has art");
                 Assert.IsTrue(c.Face.Count > 0 || !string.IsNullOrEmpty(c.Text), c.Id + " has face rows or text");
                 Assert.IsNotEmpty(c.Flavor, c.Id + " has flavour");
             }
@@ -151,7 +159,7 @@ namespace UltraPuck.Tests
         public void RunningOutOfTimePicksForYou()
         {
             var lib = Library();
-            var sim = new Simulation(Rink(), null, lib);
+            var sim = new Simulation(Rink(), OneCardPicks(lib), lib);
             var s = sim.NewGame(new[] { 0, 1 }, 5u);
             OrangeScores(sim, s);
             Assert.AreEqual(Phase.Picking, s.Phase);
@@ -207,7 +215,7 @@ namespace UltraPuck.Tests
         public void BotsPickTheirCards()
         {
             var lib = Library();
-            var sim = new Simulation(Rink(), null, lib);
+            var sim = new Simulation(Rink(), OneCardPicks(lib), lib);
             var s = sim.NewGame(new[] { 0, 1 }, 11u);
             OrangeScores(sim, s);
             var inputs = new PlayerInput[2];

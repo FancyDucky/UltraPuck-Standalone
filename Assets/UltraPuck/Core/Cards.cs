@@ -84,6 +84,7 @@ namespace UltraPuck.Core
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
             "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "Swap", "PassRefresh", "PassRefreshTeam", "IceTrail",
             "QuickShotFull", "GhostShot", "CannonBall", "PassSpeed", "StoneWall", "PortalGun", "SlotMachine",
+            "Choose", "DoubleCard", "NewHand",
         };
 
         /// <summary>Stats that need the utility button (Triangle / Y). Used to offer only one utility at a time.</summary>
@@ -270,6 +271,49 @@ namespace UltraPuck.Core
                 if (q.Team == team)
                     foreach (var c in q.Cards) if (c == want.Index) return true;
             return false;
+        }
+
+        /// <summary>Does the card change <paramref name="stat"/> for its owner (e.g. "Choose")?</summary>
+        public bool HasStat(int index, string stat)
+        {
+            if (index < 0 || index >= Cards.Count) return false;
+            foreach (var m in Cards[index].Mods) if (!m.Opponents && m.Stat == stat) return true;
+            return false;
+        }
+
+        /// <summary>Choose: taking it lets you pick any card from the deck straight after.</summary>
+        public bool IsChoose(int index) { return HasStat(index, "Choose"); }
+        /// <summary>Double Card: taking it gives you two random cards.</summary>
+        public bool IsDouble(int index) { return HasStat(index, "DoubleCard"); }
+
+        /// <summary>Cards that hand out other cards (Choose, Double Card): never what they hand out.</summary>
+        public int[] CardGivers()
+        {
+            var list = new List<int>();
+            foreach (var c in Cards) if (IsChoose(c.Index) || IsDouble(c.Index)) list.Add(c.Index);
+            return list.ToArray();
+        }
+
+        /// <summary>New Hand: how many re-rolls a pick this player gets (one per copy held).</summary>
+        public int NewHands(PlayerState p)
+        {
+            if (p == null) return 0;
+            var n = 0;
+            foreach (var c in p.Cards) if (HasStat(c, "NewHand")) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Choose: every card player <paramref name="i"/> may take right now (the usual limits: max, maxTeam, minTeam,
+        /// noBots, requires), minus <paramref name="off"/> and the card givers, in deck order.
+        /// </summary>
+        public int[] DeckOffer(GameState s, int i, int[] off)
+        {
+            var not = new List<int>(CardGivers());
+            if (off != null) not.AddRange(off);
+            var deck = DrawOffer(s, i, Cards.Count, not.ToArray());
+            Array.Sort(deck);
+            return deck;
         }
 
         /// <summary>Does this card use the utility button?</summary>

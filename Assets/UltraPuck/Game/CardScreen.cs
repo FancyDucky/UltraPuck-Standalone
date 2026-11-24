@@ -29,6 +29,11 @@ namespace UltraPuck.Game
 
         private readonly List<CardView> _cards = new List<CardView>();
         private readonly Dictionary<int, byte> _ready = new Dictionary<int, byte>();
+        /// <summary>The offer each <see cref="_ready"/> pick was made from (a new offer — a re-roll, Choose's deck — drops the pick).</summary>
+        private readonly Dictionary<int, int[]> _readyOffer = new Dictionary<int, int[]>();
+        /// <summary>The cards dealt now, and whether they're Choose's whole deck (a scrolling grid).</summary>
+        private int[] _dealt = new int[0];
+        private bool _deck, _wasDeckRound;
         private readonly Dictionary<string, Texture2D> _art = new Dictionary<string, Texture2D>();
 
         private enum Stage { Idle, Choosing, Leaving, Editing }
@@ -123,6 +128,8 @@ namespace UltraPuck.Game
                 // the picks are in: a shared draw still dives into this PC's first chooser
                 if (_stage == Stage.Choosing) { if (_teamVote && !_watching) LeaveTeamVote(); else Leave(_watching ? WatchedPick(s) : -1); }
                 _ready.Clear();
+                _readyOffer.Clear();
+                _wasDeckRound = false;
                 _watched.Clear();
                 _cursors.Clear();
                 _voters.Clear();
@@ -132,12 +139,27 @@ namespace UltraPuck.Game
             {
                 // forget confirmed picks once the game has taken them
                 var done = new List<int>();
-                foreach (var kv in _ready) if (kv.Key >= s.Players.Length || s.Players[kv.Key].Picked >= 0 || s.Players[kv.Key].Offer.Length == 0) done.Add(kv.Key);
+                foreach (var kv in _ready)
+                {
+                    int[] from;
+                    if (kv.Key >= s.Players.Length || s.Players[kv.Key].Picked >= 0 || s.Players[kv.Key].Offer.Length == 0
+                        || (_readyOffer.TryGetValue(kv.Key, out from) && !SameCards(from, s.Players[kv.Key].Offer))) done.Add(kv.Key);
+                }
                 // (a shared draw keeps their cursor up, locked, until the whole team has chosen)
-                foreach (var k in done) { _ready.Remove(k); if (!_teamVote) { _cursors.Remove(k); _voters.Remove(k); } }
+                foreach (var k in done) { _ready.Remove(k); _readyOffer.Remove(k); if (!_teamVote) { _cursors.Remove(k); _voters.Remove(k); } }
+                // Choose's deck pick starts: everyone may be watched again
+                var deckRound = DeckRound(s);
+                if (deckRound && !_wasDeckRound) _watched.Clear();
+                _wasDeckRound = deckRound;
+                // the hand on screen was re-rolled (New Hand): put it away and deal the new one
+                if (_stage == Stage.Choosing && !_editing && _slot >= 0 && _slot < s.Players.Length)
+                {
+                    var p = s.Players[_slot];
+                    if (p.Offer.Length > 0 && p.Picked < 0 && !SameCards(p.Offer, _dealt)) Redeal(s);
+                }
                 if (_stage == Stage.Idle && !_editing)
                 {
-                    if (Sim.T.TeamVote || Sim.T.SameDraw) BeginTeamVote(s);
+                    if ((Sim.T.TeamVote || Sim.T.SameDraw) && !deckRound) BeginTeamVote(s);
                     else
                     {
                         var next = NextPicker(s);
@@ -163,8 +185,9 @@ namespace UltraPuck.Game
             Motes();
             if (_stage == Stage.Leaving && (Time.unscaledTime - _stageAt > (_editing ? 1.1f : _chosen >= 0 ? 1.25f : 0.85f) || (_absorbed && Time.unscaledTime - _absorbedAt > 0.1f)))
             {
-                if (_chosen >= 0 && _slot >= 0 && !_watching && !_teamVote) _ready[_slot] = (byte)(_chosen + 1);
+                if (_chosen >= 0 && _slot >= 0 && !_watching && !_teamVote) { _ready[_slot] = (byte)(_chosen + 1); _readyOffer[_slot] = _dealt; }
                 _watching = false;
+                _deck = false;
                 _teamVote = false;
                 _cursors.Clear();
                 _voters.Clear();
@@ -179,6 +202,36 @@ namespace UltraPuck.Game
                 _slot = -1;
                 if (browsed && OnBrowseClosed != null) OnBrowseClosed();
             }
+        }
+
+        /// <summary>Someone is choosing from the whole deck (after taking Choose): everyone picks on their own then.</summary>
+        private static bool DeckRound(GameState s)
+        {
+            foreach (var p in s.Players) if (p.Offer.Length > 0 && p.Picked < 0 && p.PickKind == 1) return true;
+            return false;
+        }
+
+        /// <summary>New Hand re-rolled the cards on screen: drop them at once (the next frame deals the new hand).</summary>
+        private void Redeal(GameState s)
+        {
+            var team = s.Players[_slot].Team;
+            foreach (var c in _cards) { Destroy(c.Root.gameObject); Destroy(c.Shadow.gameObject); }
+            foreach (var m in _motes) if (m.Go != null) Destroy(m.Go);
+            _motes.Clear();
+            _cards.Clear();
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                if (s.Players[i].Team != team || s.Players[i].Picked >= 0) continue;
+                _ready.Remove(i); _readyOffer.Remove(i); _watched.Remove(i);
+            }
+            _cursors.Clear();
+            _voters.Clear();
+            _watching = false;
+            _teamVote = false;
+            _deck = false;
+            _stage = Stage.Idle;
+            _slot = -1;
+            Sound.Play(Sfx.CardDeal, 0.6f);
         }
 
         /// <summary>The first local person (not a bot) still to choose.</summary>
@@ -323,6 +376,7 @@ namespace UltraPuck.Game
                 if (m.Confirm && readyGate)
                 {
                     _ready[player] = (byte)(_cursors[player] + 1);
+                    _readyOffer[player] = _shared;
                     Sound.Play(Sfx.CardPick, 0.55f);
                 }
             }
@@ -456,6 +510,27 @@ namespace UltraPuck.Game
             _testStep = 0;
             _stage = Stage.Choosing;
             _stageAt = Time.unscaledTime;
+            _dealt = (int[])offer.Clone();
+            _deck = _state != null && slot >= 0 && slot < _state.Players.Length && _state.Players[slot].PickKind == 1;
+            if (_deck)
+            {
+                // Choose: the whole deck in the free-play editor's grid (four a row, scrolling)
+                _focus = 0;
+                _editTop = 0;
+                _dealScale = EditScale;
+                for (var k = 0; k < offer.Length; k++)
+                {
+                    var v = Build(Sim.Cards.Cards[offer[k]], k);
+                    v.Home = EditHome(k);
+                    v.Pos = new Vector3(v.Home.x * 0.3f, -7.5f, 1f);
+                    v.Rot = new Vector3(0f, 180f, Random.Range(-28f, 28f));
+                    v.Scale = 0.75f * EditScale;
+                    var row = k / EditCols;
+                    v.Delay = row < EditRows ? 0.1f + row * 0.12f + (k % EditCols) * 0.05f : 0.5f;
+                    _cards.Add(v);
+                }
+                return;
+            }
             // three in a row; more fan out in an arc (like a rainbow), a little smaller, so they all fit on screen
             var n = offer.Length;
             _dealScale = n <= 3 ? 1f : n == 4 ? 0.9f : 0.82f;
@@ -503,6 +578,12 @@ namespace UltraPuck.Game
                 }
             }
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, _cards.Count - 1));
+            if (_deck && m.Y != 0)
+            {
+                var to = _focus - m.Y * EditCols;
+                if (to >= 0 && to < _cards.Count) SetFocus(to);
+                else if (m.Y < 0 && _focus / EditCols < EditRowCount - 1) SetFocus(_cards.Count - 1); // down onto a short last row
+            }
 
             // mouse: hover to focus, click to pick (keyboard players especially)
             var mouse = UnityEngine.InputSystem.Mouse.current;
@@ -512,8 +593,19 @@ namespace UltraPuck.Game
                 // keep the focused card while the mouse is on it (cards overlap a little when one is lifted),
                 // and don't flick between cards faster than the eye can follow
                 if (mouse.delta.ReadValue().sqrMagnitude > 0.5f && !ScreenRect(_cards[_focus]).Contains(mp) && Time.unscaledTime - _lastHover > 0.12f)
-                    for (var k = 0; k < _cards.Count; k++) if (ScreenRect(_cards[k]).Contains(mp)) { SetFocus(k); _lastHover = Time.unscaledTime; break; }
+                    for (var k = 0; k < _cards.Count; k++)
+                    {
+                        var row = k / EditCols - _editTop;
+                        if (_deck && (row < 0 || row >= EditRows)) continue; // off-screen rows of the deck
+                        if (ScreenRect(_cards[k]).Contains(mp)) { SetFocus(k); _lastHover = Time.unscaledTime; break; }
+                    }
                 if (mouse.leftButton.wasPressedThisFrame && ScreenRect(_cards[_focus]).Contains(mp)) m.Confirm = true;
+                var wheel = _deck ? mouse.scroll.ReadValue().y : 0f;
+                if (wheel != 0f)
+                {
+                    var r = Mathf.Clamp(_focus / EditCols + (wheel < 0f ? 1 : -1), 0, EditRowCount - 1);
+                    SetFocus(Mathf.Min(_cards.Count - 1, r * EditCols + _focus % EditCols));
+                }
             }
             // dealt cards need a moment before they can be taken, so a held button doesn't pick by accident
             if (m.Confirm && Time.unscaledTime - _stageAt > 0.55f) Leave(_focus);
@@ -562,8 +654,9 @@ namespace UltraPuck.Game
             var since = t - _stageAt;
             var tilt = PointerTilt();
             var live = _stage == Stage.Choosing || _stage == Stage.Editing;
-            var size = _editing ? EditScale : _dealScale;
-            if (_stage == Stage.Editing) EditHomes();
+            var grid = _editing || _deck; // the editor's grid, or Choose's deck
+            var size = grid ? EditScale : _dealScale;
+            if (_stage == Stage.Editing || (_deck && _stage == Stage.Choosing)) EditHomes();
             for (var k = 0; k < _cards.Count; k++)
             {
                 var c = _cards[k];
@@ -573,7 +666,7 @@ namespace UltraPuck.Game
                     // its turn: off the deck with a flick (in the editor, only the rows on screen are heard)
                     c.Dealt = true;
                     var row = k / EditCols - _editTop;
-                    if (!_editing || (row >= 0 && row < EditRows))
+                    if (!grid || (row >= 0 && row < EditRows))
                         Sound.Play(Sfx.CardDeal, 0.5f, 1f + 0.04f * (k % 5), Mathf.Clamp(c.Home.x / 8f, -0.5f, 0.5f));
                 }
                 if (live && since < c.Delay)
@@ -617,11 +710,11 @@ namespace UltraPuck.Game
                 {
                     var focused = k == _focus || (_teamVote && CursorOn(k));
                     var bob = Mathf.Sin(t * 1.7f + c.Phase) * 0.06f;
-                    tp = c.Home + new Vector3(0f, bob * size + (focused ? 0.25f * size : 0f), focused ? (_editing ? -2.2f : -0.9f) : 0f);
+                    tp = c.Home + new Vector3(0f, bob * size + (focused ? 0.25f * size : 0f), focused ? (grid ? -2.2f : -0.9f) : 0f);
                     tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.2f + c.Phase) * 1.8f + c.Fan * (focused ? 0.25f : 1f));
                     if (focused) tr += new Vector3(-tilt.y * 16f, tilt.x * 18f, 0f);
                     else tr += new Vector3(Mathf.Sin(t * 0.9f + c.Phase) * 3f, Mathf.Cos(t * 0.8f + c.Phase) * 4f, 0f);
-                    ts = (focused ? (_editing ? 1.3f : 1.12f) : 0.95f) * size;
+                    ts = (focused ? (grid ? 1.3f : 1.12f) : 0.95f) * size;
                     // in the editor, cards you don't have sit back a little
                     if (_editing && !_browse && !focused && _counts[_who][k] == 0) ts *= 0.92f;
                 }
@@ -787,7 +880,7 @@ namespace UltraPuck.Game
                 var who = name + "  ·  " + Palette.TeamName(team);
                 Ui.Swatch(new Rect(Ui.W / 2f - 150f, y + 6f, 26f, 26f), team);
                 Ui.Label(new Rect(Ui.W / 2f - 115f, y, 400f, 40f), who, Ui.Font(22, true), new Color(1f, 1f, 1f, a));
-                Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? (_stage == Stage.Leaving && _chosen >= 0 ? name + " took a card" : name + " is choosing...") : "Choose a card",
+                Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? (_stage == Stage.Leaving && _chosen >= 0 ? name + " took a card" : name + (_deck ? " is choosing from the deck..." : " is choosing...")) : _deck ? "Pick a card, any card" : "Choose a card",
                     Ui.Font(40, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
             }
 
@@ -808,8 +901,31 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(0f, y + 110f, Ui.W, 26f), replace, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 0.85f, 0.45f, 0.95f * a)); // above the cards, under the timer line
 
             var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
-            var hint = device is UnityEngine.InputSystem.Keyboard ? "{look} Look      {join} Take it  (or click)" : "{side} Look      {aim} Tilt      {confirm} Take it";
+            var hint = device is UnityEngine.InputSystem.Keyboard ? (_deck ? "{look} {nav} Look      {join} Take it  (or click)" : "{look} Look      {join} Take it  (or click)")
+                : _deck ? "{side} {nav} Look      {aim} Tilt      {confirm} Take it" : "{side} Look      {aim} Tilt      {confirm} Take it";
+            // New Hand: under the cards, how to re-roll them (while a re-roll is left this pick)
+            var roller = Roller();
+            if (roller >= 0 && _stage == Stage.Choosing)
+            {
+                var rs = SlotOf(roller);
+                var rdev = rs >= 0 && rs < Local.Slots.Count ? Local.Slots[rs].Device : device;
+                Glyphs.Hint(new Rect(0f, Ui.H - 84f, Ui.W, 30f), "{utility} to re-roll", 19, new Color(0.55f, 0.95f, 0.9f, 0.95f * a), TextAnchor.MiddleCenter, rdev, true);
+            }
             Glyphs.Hint(new Rect(0f, Ui.H - 46f, Ui.W, 30f), hint, 17, new Color(1f, 1f, 1f, 0.6f * a), TextAnchor.MiddleCenter, device);
+        }
+
+        /// <summary>A local chooser on screen who can still re-roll this pick (New Hand), or -1.</summary>
+        private int Roller()
+        {
+            if (_state == null || _watching || _deck || Sim == null || Sim.Cards == null) return -1;
+            var who = _teamVote ? _voters : new List<int> { _slot };
+            foreach (var i in who)
+            {
+                if (i < 0 || i >= _state.Players.Length) continue;
+                var p = _state.Players[i];
+                if (p.Offer.Length > 0 && p.Picked < 0 && p.PickKind == 0 && !_ready.ContainsKey(i) && p.Rerolls < Sim.Cards.NewHands(p)) return i;
+            }
+            return -1;
         }
 
         /// <summary>When the focused offer would replace the player's utility, a short plain-English line; else null.</summary>

@@ -85,6 +85,26 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.56, not released (Claude, 23 Nov 2026): **Choose, New Hand, Double Card cards.** New stats (no `Stats`
+  fields; looked up on the card: `CardLibrary.IsChoose` / `IsDouble` / `NewHands`): `"Choose"`, `"DoubleCard"`,
+  `"NewHand"`. **Choose** (S): once the pick resolves, that player goes straight on to a second pick
+  (`PlayerState.PickKind` 1, fresh `PickTime`, everyone else waits) offered `CardLibrary.DeckOffer`: every card they
+  could be offered (max, maxTeam, minTeam, noBots, requires, `CardsOff`), never Choose / Double Card
+  (`CardGivers`), in deck order. Team Vote / Same Draw: the deck round is never a vote, each picks their own (sim
+  `deckRound`, CardScreen `DeckRound` deals one at a time). CardScreen shows it in the free-play editor's grid
+  (`_deck`, `EditHome` / `EditHomes`, up/down + wheel). **Double Card** (A): two different random cards
+  (`Simulation.GiveRandom`: same limits, never a card giver, never a utility for someone who has one).
+  **New Hand** (B, max 1): a press of Utility (Triangle / Y, edge on `PrevButtons`) while still choosing re-rolls the
+  offer (`Simulation.Reroll`: none of the cards just shown unless too few are left), once a pick per copy held
+  (`PlayerState.Rerolls`, reset in `StartPicking`); in Team Vote / Same Draw it re-rolls the whole team's hand and
+  clears the team's locked picks (then `OnePickerGets` again). A pick on the re-roll tick is ignored. CardScreen
+  redeals when the dealt hand (`_dealt`) no longer matches, drops `_ready` picks made from another offer
+  (`_readyOffer`), and shows "{utility} to re-roll" under the cards (`Roller`). Bots re-roll a hand with nothing
+  better than C (not in shared draws); bots on a deck take the best tier. Cards still held as cards (so they show
+  up and count). No art yet (`Cards/Art/ultrapuck.choose.jpg`, `ultrapuck.newhand.jpg`, `ultrapuck.doublecard.jpg`).
+  **NetSession.Version 69.** Tests: `ChooseOffersTheWholeDeckWithTheUsualLimits`,
+  `ChooseWithTeamVoteLetsEveryonePickTheirOwn`, `DoubleCardGivesTwoOtherCards`, `NewHandRerollsOncePerPick`,
+  `NewHandInATeamVoteRerollsTheTeamsHand`, `NewCardPicksAreTheSameEveryRun`.
 - After 0.1.56, not released (Claude, 23 Nov 2026): **per-card text boxes.** Card json `"textBoxes": true`
   (`CardDef.TextBoxes`) puts a snug black box (85%) behind each piece of the card's text (`CardScreen.TextBox`, sized
   from the TextMesh's `localBounds` every frame since the text is laid out late). Meant for busy finishes like
