@@ -349,7 +349,7 @@
       "face": [
         { "label": "Pick", "value": "[good]any card[/]" }
       ],
-      "text": "[note]Chose any card from the deck![/]",
+      "text": "[note]Choose any card from the deck![/]",
       "stats": { "Choose": "+1" }
     },
     {
@@ -374,7 +374,7 @@
       "face": [
         { "label": "Cards", "value": "[good]2 random[/]" }
       ],
-      "text": "[note]Get two random cards from the deck..[/]",
+      "text": "[note]Get two random cards from the deck.[/]",
       "stats": { "DoubleCard": "+1" }
     }
   ]
