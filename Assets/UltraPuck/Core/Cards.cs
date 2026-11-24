@@ -38,6 +38,8 @@ namespace UltraPuck.Core
         public CardTier Tier = CardTier.C;
         /// <summary>Optional special look, display only: "foil" (metal sheen), "polychrome" (shifting rainbow), "holo" (the S tier's rainbow holo + sparkles) or "pearl" (the A tier's pearlescent), else null (the tier's own look).</summary>
         public string Finish;
+        /// <summary>The light sweep across the card as it tilts, display only; "glare": false turns it off.</summary>
+        public bool Glare = true;
         /// <summary>Every "finish" a card file may use (see Card.shader for what each looks like).</summary>
         public static readonly string[] FinishNames =
             { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch" };
@@ -109,6 +111,7 @@ namespace UltraPuck.Core
                     MinTeam = Json.Get(o, "minTeam") != null ? Json.Int(Json.Get(o, "minTeam"), what + ".minTeam") : 0,
                     MaxPerTeam = Json.Get(o, "maxTeam") != null ? Json.Int(Json.Get(o, "maxTeam"), what + ".maxTeam") : 0,
                     NoBots = Json.Get(o, "noBots") is bool && (bool)Json.Get(o, "noBots"),
+                    Glare = !(Json.Get(o, "glare") is bool) || (bool)Json.Get(o, "glare"),
                 };
                 if (string.IsNullOrEmpty(c.Id)) throw new FormatException(what + ": needs an id");
                 if (_byId.ContainsKey(c.Id)) throw new FormatException(what + ": a card with the id \"" + c.Id + "\" already exists");

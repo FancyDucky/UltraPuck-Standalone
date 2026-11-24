@@ -85,6 +85,11 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.56, not released (Claude, 23 Nov 2026): **per-card glare toggle.** Card json `"glare": false`
+  (`CardDef.Glare`, default true) turns off the light sweep on that card's body and picture (`CardScreen`); display
+  only, no protocol bump (the card file is in the fingerprint). Card editor: a Glare tick box (unticked writes
+  `"glare": false`, ticked drops the key); starting the editor asks an already-running one to close and waits for the
+  port. Checked: 195 tests (190 pass, 5 skipped), Windows build.
 - After 0.1.56, not released (Claude, 23 Nov 2026): **Controller pre-charge auto-aim; Steam Input warning as a
   toast.** A controller player holding charge without the puck (and not pushing the aim stick past 0.2, the sim's
   deadzone) aims at the nearest net they attack: at the nearest spot of its opening (between the posts, less the

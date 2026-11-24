@@ -60,6 +60,11 @@ namespace UltraPuck.Tests
             Assert.AreEqual("foil", lib.ById("a").Finish);
             Assert.AreEqual("polychrome", lib.ById("b").Finish);
             Assert.IsNull(lib.ById("c").Finish);
+            var glare = new CardLibrary();
+            glare.AddJson("{\"cards\":[{\"id\":\"g\",\"glare\":false},{\"id\":\"h\",\"glare\":true},{\"id\":\"i\"}]}", "test");
+            Assert.IsFalse(glare.ById("g").Glare);
+            Assert.IsTrue(glare.ById("h").Glare);
+            Assert.IsTrue(glare.ById("i").Glare);
             Assert.Throws<System.FormatException>(() => lib.AddJson("{\"cards\":[{\"id\":\"d\",\"finish\":\"gold\"}]}", "test"));
         }
 

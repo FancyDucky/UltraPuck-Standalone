@@ -1506,7 +1506,7 @@ namespace UltraPuck.Game
             var pearl = def.Finish == "pearl" || (def.Finish == null && tier == 1);
             Finish(body, fx,
                 foil: holo ? 0.55f : 0f,
-                glare: tier == 1 ? 0.55f : 0.45f,
+                glare: !def.Glare ? 0f : tier == 1 ? 0.55f : 0.45f,
                 sparkle: holo ? 0.45f : 0f,
                 pearl: pearl ? 1f : 0f,
                 metal: metal ? 0.85f : 0f,
@@ -1524,7 +1524,7 @@ namespace UltraPuck.Game
             art.SetColor("_BorderColor", new Color(0f, 0f, 0f, 1f));
             Finish(art, fx,
                 foil: holo ? 0.75f : 0f,
-                glare: tier == 1 ? 0.5f : tier == 0 ? 0.42f : 0.28f,
+                glare: !def.Glare ? 0f : tier == 1 ? 0.5f : tier == 0 ? 0.42f : 0.28f,
                 sparkle: holo ? 0.9f : 0f,
                 pearl: pearl ? 1f : 0f,
                 metal: metal ? 0.6f : 0f,
@@ -1608,7 +1608,7 @@ namespace UltraPuck.Game
             m.SetFloat("_Poly", fx ? poly : 0f);
             m.SetFloat("_Foil", fx ? foil : 0f);
             m.SetFloat("_Pearl", fx ? pearl : 0f);
-            m.SetFloat("_Glare", fx ? glare : 0.12f);
+            m.SetFloat("_Glare", fx ? glare : Mathf.Min(glare, 0.12f)); // a card with "glare": false has none either way
             m.SetFloat("_Sparkle", fx ? sparkle : 0f);
         }
 

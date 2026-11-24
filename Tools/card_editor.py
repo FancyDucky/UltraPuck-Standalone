@@ -138,6 +138,8 @@ def check(cards):
             errors.append('%s: tier must be S, A, B, C, D or F' % what)
         if c.get('finish') and str(c['finish']).lower() not in finishes:
             errors.append('%s: finish must be one of: %s' % (what, ', '.join(finishes)))
+        if 'glare' in c and not isinstance(c['glare'], bool):
+            errors.append('%s: glare must be true or false' % what)
         for k in ('max', 'maxTeam', 'minTeam'):
             if k in c and not isinstance(c[k], int):
                 errors.append('%s: %s must be a whole number' % (what, k))
@@ -329,18 +331,23 @@ def main():
     url = 'http://127.0.0.1:%d/' % PORT
     try:  # an editor already open (an older window)? ask it to close so only this one answers
         urllib.request.urlopen(urllib.request.Request(url + 'api/quit', b'{}', method='POST'), timeout=1)
-        time.sleep(0.5)
     except Exception:
         pass
-    try:
-        server = Server(('127.0.0.1', PORT), Handler)
-    except OSError:
+    server = None
+    for _ in range(30):  # the old one takes a moment to let go of the port
+        try:
+            server = Server(('127.0.0.1', PORT), Handler)
+            break
+        except OSError:
+            time.sleep(0.2)
+    if server is None:
         print('Another card editor is already running. Close its window, then start this again.')
         sys.exit(1)
     print('Ultra Puck card editor on', url, '(close this window to stop it)')
     if '--no-browser' not in sys.argv:
         webbrowser.open(url)
     server.serve_forever()
+    server.server_close()
 
 
 if __name__ == '__main__':
