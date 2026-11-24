@@ -292,6 +292,17 @@ namespace UltraPuck.Core
             var tier = 0;
             for (var k = 1; k < me.Offer.Length; k++)
                 if (sim.Cards.Cards[me.Offer[k]].Tier < sim.Cards.Cards[me.Offer[tier]].Tier) tier = k;
+            // a moment to look them over first (the highlight steps along the cards, then settles on the one it'll take);
+            // again after a New Hand re-roll
+            var since = sim.T.PickTime - s.PhaseTime;
+            var wait = sim.T.BotPickDelay * Fix.FromInt(1 + System.Math.Max(0, me.Rerolls));
+            if (since < wait)
+            {
+                var settle = wait - Fix.Ratio(1, 2);
+                var step = (since * Fix.FromInt(10) / Fix.FromInt(3)).FloorToInt(); // a card every 0.3 s
+                hover = since >= settle ? (byte)(tier + 1) : (byte)(System.Math.Max(0, step) % me.Offer.Length + 1);
+                return;
+            }
             hover = pick = (byte)(tier + 1);
         }
 

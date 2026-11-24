@@ -220,6 +220,8 @@ namespace UltraPuck.Core
         public int CardsOffered = 3;
         /// <summary>Seconds to choose before a card is picked at random.</summary>
         public Fix PickTime = Fix.FromInt(30);
+        /// <summary>Bots look over their cards this long before taking one (their highlight moves along them), so people can see what they took.</summary>
+        public Fix BotPickDelay = Fix.Ratio(9, 5);
         /// <summary>The count before a face-off: 3, 2, 1, go.</summary>
         public Fix CountdownTime = Fix.FromInt(3);
         /// <summary>After a card pick: this long before the countdown starts, so the cards finish flying off first.</summary>

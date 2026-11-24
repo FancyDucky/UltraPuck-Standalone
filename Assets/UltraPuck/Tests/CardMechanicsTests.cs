@@ -125,8 +125,9 @@ namespace UltraPuck.Tests
             var s = sim.NewGame(new[] { 0, 1 }, 3u);
             s.Players[1].Bot = true;
             sim.StartPicking(s, new[] { 1 });
+            s.PhaseTime -= sim.T.BotPickDelay; // once it has looked the cards over
             var alone = Bot.Think(sim, s, 1);
-            Assert.Greater(alone.Pick, 0, "bot alone on the team picks straight away");
+            Assert.Greater(alone.Pick, 0, "bot alone on the team picks (no human to wait for)");
             Assert.AreEqual(alone.Pick, alone.Hover, "hover matches the pick");
             Assert.LessOrEqual(alone.Pick, s.Players[1].Offer.Length);
         }

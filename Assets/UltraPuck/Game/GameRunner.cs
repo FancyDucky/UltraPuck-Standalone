@@ -2276,7 +2276,7 @@ namespace UltraPuck.Game
                 if (_wipe.Covered) _replayHoldA = _replayHoldB = null;
                 if (_wipe.Active)
                 {
-                    if (_replayHoldA != null) Show(_replayHoldA, _replayHoldB ?? _replayHoldA, _replayHoldT);
+                    if (_replayHoldA != null) Show(_replayHoldA, _replayHoldB ?? _replayHoldA, _replayHoldT, true);
                     else Show(_state, _state, 0f);
                     _hud.Replay = _replayHoldA != null;
                     return true;
@@ -2297,7 +2297,7 @@ namespace UltraPuck.Game
                 _replay = null;
                 _replayExit = true;
                 _wipe.Begin(_wipeStyle, ReplayTransition.GreyStripeColours());
-                if (_replayHoldA != null) Show(_replayHoldA, _replayHoldB ?? _replayHoldA, _replayHoldT);
+                if (_replayHoldA != null) Show(_replayHoldA, _replayHoldB ?? _replayHoldA, _replayHoldT, true);
                 else Show(_state, _state, 0f);
                 return true;
             }
@@ -2307,7 +2307,7 @@ namespace UltraPuck.Game
             _hud.Replay = true;
             _hud.ReplaySkippable = true;
             _hud.ReplaySlow = _replay.Slow < 0.9f;
-            Show(a, b, t);
+            Show(a, b, t, true);
             return true;
         }
 
@@ -2592,7 +2592,15 @@ namespace UltraPuck.Game
             return Settings.PlayerName;
         }
 
-        private void Show(GameState a, GameState b, float t)
+        /// <summary>
+        /// Goals blown up so far in what's shown live (the scored total), and whether the replay on screen has had its
+        /// explosion: a frame often covers two ticks or more (120 a second against 60 fps), so the goal is noticed on
+        /// the first frame that shows it, not only when that frame's two ticks straddle it.
+        /// </summary>
+        private int _boomGoals;
+        private bool _replayBoomed;
+
+        private void Show(GameState a, GameState b, float t, bool replay = false)
         {
             _hud.Tags.Clear();
             _hud.Under.Clear();
@@ -2663,7 +2671,20 @@ namespace UltraPuck.Game
             // a puck that just jumped (face-off) shouldn't slide across the rink
             var pa2 = V.Of(a.PuckPos); var pb2 = V.Of(b.PuckPos);
             // a goal: the puck blows up in the net, and stays gone until the next face-off
-            if (b.Phase == Phase.Scored && a.Phase != Phase.Scored)
+            var boom = false;
+            if (replay)
+            {
+                if (b.Phase != Phase.Scored) _replayBoomed = false;
+                else if (!_replayBoomed) { _replayBoomed = true; boom = true; }
+            }
+            else
+            {
+                var goals = b.Score[0] + b.Score[1];
+                if (b.Phase != Phase.Scored && goals < _boomGoals) _boomGoals = goals; // a new match (or a score fixed down)
+                if (b.Phase == Phase.Scored && goals > _boomGoals) { _boomGoals = goals; boom = true; }
+                _replayBoomed = false;
+            }
+            if (boom)
             {
                 _effects.Explosion(pb2, b.LastScorer >= 0 ? Palette.Team(b.LastScorer) : Color.white);
                 _shake = Mathf.Max(_shake, 0.7f);

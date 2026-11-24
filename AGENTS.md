@@ -85,6 +85,17 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.58, not released (Claude, 24 Nov 2026): **goal explosion always shows; bots take a moment to pick.**
+  The goal explosion/ripple fired only when a frame's two shown ticks straddled the goal (`a` not Scored, `b`
+  Scored), but at 120 ticks/s a 60 fps frame (Steam Deck) runs ~2 ticks, so about half the goals were skipped.
+  `GameRunner.Show` now fires live on the first frame whose state has more goals than `_boomGoals` (reset when the
+  score goes back down, e.g. a new match), and replays once per replay (`Show(..., replay: true)`,
+  `_replayBoomed`). Cards not showing after a goal: when the conceding team was all bots, they picked on the
+  first tick, so the pick was over before the card screen saw it. Bots now look over their cards for
+  `Tuning.BotPickDelay` (1.8 s; again after a New Hand re-roll; their highlight steps along the cards every 0.3 s,
+  settling 0.5 s before taking it) in `Bot.PickCard`'s tier pick (not when following humans in a Team Vote).
+  **NetSession.Version 73.** Tests `BotsPickTheirCards` (waits the delay, highlight moves) and
+  `TeamVoteBotAlonePicksByTier` updated. Checked: 209 tests (204 pass, 5 skipped), Windows build. Not seen on the Deck.
 - 0.1.58 (Claude, 24 Nov 2026): **Double Card reveal; clean grid exits.** Double Card records
   the cards it gave (`PlayerState.Gifts`, cleared for everyone in `StartPicking`; `Gifted` counts them), and the
   countdown waits `Tuning.GiftRevealTime` (2.5 s) more on top of `PickOutroTime` when anyone has Gifts. CardScreen

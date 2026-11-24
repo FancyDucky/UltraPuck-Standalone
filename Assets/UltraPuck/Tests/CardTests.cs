@@ -219,10 +219,21 @@ namespace UltraPuck.Tests
             var s = sim.NewGame(new[] { 0, 1 }, 11u);
             OrangeScores(sim, s);
             var inputs = new PlayerInput[2];
-            for (var i = 0; i < 2; i++) inputs[i] = Bot.Think(sim, s, i);
-            sim.Step(s, inputs);
-            Assert.AreEqual(Phase.Countdown, s.Phase, "the bot chose straight away");
+            var ticks = 0;
+            var hovers = new System.Collections.Generic.HashSet<byte>();
+            while (s.Phase == Phase.Picking && ticks < 10 * sim.T.TicksPerSecond)
+            {
+                for (var i = 0; i < 2; i++) inputs[i] = Bot.Think(sim, s, i);
+                hovers.Add(inputs[1].Hover);
+                sim.Step(s, inputs);
+                ticks++;
+            }
+            Assert.AreEqual(Phase.Countdown, s.Phase, "the bot chose");
             Assert.AreEqual(1, s.Players[1].Cards.Length);
+            var delay = (int)(sim.T.BotPickDelay.ToDouble() * sim.T.TicksPerSecond);
+            Assert.GreaterOrEqual(ticks, delay, "after looking the cards over, so people can see it choose");
+            Assert.LessOrEqual(ticks, delay + 4, "but no longer than that");
+            Assert.Greater(hovers.Count, 1, "its highlight moved along the cards");
         }
     }
 }
