@@ -125,8 +125,8 @@ def check(cards):
         ids.add(cid)
         if c.get('tier', 'C') not in TIERS:
             errors.append('%s: tier must be S, A, B, C, D or F' % what)
-        if str(c.get('finish') or '').lower() not in ('', 'foil', 'polychrome'):
-            errors.append('%s: finish must be foil or polychrome' % what)
+        if str(c.get('finish') or '').lower() not in ('', 'foil', 'polychrome', 'holo', 'pearl'):
+            errors.append('%s: finish must be foil, polychrome, holo or pearl' % what)
         for k in ('max', 'maxTeam', 'minTeam'):
             if k in c and not isinstance(c[k], int):
                 errors.append('%s: %s must be a whole number' % (what, k))
