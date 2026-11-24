@@ -85,6 +85,16 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.57, not released (Claude, 24 Nov 2026): **Double Card reveal; clean grid exits.** Double Card records
+  the cards it gave (`PlayerState.Gifts`, cleared for everyone in `StartPicking`; `Gifted` counts them), and the
+  countdown waits `Tuning.GiftRevealTime` (2.5 s) more on top of `PickOutroTime` when anyone has Gifts. CardScreen
+  `Reveal`: once the picked cards are gone and the phase is Countdown, it deals those cards face down (flipping up),
+  everyone's side by side (names under each card if several took it), header "Double Card / <name> got two cards"
+  (`RevealGUI`), holds `RevealHold` 2 s, then they drop. `_seenGifted` (cleared during each pick) stops it repeating.
+  Grid exits (free-play editor, card list, Choose's deck): rows scrolled off screen now stay out of sight instead
+  of flying across the screen face down, and the deck's on-screen rows drop in the editor's ripple (`Leave` with
+  `_deck`). **NetSession.Version 72.** Test `DoubleCardsCardsAreShownBeforeTheCountdown`. Checked: 209 tests (204
+  pass, 5 skipped), Windows build. Not looked at on screen.
 - 0.1.57 (Claude, 23 Nov 2026): a dash counts as a check for 0.4 s (`Tuning.DashHitTime`, was
   0.25 s; players still gliding fast after it weren't checking). Protocol 70. Trying it out; the alternatives were a
   speed-based check window or a short grace period. Card art for Choose, New Hand, Double Card added.

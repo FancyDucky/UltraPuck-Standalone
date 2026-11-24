@@ -214,6 +214,9 @@ namespace UltraPuck.Core
         public byte PickKind;
         /// <summary>New Hand: re-rolls used in this pick.</summary>
         public int Rerolls;
+        /// <summary>Double Card: the cards it gave in the last pick (shown before the countdown), and how many times it has (so a new one is seen).</summary>
+        public int[] Gifts = new int[0];
+        public int Gifted;
 
         // card effects (seconds left, 0 = ready / not active)
         public Fix GunCooldown, InvisCooldown, InvisibleTime, ShockCooldown;
@@ -272,6 +275,7 @@ namespace UltraPuck.Core
             p.Stats = Stats.Clone();
             p.Cards = (int[])Cards.Clone();
             p.Offer = (int[])Offer.Clone();
+            p.Gifts = (int[])Gifts.Clone();
             return p;
         }
     }
@@ -506,6 +510,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.Cards.Length); foreach (var c in p.Cards) Mix(ref h, c);
                 Mix(ref h, p.Offer.Length); foreach (var c in p.Offer) Mix(ref h, c);
                 Mix(ref h, p.Picked); Mix(ref h, p.PickKind); Mix(ref h, p.Rerolls);
+                Mix(ref h, p.Gifted); Mix(ref h, p.Gifts.Length); foreach (var c in p.Gifts) Mix(ref h, c);
                 Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);

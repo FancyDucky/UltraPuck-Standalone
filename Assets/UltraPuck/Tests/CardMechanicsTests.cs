@@ -2367,6 +2367,24 @@ namespace UltraPuck.Tests
         }
 
         [Test]
+        public void DoubleCardsCardsAreShownBeforeTheCountdown()
+        {
+            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3 }, _lib);
+            var plain = sim.NewGame(new[] { 0, 1 }, 2u);
+            TakeOnly(sim, plain, Id("ultrapuck.speedup"));
+            var s = sim.NewGame(new[] { 0, 1 }, 2u);
+            TakeOnly(sim, s, Id("ultrapuck.doublecard"));
+            var p = s.Players[0];
+            Assert.AreEqual(Phase.Countdown, s.Phase);
+            Assert.AreEqual(1, p.Gifted);
+            Assert.AreEqual(new[] { p.Cards[1], p.Cards[2] }, p.Gifts, "the two cards it gave, for the reveal");
+            Assert.AreEqual(0, plain.Players[0].Gifts.Length);
+            Assert.AreEqual((plain.PhaseTime + sim.T.GiftRevealTime).Raw, s.PhaseTime.Raw, "the countdown waits for the reveal");
+            sim.StartPicking(s, new[] { 0 });
+            Assert.AreEqual(0, p.Gifts.Length, "a new pick clears the last reveal");
+        }
+
+        [Test]
         public void NewHandRerollsOncePerPick()
         {
             var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3 }, _lib);

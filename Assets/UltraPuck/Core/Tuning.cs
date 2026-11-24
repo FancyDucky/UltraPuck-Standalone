@@ -224,6 +224,8 @@ namespace UltraPuck.Core
         public Fix CountdownTime = Fix.FromInt(3);
         /// <summary>After a card pick: this long before the countdown starts, so the cards finish flying off first.</summary>
         public Fix PickOutroTime = Fix.Ratio(3, 2);
+        /// <summary>After a pick where someone took Double Card: this much longer, so everyone sees the two cards it gave.</summary>
+        public Fix GiftRevealTime = Fix.Ratio(5, 2);
         public Fix CelebrateTime = Fix.FromInt(2);
         /// <summary>A timed match: seconds on the clock (0 = play to <see cref="GoalsToWin"/> instead). Level at the end: next goal wins.</summary>
         public Fix TimeLimit = Fix.Zero;

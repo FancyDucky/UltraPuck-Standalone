@@ -38,6 +38,7 @@ namespace UltraPuck.Core
         {
             if (Cards == null || Cards.Cards.Count == 0) return;
             var any = false;
+            foreach (var q in s.Players) q.Gifts = new int[0]; // last pick's Double Card cards are old news
             var teamOffer = new int[2][];
             // people draw first, so a Team Vote offer can hold cards bots aren't offered
             var order = new System.Collections.Generic.List<int>();
@@ -205,7 +206,7 @@ namespace UltraPuck.Core
         }
 
         /// <summary>Double Card: one random card for player <paramref name="i"/>, with the usual limits (never a card giver, never another utility for someone who has one).</summary>
-        private void GiveRandom(GameState s, int i)
+        private int GiveRandom(GameState s, int i)
         {
             var p = s.Players[i];
             var off = new System.Collections.Generic.List<int>(Cards.CardGivers());
@@ -213,7 +214,9 @@ namespace UltraPuck.Core
             var utilities = StandInOff(p);
             if (utilities != null) off.AddRange(utilities);
             var got = Cards.DrawOffer(s, i, 1, off.ToArray());
-            if (got.Length > 0) GiveCard(s, p, got[0]);
+            if (got.Length == 0) return -1;
+            GiveCard(s, p, got[0]);
+            return got[0];
         }
 
         /// <summary>The team that just conceded picks (after every goal, as in ROUNDS).</summary>
@@ -295,7 +298,12 @@ namespace UltraPuck.Core
                     if (deck.Length > 0) { p.Offer = deck; p.PickKind = 1; again = true; }
                 }
                 // Double Card: two random cards, by the same rules as Choose's deck
-                else if (Cards.IsDouble(took)) for (var n = 0; n < 2; n++) GiveRandom(s, me);
+                else if (Cards.IsDouble(took))
+                {
+                    var gifts = new System.Collections.Generic.List<int>();
+                    for (var n = 0; n < 2; n++) { var g = GiveRandom(s, me); if (g >= 0) gifts.Add(g); }
+                    if (gifts.Count > 0) { p.Gifts = gifts.ToArray(); p.Gifted++; }
+                }
             }
             Cards.Recompute(s);
             if (again)
@@ -310,6 +318,10 @@ namespace UltraPuck.Core
             {
                 FaceOff(s);
                 s.PhaseTime += T.PickOutroTime; // the countdown waits for the cards to leave the screen
+                // ...and for Double Card's two cards to be shown
+                var gifted = false;
+                foreach (var q in s.Players) gifted |= q.Gifts.Length > 0;
+                if (gifted) s.PhaseTime += T.GiftRevealTime;
             }
         }
 

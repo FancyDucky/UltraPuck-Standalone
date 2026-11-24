@@ -36,7 +36,14 @@ namespace UltraPuck.Game
         private bool _deck, _wasDeckRound;
         private readonly Dictionary<string, Texture2D> _art = new Dictionary<string, Texture2D>();
 
-        private enum Stage { Idle, Choosing, Leaving, Editing }
+        private enum Stage { Idle, Choosing, Leaving, Editing, Revealing }
+
+        /// <summary>Double Card: how long its two cards stay up (after flipping in) before they go.</summary>
+        private const float RevealHold = 2.0f;
+        /// <summary>Double Card reveal on screen (through its leaving too), whose card each one is, and the reveals seen.</summary>
+        private bool _revealShow;
+        private readonly List<int> _revealOwner = new List<int>();
+        private readonly Dictionary<int, int> _seenGifted = new Dictionary<int, int>();
         private Stage _stage = Stage.Idle;
         private int _slot = -1, _focus, _chosen = -1;
         private float _stageAt, _lastHover;
@@ -134,9 +141,13 @@ namespace UltraPuck.Game
                 _cursors.Clear();
                 _voters.Clear();
                 if (_stage == Stage.Editing) { if (_browse) BrowseInput(); else EditInput(); }
+                // Double Card: once the picked cards have gone, show the two it gave (the countdown waits for it)
+                if (_stage == Stage.Idle && !_editing && s != null && s.Phase == Phase.Countdown && Sim != null && Sim.Cards != null) Reveal(s);
+                if (_stage == Stage.Revealing && Time.unscaledTime - _stageAt > RevealHold) Leave(-1);
             }
             else
             {
+                _seenGifted.Clear(); // a new pick: its Double Card reveal hasn't been shown
                 // forget confirmed picks once the game has taken them
                 var done = new List<int>();
                 foreach (var kv in _ready)
@@ -188,6 +199,8 @@ namespace UltraPuck.Game
                 if (_chosen >= 0 && _slot >= 0 && !_watching && !_teamVote) { _ready[_slot] = (byte)(_chosen + 1); _readyOffer[_slot] = _dealt; }
                 _watching = false;
                 _deck = false;
+                _revealShow = false;
+                _revealOwner.Clear();
                 _teamVote = false;
                 _cursors.Clear();
                 _voters.Clear();
@@ -202,6 +215,30 @@ namespace UltraPuck.Game
                 _slot = -1;
                 if (browsed && OnBrowseClosed != null) OnBrowseClosed();
             }
+        }
+
+        /// <summary>Double Card: deal the cards it just gave (everyone's who took it, side by side), face down, flipping up.</summary>
+        private void Reveal(GameState s)
+        {
+            var cards = new List<int>();
+            var owners = new List<int>();
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var p = s.Players[i];
+                int seen;
+                _seenGifted.TryGetValue(i, out seen);
+                if (p.Gifted == seen) continue;
+                _seenGifted[i] = p.Gifted;
+                foreach (var c in p.Gifts) if (c >= 0 && c < Sim.Cards.Cards.Count) { cards.Add(c); owners.Add(i); }
+            }
+            if (cards.Count == 0) return;
+            Deal(owners[0], cards.ToArray());
+            _stage = Stage.Revealing;
+            _focus = -1;
+            _revealShow = true;
+            _revealOwner.Clear();
+            _revealOwner.AddRange(owners);
+            Sound.Play(Sfx.CardPick, 0.4f);
         }
 
         /// <summary>Someone is choosing from the whole deck (after taking Choose): everyone picks on their own then.</summary>
@@ -643,6 +680,12 @@ namespace UltraPuck.Game
                     c.GlowTarget = 1.2f;
                     Burst(c);
                 }
+                else if (_deck)
+                {
+                    // Choose's deck: the rows on screen drop in a quick ripple (the scrolled-away ones stay out of sight)
+                    var row = k / EditCols - _editTop;
+                    c.Delay = row >= 0 && row < EditRows ? 0.03f * (row * EditCols + k % EditCols) : 0f;
+                }
                 else c.Delay = Time.unscaledTime - _stageAt + 0.05f * Mathf.Abs(k - Mathf.Max(0, chosen));
             }
         }
@@ -653,7 +696,7 @@ namespace UltraPuck.Game
             var dt = Mathf.Min(Time.unscaledDeltaTime, 1f / 30f);
             var since = t - _stageAt;
             var tilt = PointerTilt();
-            var live = _stage == Stage.Choosing || _stage == Stage.Editing;
+            var live = _stage == Stage.Choosing || _stage == Stage.Editing || _stage == Stage.Revealing;
             var grid = _editing || _deck; // the editor's grid, or Choose's deck
             var size = grid ? EditScale : _dealScale;
             if (_stage == Stage.Editing || (_deck && _stage == Stage.Choosing)) EditHomes();
@@ -698,6 +741,11 @@ namespace UltraPuck.Game
                             if (OnAbsorbed != null) OnAbsorbed(_slot, c.Accent);
                         }
                     }
+                }
+                else if (_stage == Stage.Leaving && grid && (k / EditCols - _editTop < 0 || k / EditCols - _editTop >= EditRows))
+                {
+                    // a grid row scrolled off screen: it stays out of sight instead of flying across the screen
+                    tp = c.Home; tr = c.Rot; ts = c.Scale;
                 }
                 else if (_stage == Stage.Leaving)
                 {
@@ -759,7 +807,7 @@ namespace UltraPuck.Game
         {
             var t = Time.unscaledTime;
             var drift = new Vector2(Mathf.Sin(t * 1.1f) * 0.45f, Mathf.Cos(t * 0.85f) * 0.3f);
-            if (_cards.Count == 0 || _focus >= _cards.Count) return drift;
+            if (_cards.Count == 0 || _focus < 0 || _focus >= _cards.Count) return drift;
             var mouse = UnityEngine.InputSystem.Mouse.current;
             if (mouse != null)
             {
@@ -864,6 +912,7 @@ namespace UltraPuck.Game
             var team = _state.Players[_slot].Team;
             var appear = Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.4f);
             var a = _stage == Stage.Leaving ? 1f - Ui.EaseOut((Time.unscaledTime - _stageAt) / 0.3f) : appear;
+            if (_revealShow) { RevealGUI(a, appear); return; }
             var y = 34f + (1f - appear) * -20f;
             if (_teamVote)
             {
@@ -912,6 +961,38 @@ namespace UltraPuck.Game
                 Glyphs.Hint(new Rect(0f, Ui.H - 84f, Ui.W, 30f), "{utility} to re-roll", 19, new Color(0.55f, 0.95f, 0.9f, 0.95f * a), TextAnchor.MiddleCenter, rdev, true);
             }
             Glyphs.Hint(new Rect(0f, Ui.H - 46f, Ui.W, 30f), hint, 17, new Color(1f, 1f, 1f, 0.6f * a), TextAnchor.MiddleCenter, device);
+        }
+
+        /// <summary>Double Card's reveal: who got which cards.</summary>
+        private void RevealGUI(float a, float appear)
+        {
+            var y = 34f + (1f - appear) * -20f;
+            var owners = new List<int>();
+            foreach (var o in _revealOwner) if (!owners.Contains(o)) owners.Add(o);
+            string Name(int i)
+            {
+                var n = NameOf != null ? NameOf(i) : "";
+                return string.IsNullOrEmpty(n) ? "P" + (i + 1) : n;
+            }
+            Ui.Label(new Rect(0f, y, Ui.W, 40f), "Double Card", Ui.Font(22, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+            Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), owners.Count == 1 ? Name(owners[0]) + " got two cards" : "Two cards each",
+                Ui.Font(40, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+            if (owners.Count < 2) return;
+            // several took it: each name under their cards
+            var scale = Screen.height / 720f * Settings.UiScale;
+            for (var k = 0; k < _cards.Count && k < _revealOwner.Count; k++)
+            {
+                var r = ScreenRect(_cards[k]);
+                var cx = r.center.x / scale;
+                var top = (Screen.height - r.yMin) / scale;
+                var who = _revealOwner[k];
+                var pteam = who < _state.Players.Length ? _state.Players[who].Team : 0;
+                var name = Name(who);
+                var tw = Mathf.Max(80f, name.Length * 9f + 28f);
+                Ui.Box(new Rect(cx - tw / 2f, top + 10f, tw, 22f), new Color(0f, 0f, 0f, 0.6f * a), 4f);
+                Ui.Swatch(new Rect(cx - tw / 2f + 4f, top + 13f, 16f, 16f), pteam);
+                Ui.Label(new Rect(cx - tw / 2f + 24f, top + 10f, tw - 28f, 22f), name, Ui.Font(15, true), new Color(1f, 1f, 1f, 0.9f * a));
+            }
         }
 
         /// <summary>A local chooser on screen who can still re-roll this pick (New Hand), or -1.</summary>
