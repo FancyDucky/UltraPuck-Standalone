@@ -3,6 +3,12 @@
 //   _Pearl    soft mother-of-pearl sheen (pastel white/cream interference) — A tier
 //   _Metal    "foil" finish: brushed metal with a bright sheen that sweeps across as the card tilts (per card)
 //   _Poly     "polychrome" finish: every colour on the card slowly shifts round the rainbow, in drifting waves (per card)
+//   _Special  a card file's other finishes, by number (strength _SpecialAmt): 1 starfield (stars in three depths drift
+//             against the tilt, faint nebula), 2 gilded (gold leaf on the dark parts and frame), 3 prism (crisp rainbow
+//             shards that flash at different tilts), 4 frosted (frost creeping in from the edges, cold glints),
+//             5 neon (the frame becomes a glowing tube in its colour that hums and flickers; body only),
+//             6 aurora (green / violet curtains of light), 7 molten (glowing cracks that pulse), 8 glitch (scan lines,
+//             colour split, now and then a jolt)
 //   _Glare    a soft light streak and hotspot that move opposite the tilt, like light on a glossy card
 //   _Sparkle  tiny glints that twinkle as the card moves
 //   _Sweep    a bright band of light crossing the card (its position; animated from C#), _SweepStrength how bright
@@ -23,6 +29,8 @@ Shader "UltraPuck/Card"
         _Pearl ("Pearlescent", Range(0,1)) = 0
         _Metal ("Metal foil finish", Range(0,1)) = 0
         _Poly ("Polychrome finish", Range(0,1)) = 0
+        _Special ("Special finish (1-8)", Float) = 0
+        _SpecialAmt ("Special finish strength", Range(0,1)) = 0
         _Glare ("Glare", Range(0,1)) = 0.35
         _Sparkle ("Sparkle", Range(0,1)) = 0
         _Tilt ("Tilt (x, y)", Vector) = (0,0,0,0)
@@ -51,7 +59,7 @@ Shader "UltraPuck/Card"
             sampler2D _MainTex; float4 _MainTex_ST;
             fixed4 _Color, _Color2, _BorderColor;
             float4 _Size, _Tilt;
-            float _Border, _Foil, _Pearl, _Metal, _Poly, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
+            float _Border, _Foil, _Pearl, _Metal, _Poly, _Special, _SpecialAmt, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
 
@@ -78,6 +86,38 @@ Shader "UltraPuck/Card"
                 return col * ca + cross(k, col) * sin(a) + k * dot(k, col) * (1.0 - ca);
             }
             float Hash(float2 p) { return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
+
+            float Noise(float2 q)
+            {
+                float2 a = floor(q), f = frac(q);
+                f = f * f * (3.0 - 2.0 * f);
+                return lerp(lerp(Hash(a), Hash(a + float2(1, 0)), f.x), lerp(Hash(a + float2(0, 1)), Hash(a + 1.0), f.x), f.y);
+            }
+
+            // tiny four-point glints in a grid, each twinkling at its own moment
+            float Glints(float2 uv, float2 cells, float th, float speed, float2 t)
+            {
+                float2 g = uv * cells;
+                float h = Hash(floor(g));
+                float tw = pow(saturate(sin(h * 60.0 + t.x * 11.0 + t.y * 8.0 + _Time.y * speed)), 24.0);
+                float2 f = frac(g) - 0.5;
+                float star = saturate(1.0 - length(f) * 3.2) + saturate(1.0 - abs(f.x) * 12.0) * saturate(1.0 - abs(f.y) * 2.5) * 0.5;
+                return step(th, h) * tw * star;
+            }
+
+            // one layer of stars; deeper layers (bigger depth) drift further against the tilt
+            float Stars(float2 uv, float2 t, float sc, float depth, float th)
+            {
+                float2 g = (uv + t * depth) * float2(sc, sc * 1.4);
+                float2 cl = floor(g);
+                float r = Hash(cl);
+                float2 o = float2(Hash(cl + 1.3), Hash(cl + 7.1)) * 0.6 + 0.2;
+                float2 f = frac(g) - o;
+                float tw = 0.55 + 0.45 * sin(_Time.y * (1.0 + r * 3.0) + r * 40.0);
+                float dot1 = exp(-dot(f, f) * (1350.0 / sc));
+                float rays = (exp(-abs(f.x) * 90.0) * exp(-abs(f.y) * 9.0) + exp(-abs(f.y) * 90.0) * exp(-abs(f.x) * 9.0)) * step(0.97, r);
+                return step(th, r) * tw * (dot1 + rays * 0.25);
+            }
 
             fixed4 frag(v2f i) : SV_Target
             {
@@ -147,6 +187,114 @@ Shader "UltraPuck/Card"
                     float3 tint = Hue(wave * 0.5 + t.x * 0.3 + _Time.y * 0.013) * (0.18 + lum * 0.9);
                     float3 poly = lerp(turned, saturate(turned * 0.6 + tint * 0.75), 0.55);
                     c.rgb = lerp(c.rgb, poly, saturate(_Poly * 0.9));
+                }
+
+                // the special finishes (a card file's "finish"; 0 = none)
+                if (_SpecialAmt > 0.001)
+                {
+                    float amt = _SpecialAmt;
+                    float id = round(_Special);
+                    float dark = 1.0 - smoothstep(0.12, 0.45, lum);
+                    float frame = 1.0 - inside;
+                    if (id == 1) // starfield
+                    {
+                        float2 q = i.uv - 0.5;
+                        float3 neb = float3(0.25, 0.1, 0.45) * smoothstep(0.75, 0.0, length(q * float2(1.0, 0.8) + t * 0.08 + float2(0.15, -0.1)))
+                                   + float3(0.05, 0.2, 0.4) * smoothstep(0.6, 0.0, length(q * float2(1.2, 0.9) + t * 0.12 - float2(0.2, 0.15)));
+                        neb *= 0.6 + 0.4 * sin(_Time.y * 0.2 + q.x * 3.0);
+                        float st = Stars(i.uv, t, 18.0, 0.02, 0.82) * 0.5 + Stars(i.uv, t, 32.0, 0.05, 0.86) * 0.8 + Stars(i.uv, t, 55.0, 0.1, 0.9);
+                        c.rgb += (neb * 0.55 + st * float3(0.9, 0.92, 1.0)) * amt * inside * dark;
+                    }
+                    else if (id == 2) // gilded
+                    {
+                        float leaf = 0.75 + 0.25 * Hash(floor(i.uv * float2(9.0, 12.0) + Noise(i.uv * 20.0) * 0.4));
+                        float across = dot(i.uv - 0.5, normalize(float2(0.5, 1.0)));
+                        float sheen = exp(-pow((across - (t.y * 0.8 + t.x * 0.5)) * 3.5, 2.0));
+                        float3 gold = lerp(float3(0.55, 0.36, 0.12), float3(1.0, 0.85, 0.45), saturate(leaf * 0.6 + sheen * 0.8));
+                        float m = saturate((dark * 0.85 + frame) * amt);
+                        c.rgb = lerp(c.rgb, gold * (0.55 + 0.7 * sheen) * leaf, m);
+                        c.rgb += Glints(i.uv, float2(40.0, 56.0), 0.88, 1.4, t) * m * float3(1.0, 0.9, 0.6) * 1.2;
+                    }
+                    else if (id == 3) // prism
+                    {
+                        float2 g = float2(i.uv.x * 5.0 + i.uv.y * 1.5, i.uv.y * 7.0);
+                        float2 gf = frac(g);
+                        float2 sid = floor(g) * 2.0 + step(gf.y, gf.x);
+                        float hh = Hash(sid);
+                        float flash = pow(saturate(sin(hh * 6.2831 + t.x * 4.5 + t.y * 3.5 + _Time.y * 0.3)), 6.0);
+                        float3 col = Hue(hh + dot(t, float2(0.8, 0.5)));
+                        float facet = 0.6 + 0.4 * Hash(sid + 2.1);
+                        float edge = 1.0 - smoothstep(0.0, 0.04, min(min(min(gf.x, gf.y), min(1.0 - gf.x, 1.0 - gf.y)), abs(gf.x - gf.y)));
+                        c.rgb = lerp(c.rgb, c.rgb * 0.7 + col * 0.45 * facet, amt * 0.45 * (0.4 + 0.6 * lum));
+                        c.rgb += col * flash * amt * 0.55 * (0.3 + lum) + edge * amt * 0.12 * flash;
+                    }
+                    else if (id == 4) // frosted
+                    {
+                        float n = Noise(i.uv * float2(9.0, 12.0)) * 0.6 + Noise(i.uv * float2(23.0, 31.0)) * 0.4;
+                        float frost = smoothstep(0.75, 0.05, -d + (n - 0.5) * 0.5 - 0.1 * sin(_Time.y * 0.3));
+                        float veins = pow(saturate(1.0 - abs(Noise(i.uv * float2(30.0, 40.0)) - 0.5) * 12.0), 3.0);
+                        c.rgb = lerp(c.rgb, c.rgb * float3(0.86, 0.95, 1.08), 0.4 * amt);
+                        c.rgb = lerp(c.rgb, float3(0.8, 0.92, 1.0), saturate(frost * (0.45 + 0.3 * veins)) * amt);
+                        c.rgb += Glints(i.uv, float2(46.0, 64.0), 0.8, 1.2, t) * frost * amt * 1.2 * float3(0.85, 0.95, 1.0);
+                    }
+                    else if (id == 5) // neon
+                    {
+                        float bw = max(_Border, 0.02);
+                        float tube = saturate(1.0 - abs(d + bw * 0.5) / (bw * 0.5));
+                        float flick = 1.0 - 0.5 * step(0.985, Hash(float2(floor(_Time.y * 14.0), 2.0)));
+                        float hum = (0.9 + 0.1 * sin(_Time.y * 6.0)) * flick;
+                        float3 nc = _BorderColor.rgb;
+                        float inner = max(0.0, -(d + bw));
+                        float halo = exp(-inner * 5.0);
+                        c.rgb *= lerp(1.0, 0.8, amt * inside * (1.0 - halo));
+                        c.rgb = lerp(c.rgb, lerp(nc * 1.3, float3(1, 1, 1), pow(tube, 3.0) * 0.7) * hum, saturate(tube * 1.5) * amt);
+                        c.rgb += nc * halo * 0.45 * amt * hum * inside;
+                    }
+                    else if (id == 6) // aurora
+                    {
+                        float x = i.uv.x + t.x * 0.15;
+                        float curtain = pow(saturate(0.5 + 0.5 * sin(x * 9.0 + 2.0 * sin(x * 2.3 + _Time.y * 0.4) + t.x * 3.0)), 3.0);
+                        curtain *= smoothstep(0.15, 0.85, i.uv.y + 0.1 * sin(x * 5.0 + _Time.y * 0.5));
+                        curtain *= 0.7 + 0.3 * sin(x * 80.0 + _Time.y * 1.3);
+                        float3 col = lerp(float3(0.2, 1.0, 0.6), float3(0.6, 0.3, 1.0), saturate(i.uv.y * 1.2 - 0.2 + 0.3 * sin(x * 4.0 + _Time.y * 0.3)));
+                        c.rgb += col * curtain * amt * (0.2 + 0.6 * dark) * inside;
+                    }
+                    else if (id == 7) // molten
+                    {
+                        float2 g = i.uv * float2(5.0, 7.0);
+                        float2 gi = floor(g), gf = frac(g);
+                        float f1 = 8.0, f2 = 8.0, cellH = 0.0;
+                        for (int y = -1; y <= 1; y++)
+                            for (int x = -1; x <= 1; x++)
+                            {
+                                float2 b = float2(x, y);
+                                float2 r = b + float2(Hash(gi + b), Hash(gi + b + 5.3)) - gf;
+                                float dd = dot(r, r);
+                                if (dd < f1) { f2 = f1; f1 = dd; cellH = Hash(gi + b + 9.1); }
+                                else if (dd < f2) f2 = dd;
+                            }
+                        float crack = 1.0 - smoothstep(0.0, 0.07, sqrt(f2) - sqrt(f1));
+                        float pulse = 0.6 + 0.4 * sin(_Time.y * 2.0 + cellH * 6.2831);
+                        float3 heat = lerp(float3(1.0, 0.3, 0.04), float3(1.0, 0.8, 0.3), crack * pulse);
+                        float m = amt * (0.5 + 0.5 * max(dark, frame));
+                        c.rgb *= 1.0 - 0.3 * amt * dark;
+                        c.rgb += heat * crack * pulse * m;
+                        c.rgb += float3(1.0, 0.35, 0.05) * frame * amt * 0.25 * pulse;
+                    }
+                    else if (id == 8) // glitch
+                    {
+                        float slice = floor(_Time.y * 12.0);
+                        float burst = step(0.9, Hash(float2(slice, 1.7)));
+                        float shift = (Hash(float2(floor(i.uv.y * 28.0), slice)) - 0.5) * 0.06 * burst;
+                        float split = 0.006 + 0.01 * burst;
+                        float3 gm = lerp(_Color2, _Color, i.uv.y).rgb;
+                        float rr = tex2D(_MainTex, TRANSFORM_TEX(i.uv + float2(shift + split, 0), _MainTex)).r * gm.r;
+                        float bb = tex2D(_MainTex, TRANSFORM_TEX(i.uv + float2(shift - split, 0), _MainTex)).b * gm.b;
+                        c.rgb = lerp(c.rgb, float3(lerp(c.r, rr, inside), c.g, lerp(c.b, bb, inside)), amt);
+                        c.rgb *= 1.0 - amt * 0.12 * (0.5 + 0.5 * sin(i.uv.y * _Size.y * 140.0 + _Time.y * 8.0));
+                        c.rgb += (Hash(floor(i.uv * float2(160.0, 224.0)) + frac(_Time.y * 7.3) * 100.0) - 0.5) * 0.08 * amt;
+                        c.rgb += amt * burst * 0.08 * float3(0.2, 1.0, 0.6) * step(0.5, frac(i.uv.y * 14.0 + _Time.y * 3.0));
+                    }
                 }
 
                 // shine sweep: a bright diagonal band passing across

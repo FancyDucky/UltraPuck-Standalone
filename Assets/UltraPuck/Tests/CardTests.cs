@@ -53,6 +53,10 @@ namespace UltraPuck.Tests
             lib.AddJson("{\"cards\":[{\"id\":\"a\",\"finish\":\"Foil\"},{\"id\":\"b\",\"finish\":\"polychrome\"},{\"id\":\"c\"},{\"id\":\"e\",\"finish\":\"HOLO\"},{\"id\":\"f\",\"finish\":\"pearl\"}]}", "test");
             Assert.AreEqual("holo", lib.ById("e").Finish);
             Assert.AreEqual("pearl", lib.ById("f").Finish);
+            var all = new CardLibrary();
+            for (var k = 0; k < CardDef.FinishNames.Length; k++)
+                all.AddJson("{\"cards\":[{\"id\":\"f" + k + "\",\"finish\":\"" + CardDef.FinishNames[k] + "\"}]}", "test");
+            Assert.AreEqual(CardDef.FinishNames.Length, all.Cards.Count);
             Assert.AreEqual("foil", lib.ById("a").Finish);
             Assert.AreEqual("polychrome", lib.ById("b").Finish);
             Assert.IsNull(lib.ById("c").Finish);

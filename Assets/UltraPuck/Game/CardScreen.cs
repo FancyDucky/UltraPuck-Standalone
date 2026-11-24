@@ -1511,6 +1511,7 @@ namespace UltraPuck.Game
                 pearl: pearl ? 1f : 0f,
                 metal: metal ? 0.85f : 0f,
                 poly: poly ? 0.8f : 0f);
+            Special(body, fx, def.Finish, true);
             v.Finishes.Add(body);
             body.SetFloat("_Rim", fx ? (tier <= 1 ? 0.7f : 0.4f) : 0f);
             body.SetFloat("_SweepStrength", fx ? 1f : 0.5f);
@@ -1528,6 +1529,7 @@ namespace UltraPuck.Game
                 pearl: pearl ? 1f : 0f,
                 metal: metal ? 0.6f : 0f,
                 poly: poly ? 0.65f : 0f);
+            Special(art, fx, def.Finish, false);
             v.Finishes.Add(art);
             art.SetFloat("_SweepStrength", fx ? 0.9f : 0.4f);
             v.ArtMat = art;
@@ -1586,6 +1588,18 @@ namespace UltraPuck.Game
             var backText = Text(v, "ULTRA\nPUCK", new Vector3(0f, 0f, 0.006f), 160, 0.017f, new Color(1f, 1f, 1f, 0.3f), FontStyle.Bold, TextAnchor.MiddleCenter, v.BackTexts);
             backText.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             return v;
+        }
+
+        // the shader's special finishes (_Special 1..8, see Card.shader) and how strong each is on the body / the picture
+        private static readonly string[] SpecialNames = { "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch" };
+        private static readonly float[] SpecialBody = { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f };
+        private static readonly float[] SpecialArt = { 0.8f, 0.5f, 0.7f, 0.8f, 0f, 0.6f, 0.5f, 1f };
+
+        private static void Special(Material m, bool fx, string finish, bool body)
+        {
+            var k = finish == null ? -1 : System.Array.IndexOf(SpecialNames, finish);
+            m.SetFloat("_Special", k + 1);
+            m.SetFloat("_SpecialAmt", fx && k >= 0 ? (body ? SpecialBody[k] : SpecialArt[k]) : 0f);
         }
 
         private static void Finish(Material m, bool fx, float foil, float glare, float sparkle, float pearl, float metal = 0f, float poly = 0f)

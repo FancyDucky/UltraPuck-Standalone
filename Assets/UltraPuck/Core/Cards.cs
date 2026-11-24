@@ -38,6 +38,9 @@ namespace UltraPuck.Core
         public CardTier Tier = CardTier.C;
         /// <summary>Optional special look, display only: "foil" (metal sheen), "polychrome" (shifting rainbow), "holo" (the S tier's rainbow holo + sparkles) or "pearl" (the A tier's pearlescent), else null (the tier's own look).</summary>
         public string Finish;
+        /// <summary>Every "finish" a card file may use (see Card.shader for what each looks like).</summary>
+        public static readonly string[] FinishNames =
+            { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch" };
         /// <summary>Most copies one player can hold (0 = no limit).</summary>
         public int MaxPerPlayer;
         /// <summary>Most players on one team who may hold it (0 = no limit): "maxTeam".</summary>
@@ -116,7 +119,7 @@ namespace UltraPuck.Core
                 if (!string.IsNullOrEmpty(finish))
                 {
                     finish = finish.ToLowerInvariant();
-                    if (finish != "foil" && finish != "polychrome" && finish != "holo" && finish != "pearl") throw new FormatException(what + ": finish must be foil, polychrome, holo or pearl");
+                    if (Array.IndexOf(CardDef.FinishNames, finish) < 0) throw new FormatException(what + ": finish must be one of " + string.Join(", ", CardDef.FinishNames));
                     c.Finish = finish;
                 }
                 if (c.Art == null) c.Art = c.Id;
