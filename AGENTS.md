@@ -85,11 +85,11 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.56, not released (Claude, 23 Nov 2026): a dash counts as a check for 0.4 s (`Tuning.DashHitTime`, was
+- 0.1.57 (Claude, 23 Nov 2026): a dash counts as a check for 0.4 s (`Tuning.DashHitTime`, was
   0.25 s; players still gliding fast after it weren't checking). Protocol 70. Trying it out; the alternatives were a
   speed-based check window or a short grace period. Card art for Choose, New Hand, Double Card added.
   Portal Gun keeps its colour until a portal sticks (`PortalNext` flips in `PlacePortal`, not on firing). Protocol 71.
-- After 0.1.56, not released (Claude, 23 Nov 2026): **Choose, New Hand, Double Card cards.** New stats (no `Stats`
+- 0.1.57 (Claude, 23 Nov 2026): **Choose, New Hand, Double Card cards.** New stats (no `Stats`
   fields; looked up on the card: `CardLibrary.IsChoose` / `IsDouble` / `NewHands`): `"Choose"`, `"DoubleCard"`,
   `"NewHand"`. **Choose** (S): once the pick resolves, that player goes straight on to a second pick
   (`PlayerState.PickKind` 1, fresh `PickTime`, everyone else waits) offered `CardLibrary.DeckOffer`: every card they
@@ -109,21 +109,21 @@ so whoever works next knows what changed.
   **NetSession.Version 69.** Tests: `ChooseOffersTheWholeDeckWithTheUsualLimits`,
   `ChooseWithTeamVoteLetsEveryonePickTheirOwn`, `DoubleCardGivesTwoOtherCards`, `NewHandRerollsOncePerPick`,
   `NewHandInATeamVoteRerollsTheTeamsHand`, `NewCardPicksAreTheSameEveryRun`.
-- After 0.1.56, not released (Claude, 23 Nov 2026): **per-card text boxes.** Card json `"textBoxes": true`
+- 0.1.57 (Claude, 23 Nov 2026): **per-card text boxes.** Card json `"textBoxes": true`
   (`CardDef.TextBoxes`) puts a snug black box (85%) behind each piece of the card's text (`CardScreen.TextBox`, sized
   from the TextMesh's `localBounds` every frame since the text is laid out late). Meant for busy finishes like
   starfield. Card editor: "Text boxes" tick box. Display only. Checked: tests, Windows build, cards screenshot.
-- After 0.1.56, not released (Claude, 23 Nov 2026): **starfield is black space; no shine sweep.** Card.shader
+- 0.1.57 (Claude, 23 Nov 2026): **starfield is black space; no shine sweep.** Card.shader
   starfield turns the card body black except its bright text (the picture only its darkest parts) with stars on top
   and a faint nebula; the tilt glare is mostly kept off that black (`spaceMask`). The timed diagonal shine sweep is off
   on every card (`_SweepStrength` 0 in `CardScreen`; the code that moves it is still there). Display only. Checked: 195
   tests (190 pass, 5 skipped), Windows build, cards screenshot with Swap / Stone Wall set to starfield.
-- After 0.1.56, not released (Claude, 23 Nov 2026): **per-card glare toggle.** Card json `"glare": false`
+- 0.1.57 (Claude, 23 Nov 2026): **per-card glare toggle.** Card json `"glare": false`
   (`CardDef.Glare`, default true) turns off the light sweep on that card's body and picture (`CardScreen`); display
   only, no protocol bump (the card file is in the fingerprint). Card editor: a Glare tick box (unticked writes
   `"glare": false`, ticked drops the key); starting the editor asks an already-running one to close and waits for the
   port. Checked: 195 tests (190 pass, 5 skipped), Windows build.
-- After 0.1.56, not released (Claude, 23 Nov 2026): **Controller pre-charge auto-aim; Steam Input warning as a
+- 0.1.57 (Claude, 23 Nov 2026): **Controller pre-charge auto-aim; Steam Input warning as a
   toast.** A controller player holding charge without the puck (and not pushing the aim stick past 0.2, the sim's
   deadzone) aims at the nearest net they attack: at the nearest spot of its opening (between the posts, less the
   puck's radius + 0.15) that a straight shot goes in through (`GameRunner.ScoreableSpot`, mouth side from the goal's
@@ -138,7 +138,7 @@ so whoever works next knows what changed.
   is our own app ID with Steam Input set to off/opt-out in Steamworks. Until then the warning is a 12 s toast
   (`Toasts.Show(text, seconds)`, new optional length) instead of the main menu message. Checked: 195 tests (190
   pass, 5 skipped), Windows build. Not tried with a controller or with Steam Input on.
-- After 0.1.56, not released (Claude, 23 Nov 2026): **Foil and Polychrome card finishes.** Optional card field
+- 0.1.57 (Claude, 23 Nov 2026): **Foil and Polychrome card finishes.** Optional card field
   `"finish": "foil" | "polychrome" | "holo" | "pearl"` (`CardDef.Finish`; anything else is a load error; holo / pearl
   give any card the S tier's holo + sparkles / the A tier's pearlescent). More finishes (shader `_Special` 1-9 + `_SpecialAmt`, table
   `SpecialNames` / `SpecialBody` / `SpecialArt` in CardScreen): starfield, gilded, prism, frosted, neon (frame only),
@@ -151,7 +151,7 @@ so whoever works next knows what changed.
   card picks, free play and the Cards page all get them. With "Card effects" off, both are 0. No card uses
   them yet. The card editor session was told about the field. Test `CardsCanHaveAFinish`. Checked: 195 tests (190 pass,
   5 skipped), Windows build. Not looked at on screen.
-- After 0.1.56, not released (Claude, 23 Nov 2026): **card editor.** `Card Editor.bat` opens a local page showing every
+- 0.1.57 (Claude, 23 Nov 2026): **card editor.** `Card Editor.bat` opens a local page showing every
   card as a card (tier frame, accent, art, flavor, face markup, footnote); click one to edit it live; new / duplicate /
   move / delete. Save checks it the way the loader does (ids, tiers, known stats, "x1.5"/"/1.6"/"+1" values), writes
   `ultrapuck.json` in the same layout under the same header, and copies the cards + art into `Builds/Windows` and
