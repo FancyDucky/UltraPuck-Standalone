@@ -44,7 +44,7 @@ namespace UltraPuck.Core
         public bool TextBoxes;
         /// <summary>Every "finish" a card file may use (see Card.shader for what each looks like).</summary>
         public static readonly string[] FinishNames =
-            { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch" };
+            { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass" };
         /// <summary>Most copies one player can hold (0 = no limit).</summary>
         public int MaxPerPlayer;
         /// <summary>Most players on one team who may hold it (0 = no limit): "maxTeam".</summary>

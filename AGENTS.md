@@ -116,9 +116,11 @@ so whoever works next knows what changed.
   pass, 5 skipped), Windows build. Not tried with a controller or with Steam Input on.
 - After 0.1.56, not released (Claude, 23 Nov 2026): **Foil and Polychrome card finishes.** Optional card field
   `"finish": "foil" | "polychrome" | "holo" | "pearl"` (`CardDef.Finish`; anything else is a load error; holo / pearl
-  give any card the S tier's holo + sparkles / the A tier's pearlescent). More finishes (shader `_Special` 1-8 + `_SpecialAmt`, table
+  give any card the S tier's holo + sparkles / the A tier's pearlescent). More finishes (shader `_Special` 1-9 + `_SpecialAmt`, table
   `SpecialNames` / `SpecialBody` / `SpecialArt` in CardScreen): starfield, gilded, prism, frosted, neon (frame only),
-  aurora, molten, glitch. The full list the loader accepts is `CardDef.FinishNames`. Display only, so no
+  aurora, molten, glitch (tears bands of the card sideways, outline and frame too, via a torn `uv` at the top of
+  `frag`; colour split incl. the frame, coloured blocks), glass (9: see-through via a `glass` alpha factor, bright
+  edges, a light streak). The full list the loader accepts is `CardDef.FinishNames`. Display only, so no
   `NetSession.Version` bump. Card.shader `_Metal` (brushed-metal grain plus a bright sheen band that slides with the
   tilt) and `_Poly` (turns every colour round the colour wheel in drifting waves, tints greys). They replace the
   tier's holo / pearl on the body and art (glare and sparkle stay), set in `CardScreen.Build` via `Finish(...)`, so
