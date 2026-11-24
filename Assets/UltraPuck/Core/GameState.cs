@@ -214,6 +214,11 @@ namespace UltraPuck.Core
         public byte PickKind;
         /// <summary>New Hand: re-rolls used in this pick.</summary>
         public int Rerolls;
+        /// <summary>
+        /// Just handed new cards (Choose's deck, a re-rolled hand): the pick they were still sending was for the old
+        /// cards, so picks wait until it's let go (Pick back to 0).
+        /// </summary>
+        public bool PickHeld;
         /// <summary>Double Card: the cards it gave in the last pick (shown before the countdown), and how many times it has (so a new one is seen).</summary>
         public int[] Gifts = new int[0];
         public int Gifted;
@@ -509,7 +514,7 @@ namespace UltraPuck.Core
                 p.Stats.Hash(ref h);
                 Mix(ref h, p.Cards.Length); foreach (var c in p.Cards) Mix(ref h, c);
                 Mix(ref h, p.Offer.Length); foreach (var c in p.Offer) Mix(ref h, c);
-                Mix(ref h, p.Picked); Mix(ref h, p.PickKind); Mix(ref h, p.Rerolls);
+                Mix(ref h, p.Picked); Mix(ref h, p.PickKind); Mix(ref h, p.Rerolls); Mix(ref h, p.PickHeld ? 1 : 0);
                 Mix(ref h, p.Gifted); Mix(ref h, p.Gifts.Length); foreach (var c in p.Gifts) Mix(ref h, c);
                 Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);

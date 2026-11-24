@@ -66,6 +66,7 @@ namespace UltraPuck.Core
                 p.Hover = 0;
                 p.PickKind = 0;
                 p.Rerolls = 0;
+                p.PickHeld = false;
                 any |= p.Offer.Length > 0;
             }
             if (T.TeamVote || T.SameDraw) for (var team = 0; team < 2; team++) OnePickerGets(s, team, order);
@@ -192,14 +193,14 @@ namespace UltraPuck.Core
                 hand.AddRange(Cards.DrawOffer(s, i, count - hand.Count, off2.ToArray()));
             }
             if (hand.Count == 0) return;
-            if (!(T.TeamVote || T.SameDraw)) { p.Offer = hand.ToArray(); p.Hover = 0; return; }
+            if (!(T.TeamVote || T.SameDraw)) { p.Offer = hand.ToArray(); p.Hover = 0; p.PickHeld = true; return; }
             var order = new System.Collections.Generic.List<int>();
             for (var pass = 0; pass < 2; pass++)
                 for (var j = 0; j < s.Players.Length; j++)
                 {
                     var q = s.Players[j];
                     if (q.Team != p.Team || q.Offer.Length == 0 || q.PickKind != 0 || q.Bot != (pass == 1)) continue;
-                    q.Offer = hand.ToArray(); q.Picked = -1; q.Hover = 0;
+                    q.Offer = hand.ToArray(); q.Picked = -1; q.Hover = 0; q.PickHeld = true;
                     order.Add(j);
                 }
             OnePickerGets(s, p.Team & 1, order);
@@ -250,6 +251,8 @@ namespace UltraPuck.Core
                 if (p.Offer.Length == 0 || p.Picked >= 0) continue;
                 // the tick a hand was re-rolled: a pick this tick was for the old hand, so it waits for the new one
                 if (redrawn[i]) { waiting = true; continue; }
+                // new cards: the pick still being sent is for the old ones, so wait until it's let go
+                if (p.PickHeld) { if (input.Pick == 0) p.PickHeld = false; waiting = true; continue; }
                 p.Hover = input.Hover <= p.Offer.Length ? input.Hover : (byte)0;
                 if (input.Pick >= 1 && input.Pick <= p.Offer.Length) p.Picked = p.Offer[input.Pick - 1];
                 else waiting = true;
@@ -289,13 +292,14 @@ namespace UltraPuck.Core
                 p.Picked = -1;
                 p.Hover = 0;
                 p.PickKind = 0;
+                p.PickHeld = false;
                 if (took < 0 || wasDeck) continue;
                 var me = Array.IndexOf(s.Players, p);
                 // Choose: straight on to picking any card from the deck (everyone else waits)
                 if (Cards.IsChoose(took))
                 {
                     var deck = Cards.DeckOffer(s, me, T.CardsOff);
-                    if (deck.Length > 0) { p.Offer = deck; p.PickKind = 1; again = true; }
+                    if (deck.Length > 0) { p.Offer = deck; p.PickKind = 1; p.PickHeld = true; again = true; }
                 }
                 // Double Card: two random cards, by the same rules as Choose's deck
                 else if (Cards.IsDouble(took))

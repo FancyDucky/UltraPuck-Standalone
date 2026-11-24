@@ -2320,11 +2320,35 @@ namespace UltraPuck.Tests
             for (var k = 1; k < p.Offer.Length; k++) Assert.Less(p.Offer[k - 1], p.Offer[k], "in deck order");
             var want = System.Array.IndexOf(p.Offer, Id("ultrapuck.speedup"));
             var inputs = new PlayerInput[3];
+            sim.Step(s, inputs); // the Choose pick let go
             inputs[0].Pick = (byte)(want + 1);
             sim.Step(s, inputs);
             Assert.AreNotEqual(Phase.Picking, s.Phase, "the deck pick ends the pick");
             Assert.AreEqual(new[] { Id("ultrapuck.powershot"), Id("ultrapuck.choose"), Id("ultrapuck.speedup") }, p.Cards);
             Assert.AreEqual(0, p.PickKind);
+        }
+
+        /// <summary>
+        /// The card screen keeps sending the Choose pick for a moment (a frame runs a few ticks): that mustn't take
+        /// a card from the deck for them.
+        /// </summary>
+        [Test]
+        public void TheChoosePickStillHeldDoesntPickFromTheDeck()
+        {
+            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3 }, _lib);
+            var s = sim.NewGame(new[] { 0, 1 }, 6u);
+            sim.StartPicking(s, new[] { 0 });
+            s.Players[0].Offer = new[] { Id("ultrapuck.speedup"), Id("ultrapuck.choose"), Id("ultrapuck.doubledash") };
+            var held = new PlayerInput[2];
+            held[0].Pick = 2;
+            for (var t = 0; t < 10; t++) sim.Step(s, held);
+            Assert.AreEqual(Phase.Picking, s.Phase, "still choosing from the deck");
+            Assert.AreEqual(1, s.Players[0].PickKind);
+            Assert.AreEqual(1, s.Players[0].Cards.Length, "only Choose so far");
+            sim.Step(s, new PlayerInput[2]);
+            sim.Step(s, held);
+            Assert.AreNotEqual(Phase.Picking, s.Phase, "a fresh pick after letting go takes a deck card");
+            Assert.AreEqual(2, s.Players[0].Cards.Length);
         }
 
         [Test]
@@ -2336,6 +2360,7 @@ namespace UltraPuck.Tests
             foreach (var q in s.Players) q.Offer = new[] { Id("ultrapuck.choose"), Id("ultrapuck.speedup") };
             sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 } });
             Assert.AreEqual(Phase.Picking, s.Phase);
+            sim.Step(s, new PlayerInput[2]); // the Choose picks let go
             var a = System.Array.IndexOf(s.Players[0].Offer, Id("ultrapuck.speedup"));
             var b = System.Array.IndexOf(s.Players[1].Offer, Id("ultrapuck.doubledash"));
             sim.Step(s, new[] { new PlayerInput { Pick = (byte)(a + 1) }, new PlayerInput { Pick = (byte)(b + 1) } });

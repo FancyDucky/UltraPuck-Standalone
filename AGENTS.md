@@ -85,6 +85,13 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.59, not released (Claude, 24 Nov 2026): **Choose's deck no longer picked for you.** Taking Choose went
+  straight on: the card screen keeps sending the pick (`_ready`) until its next `Frame`, and a frame runs several
+  ticks, so the next tick took that same number from the deck. New `PlayerState.PickHeld` (set when a player is
+  handed new cards: Choose's deck, a New Hand re-roll, incl. teammates' re-rolled shared hands; cleared in
+  `StartPicking` / at the end): picks wait until that player's Pick input is back to 0. **NetSession.Version 74.**
+  Test `TheChoosePickStillHeldDoesntPickFromTheDeck` (fails without it); the Choose tests let go before picking.
+  Checked: 210 tests (205 pass, 5 skipped), Windows build.
 - After 0.1.59, not released (Claude, 24 Nov 2026): **card pick log lines.** The owner sometimes gets no card
   screen when scored on (their own pick, not just bots'), not found by reading the code (the sim waits for the
   person; Route resets Pilot while picking). `CardScreen.LogPicks` writes "Ultra Puck cards: pick started / over
