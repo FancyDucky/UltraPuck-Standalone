@@ -558,6 +558,29 @@ namespace UltraPuck.Game
         /// <summary>Screenshot mode: the volume to use instead of the player's own setting (0 = silent), or -1 normally.</summary>
         private float _fixedVolume = -1f;
         private float Master { get { return _fixedVolume >= 0f ? _fixedVolume : Settings.Volume; } }
+
+        /// <summary>
+        /// A replay clip is being saved: the effects played are written down (<see cref="Heard"/>) for the clip's own
+        /// sound track, mixed by <see cref="ClipMixer"/> at the clip's pace (the music isn't in it).
+        /// </summary>
+        public static bool ClipMode;
+
+        /// <summary>The song playing now ("" for none or the menu theme) and how far into it, in seconds.</summary>
+        public static string SongNow
+        {
+            get { var s = _it; return s != null && s._wanted != null && s._wanted.Song && s._wanted.Started && s._wanted.Source.isPlaying ? s._wanted.Name : ""; }
+        }
+        public static float SongAt
+        {
+            get { var s = _it; return s != null && s._wanted != null && s._wanted.Song && s._wanted.Started ? s._wanted.Source.time : 0f; }
+        }
+
+        /// <summary>How loud the music is next to the effects (as the game plays it, before the whole game's volume).</summary>
+        public static float MusicMix { get { return MusicLevel * Settings.MusicVolume; } }
+
+        /// <summary>An effect played while saving a clip.</summary>
+        public struct HeardSound { public AudioClip Clip; public float Volume, Pitch, Pan; }
+        public static readonly List<HeardSound> Heard = new List<HeardSound>();
         private AudioClip[] _clips;
         private AudioSource[] _voices;
         private float[] _voiceStarted;
@@ -670,12 +693,13 @@ namespace UltraPuck.Game
         {
             var s = _it;
             if (s == null || s._clips == null) return;
-            var now = Time.unscaledTime;
+            var now = Clock.Now;
             if (now - s._lastPlayed[(int)id] < gap) return;
             s._lastPlayed[(int)id] = now;
             s._played[(int)id]++;
             volume *= Settings.SoundVolume;
             if (volume <= 0.001f) return;
+            if (ClipMode) Heard.Add(new HeardSound { Clip = s._clips[(int)id], Volume = Mathf.Clamp01(volume), Pitch = Mathf.Clamp(pitch, 0.3f, 3f), Pan = Mathf.Clamp(pan, -1f, 1f) });
 
             // a free voice, or else the one that has been playing longest
             var pick = 0;

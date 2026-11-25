@@ -130,6 +130,13 @@ namespace UltraPuck.Game
         /// When the game window isn't focused: pause the music (and don't start the next song). Off by default, so a
         /// song that ends while you're looking at something else still queues the next one.
         /// </summary>
+        /// <summary>Replay clips: the song that was playing goes in under the game's sounds.</summary>
+        public static bool MusicInClips
+        {
+            get { return PlayerPrefs.GetInt("clip_music", 1) != 0; }
+            set { PlayerPrefs.SetInt("clip_music", value ? 1 : 0); }
+        }
+
         public static bool PauseMusicWhenUnfocused
         {
             get { return PlayerPrefs.GetInt("pause_music_unfocused", 0) != 0; }

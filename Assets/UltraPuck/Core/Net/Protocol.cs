@@ -22,6 +22,8 @@ namespace UltraPuck.Core.Net
         Rejoin = 13,    // host to someone coming back mid-match: the game as it is, and the seats
         Recolour = 14,  // client to host: please change my side's colour (from, to)
         CardStats = 15, // in the lobby, both ways: the card pick counts this PC knows of (the host passes them on)
+        Styles = 16,    // client to host: the looks (Profile: dash, banner, goal explosion) of the players on my PC
+        StyleTable = 17,// host to everyone: every PC's players' looks
     }
 
     /// <summary>Writes a message into bytes (little-endian, compact).</summary>

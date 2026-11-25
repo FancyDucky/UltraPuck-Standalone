@@ -85,6 +85,26 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.69, not released (yet) (Claude, 25 Nov 2026): **Profile: character looks and match replays.** Main menu >
+  Profile > Edit character / Replays (`MainMenu.Page.Profile`, `Character`, `Replays`). *Looks* (`Game/Cosmetics.cs`,
+  looks only): dash trail (9), goal explosion (9), replay banner (11) and its colour (Team or 11 colours; pictures with their own colours are hue-shifted to it), saved in PlayerPrefs `look_dash/banner/boom/banner_colour`, packed
+  into one int (`Cosmetics.Pack`). The first person on a PC wears that PC's look (`GameRunner.StyleOf`); online each PC
+  sends its people's looks (`Msg.Styles` / `StyleTable`, `NetSession.SetLocalStyles` / `StyleOf`; NetSession.Version 86).
+  Particles in `StyleFx` (pooled; dash trails from `Show`, explosions replace `Effects.Explosion` by the scorer's look;
+  streak/rim colour `PlayerView.DashColour`). Banners are drawn in code (`Banners`, procedural textures) and shown only in the
+  in-match goal replays (`Hud.ScorerCard`, 280x52, bottom centre; not in saved-match replays). The Edit character page shows the rink behind:
+  the bots wear your look (`PreviewLooks`), the explosion goes off on the right (`PreviewBoom`), the banner is drawn there.
+  *Replays*: every non-free match is recorded (`Core/MatchReplay.cs`: a frame every 2 ticks, chunks of 120, each frame
+  XOR'd with the one before, Deflate; encoded on a thread) with who's who (`Cast`) and markers (goals, saves, card picks).
+  Every finished match goes into the match history (`persistentDataPath/History`, newest `GameRunner.HistoryKept` = 10 kept); the results screen's {savereplay} Save replay (Y / R), or Y / R on a Match history row, copies it into `persistentDataPath/Replays/*.upreplay`. Profile > Replays: Saved replays (Y deletes, twice), Match history, clips folder; list rows show rink, score, date, length and each team's players (file version 2 stores the first / last tick and each player's team in the description). States are
+  written by `Core/ReplayCodec.cs`, which stores a description of the types (field names) so replays from older versions
+  still load after GameState changes (fields matched by name; new ones keep their starting values). Watching:
+  `Mode.Replay` + `ReplayViewer` (time bar with goal / save / card markers, card picks skipped, speed 0.1x-4x, left / right: a tap
+  skips 5 s (a frame when paused), holding jumps goal to goal, camera: follow / whole rink / a player, Select hides the controls). Clips (X): handles on the time
+  bar (LB / RB set start / end at the playhead, the first press starts a clip; or drag), saved as MP4 (`GameRunner.ExportClip`: `Time.captureDeltaTime` 1/60, each frame
+  read back, `ClipWriter`: Windows Media Foundation H.264 through COM vtables, no install; Linux: ffmpeg if installed) to
+  Videos/Ultra Puck, or copied to the clipboard as a file (`ClipWriter.CopyFile`: PowerShell `Set-Clipboard`; Linux
+  wl-copy / xclip). Clips are the screen's size up to 1440p, H.264 High at about W x H x fps / 4 bits a second. Sound (Windows): the effects played meanwhile are written down (`Sound.ClipMode` / `Sound.Heard`) and mixed a frame at a time by `ClipMixer` (48 kHz stereo, AAC through Media Foundation); no charge hums. Music: replays (file version 3) note the song and how far into it (`MatchReplay.Music`, every 60 frames and on a change, from `Sound.SongNow` / `SongAt`); the clip mixes it in at `Sound.MusicMix` (setting Sound > Music in clips, pref `clip_music`, on). Unity streams its songs and can't hand over samples, so `BuildScript.CopyClipMusic` puts plain copies in the Windows build's StreamingAssets/ClipMusic (~39 MB) and `MusicReader` decodes them with Media Foundation's source reader. (Unity's `AudioRenderer` gave no samples in a built game.) Linux clips have no sound. Tests `ReplayTests`. Screenshot scenes `profile`, `replayview`.
 - 0.1.69 (Claude, 25 Nov 2026): **knock-outs only for Featherweights.** A hard raging hit launches someone only if
   they hold a Featherweight card (`Simulation.Featherweight`), every time (`KnockOutChance` 1); respawn 5 s with a
   countdown on their own screen (`Hud.OutCountdown_`); the rage roar plays at 0.3. NetSession.Version 85.

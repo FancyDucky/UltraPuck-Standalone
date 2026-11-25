@@ -11,9 +11,9 @@ namespace UltraPuck.Game
     /// fixed 120 ticks a second drawn smoothly in between, online games (Steam or IP, with rollback), the pause menu
     /// and settings, and the card pick screen. Created automatically when the game starts (see <see cref="Boot"/>).
     /// </summary>
-    internal sealed class GameRunner : MonoBehaviour
+    internal sealed partial class GameRunner : MonoBehaviour
     {
-        private enum Mode { Menu, Lobby, Match, Online }
+        private enum Mode { Menu, Lobby, Match, Online, Replay }
 
         private Mode _mode = Mode.Menu;
         private MainMenu _mainMenu;
@@ -44,6 +44,10 @@ namespace UltraPuck.Game
         private Menus _menus;
         private CardScreen _cardScreen;
         private Effects _effects;
+        /// <summary>The Profile looks' particles (dash trails, goal explosions), and each player's running count for their trail.</summary>
+        private StyleFx _styleFx;
+        private float[] _dashAcc = new float[16];
+        private ReplayViewer _viewer;
         private ShotViews _shots;
         private PylonViews _pylons;
         private RockViews _rocks;
@@ -121,8 +125,8 @@ namespace UltraPuck.Game
                 Vector2 at = _players[i].Root.transform.position;
                 Sound.Play(Sfx.CardAbsorb, 0.75f, 1f, Pan(at));
                 // like a drop landing in water: a big ripple that bends the rink as it spreads, and a smaller echo
-                _ripples.Add(new Ripple { At = at, Colour = colour, When = Time.unscaledTime, Size = 5.5f, Life = 1.5f });
-                _ripples.Add(new Ripple { At = at, Colour = colour, When = Time.unscaledTime + 0.22f, Size = 3.2f, Life = 1.1f });
+                _ripples.Add(new Ripple { At = at, Colour = colour, When = Clock.Now, Size = 5.5f, Life = 1.5f });
+                _ripples.Add(new Ripple { At = at, Colour = colour, When = Clock.Now + 0.22f, Size = 3.2f, Life = 1.1f });
             };
             LocalCardPicks();
             _menus.OnMainMenu = GoMainMenu;
@@ -169,6 +173,13 @@ namespace UltraPuck.Game
             _entities = new GameObject("Entities").transform;
             _puck = new PuckView(_sim.T.PuckRadius.ToFloat(), _entities);
             _effects = new Effects(_entities);
+            _styleFx = new StyleFx(_entities, _effects);
+            _viewer = gameObject.AddComponent<ReplayViewer>();
+            _viewer.OnClose = CloseReplay;
+            _viewer.OnExport = (from, to, copy) => StartCoroutine(ExportClip(from, to, copy));
+            _viewer.NameOf = SeatName;
+            _hud.StyleOf = StyleOf;
+            _hud.SymbolOf = SymbolOf;
             _shots = new ShotViews(_entities);
             _pylons = new PylonViews(_entities);
             _rocks = new RockViews(_entities);
@@ -417,6 +428,8 @@ namespace UltraPuck.Game
                 yield return Shot("replay");
                 GoMainMenu();
             }
+
+            yield return ProfileShots(want, kb);
 
             if (want("countdown"))
             {
@@ -1319,6 +1332,14 @@ namespace UltraPuck.Game
                 hi = at + Vector2.one * pad;
                 minHalfHeight = Mathf.Min(minHalfHeight, 6.8f);
             }
+            else if (_mode == Mode.Replay && _viewer.Following >= 0 && _viewer.Following < _players.Count && _players[_viewer.Following].Root != null)
+            {
+                // a replay's camera on one player
+                var at = V.Of3(_players[_viewer.Following].Root.transform.position);
+                lo = at - Vector2.one * 6f;
+                hi = at + Vector2.one * 6f;
+                minHalfHeight = Mathf.Min(minHalfHeight, 7.5f);
+            }
             else if (follow && _players.Count > 0)
             {
                 lo = hi = V.Of3(_puck.Root.transform.position);
@@ -1376,12 +1397,12 @@ namespace UltraPuck.Game
                 var smooth = Mathf.Lerp(0.12f, 0.8f, Settings.CameraSmoothing);
                 if (zooming) smooth *= 0.5f; // pulling back for a shot shouldn't lag behind it
                 if (goalHero) smooth = Mathf.Max(smooth, 0.45f); // ease in on the scorer (no hard cut)
-                _camPos = Vector2.SmoothDamp(_camPos, pos, ref _camVel, smooth, Mathf.Infinity, Time.unscaledDeltaTime);
-                _camSize = Mathf.SmoothDamp(_camSize, size, ref _camSizeVel, smooth * 1.3f, Mathf.Infinity, Time.unscaledDeltaTime);
+                _camPos = Vector2.SmoothDamp(_camPos, pos, ref _camVel, smooth, Mathf.Infinity, Clock.Dt);
+                _camSize = Mathf.SmoothDamp(_camSize, size, ref _camSizeVel, smooth * 1.3f, Mathf.Infinity, Clock.Dt);
             }
 
             // screen shake after hits: a quick random jolt that dies away (scaled with the zoom, so it feels the same)
-            _shake = Mathf.MoveTowards(_shake * Mathf.Exp(-Time.unscaledDeltaTime * 9f), 0f, Time.unscaledDeltaTime * 0.05f);
+            _shake = Mathf.MoveTowards(_shake * Mathf.Exp(-Clock.Dt * 9f), 0f, Clock.Dt * 0.05f);
             var amount = Settings.ShakeAmount;
             var jolt = _shake > 0.001f && amount > 0.01f ? Random.insideUnitCircle * _shake * amount * (_camSize / 12f) : Vector2.zero;
             _cam.transform.position = new Vector3(_camPos.x + jolt.x, _camPos.y + jolt.y, -10f);
@@ -1395,7 +1416,7 @@ namespace UltraPuck.Game
             if (_state == null || _puck == null || _puck.Root == null) return false;
             if (_state.Phase != Phase.Scored) return false;
             if (_replay != null || _wipe.Active || _replayExit) return false;
-            if (Time.unscaledTime >= _goalZoomUntil) return false;
+            if (Clock.Now >= _goalZoomUntil) return false;
             var i = _state.LastGoalPlayer;
             return i >= 0 && i < _players.Count && _players[i].Root != null;
         }
@@ -1421,18 +1442,20 @@ namespace UltraPuck.Game
                 if (_mode == Mode.Menu) AttractUpdate();
             }
             else if (_mode == Mode.Lobby) LobbyUpdate();
+            else if (_mode == Mode.Replay) ReplayUpdate();
             else MatchUpdate();
             if (_mode == Mode.Menu && _menus.IsOpen) AttractUpdate();
             if (_menus.IsOpen && _mode == Mode.Match) Show(_state, _state, 0f); // paused: hold the picture still
-            UpdateCamera(playing && Settings.FollowCamera && !_shotWholeRink);
+            UpdateCamera(_mode == Mode.Replay ? _viewer.CamMode != 1 : playing && Settings.FollowCamera && !_shotWholeRink);
             for (var k = _ripples.Count - 1; k >= 0; k--)
             {
-                if (Time.unscaledTime < _ripples[k].When) continue;
+                if (Clock.Now < _ripples[k].When) continue;
                 var r = _ripples[k];
                 _effects.Ripple(r.At, r.Colour, r.Size, r.Life);
                 _ripples.RemoveAt(k);
             }
             _effects.Update();
+            _styleFx.Update();
             if (ShotDir != null) CardStats.NoSave = true; // screenshot runs leave the player's card stats alone
             NotePicks();
             CardStats.Tick();
@@ -1445,7 +1468,8 @@ namespace UltraPuck.Game
             Sound.Music(InMatch, _map != null && (InMatch || _mode == Mode.Menu) ? _map.Music : "");
             Sound.QuietMusic = _menus.IsOpen; // pause menu (and settings from it): music at half volume
             Sound.HearingMusic = _menus.HearingMusic; // unless you're on the Music slider
-            _hud.Show(false, _free, _local, _state, _sim, _error, _menus.IsOpen || _cardScreen.Showing || !playing);
+            _hud.Show(false, _free, _local, _state, _sim, _error, _menus.IsOpen || _cardScreen.Showing || (!playing && _mode != Mode.Replay));
+            _hud.ReplaySave = _finished == null || _mode == Mode.Replay ? 0 : _finishedSaved ? 2 : 1;
             // hold View / Tab in a match: the scoreboard (cards and stats)
             _hud.Board = InMatch && !_free && !_menus.IsOpen && !_cardScreen.Showing && !Menus.Typing && (_local.SettingsHeld() || _shotBoard);
             _hud.Banner = _mode == Mode.Online && _session != null && OnlinePlaying ? OnlineBanner() : null;
@@ -1525,7 +1549,7 @@ namespace UltraPuck.Game
         private void AttractUpdate()
         {
             var dt = 1f / _attractSim.T.TicksPerSecond;
-            _attractAcc += Mathf.Min(Time.unscaledDeltaTime, 0.25f);
+            _attractAcc += Mathf.Min(Clock.Dt, 0.25f);
             var inputs = new PlayerInput[_attract.Players.Length];
             while (_attractAcc >= dt)
             {
@@ -1541,6 +1565,7 @@ namespace UltraPuck.Game
 
         public void GoMainMenu()
         {
+            DropRecording();
             _play.Open(PlayScreens.Page.None);
             if (_session != null) LeaveOnline(null);
             _local.Slots.Clear();
@@ -1588,8 +1613,8 @@ namespace UltraPuck.Game
         private void NotePicks()
         {
             if (_mode != Mode.Online || _session == null || _state == null || _sim == null || _sim.Cards == null || _state.Phase != Phase.Play) return;
-            if (Time.unscaledTime < _picksAt) return;
-            _picksAt = Time.unscaledTime + 1f;
+            if (Clock.Now < _picksAt) return;
+            _picksAt = Clock.Now + 1f;
             var held = new Dictionary<string, int>();
             for (var i = 0; i < _state.Players.Length && i < _session.Seats.Count; i++)
             {
@@ -1989,13 +2014,14 @@ namespace UltraPuck.Game
             SendLocalPlayers(s); // (someone changing team or going to watch)
             if (s.IsHost) s.LobbyRules = PackRules();
             var match = s.Match;
-            if (s.MatchId != _onlineMatchId) { _onlineMatchId = s.MatchId; _onlineAcc = 0f; foreach (var sl in _local.Slots) sl.Latched = 0; }
+            if (s.MatchId != _onlineMatchId) { _onlineMatchId = s.MatchId; _onlineAcc = 0f; foreach (var sl in _local.Slots) sl.Latched = 0; _sim = match.Sim; _state = match.State; BeginRecording(); }
             _sim = match.Sim;
             _state = match.State;
 
             if (_menus.IsOpen) _menus.Tick(_local.Menu());
             else if (_state.Phase == Phase.GameOver)
             {
+                if (_local.SaveReplayPressed()) SaveLastReplay();
                 if (s.IsHost && _local.StartPressed()) { Sound.Select(); StartOnlineMatch(); return; }
                 if (_local.BackPressed()) { Sound.Back(); if (s.IsHost) s.BackToLobby(); else LeaveOnline(null); return; }
             }
@@ -2009,10 +2035,10 @@ namespace UltraPuck.Game
 
             _local.LatchPresses();
             var dt = 1f / _sim.T.TicksPerSecond;
-            _onlineAcc += Mathf.Min(Time.unscaledDeltaTime, 0.25f);
+            _onlineAcc += Mathf.Min(Clock.Dt, 0.25f);
             // if we're ahead of the others, slow down a touch so nobody has to rewind further than needed
             var ahead = s.Advantage;
-            if (ahead > 1.5f) _onlineAcc -= Time.unscaledDeltaTime * Mathf.Min(0.25f, (ahead - 1.5f) * 0.04f);
+            if (ahead > 1.5f) _onlineAcc -= Clock.Dt * Mathf.Min(0.25f, (ahead - 1.5f) * 0.04f);
             var steps = 0;
             var simClock = System.Diagnostics.Stopwatch.StartNew();
             while (_onlineAcc >= dt && steps < 12)
@@ -2054,6 +2080,7 @@ namespace UltraPuck.Game
             NetStats((float)simClock.Elapsed.TotalMilliseconds);
             _state = match.State;
             Recorder.Record(_state);
+            RecordFrame();
             if (ReplayFrame(false)) return;
             Show(match.Previous, match.State, Mathf.Clamp01(_onlineAcc / dt));
         }
@@ -2067,20 +2094,20 @@ namespace UltraPuck.Game
         {
             _netFrames++;
             _netSimMs += simMs;
-            _netWorstFrame = Mathf.Max(_netWorstFrame, Time.unscaledDeltaTime);
-            if (Time.unscaledTime - _netStatsAt < 10f) return;
+            _netWorstFrame = Mathf.Max(_netWorstFrame, Clock.Dt);
+            if (Clock.Now - _netStatsAt < 10f) return;
             var s = _session;
             var m = s != null ? s.Match : null;
             if (m != null && _netStatsAt > 0f)
             {
-                var secs = Time.unscaledTime - _netStatsAt;
+                var secs = Clock.Now - _netStatsAt;
                 Debug.Log("Ultra Puck net: " + s.Seats.Count + " players, ping " + Mathf.RoundToInt(s.Ping * 1000f) + " ms, ahead " + s.Advantage.ToString("0.0") +
                     " ticks, waited " + _netStalls + " times, rewinds " + (m.Rewinds - _netRewinds) + " (longest " + m.LongestRewind + " ticks), " +
                     Mathf.RoundToInt(_netFrames / secs) + " fps (worst frame " + Mathf.RoundToInt(_netWorstFrame * 1000f) + " ms), game " +
                     (_netSimMs / Mathf.Max(1, _netFrames)).ToString("0.00") + " ms a frame, confirmed " + (m.Tick - m.Confirmed) + " ticks back, sent " +
                     Mathf.RoundToInt((s.MessagesSent - _netMsgs) / secs) + " messages a second (" + ((s.BytesSent - _netBytes) / secs / 1024f).ToString("0.0") + " KB/s)");
             }
-            _netStatsAt = Time.unscaledTime;
+            _netStatsAt = Clock.Now;
             _netStalls = 0; _netFrames = 0; _netSimMs = 0f; _netWorstFrame = 0f;
             if (m != null) { _netRewinds = m.Rewinds; m.LongestRewind = 0; }
             if (s != null) { _netMsgs = s.MessagesSent; _netBytes = s.BytesSent; }
@@ -2265,10 +2292,12 @@ namespace UltraPuck.Game
             _mode = Mode.Match;
             _menus.FreePlay = free;
             foreach (var s in _local.Slots) s.Latched = 0;
+            if (free) DropRecording(); else BeginRecording();
         }
 
         private void BackToLobby()
         {
+            DropRecording();
             // back to the join screen with everyone (and the bots) still there, to ready up again
             _local.UnreadyAll();
             _mode = Mode.Lobby;
@@ -2405,6 +2434,9 @@ namespace UltraPuck.Game
                 mine.Add(new KeyValuePair<string, int>(SlotName(k), NetSession.Look(sl.Colour, sl.Symbol, sl.Ready, sl.Watching)));
             }
             s.SetLocalPlayers(mine);
+            var looks = new List<int>();
+            for (var k = 0; k < _local.Slots.Count; k++) looks.Add(k == FirstPerson() ? Cosmetics.Mine : 0);
+            s.SetLocalStyles(looks);
         }
 
         /// <summary>The name of the person on this PC's slot <paramref name="k"/>.</summary>
@@ -2508,6 +2540,7 @@ namespace UltraPuck.Game
             }
             if (!_free && _state.Phase == Phase.GameOver)
             {
+                if (_local.SaveReplayPressed()) SaveLastReplay();
                 if (_local.StartPressed()) { Sound.Select(); StartMatch(false); return; }
                 if (_local.BackPressed()) { Sound.Back(); BackToLobby(); return; }
             }
@@ -2532,6 +2565,7 @@ namespace UltraPuck.Game
                 _sim.Step(_state, _shotNoInput ? new PlayerInput[_state.Players.Length] : _sim.Route(_state, _local.Sample(_sim, _state)));
                 _seenCarrier = _state.Carrier;
                 Recorder.Record(_state);
+                RecordFrame();
                 _acc -= dt;
             }
             if (!_free && ReplayFrame(true)) return;
@@ -2572,7 +2606,7 @@ namespace UltraPuck.Game
             if (_state == null || _sim == null) return false;
             _hud.Wipe = _wipe;
             var tps = _sim.T.TicksPerSecond;
-            var dt = Time.unscaledDeltaTime;
+            var dt = Clock.Dt;
 
             if (_state.Phase != Phase.Scored)
             {
@@ -2598,11 +2632,11 @@ namespace UltraPuck.Game
                 _replayStarted = false;
                 _replayHoldA = _replayHoldB = null;
                 _wipeStyle = ReplayTransition.PickStyle(_goalTick + _state.LastScorer * 17);
-                _replayStartAt = Time.unscaledTime + 3f; // zoom on the scorer, then wipe in
+                _replayStartAt = Clock.Now + 3f; // zoom on the scorer, then wipe in
                 _goalZoomUntil = _replayStartAt;
             }
 
-            if (_replayPending && Time.unscaledTime >= _replayStartAt)
+            if (_replayPending && Clock.Now >= _replayStartAt)
             {
                 _replayPending = false;
                 _wipe.Begin(_wipeStyle, ReplayTransition.GreyStripeColours());
@@ -2729,7 +2763,7 @@ namespace UltraPuck.Game
         {
             var n = s.Players.Length;
             var jump = _heardTick == int.MinValue || s.Tick < _heardTick || s.Tick - _heardTick > 60 || n != _heardHits.Count;
-            if (s.Tick != _heardTick) _heardMovingAt = Time.unscaledTime;
+            if (s.Tick != _heardTick) _heardMovingAt = Clock.Now;
             if (!jump)
             {
                 bool orange, blue;
@@ -2770,12 +2804,12 @@ namespace UltraPuck.Game
             if (s.Phase == Phase.Play && _heardPhase == Phase.Countdown && !_free && !jump)
             {
                 Sound.Play(Sfx.CountGo, 0.7f, 1f, 0f);
-                _hud.StartAt = Time.unscaledTime;
+                _hud.StartAt = Clock.Now;
             }
             _heardCount = count;
 
             // a Shockwave being held hums, higher as it grows (the loudest one: yours, if you're holding one)
-            if (!s.Paused && Time.unscaledTime - _heardMovingAt < 0.15f && _sim != null)
+            if (!s.Paused && Clock.Now - _heardMovingAt < 0.15f && _sim != null)
                 for (var k = 0; k < n; k++)
                     if (s.Players[k].ShockHold > Fix.Zero && s.Players[k].InvisibleTime <= Fix.Zero)
                         Sound.ShockCharge(s.Players[k].ShockHold.ToFloat() / Mathf.Max(0.01f, _sim.T.ShockChargeTime.ToFloat()),
@@ -2783,7 +2817,7 @@ namespace UltraPuck.Game
 
             // charging a shot hums while the game is actually running (not paused, not waiting for other players)
             var c = s.Carrier;
-            if (c >= 0 && c < n && s.Players[c].Charge > Fix.Zero && !s.Paused && Time.unscaledTime - _heardMovingAt < 0.15f)
+            if (c >= 0 && c < n && s.Players[c].Charge > Fix.Zero && !s.Paused && Clock.Now - _heardMovingAt < 0.15f)
                 Sound.Charge(s.Players[c].Charge.ToFloat(), IsLocalPerson(c) ? 1f : 0.6f, Pan(V.Of(s.Players[c].Pos)));
 
             _heardTick = s.Tick;
@@ -2906,6 +2940,7 @@ namespace UltraPuck.Game
         /// <summary>Player <paramref name="i"/>'s symbol: their online seat's, or their slot's on this PC.</summary>
         private int SymbolOf(int i)
         {
+            if (_mode == Mode.Replay && _viewer.Replay != null) { var c = ReplayCast(); return c != null && i < c.Symbols.Length ? c.Symbols[i] : i & 7; }
             if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count ? _session.Seats[i].Symbol : i & 7;
             return i < _local.Slots.Count ? _local.Slots[i].Symbol : i & 7;
         }
@@ -2946,6 +2981,7 @@ namespace UltraPuck.Game
         /// <summary>The name of player <paramref name="i"/>'s own seat.</summary>
         private string SeatName(int i)
         {
+            if (_mode == Mode.Replay && _viewer.Replay != null) { var c = ReplayCast(); return c != null && i < c.Names.Length ? c.Names[i] : "Bot"; }
             if (_mode == Mode.Online && _session != null) return i < _session.Seats.Count ? _session.Seats[i].Name : "Bot";
             if (i >= _local.Slots.Count) return "";
             var s = _local.Slots[i];
@@ -2993,12 +3029,12 @@ namespace UltraPuck.Game
             {
                 // the blast (and its boom) when the flight leaves the rink
                 var delay = (V.Of(pb.OutAt) - V.Of(pb.OutFrom)).magnitude / LaunchSpeed;
-                _hud.Blasts.Add(new Hud.Blast { World = V.Of(pb.OutAt), Dir = V.Of(pb.OutDir), Colour = Palette.Team(pb.Team), At = Time.unscaledTime + delay, Seed = i * 7919 + pb.Launches });
-                _launchBooms.Add(new Vector3(Time.unscaledTime + delay, pb.OutAt.X.ToFloat(), pb.OutAt.Y.ToFloat()));
+                _hud.Blasts.Add(new Hud.Blast { World = V.Of(pb.OutAt), Dir = V.Of(pb.OutDir), Colour = Palette.Team(pb.Team), At = Clock.Now + delay, Seed = i * 7919 + pb.Launches });
+                _launchBooms.Add(new Vector3(Clock.Now + delay, pb.OutAt.X.ToFloat(), pb.OutAt.Y.ToFloat()));
                 Sound.Play(Sfx.BigHit, 1f, 0.8f, Pan(pos));
             }
             for (var k = _launchBooms.Count - 1; k >= 0; k--)
-                if (Time.unscaledTime >= _launchBooms[k].x)
+                if (Clock.Now >= _launchBooms[k].x)
                 {
                     Sound.Play(Sfx.Launch, 0.95f, Random.Range(0.97f, 1.03f), Pan(new Vector2(_launchBooms[k].y, _launchBooms[k].z)));
                     _shake = Mathf.Max(_shake, 0.45f);
@@ -3103,7 +3139,15 @@ namespace UltraPuck.Game
                         Raging = pb.RageTime > Fix.Zero ? pb.RageTime.ToFloat() / _sim.T.RageTime.ToFloat() : 0f,
                         Cooling = pb.RageCooldown > Fix.Zero ? pb.RageCooldown.ToFloat() / _sim.T.RageCooldown.ToFloat() : 0f,
                     });
+                var look = StyleOf(i);
+                _players[i].DashColour = Cosmetics.DashTint(Cosmetics.Dash(look), Palette.Team(pb.Team));
                 var hiddenNow = CardEffects(i, pb, pos);
+                if (!hiddenNow && !outNow)
+                {
+                    if (i >= _dashAcc.Length) System.Array.Resize(ref _dashAcc, i + 8);
+                    var dashing = Mathf.Clamp01(pb.DashTime.ToFloat() / Mathf.Max(0.01f, _sim.T.DashHitTime.ToFloat()));
+                    _styleFx.DashTrail(Cosmetics.Dash(look), pos, V.Of(pb.DashDir), radius, dashing, Palette.Team(pb.Team), ref _dashAcc[i]);
+                }
                 // Slot Machine: the reels under them while they spin (and a moment after, to see what came up)
                 _slots.Show(i, pb, pos, radius, _sim.T.SlotSpinTime.ToFloat(), hiddenNow);
                 if (!hiddenNow && !outNow)
@@ -3167,7 +3211,9 @@ namespace UltraPuck.Game
             }
             if (boom)
             {
-                _effects.Explosion(pb2, b.LastScorer >= 0 ? Palette.Team(b.LastScorer) : Color.white);
+                // the scorer's own goal explosion (Profile); an own goal gets the usual one
+                var boomLook = b.LastGoalBy >= 0 && b.LastGoalBy < b.Players.Length ? Cosmetics.Boom(StyleOf(b.LastGoalBy)) : 0;
+                _styleFx.Goal(boomLook, pb2, b.LastScorer >= 0 ? Palette.Team(b.LastScorer) : Color.white);
                 _shake = Mathf.Max(_shake, 0.7f);
             }
             _puck.Visible(b.Phase != Phase.Scored);

@@ -181,6 +181,36 @@ namespace UltraPuck.Game
             GUI.color = old;
         }
 
+        private static Texture2D _disc;
+
+        /// <summary>
+        /// A filled circle in <paramref name="r"/> (one smooth texture: a rounded <see cref="Box"/> as wide as its curve
+        /// has no middle and showed a seam down the centre).
+        /// </summary>
+        public static void Disc(Rect r, Color c)
+        {
+            if (Event.current.type != EventType.Repaint || r.width <= 0f) return;
+            if (_disc == null)
+            {
+                const int n = 256;
+                _disc = new Texture2D(n, n, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, hideFlags = HideFlags.DontSave };
+                var px = new Color32[n * n];
+                for (var y = 0; y < n; y++)
+                for (var x = 0; x < n; x++)
+                {
+                    var dx = x + 0.5f - n / 2f; var dy = y + 0.5f - n / 2f;
+                    var a = Mathf.Clamp01(n / 2f - Mathf.Sqrt(dx * dx + dy * dy));
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(255f * a));
+                }
+                _disc.SetPixels32(px);
+                _disc.Apply(true);
+            }
+            var old = GUI.color;
+            GUI.color = c;
+            GUI.DrawTexture(r, _disc);
+            GUI.color = old;
+        }
+
         public static void Fill(Color c) { Box(new Rect(0f, 0f, W, H), c, 0f); }
 
         // ------------------------------------------------------------------ text

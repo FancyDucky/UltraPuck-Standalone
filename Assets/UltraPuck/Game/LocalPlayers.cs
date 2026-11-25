@@ -483,6 +483,15 @@ namespace UltraPuck.Game
             return false;
         }
 
+        /// <summary>After a match: Y / R from anyone who has joined saves its replay.</summary>
+        public bool SaveReplayPressed()
+        {
+            if (Blocked) return false;
+            foreach (var s in Slots)
+                if (Any(s, g => g.buttonNorth.wasPressedThisFrame, k => k.rKey.wasPressedThisFrame)) return true;
+            return false;
+        }
+
         /// <summary>Lobby: Y / F starts free play. Whoever presses it joins first if they haven't yet.</summary>
         public bool FreePlayPressed()
         {

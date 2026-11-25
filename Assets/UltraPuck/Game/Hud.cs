@@ -55,6 +55,10 @@ namespace UltraPuck.Game
         public System.Func<int, string> PlayerName;
         /// <summary>The name of a player's own seat (the person, even while they steer a bot): for goals and stats.</summary>
         public System.Func<int, string> SeatName;
+        /// <summary>A player's Profile look (for their replay banner) and symbol.</summary>
+        public System.Func<int, int> StyleOf, SymbolOf;
+        /// <summary>After the match: 0 no replay to save, 1 one to save, 2 saved.</summary>
+        public int ReplaySave;
         /// <summary>Draw a mouse reticle (keyboard players aiming with the mouse).</summary>
         public bool Reticle;
         /// <summary>When play last began after a countdown (for the START banner).</summary>
@@ -83,7 +87,7 @@ namespace UltraPuck.Game
             if (Settings.ShowFps)
             {
                 _fpsFrames++;
-                _fpsTimer += Time.unscaledDeltaTime;
+                _fpsTimer += Clock.Dt;
                 if (_fpsTimer >= 0.4f)
                 {
                     _fpsShown = Mathf.RoundToInt(_fpsFrames / _fpsTimer);
@@ -164,10 +168,10 @@ namespace UltraPuck.Game
                     }
                     break;
                 case Phase.Play:
-                    if (!_free && Time.unscaledTime - StartAt < 0.9f)
+                    if (!_free && Clock.Now - StartAt < 0.9f)
                     {
                         // START: pops in big and fades out
-                        var age = Time.unscaledTime - StartAt;
+                        var age = Clock.Now - StartAt;
                         var size = Mathf.RoundToInt(Mathf.Lerp(130f, 96f, Ui.EaseOut(age / 0.3f)));
                         var a = 1f - Mathf.Clamp01((age - 0.55f) / 0.35f);
                         Ui.Label(new Rect(0, h * 0.28f - 40f, w, 140), "START!", Ui.Font(size, true, TextAnchor.MiddleCenter), new Color(Gold.r, Gold.g, Gold.b, a));
@@ -179,20 +183,23 @@ namespace UltraPuck.Game
                         // a "REPLAY" badge that pulses, and a bar top and bottom like a broadcast
                         Ui.Box(new Rect(0, 0, w, 10), new Color(0f, 0f, 0f, 0.6f), 0f);
                         Ui.Box(new Rect(0, h - 10, w, 10), new Color(0f, 0f, 0f, 0.6f), 0f);
-                        var pulse = 0.7f + 0.3f * Mathf.Sin(Time.unscaledTime * 6f);
+                        var pulse = 0.7f + 0.3f * Mathf.Sin(Clock.Now * 6f);
                         Ui.Box(new Rect(24, 80, 150, 40), new Color(0.85f, 0.15f, 0.15f, 0.9f * pulse), 8f);
                         Ui.Label(new Rect(24, 80, 150, 40), "REPLAY", Ui.Font(22, true, TextAnchor.MiddleCenter), Color.white);
                         if (ReplaySlow) Ui.Label(new Rect(184, 80, 300, 40), "slow motion", Ui.Font(17, false), new Color(1f, 1f, 1f, 0.7f));
-                        // who scored, and who set it up
-                        var line = GoalLine();
-                        if (line != null)
+                        // who scored (on their banner), and who set it up
+                        if (!ScorerCard(w, h, 1f))
                         {
-                            // a backdrop just big enough for the names
-                            var style = Ui.Font(16, true);
-                            var tw = style.CalcSize(new GUIContent(line)).x;
-                            Ui.Box(new Rect(24, 128, tw + 30f, 30), new Color(0f, 0f, 0f, 0.55f), 7f);
-                            Ui.Box(new Rect(24, 128, 5, 30), Palette.Team(_state.LastScorer), 2.5f);
-                            Ui.Label(new Rect(38, 128, tw + 10f, 30), line, style, Color.white);
+                            var line = GoalLine();
+                            if (line != null)
+                            {
+                                // a backdrop just big enough for the names
+                                var style = Ui.Font(16, true);
+                                var tw = style.CalcSize(new GUIContent(line)).x;
+                                Ui.Box(new Rect(24, 128, tw + 30f, 30), new Color(0f, 0f, 0f, 0.55f), 7f);
+                                Ui.Box(new Rect(24, 128, 5, 30), Palette.Team(_state.LastScorer), 2.5f);
+                                Ui.Label(new Rect(38, 128, tw + 10f, 30), line, style, Color.white);
+                            }
                         }
                         if (ReplaySkippable)
                         {
@@ -256,8 +263,8 @@ namespace UltraPuck.Game
         private void GoalBanner(float w, float h)
         {
             var key = _state.Score[0] * 1000 + _state.Score[1];
-            if (key != _goalKey) { _goalKey = key; _goalAt = Time.unscaledTime; }
-            var age = Time.unscaledTime - _goalAt;
+            if (key != _goalKey) { _goalKey = key; _goalAt = Clock.Now; }
+            var age = Clock.Now - _goalAt;
             var by = _state.LastGoalBy;
             var who = by >= 0 && by < _state.Players.Length && SeatName != null ? SeatName(by) : Palette.TeamName(_state.LastScorer) + " Team";
             var text = who + " Scored!";
@@ -280,6 +287,26 @@ namespace UltraPuck.Game
                 var b = Mathf.Clamp01((age - 0.4f) / 0.3f);
                 Ui.Label(new Rect(0, centre.y + 70f, w, 40), "Assist: " + SeatName(assist), Ui.Font(24, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, b));
             }
+        }
+
+        /// <summary>
+        /// The scorer's replay banner (their Profile look) along the bottom left: their name, "GOAL", and the assist.
+        /// False if there's no scorer to show (an own goal).
+        /// </summary>
+        private bool ScorerCard(float w, float h, float a)
+        {
+            if (_state == null || SeatName == null) return false;
+            var by = _state.LastGoalBy;
+            if (by < 0 || by >= _state.Players.Length) return false;
+            if (a <= 0f) return true;
+            var look = StyleOf != null ? StyleOf(by) : 0;
+            var assist = _state.LastAssist;
+            var below = assist >= 0 && assist < _state.Players.Length ? "Assist: " + SeatName(assist) : null;
+            // centred along the bottom, above the skip hint
+            var bw = Mathf.Min(280f, w - 48f);
+            Banners.Draw(new Rect(w / 2f - bw / 2f, h - 118f, bw, 52f), Cosmetics.Banner(look), Cosmetics.BannerTint(look), _state.Players[by].Team, SeatName(by), "GOAL", below, a,
+                SymbolOf != null ? SymbolOf(by) : -1);
+            return true;
         }
 
         private string GoalLine()
@@ -348,7 +375,8 @@ namespace UltraPuck.Game
                 ty += rowH;
             }
             Ui.Label(new Rect(x, ty + 2f, pw, 20f), "Points: goal 3, assist 2, save 2, bump 1", Ui.Font(12, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f));
-            Glyphs.Hint(new Rect(x, y + ph - 46f, pw, 34f), "{start} Play again      {back} Main menu", 18, Ui.TextDim);
+            var save = ReplaySave == 1 ? "      {savereplay} Save replay" : ReplaySave == 2 ? "      Replay saved" : "";
+            Glyphs.Hint(new Rect(x, y + ph - 46f, pw, 34f), "{start} Play again" + save + "      {back} Main menu", 18, Ui.TextDim);
         }
 
         private static void Badge(Rect r, string text, Color bg, Color fg)
@@ -582,7 +610,7 @@ namespace UltraPuck.Game
             for (var b = Blasts.Count - 1; b >= 0; b--)
             {
                 var bl = Blasts[b];
-                var age = Time.unscaledTime - bl.At;
+                var age = Clock.Now - bl.At;
                 if (age < 0f) continue; // still flying there
                 if (age > life) { Blasts.RemoveAt(b); continue; }
                 var k = age / life;
@@ -722,8 +750,8 @@ namespace UltraPuck.Game
             var k = Screen.height / 720f * Settings.UiScale;
             // small, plain text just above the check and cooldown bars (no box: it shouldn't cover anything)
             var style = Ui.Font(12, true, TextAnchor.LowerCenter);
-            var dt = Mathf.Clamp(Time.unscaledTime - _tagsAt, 0f, 0.1f);
-            _tagsAt = Time.unscaledTime;
+            var dt = Mathf.Clamp(Clock.Now - _tagsAt, 0f, 0.1f);
+            _tagsAt = Clock.Now;
             foreach (var t in Tags)
             {
                 if (string.IsNullOrEmpty(t.Name)) continue;

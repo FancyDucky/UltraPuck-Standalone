@@ -48,8 +48,25 @@ namespace UltraPuck.Editor
             var ok = report.summary.result == BuildResult.Succeeded;
             // Steam's test app id (480) next to the exe, until the game has its own; Steam won't start without it
             if (ok && File.Exists("steam_appid.txt")) File.Copy("steam_appid.txt", Path.Combine(Path.GetDirectoryName(Output), "steam_appid.txt"), true);
+            if (ok) CopyClipMusic(Path.Combine(Path.GetDirectoryName(Output), "UltraPuck_Data"));
             Debug.Log("Ultra Puck build: " + report.summary.result + " (" + report.summary.totalErrors + " errors) -> " + Path.GetFullPath(Output));
             if (Application.isBatchMode) EditorApplication.Exit(ok ? 0 : 1);
+        }
+
+        /// <summary>
+        /// The songs as plain files in the built game's StreamingAssets/ClipMusic: the game streams its own copies,
+        /// which Unity can't hand over as samples, and replay clips mix the song that was playing into their sound.
+        /// </summary>
+        private static void CopyClipMusic(string data)
+        {
+            var to = Path.Combine(data, "StreamingAssets", "ClipMusic");
+            Directory.CreateDirectory(to);
+            foreach (var f in Directory.GetFiles("Assets/UltraPuck/Resources/UltraPuck/Music", "*.*", SearchOption.AllDirectories))
+            {
+                var ext = Path.GetExtension(f).ToLowerInvariant();
+                if (ext != ".mp3" && ext != ".wav" && ext != ".m4a") continue;
+                File.Copy(f, Path.Combine(to, Path.GetFileName(f)), true);
+            }
         }
 
         private const string LinuxOutput = "Builds/Linux/UltraPuck.x86_64";

@@ -197,6 +197,9 @@ namespace UltraPuck.Game
         private readonly Mesh[] _dashMesh = new Mesh[4];
         private readonly Transform[] _streak = new Transform[3];
         private float _dashShown = -1f;
+        /// <summary>The dash streaks' and rim's colour (the player's Profile dash trail; white by default).</summary>
+        public Color DashColour = Color.white;
+        private Color _dashColourShown = Color.white;
         private readonly Transform _cdRoot;
         private readonly Mesh[] _cdBack = new Mesh[3], _cdFill = new Mesh[3];
         private readonly Transform[] _cdFillT = new Transform[3];
@@ -525,8 +528,8 @@ namespace UltraPuck.Game
             if (_aimRoot.gameObject.activeSelf != showAim) _aimRoot.gameObject.SetActive(showAim);
             if (showAim) _aimRoot.localScale = new Vector3(len, 1f, 1f);
             if (_boostRing.activeSelf) _boostRing.SetActive(false); // (sped up shows arrows now)
-            var dt = Time.unscaledDeltaTime;
-            var t = Time.unscaledTime;
+            var dt = Clock.Dt;
+            var t = Clock.Now;
 
             // slowed: three solid black down arrows drifting down through the player and fading, one after another
             _slowAlpha = Mathf.MoveTowards(_slowAlpha, slowed ? 1f : 0f, dt * 5f);
@@ -575,20 +578,21 @@ namespace UltraPuck.Game
             // dashing: streaks behind (along the way the dash went) and a bright rim
             dash = faint ? 0f : Mathf.Clamp01(dash);
             dash = Mathf.Round(dash * 60f) / 60f; // fine steps: the streaks grow smoothly
-            if (dash != _dashShown)
+            if (dash != _dashShown || DashColour != _dashColourShown)
             {
                 _dashShown = dash;
+                _dashColourShown = DashColour;
                 _dashRoot.gameObject.SetActive(dash > 0f);
                 if (dash > 0f)
                 {
                     for (var k = 0; k < 3; k++)
                     {
-                        Draw.Recolor(_dashMesh[k], new Color(1f, 1f, 1f, 0.75f * dash));
+                        Draw.Recolor(_dashMesh[k], new Color(DashColour.r, DashColour.g, DashColour.b, 0.75f * dash));
                         // drawn outwards from the player over the first part of the dash (the middle one a touch first)
                         var grow = Ui.EaseOut(Mathf.Clamp01((1f - dash) / 0.4f - (k == 1 ? 0f : 0.15f)));
                         _streak[k].localScale = new Vector3(Mathf.Max(0.001f, grow), 1f, 1f);
                     }
-                    Draw.Recolor(_dashMesh[3], new Color(1f, 1f, 1f, 0.9f * dash));
+                    Draw.Recolor(_dashMesh[3], new Color(DashColour.r, DashColour.g, DashColour.b, 0.9f * dash));
                 }
             }
             if (dash > 0f)
@@ -831,6 +835,9 @@ namespace UltraPuck.Game
         /// <summary>Forked lightning crackling out of a hard hit.</summary>
         public void Lightning(Vector2 at, float power, Color colour) { Lightning(at, power, colour, Color.white, null); }
 
+        /// <summary>One small forked bolt from <paramref name="from"/> (Profile dash trails).</summary>
+        public void SmallBolt(Vector2 from, float angle, float length, Color colour) { AddBolt(from, angle, length, colour, Color.white, 0.035f, 1); }
+
         /// <summary>Lightning with its own core colour (hits: a near-black red core in a red glow).</summary>
         public void Lightning(Vector2 at, float power, Color colour, Color core) { Lightning(at, power, colour, core, null); }
 
@@ -1044,7 +1051,7 @@ namespace UltraPuck.Game
 
         public void Update()
         {
-            var dt = Time.unscaledDeltaTime;
+            var dt = Clock.Dt;
             StepComets(dt);
             for (var i = _waves.Count - 1; i >= 0; i--)
             {

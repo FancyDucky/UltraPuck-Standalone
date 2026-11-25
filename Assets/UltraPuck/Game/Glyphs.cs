@@ -159,7 +159,10 @@ namespace UltraPuck.Game
                 case "back": case "leave": return new[] { PadButton.East };
                 case "charge": return new[] { InputIcons.FromControls(Controls.PadOf(Controls.Act.Charge)) };
                 case "utility": return new[] { InputIcons.FromControls(Controls.PadOf(Controls.Act.Utility)) };
-                case "freeplay": case "profile": return new[] { PadButton.North };
+                case "freeplay": case "profile": case "savereplay": case "camera": case "copyclip": return new[] { PadButton.North };
+                case "clip": return new[] { PadButton.West };
+                case "delete": return new[] { PadButton.North };
+                case "hideui": return new[] { PadButton.Select };
                 case "shape": case "swap": return new[] { InputIcons.FromControls(Controls.PadOf(Controls.Act.Swap)) };
                 case "bots": return new[] { PadButton.LB, PadButton.RB };
                 case "start": case "menu": return new[] { PadButton.Start };
@@ -189,6 +192,12 @@ namespace UltraPuck.Game
                 case "utility": return new[] { Controls.KeyName(Controls.KeyOf(Controls.Act.Utility)) };
                 case "freeplay": return new[] { "F" };
                 case "profile": return new[] { "N" };
+                case "savereplay": return new[] { "R" };
+                case "camera": return new[] { "C" };
+                case "clip": return new[] { "X" };
+                case "copyclip": return new[] { "V" };
+                case "hideui": return new[] { "H" };
+                case "delete": return new[] { "Del" };
                 case "shape": case "swap": return new[] { Controls.KeyName(Controls.KeyOf(Controls.Act.Swap)) };
                 case "bots": return new[] { "-", "=" };
                 case "start": return new[] { "Enter" };

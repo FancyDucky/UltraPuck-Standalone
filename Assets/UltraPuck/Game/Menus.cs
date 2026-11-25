@@ -349,6 +349,8 @@ namespace UltraPuck.Game
                     _rows.Add(Slider("Sound effects", () => Settings.SoundVolume, v => Settings.SoundVolume = v, Percent, "Hits, shots, goals, cards and menu sounds."));
                     _rows.Add(Switch("Pause music when unfocused", () => Settings.PauseMusicWhenUnfocused, v => Settings.PauseMusicWhenUnfocused = v,
                         "When the game window isn't focused: pause the music. Leave this off and the next song still starts if one ends while you're looking elsewhere."));
+                    _rows.Add(Switch("Music in clips", () => Settings.MusicInClips, v => Settings.MusicInClips = v,
+                        "Replay clips you save have the song that was playing in them (as loud as the Music slider). Off: only the game's sounds."));
                     break;
                 case 4:
                     ControlsRows();

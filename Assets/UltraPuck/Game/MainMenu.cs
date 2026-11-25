@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UltraPuck.Core;
 using UltraPuck.Core.Net;
 using UnityEngine;
 
@@ -13,7 +14,7 @@ namespace UltraPuck.Game
     internal sealed class MainMenu : MonoBehaviour
     {
         /// <summary><see cref="Title"/> is the "press any button" screen the game starts on (see <see cref="TitleScreen"/>).</summary>
-        public enum Page { None, Main, Online, JoinIp, Browse, OnlineLobby, Friends, Title }
+        public enum Page { None, Main, Online, JoinIp, Browse, OnlineLobby, Friends, Title, Profile, Character, Replays, Saved, History }
 
         public Page Current { get; private set; }
         public GameRunner Runner;
@@ -39,6 +40,10 @@ namespace UltraPuck.Game
             public Func<string> Shown;            // a setting to look at (no arrows: only the host changes it)
             public Func<bool> Enabled = () => true;
             public bool TextField;
+            /// <summary>A second line under the detail (replay lists).</summary>
+            public string Detail2;
+            /// <summary>Match history: this one is in the saved replays too.</summary>
+            public bool Saved;
         }
 
         private readonly List<Row> _rows = new List<Row>();
@@ -51,6 +56,9 @@ namespace UltraPuck.Game
         public void Show(Page page)
         {
             if (page != Current) { _focus = 0; _focusY = -1f; _openedAt = Time.unscaledTime; _openedFrame = Time.frameCount; _scroll = 0; _scrollFocus = -1; }
+            if ((page == Page.Saved || page == Page.History) && Current != page) LoadReplays(page == Page.History ? GameRunner.HistoryFolder : GameRunner.ReplaysFolder);
+            if (page == Page.Character && Current != Page.Character) _nextBoom = Time.unscaledTime + 0.8f;
+            if (Runner != null) Runner.PreviewLooks = page == Page.Character;
             if (page != Page.OnlineLobby && page != Page.Friends) OptionsOpen = false;
             if (page == Page.Title && Current != Page.Title) _titleAt = Time.unscaledTime;
             if (page != Page.Main) _leftTitleAt = -100f;
@@ -125,9 +133,48 @@ namespace UltraPuck.Game
                     _rows.Add(new Row { Label = "Play", Detail = "Local match: everyone on this PC", Press = () => Runner.GoLocalLobby() });
                     _rows.Add(new Row { Label = "Online", Detail = "Steam, or by IP address", Press = () => Show(Page.Online) });
                     _rows.Add(new Row { Label = "Free play", Detail = "Practice, bots optional", Press = () => Runner.StartFreePlayFrom(_lastDevice) });
+                    _rows.Add(new Row { Label = "Profile", Detail = "Your character's look, and your saved replays", Press = () => Show(Page.Profile) });
                     _rows.Add(new Row { Label = "Cards", Detail = "Every card, and which get picked most online", Press = () => Runner.OpenCards() });
                     _rows.Add(new Row { Label = "Settings", Press = () => Runner.OpenSettings() });
                     _rows.Add(new Row { Label = "Quit", Press = Application.Quit });
+                    break;
+                case Page.Profile:
+                    _rows.Add(new Row { Label = "Edit character", Detail = "Dash trail, replay banner and goal explosion", Press = () => Show(Page.Character) });
+                    _rows.Add(new Row { Label = "Replays", Detail = "Watch saved matches, and make clips", Press = () => Show(Page.Replays) });
+                    _rows.Add(new Row { Label = "Back", Press = () => Show(Page.Main) });
+                    break;
+                case Page.Character:
+                    _rows.Add(Cycle("Dash trail", Cosmetics.DashNames, () => Cosmetics.MyDash, v => Cosmetics.MyDash = v));
+                    var boom = Cycle("Goal explosion", Cosmetics.BoomNames, () => Cosmetics.MyBoom, v => { Cosmetics.MyBoom = v; Runner.PreviewBoom(); _nextBoom = Time.unscaledTime + 3.5f; });
+                    boom.Press = () => { Runner.PreviewBoom(); _nextBoom = Time.unscaledTime + 3.5f; };
+                    _rows.Add(boom);
+                    _rows.Add(Cycle("Replay banner", Cosmetics.BannerNames, () => Cosmetics.MyBanner, v => Cosmetics.MyBanner = v));
+                    _rows.Add(Cycle("Banner colour", Cosmetics.BannerColourNames, () => Cosmetics.MyBannerColour, v => Cosmetics.MyBannerColour = v));
+                    _rows.Add(new Row { Label = "Back", Press = () => Show(Page.Profile) });
+                    break;
+                case Page.Replays:
+                    _rows.Add(new Row { Label = "Saved replays", Detail = "Matches you've saved", Press = () => Show(Page.Saved) });
+                    _rows.Add(new Row { Label = "Match history", Detail = "Your last " + GameRunner.HistoryKept + " matches, saved or not", Press = () => Show(Page.History) });
+                    _rows.Add(new Row { Label = "Open the clips folder", Detail = "Videos > Ultra Puck", Press = () => GameRunner.OpenFolder(GameRunner.ClipsFolder) });
+                    _rows.Add(new Row { Label = "Back", Press = () => Show(Page.Profile) });
+                    break;
+                case Page.Saved:
+                case Page.History:
+                    foreach (var rp in _replays)
+                    {
+                        var path = rp.Key;
+                        var info = rp.Value;
+                        _rows.Add(new Row
+                        {
+                            Label = info == null ? System.IO.Path.GetFileNameWithoutExtension(path) : ReplayTitle(info),
+                            Detail = info == null ? "Can't be read" : ReplayWhen(info),
+                            Detail2 = info == null ? null : ReplayWho(info),
+                            Saved = Current == Page.History && SavedAlready(path),
+                            Press = () => Runner.OpenReplay(path),
+                            Enabled = () => info != null,
+                        });
+                    }
+                    _rows.Add(new Row { Label = "Back", Press = () => Show(Page.Replays) });
                     break;
                 case Page.Online:
                     _rows.Add(new Row { Label = "Host on Steam", Detail = "Friends join through Steam, no setup", Press = () => Runner.HostSteam(), Enabled = () => SteamNet.Ready });
@@ -310,13 +357,18 @@ namespace UltraPuck.Game
             if (m.Back)
             {
                 if (Current != Page.Main) Sound.Back(); // the first page has nowhere to go back to
-                if (Current == Page.Online) Show(Page.Main);
+                if (Current == Page.Online || Current == Page.Profile) Show(Page.Main);
+                else if (Current == Page.Character || Current == Page.Replays) Show(Page.Profile);
+                else if (Current == Page.Saved || Current == Page.History) Show(Page.Replays);
                 else if (Current == Page.JoinIp || Current == Page.Browse) Show(Page.Online);
                 else if (Current == Page.Friends) Show(Page.OnlineLobby);
                 else if (Current == Page.OnlineLobby) OpenOptions(false);
                 return;
             }
             if (_rows.Count == 0) return;
+            if (Current == Page.Character && _focus == 1 && Time.unscaledTime >= _nextBoom) { Runner.PreviewBoom(); _nextBoom = Time.unscaledTime + 3.5f; }
+            if (Current == Page.Saved && DeletePressed()) DeleteReplay(_focus);
+            if (Current == Page.History && (DeletePressed() || (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.rKey.wasPressedThisFrame))) SaveHistory(_focus);
             if (m.Y != 0)
             {
                 var was = _focus;
@@ -350,7 +402,7 @@ namespace UltraPuck.Game
             if (Current == Page.Title) { TitleScreen.Draw(Time.unscaledTime - _titleAt, 0f); return; }
 
             // the main page shows the live match behind; the other pages a plain backdrop (it's too busy there)
-            if (Current != Page.Main) Ui.Box(new Rect(0f, 0f, Ui.W, Ui.H), Palette.Background, 0f);
+            if (Current != Page.Main && Current != Page.Character) Ui.Box(new Rect(0f, 0f, Ui.W, Ui.H), Palette.Background, 0f);
             if (Current == Page.OnlineLobby) { Ui.Flat = true; try { Lobby(t); } finally { Ui.Flat = false; } return; }
             // straight from the title screen: the panel slides in from the left while the name flies up to its place
             var leave = (Time.unscaledTime - _leftTitleAt) / TitleScreen.LeaveTime;
@@ -363,8 +415,11 @@ namespace UltraPuck.Game
             // the shadow as tight to these small letters as the name's is to its big ones (the usual 1.5 / 2 sat apart from them)
             Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim, new Vector2(0.6f, 0.8f));
 
+            if (Current == Page.Character) CharacterPreview(t);
             // the main page's choices sit right under the title (the other pages have a line of subtitle there)
-            Rows(x, Current == Page.Main ? 160f : 220f, 460f, 64f, 10f, 26, t, Current == Page.Friends ? Ui.H - 130f : float.MaxValue);
+            var lists = Current == Page.Saved || Current == Page.History;
+            if (lists) Rows(x, 200f, 490f, 92f, 10f, 24, t, Ui.H - 130f);
+            else Rows(x, Current == Page.Main ? 160f : 220f, 460f, 64f, 10f, 26, t, Current == Page.Friends ? Ui.H - 130f : float.MaxValue);
 
             var status = Status();
             if (!string.IsNullOrEmpty(status)) Ui.Label(new Rect(x, Ui.H - 120f, 540f, 80f), status, WrapStyle(), new Color(1f, 1f, 1f, 0.65f));
@@ -524,6 +579,8 @@ namespace UltraPuck.Game
                 var pad = rowH >= 60f ? 26f : 16f;
                 Ui.Label(new Rect(r.x + pad, r.y + (detail ? 6f : 0f), r.width - pad - 10f, detail ? 36f : r.height), label, Ui.Font(font, i == _focus), col);
                 if (detail) Ui.Label(new Rect(r.x + pad + 1f, r.y + 36f, r.width - 40f, 22f), row.Detail, Ui.Font(14), new Color(1f, 1f, 1f, 0.5f * appear));
+                if (row.Detail2 != null && rowH >= 84f) Ui.Label(new Rect(r.x + pad + 1f, r.y + 60f, r.width - 40f, 22f), row.Detail2, Ui.Font(14), new Color(1f, 1f, 1f, 0.72f * appear));
+                if (row.Saved) Ui.Label(new Rect(r.x, r.y + 8f, r.width - 16f, 26f), "Saved", Ui.Font(13, true, TextAnchor.MiddleRight), new Color(1f, 0.85f, 0.3f, 0.85f * appear));
                 if (on && r.Contains(mouse) && Time.frameCount != _openedFrame && Ui.TakeClick())
                 {
                     if (row.Step != null) { var d = mouse.x < r.center.x ? -1 : 1; row.Step(d); Sound.Step(d); }
@@ -552,6 +609,116 @@ namespace UltraPuck.Game
             if (r.Contains(Ui.Mouse) && Ui.TakeClick()) _typing = true;
         }
 
+        // ------------------------------------------------------------------ Profile
+
+        private float _nextBoom;
+        private readonly List<KeyValuePair<string, MatchReplay>> _replays = new List<KeyValuePair<string, MatchReplay>>();
+        private int _confirmDelete = -1;
+        private float _confirmAt;
+
+        private void LoadReplays(string folder)
+        {
+            _replays.Clear();
+            _confirmDelete = -1;
+            foreach (var path in GameRunner.ReplayFiles(folder))
+            {
+                MatchReplay info = null;
+                try { info = MatchReplay.LoadInfo(path); }
+                catch (Exception e) { Debug.LogWarning("Ultra Puck: replay " + path + ": " + e.Message); }
+                _replays.Add(new KeyValuePair<string, MatchReplay>(path, info));
+            }
+        }
+
+        /// <summary>The rink and the score, e.g. "Hockey Rink     Red 3 : 1 Blue".</summary>
+        private static string ReplayTitle(MatchReplay r)
+        {
+            return r.MapName + "      " + TeamName(r.Colour0) + "  " + r.Score0 + " : " + r.Score1 + "  " + TeamName(r.Colour1);
+        }
+
+        private static string TeamName(int colour) { return Palette.ColourNames[Mathf.Clamp(colour, 0, Palette.ColourNames.Length - 1)]; }
+
+        /// <summary>When it was played and how long it went on.</summary>
+        private static string ReplayWhen(MatchReplay r)
+        {
+            var s = Mathf.RoundToInt(r.Seconds);
+            return r.When.ToString("ddd d MMM, HH:mm") + "      " + (s / 60) + ":" + (s % 60).ToString("00") + " long";
+        }
+
+        /// <summary>Who played, by team ("Red: Ann, Bot   Blue: Cy, 2 bots").</summary>
+        private static string ReplayWho(MatchReplay r)
+        {
+            if (r.Casts.Count == 0) return "";
+            // everyone who played at any point, on the team they finished on
+            var names = new List<string>[] { new List<string>(), new List<string>() };
+            var bots = new int[2];
+            var last = r.Casts[r.Casts.Count - 1];
+            for (var i = 0; i < last.Names.Length; i++)
+            {
+                var t = i < last.Teams.Length ? last.Teams[i] & 1 : 0;
+                if (last.Names[i] == "Bot") bots[t]++;
+                else if (!names[t].Contains(last.Names[i])) names[t].Add(last.Names[i]);
+            }
+            var parts = new List<string>();
+            for (var t = 0; t < 2; t++)
+            {
+                var team = new List<string>(names[t]);
+                if (bots[t] > 0) team.Add(bots[t] == 1 ? "a bot" : bots[t] + " bots");
+                parts.Add(TeamName(t == 0 ? r.Colour0 : r.Colour1) + ": " + (team.Count > 0 ? string.Join(", ", team.ToArray()) : "nobody"));
+            }
+            return string.Join("      ", parts.ToArray());
+        }
+
+        private static bool SavedAlready(string historyPath)
+        {
+            return System.IO.File.Exists(System.IO.Path.Combine(GameRunner.ReplaysFolder, System.IO.Path.GetFileName(historyPath)));
+        }
+
+        /// <summary>Match history: keep row <paramref name="i"/> in the saved replays.</summary>
+        private void SaveHistory(int i)
+        {
+            if (i < 0 || i >= _replays.Count || _replays[i].Value == null) return;
+            if (SavedAlready(_replays[i].Key)) { Sound.Deny(); return; }
+            if (GameRunner.SaveFromHistory(_replays[i].Key)) { Sound.Select(); Toasts.Show("Saved. It's in Saved replays now.", 3f); }
+        }
+
+        /// <summary>Y / Triangle, or Delete / N, on the replays page.</summary>
+        private static bool DeletePressed()
+        {
+            if (LocalPlayers.Blocked) return false;
+            foreach (var g in UnityEngine.InputSystem.Gamepad.all) if (g.buttonNorth.wasPressedThisFrame) return true;
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            return kb != null && (kb.deleteKey.wasPressedThisFrame || kb.nKey.wasPressedThisFrame);
+        }
+
+        /// <summary>Delete the replay on row <paramref name="i"/>: the first press asks, the second (within a few seconds) deletes.</summary>
+        private void DeleteReplay(int i)
+        {
+            if (i < 0 || i >= _replays.Count) return;
+            if (_confirmDelete != i || Time.unscaledTime - _confirmAt > 4f)
+            {
+                _confirmDelete = i;
+                _confirmAt = Time.unscaledTime;
+                Sound.Move();
+                return;
+            }
+            try { System.IO.File.Delete(_replays[i].Key); Sound.Back(); }
+            catch (Exception e) { Sound.Deny(); Message = "Couldn't delete it: " + e.Message; }
+            LoadReplays(GameRunner.ReplaysFolder);
+            _focus = Mathf.Clamp(i, 0, Mathf.Max(0, _replays.Count - 1));
+        }
+
+        /// <summary>Edit character: the banner as it'll look, to the right of the menu.</summary>
+        private void CharacterPreview(float t)
+        {
+            var a = Ui.EaseOut((t - 0.15f) / 0.35f);
+            var x = Mathf.Max(660f, Ui.W - 620f);
+            var bw = Mathf.Min(560f, Ui.W - x - 30f);
+            Ui.Label(new Rect(x, Ui.H - 330f, bw, 24f), "Your replay banner", Ui.Font(15, true), new Color(1f, 1f, 1f, 0.7f * a));
+            Banners.Draw(new Rect(x, Ui.H - 300f, Mathf.Min(280f, bw), 52f), Cosmetics.MyBanner, Cosmetics.MyBannerColour, 0, Settings.PlayerName, "GOAL", "Assist: Bot", a, 0);
+            Ui.Label(new Rect(x, Ui.H - 180f, bw, 44f), "Shown when your goal is replayed. Your goal explosion goes off over here, and the bots dash with your trail.",
+                WrapStyle(), new Color(1f, 1f, 1f, 0.55f * a));
+        }
+
         private string Subtitle()
         {
             switch (Current)
@@ -560,6 +727,11 @@ namespace UltraPuck.Game
                 case Page.JoinIp: return "Join by IP";
                 case Page.Browse: return "Games on Steam";
                 case Page.Friends: return "Invite friends";
+                case Page.Profile: return "Profile";
+                case Page.Character: return "Edit character";
+                case Page.Replays: return "Replays";
+                case Page.Saved: return "Saved replays";
+                case Page.History: return "Match history";
                 case Page.OnlineLobby: return Session == null ? "" : Session.Current == NetSession.Stage.Connecting ? "Connecting..." : Session.IsHost ? "Your online game" : "Online game";
                 default: return "";
             }
@@ -577,6 +749,12 @@ namespace UltraPuck.Game
                     return SteamNet.Found.Count == 0 && !SteamNet.Searching ? "No open games found. Friends can also invite you from Steam." : "";
                 case Page.Friends:
                     return _friends.Count == 0 ? "None of your Steam friends are online." : "";
+                case Page.Saved:
+                    return _replays.Count == 0 ? "No saved replays yet. After a match, choose Save replay on the results screen, or save one from Match history." : "";
+                case Page.History:
+                    return _replays.Count == 0 ? "No matches yet. Every match you finish shows up here (the last " + GameRunner.HistoryKept + ")." : "";
+                case Page.Character:
+                    return "Your look, for everyone to see online. The bots behind are wearing it.";
                 case Page.OnlineLobby:
                     if (Session == null) return "";
                     var s = Session.Describe();
@@ -608,6 +786,9 @@ namespace UltraPuck.Game
                 case Page.JoinIp: return _typing ? "Type the address, then Enter      Esc: back" : "{confirm} Choose      {back} Back";
                 case Page.Main: return "";
                 case Page.Title: return "";
+                case Page.Saved: return _replays.Count == 0 ? "{confirm} Choose      {back} Back" : _confirmDelete >= 0 ? "{delete} Press again to delete      {back} Back" : "{confirm} Watch      {delete} Delete      {back} Back";
+                case Page.History: return _replays.Count == 0 ? "{confirm} Choose      {back} Back" : "{confirm} Watch      {savereplay} Save      {back} Back";
+                case Page.Character: return "{side} Change      {back} Back";
                 default: return "{confirm} Choose      {back} Back";
             }
         }

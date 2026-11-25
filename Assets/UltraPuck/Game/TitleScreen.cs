@@ -199,21 +199,21 @@ namespace UltraPuck.Game
                     var was = Mathf.Lerp(-puck, cy, Fall((a - PuckAt - (i + 1) * TrailStep) / PuckFall));
                     if (py - was < puck * 0.5f) continue; // not moving (landed), or too close to show
                     var d = puck * (0.92f - i * 0.1f);
-                    Ui.Box(new Rect(cx - d / 2f, was - d / 2f, d, d), new Color(1f, 1f, 1f, 0.42f * (1f - i / (float)TrailDots) * stay), d / 2f);
+                    Ui.Disc(new Rect(cx - d / 2f, was - d / 2f, d, d), new Color(1f, 1f, 1f, 0.42f * (1f - i / (float)TrailDots) * stay));
                 }
                 // a ring of light off it as it lands
                 var hit = (a - BeamsAt) / 0.9f;
                 if (hit > 0f && hit < 1f)
                 {
                     var d = puck + 170f * Ui.EaseOut(hit);
-                    Ui.Box(new Rect(cx - d / 2f, cy - d / 2f, d, d), new Color(1f, 1f, 1f, 0.22f * (1f - hit) * stay), d / 2f);
+                    Ui.Disc(new Rect(cx - d / 2f, cy - d / 2f, d, d), new Color(1f, 1f, 1f, 0.22f * (1f - hit) * stay));
                 }
                 var size = puck;
                 var edge = Palette.PuckEdge; edge.a = stay;
                 var body = Palette.Puck; body.a = stay;
                 var rim = 5f * big / 1.75f;
-                Ui.Box(new Rect(cx - size / 2f, py - size / 2f, size, size), edge, size / 2f);
-                Ui.Box(new Rect(cx - size / 2f + rim, py - size / 2f + rim, size - rim * 2f, size - rim * 2f), body, size / 2f - rim);
+                Ui.Disc(new Rect(cx - size / 2f, py - size / 2f, size, size), edge);
+                Ui.Disc(new Rect(cx - size / 2f + rim, py - size / 2f + rim, size - rim * 2f, size - rim * 2f), body);
             }
 
             // the prompt, breathing slowly so it catches the eye
