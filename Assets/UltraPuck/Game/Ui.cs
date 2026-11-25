@@ -48,8 +48,9 @@ namespace UltraPuck.Game
 
         public static bool MouseMoved
         {
-            // a real move only: a resting mouse (or a bumped desk) mustn't pull the focus away from a controller
-            get { InputMode.Update(); return InputMode.MouseUsed && !LocalPlayers.Blocked; }
+            // a real move only: a resting mouse (or a bumped desk) mustn't pull the focus away from a controller, and
+            // the wheel isn't a move (scrolling over a row would otherwise snap the focus straight back to that row)
+            get { InputMode.Update(); return InputMode.MouseUsed && InputMode.MouseMovedNow && !LocalPlayers.Blocked; }
         }
 
         /// <summary>The pointer moved this frame, by any amount (hovering follows even a very slow mouse).</summary>

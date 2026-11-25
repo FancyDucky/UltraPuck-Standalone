@@ -337,9 +337,105 @@ namespace UltraPuck.Tests
             Give(s, 0, "ultrapuck.doubleagent");
             _sim.FaceOff(s);
             Assert.Greater(s.Players[0].Pos.X.ToDouble(), 0.0, "on blue's side");
-            Assert.Greater(s.Players[0].Facing.X.ToDouble(), 0.0, "still facing the goal they attack");
+            Assert.AreEqual(s.Players[1].Facing, s.Players[0].Facing, "facing the puck, like the players they stand with");
+            Assert.Less(s.Players[0].Facing.X.ToDouble(), 0.0);
             Assert.Greater(s.Players[1].Pos.X.ToDouble(), 0.0, "blue is still at home");
             Assert.AreNotEqual(s.Players[0].Pos, s.Players[1].Pos);
+        }
+
+        /// <summary>
+        /// A Double Agent moves one spot round the other side's face-off group each face-off, the kick-off spot included,
+        /// never on top of anyone; the home players share the rest.
+        /// </summary>
+        [Test]
+        public void DoubleAgentTakesTurnsRoundTheOtherSidesSpots()
+        {
+            var s = Game(0, 1, 1, 1);
+            Give(s, 0, "ultrapuck.doubleagent");
+            var seen = new System.Collections.Generic.HashSet<FixVec2>();
+            var kickOffs = 0;
+            for (var k = 0; k < 8; k++)
+            {
+                _sim.FaceOff(s);
+                var agent = s.Players[0].Pos;
+                Assert.Greater(agent.X.ToDouble(), 0.0, "on blue's side");
+                for (var i = 1; i < 4; i++) Assert.AreNotEqual(agent, s.Players[i].Pos, "not on top of a blue player");
+                var group = new System.Collections.Generic.HashSet<FixVec2>();
+                for (var slot = 0; slot < 4; slot++) group.Add(_sim.FaceOffSpot(1, slot).Pos);
+                Assert.IsTrue(group.Contains(agent), "in blue's group");
+                if (agent == _sim.FaceOffSpot(1, 0).Pos) kickOffs++;
+                seen.Add(agent);
+            }
+            Assert.AreEqual(4, seen.Count, "every one of the four spots in turn");
+            Assert.AreEqual(2, kickOffs, "the kick-off spot every fourth face-off");
+        }
+
+        /// <summary>
+        /// Double Agent's disguise: from the face-off the agent goes under an opponent's name (looks only), through the
+        /// countdown and the first second of play, then fades back over 1.5 s and is gone.
+        /// </summary>
+        [Test]
+        public void DoubleAgentStartsInDisguise()
+        {
+            var s = Game(0, 1, 1);
+            Give(s, 0, "ultrapuck.doubleagent");
+            _sim.FaceOff(s);
+            var a = s.Players[0];
+            Assert.IsTrue(a.Disguised);
+            Assert.That(a.DisguiseAs, Is.EqualTo(1).Or.EqualTo(2), "an opponent's name");
+            Assert.IsFalse(s.Players[1].Disguised, "the others aren't");
+            for (var t = 0; t < 1200 && s.Phase == Phase.Countdown; t++) _sim.Step(s, null);
+            Assert.AreEqual(Phase.Play, s.Phase);
+            Assert.AreEqual(0.0, a.DisguiseTime.ToDouble(), 0.02, "the clock starts when the puck drops");
+            var hold = _sim.T.DisguiseHold + _sim.T.DisguiseFade;
+            var ticks = (hold * Fix.FromInt(_sim.T.TicksPerSecond)).FloorToInt();
+            for (var t = 0; t < ticks - 2; t++) _sim.Step(s, null);
+            Assert.IsTrue(a.Disguised, "still fading back just before 2.5 s");
+            for (var t = 0; t < 4; t++) _sim.Step(s, null);
+            Assert.IsFalse(a.Disguised, "the disguise has worn off");
+            Assert.AreEqual(-1, a.DisguiseAs, "their own name again");
+            // the same face-off on another PC borrows the same name
+            var s2 = Game(0, 1, 1);
+            Give(s2, 0, "ultrapuck.doubleagent");
+            var s3 = Game(0, 1, 1);
+            Give(s3, 0, "ultrapuck.doubleagent");
+            _sim.FaceOff(s2); _sim.FaceOff(s3);
+            Assert.AreEqual(s2.Players[0].DisguiseAs, s3.Players[0].DisguiseAs);
+            Assert.AreEqual(s2.Checksum(), s3.Checksum());
+        }
+
+        /// <summary>
+        /// A whole team of Double Agents (as Team Vote gives it): each takes its own spot on the other side, they borrow
+        /// different names while there are enough to go round, and Head Start's puck goes to a player on their own side
+        /// when there is one.
+        /// </summary>
+        [Test]
+        public void SeveralDoubleAgentsShareTheOtherSide()
+        {
+            var s = Game(0, 0, 1, 1);
+            Give(s, 0, "ultrapuck.doubleagent");
+            Give(s, 1, "ultrapuck.doubleagent");
+            for (var k = 0; k < 4; k++)
+            {
+                _sim.FaceOff(s);
+                var spots = new System.Collections.Generic.HashSet<FixVec2>();
+                foreach (var p in s.Players) spots.Add(p.Pos);
+                Assert.AreEqual(4, spots.Count, "nobody on top of anyone");
+                Assert.Greater(s.Players[0].Pos.X.ToDouble(), 0.0);
+                Assert.Greater(s.Players[1].Pos.X.ToDouble(), 0.0);
+                Assert.AreNotEqual(s.Players[0].DisguiseAs, s.Players[1].DisguiseAs, "two different names");
+                Assert.GreaterOrEqual(s.Players[0].DisguiseAs, 2);
+                Assert.GreaterOrEqual(s.Players[1].DisguiseAs, 2);
+            }
+            // one agent and a teammate at home, both with Head Start: the one at home starts with it
+            var h = Game(0, 0, 1, 1);
+            Give(h, 0, "ultrapuck.doubleagent", "ultrapuck.headstart");
+            Give(h, 1, "ultrapuck.headstart");
+            for (var k = 0; k < 4; k++)
+            {
+                _sim.FaceOff(h);
+                Assert.AreEqual(1, h.Carrier, "the teammate at home has the puck");
+            }
         }
 
         [Test]
@@ -1619,7 +1715,7 @@ namespace UltraPuck.Tests
             Assert.AreEqual(-5.0, s.Stones[0].A.Y.ToDouble(), 0.2, "along the shot");
             Assert.Greater(s.Stones[0].A.X.ToDouble(), -9.5, "starting past the shooter");
             Assert.Greater(len, 12.0, "a long way behind the puck");
-            Assert.LessOrEqual(len, 30.01, "no longer than 30");
+            Assert.LessOrEqual(len, 45.01, "no longer than 45");
             // someone skating across it is stopped
             var mid = s.Stones[s.Stones.Length / 2];
             var x = ((mid.A.X + mid.B.X) / 2).ToDouble();
@@ -1627,10 +1723,10 @@ namespace UltraPuck.Tests
             for (var t = 0; t < 90; t++) _sim.Step(s, new[] { default(PlayerInput), new PlayerInput { MoveY = -127 } });
             Assert.Greater(s.Players[1].Pos.Y.ToDouble(), -5.0, "can't get through");
             var first = s.Stones[0];
-            for (var t = 0; t < 120 * 4; t++) _sim.Step(s, new PlayerInput[2]);
-            Assert.AreEqual(first.A, s.Stones[0].A, "the first piece still standing after 4 s");
+            for (var t = 0; t < 120 * 9; t++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(first.A, s.Stones[0].A, "the first piece still standing after 9 s");
             for (var t = 0; t < 120 * 6; t++) _sim.Step(s, new PlayerInput[2]);
-            Assert.AreEqual(0, s.Stones.Length, "all crumbled (each piece lasts 5.5 s)");
+            Assert.AreEqual(0, s.Stones.Length, "all crumbled (each piece lasts 11 s)");
         }
 
         [Test]

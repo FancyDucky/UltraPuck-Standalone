@@ -69,6 +69,12 @@ namespace UltraPuck.Core
         /// <summary>Which way the net's mouth opens (towards the ice), if the map says; bots skate round to that side to shoot.</summary>
         public FixVec2 Facing;
         public bool HasFacing;
+        /// <summary>
+        /// Which side of the net its team's face-off group stands, if the map says (a net turned round to open towards
+        /// the end wall: the group still stands on the middle side). Otherwise the mouth's side.
+        /// </summary>
+        public FixVec2 FaceOff;
+        public bool HasFaceOff;
         public bool Contains(FixVec2 p) { return p.X >= Min.X && p.X <= Max.X && p.Y >= Min.Y && p.Y <= Max.Y; }
 
         /// <summary>Whether a circle (the puck) at <paramref name="p"/> with radius <paramref name="r"/> touches the box.</summary>
@@ -176,6 +182,11 @@ namespace UltraPuck.Core
                 {
                     goal.Facing = Json.Vec(Json.Get(go, "facing"), what + ".facing").Normalized;
                     goal.HasFacing = goal.Facing.SqrLength.Raw > 0;
+                }
+                if (Json.Get(go, "faceoff") != null)
+                {
+                    goal.FaceOff = Json.Vec(Json.Get(go, "faceoff"), what + ".faceoff").Normalized;
+                    goal.HasFaceOff = goal.FaceOff.SqrLength.Raw > 0;
                 }
                 m.Goals.Add(goal);
             }

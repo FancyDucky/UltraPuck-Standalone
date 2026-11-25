@@ -16,7 +16,19 @@ namespace UltraPuck.Editor
     {
         private const string ScenePath = "Assets/Scenes/Rink.unity";
         private const string FlatPath = "Assets/Resources/Flat.mat";
-        private const string Output = "Builds/Windows/UltraPuck.exe";
+        private const string DefaultOutput = "Builds/Windows/UltraPuck.exe";
+        /// <summary>
+        /// Builds/Windows/UltraPuck.exe, or env var ULTRAPUCK_BUILD_OUT (a folder) for a test build while the usual
+        /// copy is open (the build can't replace a running exe).
+        /// </summary>
+        private static string Output
+        {
+            get
+            {
+                var dir = System.Environment.GetEnvironmentVariable("ULTRAPUCK_BUILD_OUT");
+                return string.IsNullOrEmpty(dir) ? DefaultOutput : Path.Combine(dir, "UltraPuck.exe");
+            }
+        }
 
         [MenuItem("Ultra Puck/Build Windows")]
         public static void BuildWindows()

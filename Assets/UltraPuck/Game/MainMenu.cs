@@ -50,7 +50,7 @@ namespace UltraPuck.Game
 
         public void Show(Page page)
         {
-            if (page != Current) { _focus = 0; _focusY = -1f; _openedAt = Time.unscaledTime; _openedFrame = Time.frameCount; }
+            if (page != Current) { _focus = 0; _focusY = -1f; _openedAt = Time.unscaledTime; _openedFrame = Time.frameCount; _scroll = 0; _scrollFocus = -1; }
             if (page != Page.OnlineLobby && page != Page.Friends) OptionsOpen = false;
             if (page == Page.Title && Current != Page.Title) _titleAt = Time.unscaledTime;
             if (page != Page.Main) _leftTitleAt = -100f;
@@ -73,6 +73,20 @@ namespace UltraPuck.Game
             Sound.Select();
             Show(Page.Main);
             _leftTitleAt = Time.unscaledTime;
+            _titleMouseHeld = true;
+        }
+
+        // the click (or key) that left the title screen: the menu's buttons take no mouse until it has been let go and
+        // the menu has finished sliding in
+        private bool _titleMouseHeld;
+
+        /// <summary>The main menu is still arriving from the title screen (or the button that left it is still down).</summary>
+        private bool MouseLocked()
+        {
+            if (Current != Page.Main) return false;
+            var m = UnityEngine.InputSystem.Mouse.current;
+            if (_titleMouseHeld && (m == null || (!m.leftButton.isPressed && !m.rightButton.isPressed))) _titleMouseHeld = false;
+            return _titleMouseHeld || Time.unscaledTime - _leftTitleAt < TitleScreen.LeaveTime;
         }
 
         /// <summary>The online lobby's options panel is open (the host's settings, inviting, leaving).</summary>
@@ -251,6 +265,8 @@ namespace UltraPuck.Game
         private List<SteamNet.Friend> _friends = new List<SteamNet.Friend>();
         private float _friendsAt;
         private int _scroll;
+        // the focus the scroll last followed: the list only jumps to the focus when it moves (the wheel scrolls freely)
+        private int _scrollFocus = -1;
         private float _scrollY;
         private readonly HashSet<ulong> _invited = new HashSet<ulong>();
 
@@ -301,8 +317,6 @@ namespace UltraPuck.Game
                 return;
             }
             if (_rows.Count == 0) return;
-            var wheel = UnityEngine.InputSystem.Mouse.current != null ? UnityEngine.InputSystem.Mouse.current.scroll.ReadValue().y : 0f;
-            if (wheel != 0f && Current == Page.Friends) m.Y = wheel > 0f ? 1 : -1;
             if (m.Y != 0)
             {
                 var was = _focus;
@@ -437,11 +451,6 @@ namespace UltraPuck.Game
             var p = new Rect(w / 2f - pw / 2f, h / 2f - ph / 2f + (1f - a) * 24f, pw, ph);
             Ui.Box(p, new Color(0.09f, 0.11f, 0.15f, 0.97f), 20f);
             Ui.Label(new Rect(p.x + 30f, p.y + 18f, pw - 60f, 44f), "Options", Ui.Font(28, true), Color.white);
-            if (Event.current.type == EventType.ScrollWheel && _rows.Count > 0)
-            {
-                _focus = Mathf.Clamp(_focus + (Event.current.delta.y > 0 ? 1 : -1), 0, _rows.Count - 1);
-                Event.current.Use();
-            }
             Rows(p.x + 20f, p.y + 76f, pw - 64f, rowH, gap, 19, Time.unscaledTime - _optionsAt, p.yMax - 44f);
             Glyphs.Hint(new Rect(p.x, p.yMax - 40f, pw, 28f), "{confirm} Choose      {side} Change      {back} Close", 14, new Color(1f, 1f, 1f, 0.55f));
             if (!p.Contains(Ui.Mouse) && Ui.TakeClick()) { Sound.Back(); OpenOptions(false); }
@@ -450,14 +459,25 @@ namespace UltraPuck.Game
         /// <summary>The page's buttons, in a column at (<paramref name="x"/>, <paramref name="top"/>).</summary>
         private void Rows(float x, float top, float w, float rowH, float gap, int font, float t, float bottom = float.MaxValue)
         {
-            var mouse = Ui.Mouse;
+            // straight from the title screen: the mouse does nothing until the menu is in place
+            var mouse = MouseLocked() ? new Vector2(-10000f, -10000f) : Ui.Mouse;
             // more rows than fit (a long friends list): scroll so the highlighted one is in view
             var fit = bottom >= float.MaxValue ? _rows.Count : Mathf.Max(1, Mathf.FloorToInt((bottom - top + gap) / (rowH + gap)));
             if (_rows.Count <= fit) _scroll = 0;
             else
             {
-                if (_focus < _scroll) _scroll = _focus;
-                if (_focus >= _scroll + fit) _scroll = _focus - fit + 1;
+                if (_focus != _scrollFocus)
+                {
+                    if (_focus < _scroll) _scroll = _focus;
+                    if (_focus >= _scroll + fit) _scroll = _focus - fit + 1;
+                    _scrollFocus = _focus;
+                }
+                // the mouse wheel scrolls the list (the focus stays where it is)
+                if (Event.current.type == EventType.ScrollWheel)
+                {
+                    _scroll += Event.current.delta.y > 0 ? 1 : -1;
+                    Event.current.Use();
+                }
                 _scroll = Mathf.Clamp(_scroll, 0, _rows.Count - fit);
             }
             _scrollY = Mathf.Lerp(_scrollY, _scroll, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 18f));

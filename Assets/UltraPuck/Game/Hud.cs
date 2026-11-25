@@ -89,7 +89,8 @@ namespace UltraPuck.Game
             if (Reticle) DrawReticle();
             if (_state == null || _covered) return;
             NameTags();
-            if (Board && _state.Phase != Phase.GameOver) { Scoreboard(w, h); return; }
+            // holding the scoreboard button brings up the corner card list too (whatever the setting); let go and it goes
+            if (Board && _state.Phase != Phase.GameOver) { Scoreboard(w, h); CornerCards(h, true); return; }
             CornerCards(h);
 
             // score: team name, symbol and colour, so it reads without relying on colour
@@ -281,8 +282,8 @@ namespace UltraPuck.Game
         {
             var n = _state.Players.Length;
             const float rowH = 34f;
-            var pw = Mathf.Min(760f, w - 40f);
-            var ph = 190f + n * rowH;
+            var pw = Mathf.Min(880f, w - 40f);
+            var ph = 212f + n * rowH;
             var x = w / 2f - pw / 2f;
             var y = Mathf.Max(70f, h / 2f - ph / 2f);
             Ui.Box(new Rect(x, y, pw, ph), Ui.Panel, 20f);
@@ -300,18 +301,19 @@ namespace UltraPuck.Game
             if (worst == mvp || n < 2) worst = -1;
 
             // the table: the winners first, then the others
-            string[] heads = { "Goals", "Assists", "Saves", "Bumps" };
-            var colW = 82f;
+            string[] heads = { "Goals", "Assists", "Saves", "Bumps", "Points" };
+            var colW = 76f;
             var cols = x + pw - 30f - colW * heads.Length;
             var ty = y + 104f;
-            var head = Ui.Font(14, true, TextAnchor.MiddleCenter);
-            for (var c = 0; c < heads.Length; c++) Ui.Label(new Rect(cols + c * colW, ty, colW, 24f), heads[c], head, Ui.TextDim);
+            // own copies: Ui.Font hands out one shared style per size, and other labels change its alignment
+            var head = new GUIStyle(Ui.Font(14, true, TextAnchor.MiddleCenter));
+            for (var c = 0; c < heads.Length; c++) Ui.Label(new Rect(cols + c * colW, ty, colW, 24f), heads[c], head, c == heads.Length - 1 ? Ui.Text : Ui.TextDim);
             ty += 28f;
             var order = new System.Collections.Generic.List<int>();
             var win = _state.LastScorer < 0 ? 0 : _state.LastScorer;
             for (var pass = 0; pass < 2; pass++)
                 for (var i = 0; i < n; i++) if ((_state.Players[i].Team == win) == (pass == 0)) order.Add(i);
-            var cell = Ui.Font(18, true, TextAnchor.MiddleCenter);
+            var cell = new GUIStyle(Ui.Font(18, true, TextAnchor.MiddleCenter));
             foreach (var i in order)
             {
                 var p = _state.Players[i];
@@ -322,10 +324,11 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(r.x + 18f, r.y, 220f, r.height), name, Ui.Font(18, true), Color.white);
                 if (i == mvp) Badge(new Rect(r.x + 240f, r.y + 4f, 64f, r.height - 8f), "MVP", new Color(0.95f, 0.75f, 0.2f), new Color(0.15f, 0.1f, 0f));
                 else if (i == worst) Badge(new Rect(r.x + 240f, r.y + 4f, 140f, r.height - 8f), "Tried their best", new Color(0.45f, 0.47f, 0.52f), Color.white);
-                int[] v = { p.Goals, p.Assists, p.Saves, p.Bumps };
+                int[] v = { p.Goals, p.Assists, p.Saves, p.Bumps, Rating(p) };
                 for (var c = 0; c < v.Length; c++) Ui.Label(new Rect(cols + c * colW, r.y, colW, r.height), v[c].ToString(), cell, v[c] > 0 ? Color.white : new Color(1f, 1f, 1f, 0.35f));
                 ty += rowH;
             }
+            Ui.Label(new Rect(x, ty + 2f, pw, 20f), "Points: goal 3, assist 2, save 2, bump 1", Ui.Font(12, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.35f));
             Glyphs.Hint(new Rect(x, y + ph - 46f, pw, 34f), "{start} Play again      {back} Main menu", 18, Ui.TextDim);
         }
 
@@ -349,31 +352,12 @@ namespace UltraPuck.Game
             Ui.Label(r, what + "...", Ui.Font(14, true, TextAnchor.MiddleCenter), Color.white);
         }
 
-        /// <summary>"Speed Up x2,  Puck Gun" — a player's cards, the same card counted.</summary>
-        private string CardList(PlayerState p)
-        {
-            if (_sim == null || _sim.Cards == null) return "";
-            var names = new System.Text.StringBuilder();
-            var seen = new System.Collections.Generic.List<int>();
-            foreach (var c in p.Cards)
-            {
-                if (seen.Contains(c) || c < 0 || c >= _sim.Cards.Cards.Count) continue;
-                seen.Add(c);
-                var n = 0;
-                foreach (var d in p.Cards) if (d == c) n++;
-                if (names.Length > 0) names.Append(",  ");
-                names.Append(_sim.Cards.Cards[c].Name);
-                if (n > 1) names.Append(" x" + n);
-            }
-            return names.ToString();
-        }
-
         /// <summary>While View / Tab is held: the score, and everyone's cards and stats so far, team by team.</summary>
         private void Scoreboard(float w, float h)
         {
             var n = _state.Players.Length;
-            const float rowH = 50f;
-            var pw = Mathf.Min(860f, w - 40f);
+            const float rowH = 44f;
+            var pw = Mathf.Min(900f, w - 40f);
             var ph = 120f + n * rowH + 8f;
             var x = w / 2f - pw / 2f;
             var y = Mathf.Max(76f, h / 2f - ph / 2f);
@@ -384,15 +368,14 @@ namespace UltraPuck.Game
             Ui.Label(new Rect(x + pw / 2f - 40f, y + 12f, 80f, 50f), ":", big, Color.white);
             Ui.Label(new Rect(x + pw / 2f + 40f, y + 12f, pw / 2f - 40f, 50f), _state.Score[1] + "  " + Palette.TeamName(1), new GUIStyle(big) { alignment = TextAnchor.MiddleLeft }, Palette.Team(1));
 
-            string[] heads = { "Goals", "Assists", "Saves", "Bumps" };
-            const float colW = 74f;
+            string[] heads = { "Goals", "Assists", "Saves", "Bumps", "Points" };
+            const float colW = 70f;
             var cols = x + pw - 26f - colW * heads.Length;
             var ty = y + 74f;
-            var head = Ui.Font(13, true, TextAnchor.MiddleCenter);
-            for (var c = 0; c < heads.Length; c++) Ui.Label(new Rect(cols + c * colW, ty, colW, 22f), heads[c], head, Ui.TextDim);
+            var head = new GUIStyle(Ui.Font(13, true, TextAnchor.MiddleCenter));
+            for (var c = 0; c < heads.Length; c++) Ui.Label(new Rect(cols + c * colW, ty, colW, 22f), heads[c], head, c == heads.Length - 1 ? Ui.Text : Ui.TextDim);
             ty += 26f;
-            var cell = Ui.Font(18, true, TextAnchor.MiddleCenter);
-            var small = new GUIStyle(Ui.Font(12)) { clipping = TextClipping.Clip };
+            var cell = new GUIStyle(Ui.Font(18, true, TextAnchor.MiddleCenter));
             for (var team = 0; team < 2; team++)
                 for (var i = 0; i < n; i++)
                 {
@@ -402,19 +385,17 @@ namespace UltraPuck.Game
                     Ui.Box(r, new Color(1f, 1f, 1f, 0.05f), 8f);
                     Ui.Box(new Rect(r.x, r.y, 5f, r.height), Palette.Team(p.Team), 2.5f);
                     var name = SeatName != null ? SeatName(i) : "P" + (i + 1);
-                    Ui.Label(new Rect(r.x + 16f, r.y + 2f, cols - r.x - 24f, 24f), name, Ui.Font(17, true), Color.white);
-                    var cards = CardList(p);
-                    Ui.Label(new Rect(r.x + 16f, r.y + 24f, cols - r.x - 24f, 18f), cards.Length > 0 ? cards : "No cards yet", small, new Color(1f, 1f, 1f, cards.Length > 0 ? 0.7f : 0.35f), false);
-                    int[] v = { p.Goals, p.Assists, p.Saves, p.Bumps };
+                    Ui.Label(new Rect(r.x + 16f, r.y, cols - r.x - 24f, r.height), name, Ui.Font(17, true), Color.white);
+                    int[] v = { p.Goals, p.Assists, p.Saves, p.Bumps, Rating(p) };
                     for (var c = 0; c < v.Length; c++) Ui.Label(new Rect(cols + c * colW, r.y, colW, r.height), v[c].ToString(), cell, v[c] > 0 ? Color.white : new Color(1f, 1f, 1f, 0.35f));
                     ty += rowH;
                 }
         }
 
         /// <summary>Everyone's cards, small, in the lower-left corner (Settings > Gameplay).</summary>
-        private void CornerCards(float h)
+        private void CornerCards(float h, bool always = false)
         {
-            if (!Settings.CornerCards || _sim == null || _sim.Cards == null) return;
+            if ((!Settings.CornerCards && !always) || _sim == null || _sim.Cards == null) return;
             var lines = new System.Collections.Generic.List<int>();
             for (var i = 0; i < _state.Players.Length; i++) if (_state.Players[i].Cards.Length > 0) lines.Add(i);
             if (lines.Count == 0) return;
@@ -455,35 +436,44 @@ namespace UltraPuck.Game
             var team = 0;
             if (_local != null)
                 foreach (var s in _local.Slots) if (!s.Demo) { team = s.Team; break; }
-            var c = Settings.ReticleTint(team); c.a = 0.92f;
-            var dim = new Color(0f, 0f, 0f, 0.35f);
-            var scale = 0.7f + Settings.ReticleSize * 0.9f; // ~0.7 .. 1.6
+            var c = Settings.ReticleTint(team); c.a = 0.95f;
+            var scale = 1.1f * Settings.CrosshairSize / 100f; // 100%: the size the original crosshair had by default
+            DrawCrosshair(Settings.Crosshair, p, 34f * scale, c);
+        }
+
+        /// <summary>
+        /// Crosshair <paramref name="which"/> centred on <paramref name="at"/>, <paramref name="size"/> across, in
+        /// <paramref name="colour"/> with a soft dark copy behind it so it reads on the light ice too.
+        /// </summary>
+        public static void DrawCrosshair(int which, Vector2 at, float size, Color colour)
+        {
+            if (Crosshairs.IsOriginal(which)) { OriginalCrosshair(at, size / 34f, colour); return; }
+            var tex = Crosshairs.Get(which);
+            if (tex == null) return;
+            var r = new Rect(at.x - size / 2f, at.y - size / 2f, size, size);
+            var keep = GUI.color;
+            GUI.color = new Color(0f, 0f, 0f, colour.a * 0.45f);
+            GUI.DrawTexture(new Rect(r.x + 1f, r.y + 1f, r.width, r.height), tex);
+            GUI.color = colour;
+            GUI.DrawTexture(r, tex);
+            GUI.color = keep;
+        }
+
+        /// <summary>The game's first crosshair: a soft dark ring, a faint disc of the colour, a cross with a gap, and a dot.</summary>
+        private static void OriginalCrosshair(Vector2 p, float scale, Color c)
+        {
             var r = 14f * scale;
             var gap = 5f * scale;
             var arm = 10f * scale;
             var thick = Mathf.Max(1.5f, 2f * scale);
-            var style = Settings.ReticleStyle;
-            if (style == 0 || style == 1 || style == 2)
-            {
-                // soft shadow ring (crosshair, circle, dot)
-                Ui.Box(new Rect(p.x - r - 1f, p.y - r - 1f, (r + 1f) * 2f, (r + 1f) * 2f), dim, r + 1f);
-            }
-            if (style == 0 || style == 1)
-                Ui.Box(new Rect(p.x - r, p.y - r, r * 2f, r * 2f), new Color(c.r, c.g, c.b, 0.18f), r);
-            if (style == 0 || style == 3)
-            {
-                Ui.Box(new Rect(p.x - arm - gap, p.y - thick * 0.5f, arm, thick), c, 1f);
-                Ui.Box(new Rect(p.x + gap, p.y - thick * 0.5f, arm, thick), c, 1f);
-                Ui.Box(new Rect(p.x - thick * 0.5f, p.y - arm - gap, thick, arm), c, 1f);
-                Ui.Box(new Rect(p.x - thick * 0.5f, p.y + gap, thick, arm), c, 1f);
-            }
-            if (style == 0 || style == 2)
-            {
-                var d = style == 2 ? 4f * scale : 1.5f * scale;
-                Ui.Box(new Rect(p.x - d, p.y - d, d * 2f, d * 2f), c, d);
-            }
-            else if (style == 1)
-                Ui.Box(new Rect(p.x - 1.5f * scale, p.y - 1.5f * scale, 3f * scale, 3f * scale), c, 1.5f * scale);
+            Ui.Box(new Rect(p.x - r - 1f, p.y - r - 1f, (r + 1f) * 2f, (r + 1f) * 2f), new Color(0f, 0f, 0f, 0.35f * c.a), r + 1f);
+            Ui.Box(new Rect(p.x - r, p.y - r, r * 2f, r * 2f), new Color(c.r, c.g, c.b, 0.18f * c.a), r);
+            Ui.Box(new Rect(p.x - arm - gap, p.y - thick * 0.5f, arm, thick), c, 1f);
+            Ui.Box(new Rect(p.x + gap, p.y - thick * 0.5f, arm, thick), c, 1f);
+            Ui.Box(new Rect(p.x - thick * 0.5f, p.y - arm - gap, thick, arm), c, 1f);
+            Ui.Box(new Rect(p.x - thick * 0.5f, p.y + gap, thick, arm), c, 1f);
+            var d = 1.5f * scale;
+            Ui.Box(new Rect(p.x - d, p.y - d, d * 2f, d * 2f), c, d);
         }
 
         /// <summary>Tiny FPS in the top-left, like Steam's overlay (doesn't follow UI size).</summary>

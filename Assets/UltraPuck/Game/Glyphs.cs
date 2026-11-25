@@ -226,7 +226,9 @@ namespace UltraPuck.Game
             if (Controls.KeyboardOnly(a)) return a >= Controls.Act.AimLeft ? "{aim}" : "{move}"; // the sticks (not rebindable on a controller)
             var p1 = Controls.PadOf(a);
             var p2 = Controls.Pad2Of(a);
-            return p1 == p2 ? "{bindpad:" + n + "}" : "{bindpad:" + n + "}  or  {bindpad2:" + n + "}";
+            if (p1 == Controls.Pad.None && p2 == Controls.Pad.None) return "Not set";
+            if (p1 == Controls.Pad.None) return "{bindpad2:" + n + "}";
+            return p1 == p2 || p2 == Controls.Pad.None ? "{bindpad:" + n + "}" : "{bindpad:" + n + "}  or  {bindpad2:" + n + "}";
         }
 
         // ------------------------------------------------------------------ drawing a hint line

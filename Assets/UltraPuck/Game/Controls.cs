@@ -25,6 +25,8 @@ namespace UltraPuck.Game
             South, East, West, North,
             LeftShoulder, RightShoulder, LeftTrigger, RightTrigger,
             Select, Start, LeftStick, RightStick,
+            /// <summary>Not bound (cleared with Y / Triangle on the Controls tab).</summary>
+            None,
         }
 
         private static readonly Act[] All = (Act[])Enum.GetValues(typeof(Act));
@@ -132,6 +134,14 @@ namespace UltraPuck.Game
             return Enum.IsDefined(typeof(Pad), v) ? (Pad)v : DefaultPads2[i];
         }
 
+        /// <summary>Take the controller button(s) off <paramref name="a"/> (a keyboard-only action: its key).</summary>
+        public static void Clear(Act a)
+        {
+            if (KeyboardOnly(a)) { PlayerPrefs.SetInt("bind_key_" + (int)a, (int)Key.None); return; }
+            PlayerPrefs.SetInt("bind_pad_" + (int)a, (int)Pad.None);
+            PlayerPrefs.SetInt("bind_pad2_" + (int)a, (int)Pad.None);
+        }
+
         public static void SetPad2(Act a, Pad p)
         {
             PlayerPrefs.SetInt("bind_pad2_" + (int)a, (int)p);
@@ -182,6 +192,7 @@ namespace UltraPuck.Game
                 case Pad.Start: return "Menu / Start";
                 case Pad.LeftStick: return "Left stick click";
                 case Pad.RightStick: return "Right stick click";
+                case Pad.None: return "—";
                 default: return p.ToString();
             }
         }
@@ -191,7 +202,7 @@ namespace UltraPuck.Game
             if (KeyboardOnly(a)) return KeyName(KeyOf(a));
             var p1 = PadOf(a);
             var p2 = Pad2Of(a);
-            var pad = p1 == p2 ? PadName(p1) : PadName(p1) + "  or  " + PadName(p2);
+            var pad = p1 == p2 || p2 == Pad.None ? PadName(p1) : p1 == Pad.None ? PadName(p2) : PadName(p1) + "  or  " + PadName(p2);
             return KeyName(KeyOf(a)) + "   ·   " + pad;
         }
 

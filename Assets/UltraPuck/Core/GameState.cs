@@ -244,6 +244,15 @@ namespace UltraPuck.Core
         /// while the bot plays them, but their catch-up cards wait for them.)
         /// </summary>
         public bool BotCatchUp;
+        /// <summary>
+        /// Double Agent's disguise, looks only: true from a face-off on the other side until the colour has faded back
+        /// (<see cref="DisguiseTime"/> past Tuning's hold + fade). Shown in the other team's colour, under
+        /// <see cref="DisguiseAs"/>'s name (a player index; -1: no name to borrow).
+        /// </summary>
+        public bool Disguised;
+        public int DisguiseAs = -1;
+        /// <summary>Seconds of play since the disguised face-off (counts from the puck drop, not the countdown).</summary>
+        public Fix DisguiseTime;
 
         // card effects (seconds left, 0 = ready / not active)
         public Fix GunCooldown, InvisCooldown, InvisibleTime, ShockCooldown;
@@ -554,6 +563,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.Picked); Mix(ref h, p.PickKind); Mix(ref h, p.Rerolls); Mix(ref h, p.PickHeld ? 1 : 0);
                 Mix(ref h, p.Gifted); Mix(ref h, p.Gifts.Length); foreach (var c in p.Gifts) Mix(ref h, c);
                 Mix(ref h, p.PickRounds); Mix(ref h, p.CatchingUp ? 1 : 0); Mix(ref h, p.BotCatchUp ? 1 : 0);
+                Mix(ref h, p.Disguised ? 1 : 0); Mix(ref h, p.DisguiseAs); Mix(ref h, p.DisguiseTime);
                 Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);

@@ -840,6 +840,81 @@ namespace UltraPuck.Tests
         [Test]
         public void MirroredMatchesStayMirroredOnTheHockeyRink() { Mirrored(LoadMap("hockey-rink.json")); }
 
+        [Test]
+        public void MirroredMatchesStayMirroredOnTheBackwardsRink() { Mirrored(LoadMap("backwards-rink.json")); }
+
+        /// <summary>
+        /// The Backwards Rink is the Hockey Rink with each net turned round where it stands: the same boards, nets in the
+        /// same place, but open towards the end wall behind them, with room to skate round and shoot in.
+        /// </summary>
+        [Test]
+        public void TheBackwardsRinksNetsOpenTowardsTheEndWalls()
+        {
+            var hockey = LoadMap("hockey-rink.json");
+            var map = LoadMap("backwards-rink.json");
+            Assert.AreEqual("Backwards Rink", map.Name);
+            Assert.AreEqual(hockey.WallLines[0].Length, map.WallLines[0].Length, "the same boards");
+            foreach (var g in map.Goals)
+            {
+                var h = hockey.Goals.Find(x => x.Team == g.Team);
+                var mid = new FixVec2((g.Min.X + g.Max.X) / 2, (g.Min.Y + g.Max.Y) / 2);
+                var hmid = new FixVec2((h.Min.X + h.Max.X) / 2, (h.Min.Y + h.Max.Y) / 2);
+                Assert.AreEqual(hmid.X.ToDouble(), mid.X.ToDouble(), 0.35, "standing where the Hockey Rink's net does (the box is inset at its back wall)");
+                Assert.AreEqual(-h.Facing.X.ToDouble(), g.Facing.X.ToDouble(), 1e-3, "turned round");
+                Assert.Greater(FixVec2.Dot(g.Facing, mid - map.PuckSpot).ToDouble(), 0.0, "open away from the middle");
+                Assert.IsTrue(g.HasFaceOff);
+                Assert.Less(FixVec2.Dot(g.FaceOff, mid - map.PuckSpot).ToDouble(), 0.0, "the face-off on the middle side");
+                Assert.IsTrue(map.Inside(mid + g.Facing * Fix.FromInt(5)), "ice between the mouth and the end wall");
+                Assert.IsFalse(map.Blocked(mid, mid + g.Facing * Fix.FromInt(5)), "the mouth is open");
+                Assert.IsTrue(map.Blocked(mid, mid - g.Facing * Fix.FromInt(5)), "the back (towards the middle) is closed");
+            }
+        }
+
+        /// <summary>On the Backwards Rink a shot from the middle hits the back of the net; one into the mouth from behind scores.</summary>
+        [Test]
+        public void TheBackwardsNetsScoreOnlyThroughTheMouth()
+        {
+            var sim = new Simulation(LoadMap("backwards-rink.json"));
+            var s = sim.NewGame(new[] { 0 });
+            PlayNow(s);
+            s.Players[0].Pos = new FixVec2(Fix.Zero, Fix.FromInt(10));
+            var goal = sim.Map.Goals[0].Team == 1 ? sim.Map.Goals[0] : sim.Map.Goals[1]; // the right net (team 1's)
+            s.PuckPos = new FixVec2(goal.Min.X - Fix.FromInt(6), Fix.Zero);
+            s.PuckVel = new FixVec2(Fix.FromInt(40), Fix.Zero);
+            for (var t = 0; t < 60; t++) sim.Step(s, null);
+            Assert.AreEqual(0, s.Score[0] + s.Score[1], "no goal through the back");
+            Assert.Less(s.PuckPos.X.ToDouble(), goal.Min.X.ToDouble(), "it stayed on the middle side of the net");
+            // from the end wall side, into the mouth
+            s.PuckPos = new FixVec2(goal.Max.X + Fix.FromInt(5), Fix.Zero);
+            s.PuckVel = new FixVec2(Fix.FromInt(-30), Fix.Zero);
+            for (var t = 0; t < 60 && s.Phase == Phase.Play; t++) sim.Step(s, null);
+            Assert.AreEqual(1, s.Score[0], "a shot into the mouth scores for the team attacking that net");
+            // off the end wall and back into it counts too
+            var s2 = sim.NewGame(new[] { 0 });
+            PlayNow(s2);
+            s2.Players[0].Pos = new FixVec2(Fix.Zero, Fix.FromInt(10));
+            s2.PuckPos = new FixVec2(goal.Max.X + Fix.FromInt(2), Fix.Zero);
+            s2.PuckVel = new FixVec2(Fix.FromInt(25), Fix.Zero);
+            for (var t = 0; t < 240 && s2.Phase == Phase.Play; t++) sim.Step(s2, null);
+            Assert.AreEqual(1, s2.Score[0], "off the end wall and in");
+        }
+
+        /// <summary>The Backwards Rink: bots go round the nets to shoot into them, and both teams score.</summary>
+        [Test]
+        public void BotsScoreOnTheBackwardsRink()
+        {
+            var sim = new Simulation(LoadMap("backwards-rink.json"));
+            int[] goals = new int[2];
+            for (var k = 0; k < 20; k++)
+            {
+                var score = BotMatch(sim, new[] { 0, 1, 0, 1 }, 0x51ED27u + (uint)k * 7919u, 240);
+                goals[0] += score[0]; goals[1] += score[1];
+            }
+            TestContext.WriteLine("backwards-rink.json: goals red " + goals[0] + ", blue " + goals[1]);
+            Assert.Greater(goals[0] + goals[1], 10, "goals: orange " + goals[0] + " blue " + goals[1]);
+            Assert.Greater(goals[0], 0); Assert.Greater(goals[1], 0);
+        }
+
         /// <summary>The upright U Rink is the same either side of its middle too, bend, nets, spawns, route and all.</summary>
         [Test]
         public void MirroredMatchesStayMirroredOnTheURink() { Mirrored(LoadMap("u-rink.json")); }
@@ -928,6 +1003,7 @@ namespace UltraPuck.Tests
         /// </summary>
         [TestCase("test-rink.json")]
         [TestCase("hockey-rink.json")]
+        [TestCase("backwards-rink.json")]
         [TestCase("s-rink.json")]
         [TestCase("u-rink.json")]
         public void TheNetsAreThirtyPercentBiggerOnEveryRink(string file)
@@ -1173,6 +1249,7 @@ namespace UltraPuck.Tests
         [TestCase("test-rink.json")]
         [TestCase("hockey-rink.json")]
         [TestCase("big-rink.json")]
+        [TestCase("backwards-rink.json")]
         [TestCase("s-rink.json")]
         [TestCase("u-rink.json")]
         public void FaceOffGroupsFitInFrontOfTheNets(string file)

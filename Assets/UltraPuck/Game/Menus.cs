@@ -14,7 +14,7 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class Menus : MonoBehaviour
     {
-        public enum Page { None, Pause, Settings, Cards, Match, Team }
+        public enum Page { None, Pause, Settings, Cards, Match, Team, Crosshair }
 
         /// <summary>The card list for the Toggle Cards page (set by GameRunner).</summary>
         public UltraPuck.Core.CardLibrary Cards;
@@ -90,6 +90,8 @@ namespace UltraPuck.Game
         /// <summary>Rows shown at once; longer pages scroll with the focus.</summary>
         private const int MaxVisible = 8;
         private int _first;
+        // the focus the scroll last followed: the view only jumps to the focus when it moves (the wheel scrolls freely)
+        private int _firstFocus = -1;
 
         // ------------------------------------------------------------------ rows
 
@@ -106,6 +108,8 @@ namespace UltraPuck.Game
             public string Hint;
             public bool Text;                     // a text box (your name): press to type
             public Func<string> GlyphText;        // Controls rebinds: the binding as button pictures (instead of Value)
+            public Action Clear;                  // Controls rebinds: Y / Triangle takes the binding off
+            public Action<Rect> Picture;          // drawn on the right instead of Value (the crosshair in use)
         }
 
         // typing your name
@@ -278,6 +282,12 @@ namespace UltraPuck.Game
                         var at = Array.IndexOf(sizes, now);
                         return at >= 0 ? at : 0;
                     }, v => Settings.Resolution = sizes[v], "How many pixels the game draws. Lower is faster on slow PCs."));
+                    const float cursorSpan = Settings.CursorMax - Settings.CursorMin;
+                    var cursor = Slider("Mouse cursor size", () => (Settings.CursorSize - Settings.CursorMin) / cursorSpan,
+                        v => Settings.CursorSize = Settings.CursorMin + Mathf.RoundToInt(v * cursorSpan / 10f) * 10,
+                        v => Settings.CursorSize + "%", "How big the mouse pointer is in the menus: 100% is the normal size.");
+                    cursor.Step = d => Settings.CursorSize = Settings.CursorSize + d * 10;
+                    _rows.Add(cursor);
                     _rows.Add(Switch("V-Sync", () => Settings.VSync, v => Settings.VSync = v, "Matches your monitor's refresh rate and stops tearing."));
                     var caps = new string[Settings.FpsCaps.Length];
                     for (var k = 0; k < caps.Length; k++) caps[k] = Settings.FpsCaps[k] == 0 ? "Unlimited" : Settings.FpsCaps[k] + " fps";
@@ -309,7 +319,7 @@ namespace UltraPuck.Game
                     _rows.Add(Switch("Swap trail", () => Settings.SwapTrail, v => Settings.SwapTrail = v, "When you swap to a bot teammate, a trail shows where you went."));
                     _rows.Add(Choice("Check bar", new[] { "While recharging", "Always" }, () => Settings.DashBarAlways ? 1 : 0, v => Settings.DashBarAlways = v == 1));
                     _rows.Add(Choice("Corner card list", new[] { "Shown", "Hidden" }, () => Settings.CornerCards ? 0 : 1, v => Settings.CornerCards = v == 0,
-                        "Everyone's cards in the lower-left corner during a match. Hold Tab / View in a match for the full scoreboard."));
+                        "Everyone's cards in the lower-left corner during a match. They always show while you hold Tab / View for the scoreboard."));
                     _rows.Add(Switch("Auto-update", () => Settings.AutoUpdate, v => Settings.AutoUpdate = v, "Check for a new version when the game starts, and install it."));
                     break;
                 case 2:
@@ -332,11 +342,6 @@ namespace UltraPuck.Game
                         "How long the shot aim line is while you have the puck. 100% is the original length."));
                     _rows.Add(Switch("Swap rock line", () => Settings.RockLine, v => Settings.RockLine = v,
                         "A faint dotted line from you to your Swap rock while it's on the ice."));
-                    _rows.Add(Choice("Mouse reticle", Settings.ReticleNames, () => Settings.ReticleStyle, v => Settings.ReticleStyle = v,
-                        "The aim marker while you play with keyboard and mouse."));
-                    _rows.Add(Slider("Reticle size", () => Settings.ReticleSize, v => Settings.ReticleSize = v,
-                        v => Mathf.RoundToInt(50f + v * 100f) + "%"));
-                    _rows.Add(Choice("Reticle colour", Settings.ReticleColourNames, () => Settings.ReticleColour, v => Settings.ReticleColour = v));
                     break;
                 case 3:
                     _rows.Add(Slider("Volume", () => Settings.Volume, v => Settings.Volume = v, Percent, "How loud the whole game is."));
@@ -361,6 +366,26 @@ namespace UltraPuck.Game
                 "When a bot on your team picks up the puck, you take over that bot."));
             _rows.Add(Choice("Dash direction", new[] { "Where you move", "Where you look" }, () => Settings.DashWhereMoving ? 0 : 1, v => Settings.DashWhereMoving = v == 0,
                 "Which way a check dashes. Where you move: along the move stick (where you look if it's still)."));
+            _rows.Add(new Row
+            {
+                Label = "Change crosshair",
+                Value = () => "",
+                Press = OpenCrosshair,
+                Picture = r =>
+                {
+                    if (Event.current.type != EventType.Repaint) return;
+                    var c = Settings.ReticleTint(0); c.a = 1f;
+                    Hud.DrawCrosshair(Settings.Crosshair, new Vector2(r.xMax - 22f, r.center.y), 36f, c);
+                },
+                Hint = "The aim marker while you play with keyboard and mouse.",
+            });
+            const float span = Settings.CrosshairMax - Settings.CrosshairMin;
+            var size = Slider("Crosshair size", () => (Settings.CrosshairSize - Settings.CrosshairMin) / span,
+                v => Settings.CrosshairSize = Settings.CrosshairMin + Mathf.RoundToInt(v * span / 10f) * 10,
+                v => Settings.CrosshairSize + "%", "How big the crosshair is: 100% is the normal size, up to 1000%.");
+            size.Step = d => Settings.CrosshairSize = Settings.CrosshairSize + d * 10;
+            _rows.Add(size);
+            _rows.Add(Choice("Crosshair colour", Settings.ReticleColourNames, () => Settings.ReticleColour, v => Settings.ReticleColour = v));
             foreach (Controls.Act a in Enum.GetValues(typeof(Controls.Act)))
             {
                 var act = a;
@@ -370,7 +395,8 @@ namespace UltraPuck.Game
                     Value = () => _listen == act ? "Press a key or button…" : Controls.BindingText(act),
                     GlyphText = () => _listen == act ? null : Glyphs.BindingHint(act),
                     Press = () => { _listen = act; },
-                    Hint = Controls.Hint(act) + "  Press this row, then the new key or button. Esc cancels.",
+                    Clear = () => Controls.Clear(act),
+                    Hint = Controls.Hint(act),
                 });
             }
             _rows.Add(new Row
@@ -685,6 +711,7 @@ namespace UltraPuck.Game
             if (!IsOpen) { StopTyping(false); _listen = null; return; }
             if (_typing) { TypingTick(); return; }
             if (_listen.HasValue) { ListenTick(m); return; }
+            if (Current == Page.Crosshair) { CrosshairTick(m); return; }
             BuildRows();
             if (_rows.Count == 0) return;
             if (m.Back)
@@ -710,6 +737,7 @@ namespace UltraPuck.Game
             _focus = Mathf.Clamp(_focus, 0, _rows.Count - 1);
             var row = _rows[_focus];
             if (!row.Enabled()) return;
+            if (row.Clear != null && NorthPressed()) { row.Clear(); Sound.Back(); return; }
             if (m.X != 0 && row.Step != null) { row.Step(m.X); Sound.Step(m.X); } // after the change: a volume slider ticks at its new volume
             else if (m.Confirm && row.Press != null) { PressSound(row); row.Press(); }
         }
@@ -718,13 +746,14 @@ namespace UltraPuck.Game
         {
             if (!_listen.HasValue) return;
             var act = _listen.Value;
-            if (m.Back)
+            // only Esc cancels: B / Circle is a button like any other here (it can be bound)
+            var kb = Keyboard.current;
+            if (kb != null && kb.escapeKey.wasPressedThisFrame)
             {
                 Sound.Back();
                 _listen = null;
                 return;
             }
-            var kb = Keyboard.current;
             var key = Controls.ReadKeyPress(kb);
             if (key != Key.None && key != Key.Escape)
             {
@@ -733,7 +762,12 @@ namespace UltraPuck.Game
                 _listen = null;
                 return;
             }
-            if (Controls.KeyboardOnly(act)) return; // pad sticks cover move/aim; don't bind pad face buttons to them
+            if (Controls.KeyboardOnly(act))
+            {
+                // pad sticks cover move/aim: a controller can't bind these, so its B just cancels
+                if (m.Back) { Sound.Back(); _listen = null; }
+                return;
+            }
             foreach (var g in Gamepad.all)
             {
                 var p = Controls.ReadPadPress(g);
@@ -760,6 +794,7 @@ namespace UltraPuck.Game
                 _shotFocus = null;
             }
             var t = Time.unscaledTime - _openedAt;
+            if (Current == Page.Crosshair) { CrosshairPage(t); return; }
             var appear = Ui.EaseOutBack(t / 0.28f);
             // over a match: a dim, so you can still see it; from the menus: a plain backdrop
             if (_settingsFromLobby && Current != Page.Pause) Ui.Fill(Palette.Background);
@@ -775,7 +810,18 @@ namespace UltraPuck.Game
             var panelH = top + (pause ? _rows.Count : matchPage ? Mathf.Min(MaxVisible, _rows.Count) : Mathf.Min(MaxVisible, SettingsRows())) * (rowH + 8f) + (pause ? 30f : 92f);
             // long pages (the card list) scroll: keep the focused row in view
             var visible = pause ? _rows.Count : Mathf.Min(MaxVisible, _rows.Count);
-            _first = Mathf.Clamp(_first, Mathf.Max(0, _focus - visible + 1), Mathf.Min(_focus, Mathf.Max(0, _rows.Count - visible)));
+            if (_focus != _firstFocus)
+            {
+                _first = Mathf.Clamp(_first, Mathf.Max(0, _focus - visible + 1), Mathf.Min(_focus, Mathf.Max(0, _rows.Count - visible)));
+                _firstFocus = _focus;
+            }
+            // the mouse wheel scrolls the rows (the focus stays where it is)
+            if (Event.current.type == EventType.ScrollWheel && _rows.Count > visible)
+            {
+                _first += Event.current.delta.y > 0 ? 1 : -1;
+                Event.current.Use();
+            }
+            _first = Mathf.Clamp(_first, 0, Mathf.Max(0, _rows.Count - visible));
             var x = Ui.W / 2f - panelW / 2f;
             var y = Ui.H / 2f - panelH / 2f + (1f - appear) * 40f;
 
@@ -806,11 +852,6 @@ namespace UltraPuck.Game
                 // hover focuses; a resting mouse doesn't steal focus from the pad
                 if (r.Contains(mouse) && (Ui.MouseMoved || Ui.Clicked) && _rows[i].Enabled() && _focus != i) { _focus = i; if (Ui.MouseMoved) Sound.Move(); }
             }
-            if (Event.current.type == EventType.ScrollWheel && _rows.Count > 0)
-            {
-                var to = Mathf.Clamp(_focus + (Event.current.delta.y > 0 ? 1 : -1), 0, _rows.Count - 1);
-                if (to != _focus) { _focus = to; Sound.Move(); }
-            }
             // the focus highlight glides between rows
             var focusTarget = rowsTop + (_focus - _first) * (rowH + 8f);
             _focusY = _focusY < 0f ? focusTarget : Mathf.Lerp(_focusY, focusTarget, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 22f));
@@ -819,7 +860,7 @@ namespace UltraPuck.Game
                 var r = new Rect(x + 30f, rowsTop + (i - _first) * (rowH + 8f), rowW, rowH);
                 Ui.Box(r, Ui.Row, 12f);
             }
-            Ui.Box(new Rect(x + 30f, _focusY, rowW, rowH), Ui.RowFocus, 12f);
+            if (_focus >= _first && _focus < last) Ui.Box(new Rect(x + 30f, _focusY, rowW, rowH), Ui.RowFocus, 12f); // (scrolled out of view: no highlight)
 
             for (var i = _first; i < last; i++)
             {
@@ -843,10 +884,127 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(x, y + panelH - 70f, panelW, 24f), hint, Ui.Font(16, false, TextAnchor.MiddleCenter), Ui.TextDim);
                 Glyphs.Hint(new Rect(x, y + panelH - 40f, panelW, 24f),
                     _typing ? (InputMode.Pad ? "Type on the keyboard    {confirm} Done    {back} Cancel" : "Type your name    {confirm} Done    {back} Cancel")
-                            : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : matchPage && ReadOnly && !teamPage ? "{nav} Scroll      {back} Back" : matchPage ? "{nav} Choose      {side} Change      {back} Back" : "{tabs} Tabs      {back} Back      Changes save straight away",
+                            : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : matchPage && ReadOnly && !teamPage ? "{nav} Scroll      {back} Back" : matchPage ? "{nav} Choose      {side} Change      {back} Back" : _tab == 4 && InputMode.Pad && _focus < _rows.Count && _rows[_focus].Clear != null ? "{tabs} Tabs      {freeplay} Clear      {back} Back" : "{tabs} Tabs      {back} Back",
                     14, new Color(1f, 1f, 1f, 0.45f));
             }
             GUI.matrix = oldMatrix;
+        }
+
+        // ------------------------------------------------------------------ crosshair picker
+
+        // the picker: a grid of crosshairs, then Apply and Cancel. _xhFocus: a crosshair (0..), Apply, or Cancel.
+        private const int XhPerRow = 7;
+        private int _xhPick, _xhFocus;
+        private int XhApply { get { return Crosshairs.Ids.Length; } }
+        private int XhCancel { get { return Crosshairs.Ids.Length + 1; } }
+
+        /// <summary>Screenshots: the crosshair picker, the third one under the focus (not picked).</summary>
+        public void ShowCrosshairs() { OpenCrosshair(); _xhFocus = 2; }
+
+        private void OpenCrosshair()
+        {
+            Current = Page.Crosshair;
+            _xhPick = _xhFocus = Settings.Crosshair;
+            _openedAt = Time.unscaledTime;
+        }
+
+        /// <summary>Back to the Controls tab, on the Change crosshair row (and keep the pick, or not).</summary>
+        private void CloseCrosshair(bool apply)
+        {
+            if (apply) { Settings.Crosshair = _xhPick; PlayerPrefs.Save(); Sound.Select(); }
+            else Sound.Back();
+            Current = Page.Settings;
+            _tab = 4;
+            _openedAt = Time.unscaledTime;
+            BuildRows();
+            _focus = Mathf.Max(0, _rows.FindIndex(r => r.Label == "Change crosshair"));
+            _first = 0; _focusY = -1f;
+        }
+
+        private void CrosshairTick(LocalPlayers.MenuInput m)
+        {
+            if (m.Back) { CloseCrosshair(false); return; }
+            var n = Crosshairs.Ids.Length;
+            var was = _xhFocus;
+            if (_xhFocus < n)
+            {
+                if (m.X != 0) _xhFocus = Mathf.Clamp(_xhFocus + m.X, 0, n - 1);
+                if (m.Y < 0) _xhFocus = _xhFocus + XhPerRow < n ? _xhFocus + XhPerRow : XhApply;
+                if (m.Y > 0 && _xhFocus >= XhPerRow) _xhFocus -= XhPerRow;
+            }
+            else
+            {
+                if (m.X != 0) _xhFocus = m.X > 0 ? XhCancel : XhApply;
+                if (m.Y > 0) _xhFocus = Mathf.Min(n - 1, (n - 1) / XhPerRow * XhPerRow + (_xhFocus == XhCancel ? XhPerRow - 1 : 0));
+            }
+            if (_xhFocus != was) Sound.Move();
+            if (!m.Confirm) return;
+            if (_xhFocus == XhApply) CloseCrosshair(true);
+            else if (_xhFocus == XhCancel) CloseCrosshair(false);
+            else { _xhPick = _xhFocus; Sound.Select(); }
+        }
+
+        private void CrosshairPage(float t)
+        {
+            var appear = Ui.EaseOutBack(t / 0.28f);
+            if (_settingsFromLobby) Ui.Fill(Palette.Background);
+            else Ui.Fill(new Color(0f, 0f, 0f, 0.55f));
+            const float cell = 86f, gap = 12f;
+            var rows = (Crosshairs.Ids.Length + XhPerRow - 1) / XhPerRow;
+            var gridW = XhPerRow * cell + (XhPerRow - 1) * gap;
+            var panelW = gridW + 80f;
+            var panelH = 130f + rows * (cell + gap) + 130f;
+            var x = Ui.W / 2f - panelW / 2f;
+            var y = Ui.H / 2f - panelH / 2f + (1f - appear) * 40f;
+            Ui.Box(new Rect(x - 1f, y - 1f, panelW + 2f, panelH + 2f), new Color(1f, 1f, 1f, 0.06f), 22f);
+            Ui.Box(new Rect(x, y, panelW, panelH), Ui.Panel, 21f);
+            Ui.Label(new Rect(x, y + 22f, panelW, 50f), "Crosshair", Ui.Font(38, true, TextAnchor.MiddleCenter), Ui.Text);
+            Ui.Label(new Rect(x, y + 74f, panelW, 30f), "Pick the aim marker for keyboard and mouse", Ui.Font(17, false, TextAnchor.MiddleCenter), Ui.TextDim);
+
+            var mouse = Ui.Mouse;
+            var tint = Settings.ReticleTint(0); tint.a = 1f;
+            var gx = x + 40f;
+            var gy = y + 120f;
+            for (var i = 0; i < Crosshairs.Ids.Length; i++)
+            {
+                var r = new Rect(gx + (i % XhPerRow) * (cell + gap), gy + (i / XhPerRow) * (cell + gap), cell, cell);
+                if (r.Contains(mouse) && Ui.MouseMoved && _xhFocus != i) { _xhFocus = i; Sound.Move(); }
+                if (r.Contains(mouse) && Ui.TakeClick()) { _xhFocus = i; _xhPick = i; Sound.Select(); }
+                var picked = i == _xhPick;
+                Ui.Box(r, picked ? new Color(1f, 1f, 1f, 0.2f) : Ui.Row, 12f);
+                if (i == _xhFocus) Ui.Box(r, Ui.RowFocus, 12f);
+                if (picked)
+                {
+                    // a white ring round the one picked
+                    Ui.Box(new Rect(r.x - 3f, r.y - 3f, r.width + 6f, 3f), Color.white, 1.5f);
+                    Ui.Box(new Rect(r.x - 3f, r.yMax, r.width + 6f, 3f), Color.white, 1.5f);
+                    Ui.Box(new Rect(r.x - 3f, r.y, 3f, r.height), Color.white, 1.5f);
+                    Ui.Box(new Rect(r.xMax, r.y, 3f, r.height), Color.white, 1.5f);
+                }
+                if (Event.current.type == EventType.Repaint) Hud.DrawCrosshair(i, r.center, cell * 0.62f, tint);
+            }
+
+            // Apply and Cancel
+            const float bw = 200f, bh = 52f;
+            var by = gy + rows * (cell + gap) + 18f;
+            for (var k = 0; k < 2; k++)
+            {
+                var idx = k == 0 ? XhApply : XhCancel;
+                var r = new Rect(x + panelW / 2f + (k == 0 ? -bw - 10f : 10f), by, bw, bh);
+                if (r.Contains(mouse) && Ui.MouseMoved && _xhFocus != idx) { _xhFocus = idx; Sound.Move(); }
+                Ui.Box(r, _xhFocus == idx ? new Color(1f, 1f, 1f, 0.92f) : Ui.Row, 12f);
+                Ui.Label(r, k == 0 ? "Apply" : "Cancel", Ui.Font(20, _xhFocus == idx, TextAnchor.MiddleCenter), _xhFocus == idx ? new Color(0.08f, 0.08f, 0.09f) : Ui.Text, _xhFocus != idx);
+                if (r.Contains(mouse) && Ui.TakeClick()) { CloseCrosshair(k == 0); return; }
+            }
+            Glyphs.Hint(new Rect(x, y + panelH - 40f, panelW, 24f), "{nav} Choose      {confirm} Pick      {back} Cancel", 14, new Color(1f, 1f, 1f, 0.45f));
+        }
+
+        /// <summary>Y / Triangle pressed on any controller this frame.</summary>
+        private static bool NorthPressed()
+        {
+            if (LocalPlayers.Blocked) return false;
+            foreach (var g in Gamepad.all) if (g.buttonNorth.wasPressedThisFrame) return true;
+            return false;
         }
 
         private void Tabs_(float x, float y, float panelW)
@@ -956,7 +1114,8 @@ namespace UltraPuck.Game
             {
                 // value + press (Controls rebinds): show the binding (as button pictures for the device in use), click to rebind
                 var glyph = row.GlyphText != null ? row.GlyphText() : null;
-                if (glyph != null) Glyphs.Hint(right, glyph, 22, textCol, TextAnchor.MiddleRight, null, focused);
+                if (row.Picture != null) row.Picture(right);
+                else if (glyph != null) Glyphs.Hint(right, glyph, 22, textCol, TextAnchor.MiddleRight, null, focused);
                 else Ui.Label(right, row.Value(), Ui.Font(17, focused, TextAnchor.MiddleRight), textCol);
                 if (clicked && row.Press != null) { PressSound(row); row.Press(); }
             }

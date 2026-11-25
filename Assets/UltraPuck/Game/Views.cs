@@ -209,9 +209,15 @@ namespace UltraPuck.Game
         private float _hitAge = 10f, _hitPower, _hitAngle;
         private const float HitTime = 0.32f;
 
+        // Double Agent's disguise: the body and arrow drawn in the other team's colours, shifting back to the own ones
+        private readonly Mesh _fillMesh, _frontMesh;
+        private readonly int _ownTeam;
+        private float _ownShown = 1f;
+
         public PlayerView(int team, float radius, Transform parent, int symbol)
         {
             _r = radius;
+            _ownTeam = team & 1;
             var c = Palette.Team(team);
             Root = new GameObject("Player");
             Root.transform.SetParent(parent, false);
@@ -311,9 +317,11 @@ namespace UltraPuck.Game
             _body = new GameObject("Body").transform;
             _body.SetParent(_unsquash, false);
             Draw.Make("Rim", _body, Draw.Disc(radius, Palette.PlayerRim), 10);
-            Draw.Make("Fill", _body, Draw.Disc(radius * 0.86f, c), 11);
+            _fillMesh = Draw.Disc(radius * 0.86f, c);
+            Draw.Make("Fill", _body, _fillMesh, 11);
             // facing marker: a big arrowhead at the front in a light team tint, easy to read on the dark rink
-            Draw.Make("Front", _body, Draw.Triangle(new Vector2(radius * 1.8f, 0f), new Vector2(radius * 0.6f, radius * 0.7f), new Vector2(radius * 0.6f, -radius * 0.7f), Palette.TeamTint(team)), 8);
+            _frontMesh = Draw.Triangle(new Vector2(radius * 1.8f, 0f), new Vector2(radius * 0.6f, radius * 0.7f), new Vector2(radius * 0.6f, -radius * 0.7f), Palette.TeamTint(team));
+            Draw.Make("Front", _body, _frontMesh, 8);
             _flashMesh = Draw.Disc(radius, Color.clear);
             _flash = Draw.Make("Flash", _unsquash, _flashMesh, 12).gameObject;
             _flash.SetActive(false);
@@ -373,6 +381,34 @@ namespace UltraPuck.Game
         /// Draw this frame. Returns the power (0..1) of a hit that just happened, or 0, so the caller can add an
         /// impact ring and screen shake; <paramref name="hitAt"/> is where it happened.
         /// </summary>
+        /// <summary>
+        /// Double Agent's disguise: <paramref name="own"/> 0 shows the other team's colours, 1 the player's own, and in
+        /// between the hue shifts round from one to the other.
+        /// </summary>
+        public void Disguise(float own)
+        {
+            own = Mathf.Clamp01(own);
+            if (Mathf.Abs(own - _ownShown) < 0.002f) return;
+            _ownShown = own;
+            var other = 1 - _ownTeam;
+            Draw.Recolor(_fillMesh, HueShift(Palette.Team(other), Palette.Team(_ownTeam), own));
+            Draw.Recolor(_frontMesh, HueShift(Palette.TeamTint(other), Palette.TeamTint(_ownTeam), own));
+        }
+
+        /// <summary>From <paramref name="a"/> to <paramref name="b"/> round the colour wheel (the short way), not through grey.</summary>
+        public static Color HueShift(Color a, Color b, float t)
+        {
+            if (t <= 0f) return a;
+            if (t >= 1f) return b;
+            float ha, sa, va, hb, sb, vb;
+            Color.RGBToHSV(a, out ha, out sa, out va);
+            Color.RGBToHSV(b, out hb, out sb, out vb);
+            var dh = Mathf.Repeat(hb - ha + 0.5f, 1f) - 0.5f;
+            var c = Color.HSVToRGB(Mathf.Repeat(ha + dh * t, 1f), Mathf.Lerp(sa, sb, t), Mathf.Lerp(va, vb, t));
+            c.a = Mathf.Lerp(a.a, b.a, t);
+            return c;
+        }
+
         public float Show(Vector2 pos, Vector2 facing, float dashCharge, int dashMax, float charge, int hits, float hitPower, Vector2 hitDir, out Vector2 hitAt)
         {
             Root.transform.localPosition = new Vector3(pos.x, pos.y, 0f);

@@ -602,7 +602,7 @@ namespace UltraPuck.Game
             {
                 // Choose: the whole deck in the free-play editor's grid (four a row, scrolling)
                 _focus = 0;
-                _editTop = 0;
+                _editTop = 0; _editFollow = -1;
                 _dealScale = EditScale;
                 for (var k = 0; k < offer.Length; k++)
                 {
@@ -689,11 +689,8 @@ namespace UltraPuck.Game
                     }
                 if (mouse.leftButton.wasPressedThisFrame && ScreenRect(_cards[_focus]).Contains(mp)) m.Confirm = true;
                 var wheel = _deck ? mouse.scroll.ReadValue().y : 0f;
-                if (wheel != 0f)
-                {
-                    var r = Mathf.Clamp(_focus / EditCols + (wheel < 0f ? 1 : -1), 0, EditRowCount - 1);
-                    SetFocus(Mathf.Min(_cards.Count - 1, r * EditCols + _focus % EditCols));
-                }
+                // the wheel scrolls the grid (the focus stays where it is)
+                if (wheel != 0f) { _editTop = Mathf.Clamp(_editTop + (wheel < 0f ? 1 : -1), 0, EditMaxTop); EditHomes(); }
             }
             // dealt cards need a moment before they can be taken, so a held button doesn't pick by accident
             if (m.Confirm && Time.unscaledTime - _stageAt > 0.55f) Leave(_focus);
@@ -1155,7 +1152,7 @@ namespace UltraPuck.Game
             if (to == _cols) { Sound.Deny(); return; }
             _cols = to;
             try { PlayerPrefs.SetInt("card_grid_cols", _cols); } catch { }
-            _editTop = 0;
+            _editTop = 0; _editFollow = -1;
             EditHomes();
             foreach (var c in _cards) c.ScaleVel += 1.2f;
             Sound.Move();
@@ -1189,7 +1186,7 @@ namespace UltraPuck.Game
             _watching = false;
             _chosen = -1;
             _focus = 0;
-            _editTop = 0;
+            _editTop = 0; _editFollow = -1;
             _cancelHeld = 0f;
             _stage = Stage.Editing;
             _stageAt = Time.unscaledTime;
@@ -1221,13 +1218,20 @@ namespace UltraPuck.Game
             return new Vector3(x, y, 0f);
         }
 
+        // the focus the grid last scrolled to: it only follows the focus when that moves (the wheel scrolls freely)
+        private int _editFollow = -1;
+
         private void EditHomes()
         {
             var row = _focus / EditCols;
-            if (row < _editTop) _editTop = row;
-            if (row >= _editTop + EditRows) _editTop = row - EditRows + 1;
-            // on the last row, one step further, so it isn't cut off by the bottom of the screen
-            if (row == EditRowCount - 1 && EditRowCount >= EditRows) _editTop = Mathf.Max(_editTop, row - EditRows + 2);
+            if (_focus != _editFollow)
+            {
+                if (row < _editTop) _editTop = row;
+                if (row >= _editTop + EditRows) _editTop = row - EditRows + 1;
+                // on the last row, one step further, so it isn't cut off by the bottom of the screen
+                if (row == EditRowCount - 1 && EditRowCount >= EditRows) _editTop = Mathf.Max(_editTop, row - EditRows + 2);
+                _editFollow = _focus;
+            }
             _editTop = Mathf.Clamp(_editTop, 0, EditMaxTop);
             for (var k = 0; k < _cards.Count; k++) _cards[k].Home = EditHome(k);
         }
@@ -1280,11 +1284,8 @@ namespace UltraPuck.Game
                 if (ready && over && mouse.leftButton.wasPressedThisFrame) EditAdd(_focus, 1);
                 if (ready && over && mouse.rightButton.wasPressedThisFrame) EditAdd(_focus, -1);
                 var wheel = mouse.scroll.ReadValue().y;
-                if (wheel != 0f)
-                {
-                    var r = Mathf.Clamp(_focus / EditCols + (wheel < 0f ? 1 : -1), 0, EditRowCount - 1);
-                    SetFocus(Mathf.Min(EditCount - 1, r * EditCols + _focus % EditCols));
-                }
+                // the wheel scrolls the grid (the focus stays where it is)
+                if (wheel != 0f) { _editTop = Mathf.Clamp(_editTop + (wheel < 0f ? 1 : -1), 0, EditMaxTop); EditHomes(); }
             }
             if (ready && m.Confirm) EditAdd(_focus, 1);
             if (ready && m.Back) EditAdd(_focus, -1);
@@ -1480,7 +1481,7 @@ namespace UltraPuck.Game
             _slot = -1;
             _chosen = -1;
             _focus = 0;
-            _editTop = 0;
+            _editTop = 0; _editFollow = -1;
             _cancelHeld = 0f;
             _personalTotal = 0; _globalTotal = 0;
             foreach (var c in lib.Cards) { _personalTotal += CardStats.Personal(c.Id); _globalTotal += CardStats.Global(c.Id); }
@@ -1529,7 +1530,7 @@ namespace UltraPuck.Game
             SortOrder();
             for (var p = 0; p < _order.Count; p++) _cards[p] = byCard[_order[p]];
             _focus = Mathf.Max(0, _order.IndexOf(focusCard));
-            _editTop = 0;
+            _editTop = 0; _editFollow = -1;
             EditHomes();
             foreach (var c in _cards) c.ScaleVel += 1.2f;
             Sound.Move();
@@ -1563,11 +1564,8 @@ namespace UltraPuck.Game
                 if (ready && mouse.rightButton.wasPressedThisFrame) { BrowseClose(); return; }
                 if (ready && mouse.leftButton.wasPressedThisFrame && new Rect(Ui.W / 2f - 220f, 58f, 440f, 34f).Contains(GuiMouse(mp))) Resort(1);
                 var wheel = mouse.scroll.ReadValue().y;
-                if (wheel != 0f)
-                {
-                    var r = Mathf.Clamp(_focus / EditCols + (wheel < 0f ? 1 : -1), 0, EditRowCount - 1);
-                    SetFocus(Mathf.Min(EditCount - 1, r * EditCols + _focus % EditCols));
-                }
+                // the wheel scrolls the grid (the focus stays where it is)
+                if (wheel != 0f) { _editTop = Mathf.Clamp(_editTop + (wheel < 0f ? 1 : -1), 0, EditMaxTop); EditHomes(); }
             }
         }
 

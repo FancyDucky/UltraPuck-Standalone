@@ -28,7 +28,7 @@ so whoever works next knows what changed.
 5. **Look at visual changes** with the built-in screenshot mode instead of guessing: run
    `Builds/Windows/UltraPuck.exe -screen-width 1280 -screen-height 720 -screen-fullscreen 0 -logFile <somewhere else>`
    with env vars `ULTRAPUCK_SHOTS=<folder>`, `ULTRAPUCK_NOSTEAM=1`, `ULTRAPUCK_NOUPDATE=1`, optional
-   `ULTRAPUCK_SHOTS_ONLY=title,music,players,online,ripple,replay,maps,ice,clip,pairing,countdown,goal,cards,pausemenu,settings`
+   `ULTRAPUCK_SHOTS_ONLY=title,music,players,online,ripple,replay,maps,agent,ice,clip,pairing,countdown,goal,cards,pausemenu,settings`
    (`music` takes no pictures: it skips match songs to their end and the log shows the next one starting).
    Scenes are in `GameRunner.Shots()`; add one for new screens. Always pass `-logFile` (don't overwrite the owner's
    Player.log) and never change saved settings (PlayerPrefs) from a scene.
@@ -85,6 +85,52 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.65, not released (yet) (Claude, 24 Nov 2026): **Stone Wall, scoreboards, controls, cursor and
+  crosshairs.** Stone Wall stands 11 s (was 5.5) and runs up to 45 long / 4.5 s of laying (was 30 / 3 s);
+  NetSession.Version 79. Double Agent: a person sees their own name over themselves (`GameRunner.SeesOwnName`), unless
+  someone on the other team plays on the same PC. Tab scoreboard: no cards on it any more (names and stats only),
+  a Points column (the MVP rating: goal 3, assist 2, save 2, bump 1); holding it brings up the corner card list too,
+  whatever its setting (`CornerCards(h, always)`), and letting go hides it again (unless the setting shows it). After-game table: the numbers now sit under their
+  headings (they were left-aligned: `Ui.Font` hands out one shared style per size and the name label changed its
+  alignment; the tables now take their own copies), a Points column, and room for the badges. Main menu: no mouse
+  hover / clicks until it has slid in from the title screen and the button that left the title is let go
+  (`MainMenu.MouseLocked`). **The mouse wheel only scrolls** (settings, main menu lists, the card grids): it no
+  longer moves the focus; the view follows the focus only when the focus itself moves (`Menus._firstFocus`,
+  `MainMenu._scrollFocus`, `CardScreen._editFollow`), and a row scrolled out of view loses its highlight.
+  (`Ui.MouseMoved` also needs a real pointer move now: a wheel turn counted as one.) Controls tab: no "Press this row..." in the hints, no "Changes save
+  straight away"; while rebinding only Esc cancels, so B / Circle can be bound (on a keyboard-only row a controller's B
+  still cancels); Y / Triangle on a binding row clears it (`Controls.Clear`, `Pad.None`; a keyboard-only row loses
+  its key). The crosshair: "Change crosshair" (Controls tab, with Crosshair size / colour moved there from Camera)
+  opens a picker page (`Menus.Page.Crosshair`: 14 crosshairs, Apply / Cancel); pref `crosshair` (default 6, the ring
+  with a cross); drawn by `Hud.DrawCrosshair`. The third is the game's original crosshair, drawn in code
+  (`Crosshairs.Original`, `Hud.OriginalCrosshair`). Crosshair size 50-1000% in 10s (pref `crosshair_size`, default 100). Mouse cursor size 50-400% (Graphics tab, under Resolution; pref `cursor_size`):
+  `Crosshairs.UseGameCursor` scales `Cursors/pointer-2x.png` (64 px) to 32 px x size, hotspot scaled with it. The game's own mouse pointer (`Crosshairs.UseGameCursor`). Pictures
+  are Kenney's CC0 Cursor and Crosshair packs (the PNG copies of the SVGs the owner named: Unity can't load SVG
+  without a package) in `StreamingAssets/Cursors` and `StreamingAssets/Crosshairs`. Screenshot `settings-crosshair`.
+- After 0.1.65, not released (yet) (Claude, 24 Nov 2026): **Double Agent reworked, Backwards Rink.**
+  *Double Agent*: each face-off the agent moves one spot further round the other side's group, the kick-off spot
+  included (`Simulation.FaceOff`: the agents take spots `(KickOffTurn + j) % group size`, the home players take turns
+  at the front of the spots left; with no agents nothing changes), and faces the puck like the group it stands with.
+  It starts disguised (looks only): the other team's colour and a random opponent's name (`PlayerState.Disguised` /
+  `DisguiseAs`, picked in `Borrow` with `s.NextRandom()` so every PC shows the same one, different names for several
+  agents while there are enough). `DisguiseTime` counts from the puck drop (`Simulation.Disguises`); after
+  `Tuning.DisguiseHold` (1 s) the colour hue-shifts back over `DisguiseFade` (1.5 s, `PlayerView.Disguise` /
+  `HueShift`, driven by `GameRunner.DisguiseShown`) and the name tag switches back when it ends. Head Start's puck goes
+  to a player on their own side before an agent. Changing team clears a disguise; `RemovePlayer` shifts `DisguiseAs`.
+  Team Vote here gives the card to the whole team (the card is `max: 1`; this repo has no "one random player per copy"
+  rule): they all go across, each on their own spot. *Backwards Rink* (`backwards-rink.json`,
+  `make_hockey_rink.py --backwards`): the Hockey Rink with each net turned round where it stands, open towards the end
+  wall (WIDEN 1.1 kept). New optional goal key `"faceoff"` (`GoalDef.FaceOff`): which side of the net the face-off
+  group stands (here the middle side; otherwise the mouth side as before). Goals still count by the puck touching the
+  box. NetSession.Version 78. Tests: `DoubleAgentTakesTurnsRoundTheOtherSidesSpots`, `DoubleAgentStartsInDisguise`,
+  `SeveralDoubleAgentsShareTheOtherSide`, `TheBackwardsRinksNetsOpenTowardsTheEndWalls`,
+  `TheBackwardsNetsScoreOnlyThroughTheMouth`, `BotsScoreOnTheBackwardsRink`, mirrored + face-off + net-size cases.
+  Screenshot scene `agent` (agent-0/1-faceoff, agent-fading, agent-back on the Backwards Rink; named players with no
+  controller, since bots' tags all say "Bot"). **Fixed (fairness):** a carried puck shoved dead in line with the
+  carrier's facing picked a random side to slide round the wedge, which is fair to a turned rink but not a mirrored
+  one (the Backwards Rink's kick-off hit it: the mirror test drifted); now it goes straight out (`Carry`).
+  `BuildScript`: env var `ULTRAPUCK_BUILD_OUT=<folder>` builds there instead of Builds/Windows (for when the owner
+  has the game open).
 - 0.1.65 (Claude, 24 Nov 2026): **fixed: a slow mouse didn't move the menu focus.** The mouse counted
   as used only when it moved over 3 px in one frame, and at a few hundred fps a slow mouse never does. `InputMode` now
   tracks the pointer: on mouse and keyboard any move counts (`MouseMovedNow`, `Ui.MouseMovedNow`); after a controller

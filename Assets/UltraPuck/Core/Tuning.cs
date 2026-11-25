@@ -106,7 +106,7 @@ namespace UltraPuck.Core
         /// until the puck turns or is caught), kept <see cref="StoneGap"/> behind it, in pieces <see cref="StoneSpacing"/>
         /// long; each piece stands <see cref="StoneLife"/> and then crumbles.
         /// </summary>
-        public Fix StoneLife = Fix.Ratio(11, 2), StoneLength = Fix.FromInt(30), StoneLayTime = Fix.FromInt(3), StoneSpacing = Fix.Ratio(4, 5), StoneGap = Fix.Ratio(9, 10);
+        public Fix StoneLife = Fix.FromInt(11), StoneLength = Fix.FromInt(45), StoneLayTime = Fix.Ratio(9, 2), StoneSpacing = Fix.Ratio(4, 5), StoneGap = Fix.Ratio(9, 10);
         public Fix ShotPickupDelay = Fix.Ratio(1, 5);
         /// <summary>Checking the carrier knocks the puck loose: how fast it pops out, and how long the checker must wait to grab it.</summary>
         public Fix KnockLooseSpeed = Fix.FromInt(4), CheckerPickupDelay = Fix.Ratio(1, 4);
@@ -186,6 +186,11 @@ namespace UltraPuck.Core
         /// is <see cref="FaceOffRow"/> × 3 further. Players stand <see cref="FaceOffSpacing"/> apart across a row.
         /// </summary>
         public Fix FaceOffBack = Fix.FromInt(3), FaceOffRow = Fix.One, FaceOffSpacing = Fix.Ratio(6, 5);
+        /// <summary>
+        /// Double Agent's disguise (looks only): the other team's colour and an opponent's name from the face-off, held
+        /// this long after the puck drops, then the colour fades back over <see cref="DisguiseFade"/> and the name returns.
+        /// </summary>
+        public Fix DisguiseHold = Fix.One, DisguiseFade = Fix.Ratio(3, 2);
         /// <summary>
         /// Portal Gun (utility): a portal is as long as a net's back wall. The shot flies at <see cref="PortalShotSpeed"/>
         /// for up to <see cref="PortalShotLife"/> s; <see cref="PortalCooldown"/> between shots. Things come out at least

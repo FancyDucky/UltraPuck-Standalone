@@ -163,6 +163,7 @@
       "face": [
         { "label": "Spawn", "value": "[good]their side[/]" }
       ],
+      "text": "[note]You start in their colours, under one of their names.[/]",
       "stats": { "DoubleAgent": "+1" }
     },
     {
@@ -334,7 +335,7 @@
       "flavor": "This rocks!",
       "face": [
         { "label": "Full Charge", "value": "[good]wall behind the puck[/]" },
-        { "label": "Lasts", "value": "[good]5.5 s[/]" }
+        { "label": "Lasts", "value": "[good]11 s[/]" }
       ],
       "text": "[note]Summons a rock wall behind the path of the puck.[/]",
       "stats": { "StoneWall": "+1" }

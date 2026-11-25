@@ -163,21 +163,27 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("rock_line", value ? 1 : 0); }
         }
 
-        /// <summary>Mouse aim reticle styles (Settings &gt; Camera).</summary>
-        public static readonly string[] ReticleNames = { "Crosshair", "Circle", "Dot", "Cross" };
-
-        /// <summary>Which reticle to draw while aiming with the mouse.</summary>
-        public static int ReticleStyle
+        /// <summary>Which crosshair (of <see cref="Crosshairs.Ids"/>) to draw while aiming with the mouse (Settings &gt; Controls).</summary>
+        public static int Crosshair
         {
-            get { return Mathf.Clamp(PlayerPrefs.GetInt("reticle_style", 0), 0, ReticleNames.Length - 1); }
-            set { PlayerPrefs.SetInt("reticle_style", Mathf.Clamp(value, 0, ReticleNames.Length - 1)); }
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("crosshair", 6), 0, Crosshairs.Ids.Length - 1); } // 6: the ring with a cross, like the old one
+            set { PlayerPrefs.SetInt("crosshair", Mathf.Clamp(value, 0, Crosshairs.Ids.Length - 1)); }
         }
 
-        /// <summary>Reticle size, 0 (small) .. 1 (large). Default mid.</summary>
-        public static float ReticleSize
+        /// <summary>The mouse pointer's size in percent: 50 .. 400 (100 is the normal size).</summary>
+        public const int CursorMin = 50, CursorMax = 400;
+        public static int CursorSize
         {
-            get { return Mathf.Clamp01(PlayerPrefs.GetFloat("reticle_size", 0.45f)); }
-            set { PlayerPrefs.SetFloat("reticle_size", Mathf.Clamp01(value)); }
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("cursor_size", 100), CursorMin, CursorMax); }
+            set { PlayerPrefs.SetInt("cursor_size", Mathf.Clamp(value, CursorMin, CursorMax)); Crosshairs.UseGameCursor(); }
+        }
+
+        /// <summary>Crosshair size in percent: 50 .. 1000 (100 is the normal size).</summary>
+        public const int CrosshairMin = 50, CrosshairMax = 1000;
+        public static int CrosshairSize
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("crosshair_size", 100), CrosshairMin, CrosshairMax); }
+            set { PlayerPrefs.SetInt("crosshair_size", Mathf.Clamp(value, CrosshairMin, CrosshairMax)); }
         }
 
         /// <summary>Reticle colours.</summary>

@@ -112,6 +112,7 @@ namespace UltraPuck.Game
 
             _cardScreen.Local = _local;
             StartCoroutine(_cardScreen.PreloadArt(_cards)); // every card picture loaded before the first pick
+            Crosshairs.UseGameCursor(); // the game's own mouse pointer
             StartCoroutine(WarmPreviews()); // and every rink's picture for the rink screen
             _cardScreen.PlayerOnScreen = i => i >= 0 && i < _players.Count && _players[i].Root != null ? _cam.WorldToScreenPoint(_players[i].Root.transform.position) : (Vector3?)null;
             _cardScreen.OnAbsorbed = (i, colour) =>
@@ -795,6 +796,11 @@ namespace UltraPuck.Game
                 InputMode.ShotOverride = InputMode.Family.Xbox;
                 yield return new WaitForSecondsRealtime(0.3f);
                 yield return Shot("settings-controls-xbox");
+                InputMode.ShotOverride = InputMode.Family.Keyboard;
+                // the crosshair picker (looking only: nothing is applied)
+                _menus.ShowCrosshairs();
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("settings-crosshair");
                 InputMode.ShotOverride = null;
                 _menus.Close();
                 // the same from the players screen, where there are six tabs across (Match as well)
@@ -824,6 +830,44 @@ namespace UltraPuck.Game
                 }
                 _shotWholeRink = false;
                 UseMap(startMap);
+            }
+
+            if (want("agent"))
+            {
+                // Double Agent on the Backwards Rink: the face-off groups behind the turned-round nets, Ava starting on
+                // blue's side in blue under a blue player's name, then shifting back to orange and her own name
+                var startMap = _mapIndex;
+                var back = _mapFiles.IndexOf("backwards-rink.json");
+                if (back >= 0) UseMap(back, false); // only for the pictures: not saved as the rink to play on
+                _shotWholeRink = true;
+                _local.Slots.Clear();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0, Name = "Ava" });
+                // people with no controller (not bots, whose tags all say "Bot"), so the borrowed name shows
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Name = "Ben" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Name = "Cleo" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Name = "Dex" });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return null;
+                _shotNoInput = true;
+                for (var round = 0; round < 2; round++)
+                {
+                    _state.Players[0].Cards = new[] { _sim.Cards.ById("ultrapuck.doubleagent").Index };
+                    _sim.Cards.Recompute(_state);
+                    _sim.FaceOff(_state);
+                    yield return new WaitForSecondsRealtime(1f);
+                    yield return Shot("agent-" + round + "-faceoff");
+                }
+                while (_state.Phase == Phase.Countdown) yield return null;
+                yield return new WaitForSecondsRealtime(1.75f);
+                yield return Shot("agent-fading");
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("agent-back");
+                _shotNoInput = false;
+                _shotWholeRink = false;
+                GoMainMenu();
+                UseMap(startMap, false);
             }
 
             if (want("clip"))
@@ -2588,6 +2632,17 @@ namespace UltraPuck.Game
             return true;
         }
 
+        /// <summary>
+        /// Double Agent: player <paramref name="i"/> is a person playing on this PC and nobody here plays for the other
+        /// team, so their borrowed name isn't needed on this screen.
+        /// </summary>
+        private bool SeesOwnName(GameState b, int i)
+        {
+            if (!IsLocalPerson(i)) return false;
+            for (var j = 0; j < b.Players.Length; j++) if (b.Players[j].Team != b.Players[i].Team && IsLocalPerson(j)) return false;
+            return true;
+        }
+
         /// <summary>Match player <paramref name="i"/> is a person playing on this PC (not a bot, not someone online).</summary>
         private bool IsLocalPerson(int i)
         {
@@ -2863,6 +2918,17 @@ namespace UltraPuck.Game
         private int _boomGoals;
         private bool _replayBoomed;
 
+        /// <summary>
+        /// How much of a Double Agent's own colour shows (0: all the other team's, 1: their own), from the sim's disguise
+        /// clock (blended between the two ticks on screen), so every PC shows the same.
+        /// </summary>
+        private float DisguiseShown(PlayerState pa, PlayerState pb, float t)
+        {
+            if (!pb.Disguised) return 1f;
+            var time = pa.Disguised ? Mathf.Lerp(pa.DisguiseTime.ToFloat(), pb.DisguiseTime.ToFloat(), t) : pb.DisguiseTime.ToFloat();
+            return Mathf.Clamp01((time - _sim.T.DisguiseHold.ToFloat()) / Mathf.Max(0.01f, _sim.T.DisguiseFade.ToFloat()));
+        }
+
         private void Show(GameState a, GameState b, float t, bool replay = false)
         {
             _hud.Tags.Clear();
@@ -2889,12 +2955,17 @@ namespace UltraPuck.Game
                 var full = Simulation.MaxDashes(pb).ToFloat();
                 Vector2 hitAt;
                 var hit = _players[i].Show(pos, facing, pb.DashCharge.ToFloat(), Mathf.RoundToInt(full), pb.Charge.ToFloat(), pb.Hits, pb.HitPower.ToFloat(), V.Of(pb.HitDir), out hitAt);
+                _players[i].Disguise(DisguiseShown(pa, pb, t));
                 var hiddenNow = CardEffects(i, pb, pos);
                 // Slot Machine: the reels under them while they spin (and a moment after, to see what came up)
                 _slots.Show(i, pb, pos, radius, _sim.T.SlotSpinTime.ToFloat(), hiddenNow);
                 if (!hiddenNow)
                 {
-                    _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.62f, 0f), Name = NameOf(i), Team = pb.Team, Owner = i });
+                    // Double Agent: under a borrowed name from the other team until the colour has shifted back
+                    // (but not to themselves: a person playing here sees their own name, unless someone on the other
+                    // team is at this PC too and would see it)
+                    var named = pb.Disguised && pb.DisguiseAs >= 0 && pb.DisguiseAs < b.Players.Length && !SeesOwnName(b, i) ? pb.DisguiseAs : i;
+                    _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.62f, 0f), Name = NameOf(named), Team = pb.Team, Owner = i });
                     _hud.Under.Add(new Vector4(pos.x, pos.y, radius, i));
                 }
                 if (hit > 0f)

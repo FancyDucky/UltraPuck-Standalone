@@ -515,35 +515,58 @@ namespace UltraPuck.Core
         /// </summary>
         public void FaceOff(GameState s)
         {
-            // the team's own players (not Double Agents) take turns at the front spot: one further along each face-off
+            // Each side's group: its own players (not Double Agents) and the other team's Double Agents. Every face-off
+            // the agents move one spot further round the group (the kick-off spot too), and the own players take turns
+            // at the front of the spots that are left.
             var own = new int[2];
-            foreach (var p in s.Players) if (p.Stats.DoubleAgent <= 0) own[p.Team & 1]++;
+            var agents = new int[2];
+            foreach (var p in s.Players)
+                if (p.Stats.DoubleAgent > 0) agents[1 - (p.Team & 1)]++;
+                else own[p.Team & 1]++;
             var turn = s.KickOffTurn;
             s.KickOffTurn++;
+            var taken = new bool[2][];
+            for (var side = 0; side < 2; side++)
+            {
+                taken[side] = new bool[own[side] + agents[side]];
+                for (var j = 0; j < agents[side]; j++) taken[side][(turn + j) % taken[side].Length] = true;
+            }
             var count = new int[2];
-            // everyone else first, then the Double Agents take the other team's next spots
-            for (var pass = 0; pass < 2; pass++)
-                foreach (var p in s.Players)
+            var agentCount = new int[2];
+            var borrowed = new System.Collections.Generic.List<int>();
+            foreach (var p in s.Players)
+            {
+                var agent = p.Stats.DoubleAgent > 0;
+                var side = agent ? 1 - (p.Team & 1) : p.Team & 1;
+                int slot;
+                if (agent) slot = (turn + agentCount[side]++) % taken[side].Length;
+                else
                 {
-                    var agent = p.Stats.DoubleAgent > 0;
-                    if ((pass == 1) != agent) continue;
-                    var side = agent ? 1 - p.Team : p.Team;
-                    var k = count[side]++;
-                    var slot = !agent && own[side] > 0 ? (k + turn) % own[side] : k;
-                    var sp = FaceOffSpot(side, slot);
-                    p.Pos = sp.Pos;
-                    p.Facing = agent ? FaceOffSpot(p.Team, 0).Facing : sp.Facing; // agents still face the goal they attack
-                    p.Vel = FixVec2.Zero;
-                    p.DashCharge = MaxDashes(p);
-                    p.DashTime = Fix.Zero;
-                    p.DashCoast = Fix.Zero;
-                    p.Charge = Fix.Zero;
-                    p.NoPickup = Fix.Zero;
-                    p.Stun = Fix.Zero;
-                    p.GunCooldown = Fix.Zero; p.InvisCooldown = Fix.Zero; p.InvisibleTime = Fix.Zero; p.ShockCooldown = Fix.Zero; p.ShockHold = Fix.Zero;
-                    p.SlowTime = Fix.Zero; p.HeldBy = -1; p.HeldTime = Fix.Zero; p.TossTime = Fix.Zero;
-                    p.FastTime = Fix.Zero; p.Shoved = Fix.Zero; p.ShovedBy = -1;
+                    // the (k + turn)-th of the spots the agents left free
+                    var want = (count[side]++ + turn) % own[side];
+                    slot = -1;
+                    for (var q = 0; q < taken[side].Length; q++)
+                        if (!taken[side][q] && want-- == 0) { slot = q; break; }
                 }
+                var sp = FaceOffSpot(side, slot);
+                p.Pos = sp.Pos;
+                p.Facing = sp.Facing; // facing the puck, like the group they stand with
+                // Double Agent's disguise: the other team's colour and one of their names (one nobody else has
+                // borrowed this face-off, if there's one left), until it fades a moment after the puck drops
+                p.Disguised = agent;
+                p.DisguiseTime = Fix.Zero;
+                p.DisguiseAs = agent ? Borrow(s, p.Team, borrowed) : -1;
+                p.Vel = FixVec2.Zero;
+                p.DashCharge = MaxDashes(p);
+                p.DashTime = Fix.Zero;
+                p.DashCoast = Fix.Zero;
+                p.Charge = Fix.Zero;
+                p.NoPickup = Fix.Zero;
+                p.Stun = Fix.Zero;
+                p.GunCooldown = Fix.Zero; p.InvisCooldown = Fix.Zero; p.InvisibleTime = Fix.Zero; p.ShockCooldown = Fix.Zero; p.ShockHold = Fix.Zero;
+                p.SlowTime = Fix.Zero; p.HeldBy = -1; p.HeldTime = Fix.Zero; p.TossTime = Fix.Zero;
+                p.FastTime = Fix.Zero; p.Shoved = Fix.Zero; p.ShovedBy = -1;
+            }
             s.PuckPos = Map.PuckSpot;
             s.PuckVel = FixVec2.Zero;
             s.Carrier = -1;
@@ -572,6 +595,38 @@ namespace UltraPuck.Core
             }
             if (prizes && Cards != null) Cards.Recompute(s);
             HeadStart(s);
+        }
+
+        /// <summary>
+        /// A name for a Double Agent on <paramref name="team"/> to go under: a random player of the other team that no
+        /// agent has borrowed this face-off (any of them once all are taken), or -1 if the other team has nobody.
+        /// </summary>
+        private static int Borrow(GameState s, int team, System.Collections.Generic.List<int> borrowed)
+        {
+            var free = new System.Collections.Generic.List<int>();
+            var all = new System.Collections.Generic.List<int>();
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                if (s.Players[i].Team == team) continue;
+                all.Add(i);
+                if (!borrowed.Contains(i)) free.Add(i);
+            }
+            var from = free.Count > 0 ? free : all;
+            if (from.Count == 0) return -1;
+            var pick = from[(int)(s.NextRandom() % (uint)from.Count)];
+            borrowed.Add(pick);
+            return pick;
+        }
+
+        /// <summary>Double Agent's disguise wears off: the clock runs from the puck drop; past hold + fade it's gone.</summary>
+        private void Disguises(GameState s, Fix dt)
+        {
+            foreach (var p in s.Players)
+            {
+                if (!p.Disguised) continue;
+                p.DisguiseTime += dt;
+                if (p.DisguiseTime >= T.DisguiseHold + T.DisguiseFade) { p.Disguised = false; p.DisguiseAs = -1; }
+            }
         }
 
         // the face-off group, front to back: (rows out from the back, places across the row). Slot 0 is the kick-off.
@@ -607,7 +662,8 @@ namespace UltraPuck.Core
             if (net == null || slot < 0 || slot >= FaceOffShape.GetLength(0)) return Map.SpawnFor(team, slot);
             var centre = new FixVec2((net.Min.X + net.Max.X) / 2, (net.Min.Y + net.Max.Y) / 2);
             FixVec2 front;
-            if (net.HasFacing) front = net.Facing;
+            if (net.HasFaceOff) front = net.FaceOff;        // a net turned round: the group stands on its middle side
+            else if (net.HasFacing) front = net.Facing;
             else
             {
                 var to = Map.PuckSpot - centre;
@@ -781,15 +837,17 @@ namespace UltraPuck.Core
             foreach (var p in s.Players) if (p.Team == 0) a += p.Stats.HeadStart; else b += p.Stats.HeadStart;
             if (a == b) return;
             var team = a > b ? 0 : 1;
-            // whoever on that team is nearest the puck spot takes it (the first of them on a tie)
+            // whoever on that team is nearest the puck spot takes it (the first of them on a tie); a Double Agent only
+            // if the team has nobody else (one at the other side's kick-off spot would start it on the wrong side)
             var best = -1;
             var bestD = Fix.Zero;
-            for (var i = 0; i < s.Players.Length; i++)
-            {
-                if (s.Players[i].Team != team) continue;
-                var d = (s.Players[i].Pos - Map.PuckSpot).SqrLength;
-                if (best < 0 || d < bestD) { best = i; bestD = d; }
-            }
+            for (var agents = 0; agents < 2 && best < 0; agents++)
+                for (var i = 0; i < s.Players.Length; i++)
+                {
+                    if (s.Players[i].Team != team || (s.Players[i].Stats.DoubleAgent > 0) != (agents == 1)) continue;
+                    var d = (s.Players[i].Pos - Map.PuckSpot).SqrLength;
+                    if (best < 0 || d < bestD) { best = i; bestD = d; }
+                }
             if (best < 0) return;
             s.Carrier = best;
             s.PuckTeam = team;
@@ -929,6 +987,8 @@ namespace UltraPuck.Core
             var n = 0;
             foreach (var q in s.Players) if (q.Team == team) n++;
             p.Team = team;
+            p.Disguised = false; p.DisguiseAs = -1; // a new team: no disguise to keep
+            foreach (var q in s.Players) if (q.DisguiseAs == index) q.DisguiseAs = -1; // nor one borrowing their name
             var sp = FaceOffSpot(team, n);
             p.Pos = sp.Pos;
             p.Facing = sp.Facing;
@@ -961,6 +1021,7 @@ namespace UltraPuck.Core
                 p.HeldBy = Shift(p.HeldBy, index);
                 p.Pilot = Shift(p.Pilot, index);
                 p.ShovedBy = Shift(p.ShovedBy, index);
+                p.DisguiseAs = Shift(p.DisguiseAs, index);
             }
             // their Swap rock goes with them; a rock they were carrying drops
             var rocks = new System.Collections.Generic.List<Rock>();
@@ -1047,6 +1108,7 @@ namespace UltraPuck.Core
             }
 
             if (s.Phase == Phase.Scored && T.Replays) SkipVotes(s, inputs, dt);
+            Disguises(s, dt);
             for (var i = 0; i < s.Players.Length; i++) Control(s, i, InputOf(inputs, i), dt);
 
             // the match clock (timed matches): runs while the puck is in play; level at zero: next goal wins
@@ -1940,7 +2002,9 @@ namespace UltraPuck.Core
                     {
                         var dir = od.Raw > 0 ? o / od : c.Facing;
                         var cross = FixVec2.Cross(c.Facing, dir);
-                        var side = cross > Fix.Zero ? Fix.One : cross < Fix.Zero ? -Fix.One : ((s.NextRandom() & 1) == 0 ? Fix.One : -Fix.One);
+                        // dead in line (a kick-off along the middle line): straight out, no side to pick, so a mirrored
+                        // match stays mirrored (a random side is only fair to a rink turned round, not a mirrored one)
+                        var side = cross > Fix.Zero ? Fix.One : cross < Fix.Zero ? -Fix.One : Fix.Zero;
                         var tangent = new FixVec2(-dir.Y, dir.X) * side;
                         var slid = dir * reach + tangent * (reach - od + Fix.Ratio(1, 50));
                         pos = c.Pos + slid.Normalized * reach;
