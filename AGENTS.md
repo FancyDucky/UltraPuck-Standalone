@@ -85,7 +85,7 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.67, not released (yet) (Claude, 24 Nov 2026): **RAGE card** (`ultrapuck.rage`, art from the owner's
+- 0.1.68 (Claude, 24 Nov 2026): **RAGE card** (`ultrapuck.rage`, art from the owner's
   RAGE.jpg). Every check taken from an opponent (a body check in `Knock`, or a check into the puck you carry) fills a
   meter (`PlayerState.RageMeter`, `Simulation.Enrage`); at `Tuning.RageChecks` (7) you rage for `RageTime` (7 s):
   2.5x size and weight, +25% speed, 10x knockback given (no shot power: no puck while raging) (`CardLibrary.Recompute` while `RageTime` > 0),
