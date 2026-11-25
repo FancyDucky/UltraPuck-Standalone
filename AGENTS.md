@@ -85,7 +85,7 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.65, not released (yet) (Claude, 24 Nov 2026): **Stone Wall, scoreboards, controls, cursor and
+- 0.1.66 (Claude, 24 Nov 2026): **Stone Wall, scoreboards, controls, cursor and
   crosshairs.** Stone Wall stands 11 s (was 5.5) and runs up to 45 long / 4.5 s of laying (was 30 / 3 s);
   NetSession.Version 79. Double Agent: a person sees their own name over themselves (`GameRunner.SeesOwnName`), unless
   someone on the other team plays on the same PC. Tab scoreboard: no cards on it any more (names and stats only),
@@ -107,7 +107,7 @@ so whoever works next knows what changed.
   `Crosshairs.UseGameCursor` scales `Cursors/pointer-2x.png` (64 px) to 32 px x size, hotspot scaled with it. The game's own mouse pointer (`Crosshairs.UseGameCursor`). Pictures
   are Kenney's CC0 Cursor and Crosshair packs (the PNG copies of the SVGs the owner named: Unity can't load SVG
   without a package) in `StreamingAssets/Cursors` and `StreamingAssets/Crosshairs`. Screenshot `settings-crosshair`.
-- After 0.1.65, not released (yet) (Claude, 24 Nov 2026): **Double Agent reworked, Backwards Rink.**
+- 0.1.66 (Claude, 24 Nov 2026): **Double Agent reworked, Backwards Rink.**
   *Double Agent*: each face-off the agent moves one spot further round the other side's group, the kick-off spot
   included (`Simulation.FaceOff`: the agents take spots `(KickOffTurn + j) % group size`, the home players take turns
   at the front of the spots left; with no agents nothing changes), and faces the puck like the group it stands with.
