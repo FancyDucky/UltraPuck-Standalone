@@ -1,4 +1,4 @@
-﻿# Working on Ultra Puck (instructions for AI assistants)
+# Working on Ultra Puck (instructions for AI assistants)
 
 You're helping build **Ultra Puck**, an original top-down air-hockey/ice-hockey brawler made in **Unity 6000.6.9f1**
 (C#, Mono, built-in render pipeline). Players skate, carry the puck in a wedge, check (dash) into each other, charge
@@ -23,7 +23,7 @@ so whoever works next knows what changed.
    (also `BuildLinux`). Close the Unity editor first if it has the project open.    Owner shortcut: double-click
    `Build Windows.bat` (or `powershell -File Tools/build-windows.ps1`) after editing cards/maps so the built game
    picks up `StreamingAssets`. For face text / art / maps only, `Sync Cards.bat` copies StreamingAssets without a
-   Unity compile. Card `face` rows are display only â€” Shockwave slow/range/duration/cooldown in play come from
+   Unity compile. Card `face` rows are display only — Shockwave slow/range/duration/cooldown in play come from
    `Core/Tuning.cs` (must match the face, then full build).
 5. **Look at visual changes** with the built-in screenshot mode instead of guessing: run
    `Builds/Windows/UltraPuck.exe -screen-width 1280 -screen-height 720 -screen-fullscreen 0 -logFile <somewhere else>`
@@ -81,7 +81,7 @@ so whoever works next knows what changed.
   keys need adding to `ORDER` / the form in the html (unknown keys are kept as they are).
 - Button pictures: Kenney Input Prompts (CC0) in `StreamingAssets/InputPrompts/` (`Xbox`, `PlayStation`, `Switch`,
   `Keyboard`, `Generic`). Hints (`Glyphs`) and utility card footnotes (`Press {utility} to activate`) load PNGs via
-  `InputIcons` for the last device used. Empty Kenney placeholder folders are not used â€” drop packs here.
+  `InputIcons` for the last device used. Empty Kenney placeholder folders are not used — drop packs here.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
@@ -97,11 +97,11 @@ so whoever works next knows what changed.
   main thread never waits; outside a drag `Fetch` uses `FrameStateQuick` too (no stall when you let go or play into
   a chunk that isn't decoded yet; it prefetches the next chunk past half way like `FrameState`). Test:
   `ScrubbingReadsTheSameFramesAsPlaying`.
-  **RAGE rework.** The meter fills by the checker's heft over yours (`Simulation.Heft` = weight Ã— Knockback Given,
+  **RAGE rework.** The meter fills by the checker's heft over yours (`Simulation.Heft` = weight × Knockback Given,
   i.e. Heavyweight's "Weight +80%"; per check clamped `RageFillMin` 0.25 .. `RageFillMax` 3) up to a random whole
   3-5 (`RageNeedMin` / `RageNeedMax`, rolled with `s.NextRandom()` at the first check after a rage). `PlayerState.
   RageMeter` (int) is now `RageFill` (Fix) + `RageNeed`; `Tuning.RageChecks` is gone; `Enrage` takes the checker.
-  Even checks: 3-5 to rage. The meter is no longer drawn (only the raging bar, and a smaller 26Ã—3 cooldown bar;
+  Even checks: 3-5 to rage. The meter is no longer drawn (only the raging bar, and a smaller 26×3 cooldown bar;
   screenshot `rage-cooldown`). The near-rage twitch
   (from half full) now only moves the body (`PlayerView.TwitchOffset` / `TwitchTurn` on `_squash` / `_body`), not
   the player's root, so the aim line, charge ring, bars and the camera stay put. The card face still says
@@ -272,7 +272,7 @@ so whoever works next knows what changed.
   Team Vote / Same Draw: they get the cards of the teammate with the most rounds straight away (one-a-team cards
   left out). Picks resolve through the shared `TakePicked` (Choose's deck, Double Card work as usual). The card
   screen shows for a local player with an offer outside Phase.Picking (`CardScreen.LocalCatchingUp`, no watching),
-  and `LocalPlayers` sends its pick then too; its heading says "Catching up Â· N cards to go" with no timer. Bots
+  and `LocalPlayers` sends its pick then too; its heading says "Catching up · N cards to go" with no timer. Bots
   catch up at once (no look-over delay there) and now send no pick while `PickHeld`; the bot standing in for a person
   who is away (the rollback marks them `Bot`) leaves that person's catch-up cards alone (`PlayerState.BotCatchUp`, set
   only for players added as bots). NetSession.Version 77. **Fixed: joining part-way by IP never got in** for bigger
@@ -289,14 +289,14 @@ so whoever works next knows what changed.
   change team / watch, subtitle shadow, free play arrows, match song "Final Hit".** *Carry-through* (match setting, `Settings.CarryThrough` /
   `CarryPercent` 5-100%, default on at 40% (prefs `carry_through_v2` / `carry_percent_v2`), the % slider is temporary for tuning): any pass or shot (`PassFrom` set, caught by
   someone else, either team) carries the catcher along like a gentle Cannon Ball (`Simulation.CarryThrough`: speed along
-  the shot replaced by puck speed Ã— % Ã— weight / Knockback Taken if faster; no Shoved, no loss of control; not on top of
+  the shot replaced by puck speed × % × weight / Knockback Taken if faster; no Shoved, no loss of control; not on top of
   a Cannon Ball). State `GameState.CarryOn` / `CarryPercent` (from `Tuning.CarryThrough` / `CarryPercent`, rules byte
   after the card list); the host changes it mid-match from the pause Match settings with host commands Pick 224 off /
-  225 on / 226+n strength nÃ—5% (`GameRunner.HostCommand` keeps only the newest strength queued). *Knock-away* (match
+  225 on / 226+n strength n×5% (`GameRunner.HostCommand` keeps only the newest strength queued). *Knock-away* (match
   setting, `Settings.KnockAwayPercent` 0-500% in 25s, default 350 (pref `knock_away_v2`; 100 = the old pop), a tuning slider): how hard a check (a `Knock`, or a
   dash into the carried puck) pops the puck away from its carrier (`KnockLoose(..., check: true)` scales
   `KnockLooseSpeed`; Shockwave / Puck Gun / rock knocks are unchanged). State `GameState.KnockPercent`, rules byte after
-  Carry-through (% / 5), host command Pick 100+n = nÃ—25%; NetSession.Version 76. *Match settings for
+  Carry-through (% / 5), host command Pick 100+n = n×25%; NetSession.Version 76. *Match settings for
   everyone*: the lobby message carries the host's current rules (`NetSession.LobbyRules`, set by the host's game each
   frame); non-hosts get a read-only Match settings page in the pause menu (`Menus.ShownRules` / `RulesView` in
   Settings.cs, Carry-through shown live from the state) and read-only rows in the lobby Options (`MainMenu.Shown`).
@@ -310,7 +310,7 @@ so whoever works next knows what changed.
   own newer inputs by seat, then catch up). Inputs / Away / Checksum carry the layout, stale ones are ignored; waits
   for card picks and for a bot removal to settle (`_botLeftTick`). Host commands / pause go with the host's first
   seated player. `BotLeftMatch` counts bots before the player (people can now come after bots). **NetSession.Version
-  75.** Main menu subtitle shadow offset 0.6 / 0.8 (new `Ui.Label` overload with an offset). Free play pause: small â€¹ â€º
+  75.** Main menu subtitle shadow offset 0.6 / 0.8 (new `Ui.Label` overload with an offset). Free play pause: small ‹ ›
   arrows either side of the Bots and Rink values. Tests `CarryThroughTakesWhoeverGetsThePuckAlong`,
   `ChangingTeamMidMatch`, `JoiningChangingTeamAndWatchingMidMatch`. Not checked on screen or with real PCs.
 - After 0.1.61, not released (Claude, 24 Nov 2026): **cards per row in the grid.** LB / RB (Q / E) in free play's
@@ -497,7 +497,7 @@ so whoever works next knows what changed.
   may only go on the outside of its back wall, all of it on that one segment (`NetNear` / `NetFront` in
   `PlacePortal`); anywhere else a portal that would reach round onto a net fizzles (the old post shot put one inside
   the net). Cards can say `"maxTeam"` (`CardDef.MaxPerTeam`, `CardLibrary.TeamFull`): not offered once that many
-  teammates hold it, and two teammates taking it at once â€” the second gets the next card in their offer. Portal Gun
+  teammates hold it, and two teammates taking it at once — the second gets the next card in their offer. Portal Gun
   is `maxTeam` 1. Going through a portal is gradual now: `PortalPass` lets a thing touching a portal's face (moving in)
   sink into that wall (`CollideWalls` overload skips the portal's stretch), records it in `PortalVia` / `PuckPortal`
   (portal Id, 0 = none), and moves it across once its middle passes the face, as far out of the other face as it
@@ -513,7 +513,7 @@ so whoever works next knows what changed.
   `WallHalf` clear of the rounded ends (`ClampAlong`; the hockey nets' back is an exact fit, so it's centred).
   Free play d-pad puck drills (`PlayerInput.PuckToMe` / `PuckAtMe` / `PuckAtTheirNet` / `PuckAtOurNet`, 220-223 as
   a Pick, `Simulation.PuckDrill`; `LocalPlayers.PuckDrills` latches them and stops the d-pad moving you in free play).
-  Main menu Cards page reads any device (`Local.Menu()`), sorts on the bumpers, and Aâ€“Z shows no numbers or stats.
+  Main menu Cards page reads any device (`Local.Menu()`), sorts on the bumpers, and A–Z shows no numbers or stats.
   Count badges on cards fade under the focused card (`BadgeShow`) instead of flickering. Same Draw / Team Vote:
   a `maxTeam` card (Portal Gun, and now Swap) is never in the shared hand; `OnePickerGets` puts it in just one
   picker's hand (a person first) in place of one card, the rest get a fresh card there; in a Team Vote whoever took
@@ -554,7 +554,7 @@ so whoever works next knows what changed.
   plus a `CardStatsTable` of everyone met (per person id: Steam id or a random PC id). In the lobby
   (`Msg.CardStats` = 15, every 3 s) clients send their table to the host, the host sends its merged table to
   everyone; merging keeps the bigger count per person and card and never touches this PC's own rows. Main menu
-  "Cards" opens `CardScreen.OpenBrowser`: the free-play grid, read-only, sorted by your picks / everyone's / Aâ€“Z
+  "Cards" opens `CardScreen.OpenBrowser`: the free-play grid, read-only, sorted by your picks / everyone's / A–Z
   (confirm or LB/RB or clicking the sort bar), each card showing its place, your picks and everyone's share.
   Screenshot runs never save (`CardStats.NoSave`). Screenshot scenes `portal` (also takes `faceoff`) and
   `browse`. **Version 63.**
@@ -663,7 +663,7 @@ so whoever works next knows what changed.
   Same messages, so no version bump. Checked: 134 tests (129 pass, 5 skipped), incl. 6 PCs at 600 fps over a laggy
   network (128 messages/s, 74 KB/s per PC, no waits, identical games).
 - 0.1.41 (Claude, 21 Nov 2026): **Cannon Ball really shoves; Invisible Shot; darker lines.**
-  Cannon Ball: the catcher's speed along the shot is replaced by `CannonCarry` (0.8) Ã— the puck's speed (by weight /
+  Cannon Ball: the catcher's speed along the shot is replaced by `CannonCarry` (0.8) × the puck's speed (by weight /
   Knockback Taken), sideways speed kept, and `PlayerState.Shoved` (`CannonTime` 0.5 s) gives toss-like low drag and
   stun-level control so a skating bot can't just cancel it. No hit lag, no hit flash. Card face "Knock Back +100%".
   "Invisible Quick Shot" renamed "Invisible Shot" (the title didn't fit). Rink side lines darker (0.3 of the team
@@ -674,7 +674,7 @@ so whoever works next knows what changed.
   `ultrapuck.ghostshot` (GhostShot: a quick shot sets `GameState.PuckHidden` 1.5 s / `PuckHiddenTeam`; ends on any
   pickup; `PuckView.Ghost` draws an outline for that team, nothing for a screen with only the other team, outline in
   replays) and `ultrapuck.cannonball` (CannonBall: a released full charge sets `CannonTeam`; an opponent catching it
-  while it's faster than a quick shot is carried along by `CannonCarry` Ã— the puck's speed, scaled by weight / Knockback
+  while it's faster than a quick shot is carried along by `CannonCarry` × the puck's speed, scaled by weight / Knockback
   Taken). Art from the user's desktop. Main menu: the 120 px see-through strip beside the panel is gone. Rink side lines
   are a dark shade of the team defending that end (centre line grey). **NetSession.Version 46.** Checked: 133 tests
   (128 pass, 5 skipped), Windows build, title / cards / maps screenshots. Not looked at: the invisible-puck outline in play.
@@ -701,7 +701,7 @@ so whoever works next knows what changed.
   Cards and stats stay with the seat. NetTests.ThreePcsThroughTheHost now checks leave, bots, rejoin and identical
   games. Host commands in Pick 203-207 (kick-off, red/blue score up/down) from Match settings. View/Tab held: a
   scoreboard (score, cards, stats); no longer toggles the corner list. Replay goal banner sized to the text; the
-  "Replaces your â€¦" line sits under the pick timer; the players-screen Continue chip stays grey.
+  "Replaces your …" line sits under the pick timer; the players-screen Continue chip stays grey.
   **NetSession.Version 44.** Checked: 128 tests (123 pass, 5 skipped), Windows build, screenshots (countdown, start,
   scoreboard, match-settings, replay, players). Not checked: online with real PCs, Linux build.
 - 0.1.37 part 1 (Claude, 21 Nov 2026): **online freeze fix, swapping in the sim, mid-match bots, match stats.**
@@ -743,11 +743,11 @@ so whoever works next knows what changed.
   touches their wedge, like the puck (`GrabTouching` with `OnWedge(p, at, r)`, slack `MateGrabReach`; a check
   on the wedge works too; body/back contact doesn't). State
   `PlayerState.HeldBy`/`HeldTime`; `CanGrab`/`GrabMate`/`CarryMates`/`ThrowMate`/`DropMate` in Simulation. The carried one rides in front facing the same way and keeps the puck; shoot/charge throws them
-  (shot speed Ã— `MateThrow`, max `MateThrowMax`), auto-throw after `MateHoldMax` 3 s. Thrown = `TossTime` 0.75 s
+  (shot speed × `MateThrow`, max `MateThrowMax`), auto-throw after `MateHoldMax` 3 s. Thrown = `TossTime` 0.75 s
   of no skating, low drag, and it counts as a check (DashTime) on opponents; on teammates just a bump. A real
   check / Shockwave frees them. Holders can't pick up the puck/rocks, steal or Swap. Shockwave (`BlastFrom`
-  knockLoose) knocks the puck off any carrier it reaches. Pylon Goalie: one per team, `Pylon.Radius` = 0.5 Ã—
-  1.35^(cardsâˆ’1) (cap 4 cards), heavier when bigger; `KeepPylonOut` stops it entering any goal box. Views scale
+  knockLoose) knocks the puck off any carrier it reaches. Pylon Goalie: one per team, `Pylon.Radius` = 0.5 ×
+  1.35^(cards−1) (cap 4 cards), heavier when bigger; `KeepPylonOut` stops it entering any goal box. Views scale
   pylons; no ring on carried/thrown players (the old boost ring is never shown now). Card texts updated. New screenshot scene
   `carry` (+ `_shotNoInput`). **NetSession.Version 41.**
   Files: Core (Simulation, GameState, Tuning, NetSession), Game (GameRunner, Views), cards json, tests; this file.
@@ -787,23 +787,23 @@ so whoever works next knows what changed.
   Checked: 108 tests (103 pass, 5 skipped), Windows + Linux builds, release published.
 - 0.1.31 (Composer, 20 Nov 2026): **Swap card, one-utility rule, Shockwave remake, Kenney prompts.** New Swap
   utility (throw rock / teleport with momentum + clap reverb; rocks pickable, shootable, bounce off puck). One
-  utility at a time (match setting for multiple; hover replace hint). Shockwave: push everyone, 2Ã— shove, ring FX.
+  utility at a time (match setting for multiple; hover replace hint). Shockwave: push everyone, 2× shove, ring FX.
   Kenney button icons; utility cards show Press {utility}. Free-play rink auto-applies; Sync Cards / Build Windows
   bats. **NetSession.Version 34.** GitHub release v0.1.31.
   Checked: 107 tests (102 pass, 5 skipped), Windows + Linux builds, release published.
 - 0.1.30 (Composer, 19 Nov 2026): **online mouse aim, reticle options, menu mouse, freeplay rink**. (1) Online
-  mouse aim used the local slot index as the match player â€” wrong when you join someone; now uses
+  mouse aim used the local slot index as the match player — wrong when you join someone; now uses
   `NetSession.PlayerOf`. (2) Settings > Camera: reticle style / size / colour. (3) System cursor shows on menus and
   the card pick. (4) Menu clicks use `Ui.TakeClick` (more reliable). (5) Free play pause: pick a rink and Change
   rink. No rules change: **NetSession.Version still 23.**
   Files: `Game/GameRunner.cs`, `Settings.cs`, `Hud.cs`, `Menus.cs`, `Ui.cs`, `MainMenu.cs`, `PlayScreens.cs`; this file.
   Checked: 98 tests (93 pass, 5 skipped), Windows + Linux builds, GitHub release v0.1.30.
   **Not checked online by a person:** mouse aim when joining a host.
-- 0.1.29 (Composer, 19 Nov 2026): **no clip outline** â€” carried puck against a wall still sits in the player, but
+- 0.1.29 (Composer, 19 Nov 2026): **no clip outline** — carried puck against a wall still sits in the player, but
   draws on top of them (higher sort order) instead of a bright outline. No rules change: **NetSession.Version 23.**
   Files: `Game/Views.cs`; this file.
 - 0.1.28 (Composer, 19 Nov 2026): **controls rebind, mouse aim, swap fix, wall-carry, no dash after quick shot,
-  pad/KBM mode, slower title**. Mouse aim / reticle only in keyboard mode (last device flips pad â†” KBM). Quick shot
+  pad/KBM mode, slower title**. Mouse aim / reticle only in keyboard mode (last device flips pad ↔ KBM). Quick shot
   sets `SuppressDash` until Shoot is let go. Against a wall the carried puck pulls into the carrier. **NetSession.Version 23.**
   Files: `Game/Controls.cs`; Core + Game + tests; this file.
   Checked: 98 tests (93 pass, 5 skipped), Windows + Linux builds, GitHub release v0.1.28.
@@ -868,7 +868,7 @@ so whoever works next knows what changed.
   screenshot run the title was left by itself between two pictures: probably the owner touching the keyboard or
   mouse at that moment, but unproven; it now logs `Ultra Puck: title screen: a button on <device>` so a repeat can
   be traced. Songs ending was only checked by jumping to a second before the end, never by playing one through.
-  Last two changes of the evening, at the owner's request: the "SKATE Â· CHECK Â· SCORE" line under the name on the
+  Last two changes of the evening, at the owner's request: the "SKATE · CHECK · SCORE" line under the name on the
   title screen is gone (`TitleScreen.Draw`), and the goal explosion plays at 0.55 instead of full level
   (`GameRunner.MatchSounds`; the owner found it too loud). Checked after these two: 84 tests (79 pass, 5 skipped),
   Windows + Linux builds, title screenshots (the line is gone). The goal level was edited while that test run was
