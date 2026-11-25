@@ -85,6 +85,8 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.67 (Claude, 24 Nov 2026): **mouse cursor size works.** 0.1.66's slider changed nothing: Windows shows a
+  hardware cursor at its own pointer size. Sizes other than 100% now use `CursorMode.ForceSoftware` (`Crosshairs.UseGameCursor`).
 - 0.1.66 (Claude, 24 Nov 2026): **Stone Wall, scoreboards, controls, cursor and
   crosshairs.** Stone Wall stands 11 s (was 5.5) and runs up to 45 long / 4.5 s of laying (was 30 / 3 s);
   NetSession.Version 79. Double Agent: a person sees their own name over themselves (`GameRunner.SeesOwnName`), unless
