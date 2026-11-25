@@ -85,11 +85,11 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.64, not released (Claude, 24 Nov 2026): **fixed: a slow mouse didn't move the menu focus.** The mouse counted
+- 0.1.65 (Claude, 24 Nov 2026): **fixed: a slow mouse didn't move the menu focus.** The mouse counted
   as used only when it moved over 3 px in one frame, and at a few hundred fps a slow mouse never does. `InputMode` now
   tracks the pointer: on mouse and keyboard any move counts (`MouseMovedNow`, `Ui.MouseMovedNow`); after a controller
   it has to go 8 px in total first (a bumped desk still can't take the focus). The card screen's hover uses the same.
-- After 0.1.64, not released (Claude, 24 Nov 2026): **fixed: the game didn't start in the Unity editor's Play mode**
+- 0.1.65 (Claude, 24 Nov 2026): **fixed: the game didn't start in the Unity editor's Play mode**
   (music, but a black or sky-blue Game view). `PortalSplit` made a `MaterialPropertyBlock` in a field initializer,
   and GameRunner makes a PortalSplit in one: the editor throws there ("CreateImpl is not allowed ... field
   initializer"), which left GameRunner's later fields null, so no map loaded and Awake failed. The block is now made
@@ -98,19 +98,19 @@ so whoever works next knows what changed.
   hidden with HideAndDontSave and cleared in Play mode; with `ShowRink` off it draws a yellow outline instead (real
   lines, not a gizmo: the gizmo stopped being drawn after the editor's Play mode, and the Gizmos toggle hid it). Builds never checked this, so only the editor showed it. Keep Unity objects (materials, textures,
   property blocks, GameObjects) out of field initializers of anything GameRunner makes as a field.
-- After 0.1.64, not released (Claude, 24 Nov 2026): **intro and underwater polish.** Intro: the falling puck has the
+- 0.1.65 (Claude, 24 Nov 2026): **intro and underwater polish.** Intro: the falling puck has the
   in-game trail (fading discs, `TitleScreen.TrailDots`) in white, stops dead (no bounce, no squash), and the beams
   glow (`Ui.Glow`: one smooth gradient texture drawn as a single 9-slice quad so the ends fade; layered boxes showed bands, and separate slices left a 1 px gap). Underwater: sand a bit darker (Sand.mat, `Underwater.Sand`), little grey
   pebbles in it (Sand.shader `Pebble`: flat grey, no shading or shadow, `_PebbleAmount` 0.45 of the way to grey; `_PebbleCell` / `_PebbleChance`), caustics at 35% of before (Caustics.mat
   strength 0.0525, no setting any more: the Caustics switch is gone), the light rays screen-blend and add up softly
   where shafts cross (no white blow-out), no drifting light lines on the water round the rink (Water.mat strength 0),
   bubbles 60% bigger and more see-through (FrontAlpha 0.18 / BackAlpha 0.4), and the wavy "Surface" strip along the top switched off in the prefab.
-- After 0.1.64, not released (Claude, 24 Nov 2026): **title animation reworked.** ULTRA and PUCK have a gap between
+- 0.1.65 (Claude, 24 Nov 2026): **title animation reworked.** ULTRA and PUCK have a gap between
   them centred on the screen (`TitleScreen.Gap`; it closes as the name flies to the menu); the puck falls from the top
   through it (bouncing, `Fall`) and lands under the words, then the red / blue beams shoot out under the name. It's
   about 40% slower, and waits until 0.7 s after the screen appears *and* the window has kept its size for 0.45 s
   (`Clock`: the game going fullscreen used to eat the start of it). Screenshot scene `title` retimed (title-0/1/1b/2).
-- After 0.1.64, not released (Claude, 24 Nov 2026): **catching up on cards after joining part-way.** A player added
+- 0.1.65 (Claude, 24 Nov 2026): **catching up on cards after joining part-way.** A player added
   mid-match (`Simulation.AddPlayer`: online re-seat or a host-added bot) gets `PlayerState.CatchingUp`; each tick
   outside the card screen `Simulation.CatchUp` gives them one offer at a time until their `PickRounds` reaches their
   team's `GameState.TeamRounds` (counted in `StartPicking`), with no time limit, while the match goes on; meanwhile
