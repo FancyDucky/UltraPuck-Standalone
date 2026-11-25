@@ -15,12 +15,14 @@ namespace UltraPuck.Core
         {
             if (sim == null || s == null || i < 0 || i >= s.Players.Length) return default(PlayerInput);
             var me = s.Players[i];
-            if (s.Phase == Phase.Picking)
+            // a person catching up after joining part-way picks their own cards (while they're away, nobody picks for them)
+            if (s.Phase != Phase.Picking && me.Offer.Length > 0 && !me.BotCatchUp) return default(PlayerInput);
+            if (s.Phase == Phase.Picking || me.Offer.Length > 0) // the card screen, or a bot catching up after being added part-way
             {
                 byte hover, pick;
                 PickCard(sim, s, me, out hover, out pick);
                 // New Hand: a poor hand (nothing better than C) gets re-rolled first, when it's theirs alone to re-roll
-                if (pick > 0 && me.PickKind == 0 && !sim.T.TeamVote && !sim.T.SameDraw && sim.Cards != null
+                if (pick > 0 && s.Phase == Phase.Picking && me.PickKind == 0 && !sim.T.TeamVote && !sim.T.SameDraw && sim.Cards != null
                     && me.Rerolls < sim.Cards.NewHands(me) && sim.Cards.Cards[me.Offer[pick - 1]].Tier > CardTier.B)
                     return new PlayerInput { Buttons = PlayerInput.Utility, Hover = hover };
                 return new PlayerInput { Pick = pick, Hover = hover };
@@ -259,6 +261,7 @@ namespace UltraPuck.Core
             hover = 0;
             pick = 0;
             if (me.Offer.Length == 0 || me.Picked >= 0 || sim.Cards == null) return;
+            if (me.PickHeld) return; // new cards: let go of the last pick first (see PlayerState.PickHeld)
             if (sim.T.TeamVote && me.PickKind == 0)
             {
                 var humans = false;
@@ -294,9 +297,10 @@ namespace UltraPuck.Core
                 if (sim.Cards.Cards[me.Offer[k]].Tier < sim.Cards.Cards[me.Offer[tier]].Tier) tier = k;
             // a moment to look them over first (the highlight steps along the cards, then settles on the one it'll take);
             // again after a New Hand re-roll
+            // (catching up after joining part-way, nobody's watching: straight away)
             var since = sim.T.PickTime - s.PhaseTime;
             var wait = sim.T.BotPickDelay * Fix.FromInt(1 + System.Math.Max(0, me.Rerolls));
-            if (since < wait)
+            if (s.Phase == Phase.Picking && since < wait)
             {
                 var settle = wait - Fix.Ratio(1, 2);
                 var step = (since * Fix.FromInt(10) / Fix.FromInt(3)).FloorToInt(); // a card every 0.3 s

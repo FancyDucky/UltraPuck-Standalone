@@ -505,6 +505,29 @@ namespace UltraPuck.Tests
             StringAssert.Contains("different", client.Problem);
         }
 
+        /// <summary>The real UDP transport carries a big packet (a hand-over of the whole game is several KB).</summary>
+        [Test, Timeout(30000)]
+        public void RealUdpCarriesBigPackets()
+        {
+            using (var host = UdpTransport.Host(47992))
+            using (var client = UdpTransport.Join("127.0.0.1:47992"))
+            {
+                client.Send(0, new byte[] { 1 });
+                int conn = -1; byte[] got = null;
+                var clock = System.Diagnostics.Stopwatch.StartNew();
+                while (clock.Elapsed.TotalSeconds < 5 && !host.Poll(out conn, out got)) System.Threading.Thread.Sleep(2);
+                Assert.IsNotNull(got, "the host heard the client");
+                var big = new byte[30000];
+                for (var k = 0; k < big.Length; k++) big[k] = (byte)(k * 7);
+                host.Send(conn, big);
+                got = null;
+                int from;
+                while (clock.Elapsed.TotalSeconds < 10 && !client.Poll(out from, out got)) System.Threading.Thread.Sleep(2);
+                Assert.IsNotNull(got, "the big packet got through");
+                CollectionAssert.AreEqual(big, got);
+            }
+        }
+
         /// <summary>The real UDP transport on this PC: a host and a client find each other and start a match.</summary>
         [Test, Timeout(60000)]
         public void RealUdpOnThisPc()

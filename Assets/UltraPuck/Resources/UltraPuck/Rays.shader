@@ -1,6 +1,7 @@
 // Sun rays coming down through the water from the top of the screen (the Underwater rink): soft shafts of light
 // fanning out from a point above the surface, swaying slowly, brightest near the top and fading as they go down.
-// Added on top (light), over the sand, walls and sea life, under the players.
+// Screen-blended (light), over the sand, walls and sea life, under the players: where shafts cross, or fall on bright
+// sand and caustics, they brighten towards the light's colour but never blow out to white.
 Shader "UltraPuck/Rays"
 {
     Properties
@@ -15,7 +16,7 @@ Shader "UltraPuck/Rays"
         Tags { "Queue" = "Transparent" "RenderType" = "Transparent" "IgnoreProjector" = "True" }
         ZWrite Off
         Cull Off
-        Blend SrcAlpha One
+        Blend OneMinusDstColor One
 
         Pass
         {
@@ -53,8 +54,10 @@ Shader "UltraPuck/Rays"
                 // brightest towards the middle, fading down and out to the sides
                 float fall = saturate(1.0 - down / _Reach);
                 float spread = saturate(1.0 - abs(a) / 1.25);
+                // crossing shafts add up softly (never past ~1) instead of stacking
+                s = 1.0 - exp(-1.3 * s);
                 float alpha = s * fall * spread * _Strength;
-                return fixed4(_Colour.rgb, alpha);
+                return fixed4(_Colour.rgb * alpha, 1.0);
             }
             ENDCG
         }

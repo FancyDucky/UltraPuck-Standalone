@@ -20,8 +20,14 @@ namespace UltraPuck.Game
         public static bool DualSense { get; private set; }
         /// <summary>The mouse moved (properly, not a jitter) or clicked this frame.</summary>
         public static bool MouseUsed { get; private set; }
+        /// <summary>The pointer is somewhere else than last frame (any amount: for hovering, however slowly it goes).</summary>
+        public static bool MouseMovedNow { get; private set; }
 
         private static int _frame = -1;
+        // where the pointer was last frame, and where it was when the mouse last counted as used: a slow mouse moves
+        // less than a pixel or two a frame at a high frame rate, so "used" is how far it has gone since, not per frame
+        private static Vector2 _lastPos, _anchor;
+        private static bool _havePos;
 
         /// <summary>Screenshots: show this device's pictures whatever was used last (null: normal).</summary>
         internal static Family? ShotOverride;
@@ -39,16 +45,25 @@ namespace UltraPuck.Game
             if (_frame == Time.frameCount) return;
             _frame = Time.frameCount;
             MouseUsed = false;
+            var m = Mouse.current;
+            var p = m != null ? m.position.ReadValue() : Vector2.zero;
+            MouseMovedNow = _havePos && m != null && (p - _lastPos).sqrMagnitude > 0.01f;
+            if (!_havePos) _anchor = p;
+            _lastPos = p;
+            _havePos = m != null;
             if (ShotOverride.HasValue) { Set(ShotOverride.Value); return; }
             if (LocalPlayers.Blocked) return;
-            foreach (var g in Gamepad.all) if (Active(g)) { Use(g); return; }
+            foreach (var g in Gamepad.all) if (Active(g)) { _anchor = p; Use(g); return; }
             var kb = Keyboard.current;
             if (kb != null && kb.anyKey.wasPressedThisFrame) { Set(Family.Keyboard); return; }
-            var m = Mouse.current;
-            if (m != null && (m.delta.ReadValue().sqrMagnitude > 9f || m.leftButton.wasPressedThisFrame || m.rightButton.wasPressedThisFrame
+            // already on mouse and keyboard: any move counts (however slow); after a controller, the mouse has to go
+            // 8 pixels first (a bumped desk mustn't take the focus from the controller)
+            var moved = Current == Family.Keyboard ? MouseMovedNow : (p - _anchor).sqrMagnitude > 64f;
+            if (m != null && (moved || m.leftButton.wasPressedThisFrame || m.rightButton.wasPressedThisFrame
                               || Mathf.Abs(m.scroll.ReadValue().y) > 0.1f))
             {
                 MouseUsed = true;
+                _anchor = p;
                 Set(Family.Keyboard);
             }
         }

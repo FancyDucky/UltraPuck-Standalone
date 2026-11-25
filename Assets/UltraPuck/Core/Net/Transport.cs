@@ -32,7 +32,9 @@ namespace UltraPuck.Core.Net
         private readonly Dictionary<EndPoint, int> _byEndpoint = new Dictionary<EndPoint, int>();
         private readonly Dictionary<int, EndPoint> _byConn = new Dictionary<int, EndPoint>();
         private int _nextConn = 1;
-        private readonly byte[] _buffer = new byte[2048];
+        // the biggest a UDP packet can be: a hand-over (the whole game, for someone joining part-way) runs to several KB,
+        // and a packet bigger than the buffer is thrown away (it was 2048, so joining a big match never got through)
+        private readonly byte[] _buffer = new byte[65536];
         private readonly int _port;
 
         private UdpTransport(bool host, int port)

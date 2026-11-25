@@ -17,14 +17,11 @@ namespace UltraPuck.Game
 
         /// <summary>The underwater dressing's settings, or null on an ordinary rink.</summary>
         public readonly UnderwaterTheme Dress;
-        /// <summary>The moving light over the underwater rink (null on others); off with the Caustics setting.</summary>
+        /// <summary>The moving light over the underwater rink (null on others).</summary>
         public readonly GameObject Caustics;
 
-        /// <summary>Follow the Caustics setting (call every frame; only a change does anything).</summary>
-        public void Settle()
-        {
-            if (Caustics != null && Caustics.activeSelf != Settings.Caustics) Caustics.SetActive(Settings.Caustics);
-        }
+        /// <summary>Called every frame (nothing to follow now: the caustics have no setting).</summary>
+        public void Settle() { }
 
         /// <summary>A closed outline pushed out by <paramref name="by"/> all round (mitred corners, capped on sharp ones).</summary>
         private static List<Vector2> Grow(List<Vector2> pts, float by)
@@ -46,7 +43,9 @@ namespace UltraPuck.Game
             return grown;
         }
 
-        public RinkView(MapDef map, float wallThickness)
+        /// <param name="dressWith">An underwater theme already there to use (the editor's preview inside the dressing
+        /// prefab), instead of putting the map's dressing in.</param>
+        public RinkView(MapDef map, float wallThickness, UnderwaterTheme dressWith = null)
         {
             Root = new GameObject("Rink");
             var outline = new List<Vector2>();
@@ -55,7 +54,7 @@ namespace UltraPuck.Game
             // a themed look: under the sea (sand with moving light, water and sea life all round)
             // (the scenery and these settings come from the dressing prefab, made and edited in Unity)
             var wet = map.Theme == Underwater.Theme;
-            var dress = wet ? Underwater.Dress(Root, map) : null;
+            var dress = dressWith != null ? dressWith : wet ? Underwater.Dress(Root, map) : null;
             Dress = dress;
             if (dress != null && dress.Floor != null) floor.GetComponent<MeshRenderer>().sharedMaterial = dress.Floor;
             // over the players but under the puck (order 30 up), so it stays bright white and easy to see: the light
@@ -66,7 +65,7 @@ namespace UltraPuck.Game
             {
                 Caustics = Draw.Make("Caustics", Root.transform, Draw.Polygon(Grow(outline, wallThickness / 2f + 0.02f), Color.white), 28).gameObject;
                 Caustics.GetComponent<MeshRenderer>().sharedMaterial = dress.Caustics;
-                Caustics.SetActive(Settings.Caustics);
+
             }
             if (dress != null && dress.ScreenTint.a > 0f)
                 Draw.Make("WaterTint", Root.transform, Draw.Rect(V.Of(map.BoundsMin) - new Vector2(200f, 150f), V.Of(map.BoundsMax) + new Vector2(200f, 150f), dress.ScreenTint), 29);
@@ -1795,7 +1794,10 @@ namespace UltraPuck.Game
 
         private readonly Dictionary<GameObject, Entry> _entries = new Dictionary<GameObject, Entry>();
         private readonly List<GameObject> _gone = new List<GameObject>();
-        private readonly MaterialPropertyBlock _block = new MaterialPropertyBlock();
+        // made on first use: GameRunner makes this class as a field, and the Unity editor refuses a property block
+        // made that early (it stopped GameRunner starting at all in the editor's Play mode)
+        private MaterialPropertyBlock _blockMade;
+        private MaterialPropertyBlock _block { get { return _blockMade ?? (_blockMade = new MaterialPropertyBlock()); } }
         private readonly HashSet<GameObject> _seen = new HashSet<GameObject>();
 
         /// <summary>Call once a frame before the <see cref="Show"/>s.</summary>

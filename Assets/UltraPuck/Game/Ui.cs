@@ -52,6 +52,12 @@ namespace UltraPuck.Game
             get { InputMode.Update(); return InputMode.MouseUsed && !LocalPlayers.Blocked; }
         }
 
+        /// <summary>The pointer moved this frame, by any amount (hovering follows even a very slow mouse).</summary>
+        public static bool MouseMovedNow
+        {
+            get { InputMode.Update(); return InputMode.MouseMovedNow && !LocalPlayers.Blocked; }
+        }
+
         public static bool Clicked
         {
             get { var m = UnityEngine.InputSystem.Mouse.current; return m != null && m.leftButton.wasPressedThisFrame && !LocalPlayers.Blocked; }
@@ -110,6 +116,47 @@ namespace UltraPuck.Game
             _roundBig.SetPixels32(bpx);
             _roundBig.Apply();
             _roundBigStyle = new GUIStyle { normal = { background = _roundBig }, border = new RectOffset(br, br, br, br) };
+        }
+
+        private static Texture2D _glow;
+        private static GUIStyle _glowStyle;
+
+        /// <summary>
+        /// A soft glow filling <paramref name="r"/>: brightest along its middle, fading smoothly to nothing at the top
+        /// and bottom, and over <paramref name="ends"/> at either end (one smooth texture, so no rings or bands).
+        /// </summary>
+        public static void Glow(Rect r, Color c, float ends)
+        {
+            if (Event.current.type != EventType.Repaint || r.width <= 0f || r.height <= 0f) return;
+            if (_glow == null)
+            {
+                const int n = 64;
+                _glow = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, hideFlags = HideFlags.DontSave };
+                var px = new Color32[n * n];
+                for (var y = 0; y < n; y++)
+                for (var x = 0; x < n; x++)
+                {
+                    var gx = Mathf.SmoothStep(0f, 1f, Mathf.Min(x, n - 1 - x) / (n / 2f - 1f));
+                    var d = (y - (n - 1) / 2f) / ((n - 1) / 2f);
+                    var gy = Mathf.Exp(-d * d * 4.5f) * (1f - d * d);
+                    px[y * n + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(255f * gx * gy));
+                }
+                _glow.SetPixels32(px);
+                _glow.Apply();
+                // one 9-slice quad (ends kept, middle stretched): drawn as separate pieces, a pixel between them could
+                // go undrawn and show as a dark line
+                _glowStyle = new GUIStyle { normal = { background = _glow }, border = new RectOffset(n / 2 - 1, n / 2 - 1, 0, 0) };
+            }
+            var old = GUI.color;
+            GUI.color = c;
+            ends = Mathf.Max(0.5f, Mathf.Min(ends, r.width / 2f));
+            var kx = ends / 31f;
+            var ky = r.height / 64f;
+            var m = GUI.matrix;
+            GUI.matrix = m * Matrix4x4.TRS(new Vector3(r.x, r.y, 0f), Quaternion.identity, new Vector3(kx, ky, 1f));
+            _glowStyle.Draw(new Rect(0f, 0f, r.width / kx, 64f), false, false, false, false);
+            GUI.matrix = m;
+            GUI.color = old;
         }
 
         /// <summary>A filled rounded rectangle. <paramref name="radius"/> is in canvas units (0 = square corners).</summary>

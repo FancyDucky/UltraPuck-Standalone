@@ -232,6 +232,18 @@ namespace UltraPuck.Core
         /// <summary>Double Card: the cards it gave in the last pick (shown before the countdown), and how many times it has (so a new one is seen).</summary>
         public int[] Gifts = new int[0];
         public int Gifted;
+        /// <summary>Card rounds this player has picked in (Choose's deck pick not counted again).</summary>
+        public int PickRounds;
+        /// <summary>
+        /// Joined part-way: picking a card for each of their team's card rounds they missed (individual picking), or
+        /// about to be given the team's cards (Team Vote / Same Draw). They can't move or touch the puck until done.
+        /// </summary>
+        public bool CatchingUp;
+        /// <summary>
+        /// Added part-way as a bot: the bot picks its catch-up cards. (A person away for a moment is flagged <see cref="Bot"/>
+        /// while the bot plays them, but their catch-up cards wait for them.)
+        /// </summary>
+        public bool BotCatchUp;
 
         // card effects (seconds left, 0 = ready / not active)
         public Fix GunCooldown, InvisCooldown, InvisibleTime, ShockCooldown;
@@ -410,6 +422,8 @@ namespace UltraPuck.Core
         /// <summary>Team that last shot or carried the puck (-1 = nobody since the face-off). The puck glows in their colour.</summary>
         public int PuckTeam = -1;
         public int[] Score = new int[2];
+        /// <summary>Card rounds each team has had (red, blue): what a player joining part-way catches up to.</summary>
+        public int[] TeamRounds = new int[2];
         public Phase Phase = Phase.Countdown;
         public Fix PhaseTime;
         /// <summary>Team that scored last (-1 = nobody yet), or the winner once the game is over.</summary>
@@ -489,6 +503,7 @@ namespace UltraPuck.Core
             s.Players = new PlayerState[Players.Length];
             for (var i = 0; i < Players.Length; i++) s.Players[i] = Players[i].Clone();
             s.Score = (int[])Score.Clone();
+            s.TeamRounds = (int[])TeamRounds.Clone();
             s.Shots = (Shot[])Shots.Clone();
             s.Pylons = (Pylon[])Pylons.Clone();
             s.Rocks = (Rock[])Rocks.Clone();
@@ -526,6 +541,7 @@ namespace UltraPuck.Core
             foreach (var st in Stones) { Mix(ref h, st.A); Mix(ref h, st.B); Mix(ref h, st.Life); Mix(ref h, st.Wall); }
             foreach (var ice in Ice) { Mix(ref h, ice.Pos); Mix(ref h, ice.Trail); Mix(ref h, ice.Team); Mix(ref h, ice.Slow); Mix(ref h, ice.Melt); Mix(ref h, ice.Laying ? 1 : 0); }
             foreach (var sc in Score) Mix(ref h, sc);
+            foreach (var r in TeamRounds) Mix(ref h, r);
             foreach (var p in Players)
             {
                 Mix(ref h, p.Team); Mix(ref h, p.Pos); Mix(ref h, p.Vel); Mix(ref h, p.Facing);
@@ -537,6 +553,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.Offer.Length); foreach (var c in p.Offer) Mix(ref h, c);
                 Mix(ref h, p.Picked); Mix(ref h, p.PickKind); Mix(ref h, p.Rerolls); Mix(ref h, p.PickHeld ? 1 : 0);
                 Mix(ref h, p.Gifted); Mix(ref h, p.Gifts.Length); foreach (var c in p.Gifts) Mix(ref h, c);
+                Mix(ref h, p.PickRounds); Mix(ref h, p.CatchingUp ? 1 : 0); Mix(ref h, p.BotCatchUp ? 1 : 0);
                 Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);

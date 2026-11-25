@@ -210,12 +210,6 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("hit_fx", value ? 1 : 0); }
         }
 
-        /// <summary>The moving sunlight (caustics) on the underwater rink.</summary>
-        public static bool Caustics
-        {
-            get { return PlayerPrefs.GetInt("caustics", 1) != 0; }
-            set { PlayerPrefs.SetInt("caustics", value ? 1 : 0); }
-        }
 
         /// <summary>Swapping to a bot teammate: a trail from where you were to where you are now (off by default).</summary>
         public static bool SwapTrail

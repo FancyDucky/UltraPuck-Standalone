@@ -54,6 +54,9 @@ namespace UltraPuck.Game
         /// ULTRAPUCK_CARDTEST=1 (for recording the screen with nobody at the controls): the focus moves along by
         /// itself and a card is taken after a few seconds, then another pick starts.
         /// </summary>
+        /// <summary>Screenshots: take the card in focus (as if confirmed).</summary>
+        public bool ShotConfirm;
+
         public static readonly bool TestMode = System.Environment.GetEnvironmentVariable("ULTRAPUCK_CARDTEST") == "1";
 
         /// <summary>The pick a local player confirmed (1-based) for the game to read, or 0 while they're still choosing.</summary>
@@ -129,7 +132,9 @@ namespace UltraPuck.Game
         public void Frame(GameState s)
         {
             _state = s;
-            var picking = s != null && s.Phase == Phase.Picking && Sim != null && Sim.Cards != null;
+            // (or someone on this PC catching up on cards after joining part-way, while the match goes on)
+            var catchUp = s != null && s.Phase != Phase.Picking && Sim != null && Sim.Cards != null && LocalCatchingUp(s);
+            var picking = s != null && (s.Phase == Phase.Picking || catchUp) && Sim != null && Sim.Cards != null;
             LogPicks(s, picking);
             if (!picking)
             {
@@ -169,7 +174,13 @@ namespace UltraPuck.Game
                     var p = s.Players[_slot];
                     if (p.Offer.Length > 0 && p.Picked < 0 && !SameCards(p.Offer, _dealt)) Redeal(s);
                 }
-                if (_stage == Stage.Idle && !_editing)
+                if (_stage == Stage.Idle && !_editing && catchUp)
+                {
+                    // catching up: their own cards, one round at a time (nobody else's picks to watch)
+                    var next = NextPicker(s);
+                    if (next >= 0) { _watching = false; _teamVote = false; Deal(next, s.Players[next].Offer); }
+                }
+                else if (_stage == Stage.Idle && !_editing)
                 {
                     if ((Sim.T.TeamVote || Sim.T.SameDraw) && !deckRound) BeginTeamVote(s);
                     else
@@ -297,6 +308,18 @@ namespace UltraPuck.Game
         }
 
         /// <summary>The first local person (not a bot) still to choose.</summary>
+        /// <summary>Someone on this PC is catching up on cards (joined part-way) outside the card screen.</summary>
+        private bool LocalCatchingUp(GameState s)
+        {
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var slot = SlotOf(i);
+                if (slot < 0 || slot >= Local.Slots.Count || Local.Slots[slot].Demo) continue;
+                if (s.Players[i].Offer.Length > 0) return true;
+            }
+            return false;
+        }
+
         private int NextPicker(GameState s)
         {
             for (var i = 0; i < s.Players.Length; i++)
@@ -426,7 +449,7 @@ namespace UltraPuck.Game
                 if (n == 0)
                 {
                     var mouse = UnityEngine.InputSystem.Mouse.current;
-                    if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 0.5f && Time.unscaledTime - _lastHover > 0.12f)
+                    if (mouse != null && Ui.MouseMovedNow && Time.unscaledTime - _lastHover > 0.12f)
                     {
                         var mp = mouse.position.ReadValue();
                         for (var k = 0; k < _cards.Count; k++)
@@ -640,6 +663,7 @@ namespace UltraPuck.Game
                     _testStep++;
                 }
             }
+            if (ShotConfirm) { m.Confirm = true; ShotConfirm = false; }
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, _cards.Count - 1));
             if (_deck && m.Tab != 0) ResizeGrid(m.Tab);
             if (_deck && m.Y != 0)
@@ -656,7 +680,7 @@ namespace UltraPuck.Game
                 var mp = mouse.position.ReadValue();
                 // keep the focused card while the mouse is on it (cards overlap a little when one is lifted),
                 // and don't flick between cards faster than the eye can follow
-                if (mouse.delta.ReadValue().sqrMagnitude > 0.5f && !ScreenRect(_cards[_focus]).Contains(mp) && Time.unscaledTime - _lastHover > 0.12f)
+                if (Ui.MouseMovedNow && !ScreenRect(_cards[_focus]).Contains(mp) && Time.unscaledTime - _lastHover > 0.12f)
                     for (var k = 0; k < _cards.Count; k++)
                     {
                         var row = k / EditCols - _editTop;
@@ -954,14 +978,21 @@ namespace UltraPuck.Game
                 var name = NameOf != null ? NameOf(_slot) : "";
                 if (string.IsNullOrEmpty(name)) name = "P" + (_slot + 1);
                 var who = name + "  ·  " + Palette.TeamName(team);
+                // joined part-way: catching up on the team's card rounds (how many to go, this one included)
+                var choose = "Choose a card";
+                if (_state.Phase != Phase.Picking && !_watching && !_deck)
+                {
+                    var togo = Mathf.Max(1, _state.TeamRounds[team & 1] - _state.Players[_slot].PickRounds);
+                    choose = "Catching up  ·  " + togo + (togo == 1 ? " card" : " cards") + " to go";
+                }
                 Ui.Swatch(new Rect(Ui.W / 2f - 150f, y + 6f, 26f, 26f), team);
                 Ui.Label(new Rect(Ui.W / 2f - 115f, y, 400f, 40f), who, Ui.Font(22, true), new Color(1f, 1f, 1f, a));
-                Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? (_stage == Stage.Leaving && _chosen >= 0 ? name + " took a card" : name + (_deck ? " is choosing from the deck..." : " is choosing...")) : _deck ? "Pick a card, any card" : "Choose a card",
+                Ui.Label(new Rect(0f, y + 40f, Ui.W, 50f), _watching ? (_stage == Stage.Leaving && _chosen >= 0 ? name + " took a card" : name + (_deck ? " is choosing from the deck..." : " is choosing...")) : _deck ? "Pick a card, any card" : choose,
                     Ui.Font(40, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
             }
 
             // time left
-            var noLimit = Sim.T.PickTime <= Fix.Zero;
+            var noLimit = Sim.T.PickTime <= Fix.Zero || _state.Phase != Phase.Picking; // (catching up: no time limit)
             var left = noLimit ? 1f : Mathf.Clamp01(_state.PhaseTime.ToFloat() / Mathf.Max(0.01f, Sim.T.PickTime.ToFloat()));
             var bar = new Rect(Ui.W / 2f - 160f, y + 98f, 320f, 6f);
             Ui.Box(bar, new Color(1f, 1f, 1f, 0.12f * a), 3f);
@@ -1238,7 +1269,7 @@ namespace UltraPuck.Game
             if (mouse != null)
             {
                 var mp = mouse.position.ReadValue();
-                if (mouse.delta.ReadValue().sqrMagnitude > 0.5f && !ScreenRect(_cards[_focus]).Contains(mp) && Time.unscaledTime - _lastHover > 0.12f)
+                if (Ui.MouseMovedNow && !ScreenRect(_cards[_focus]).Contains(mp) && Time.unscaledTime - _lastHover > 0.12f)
                     for (var k = 0; k < _cards.Count; k++)
                     {
                         var row = k / EditCols - _editTop;
@@ -1522,7 +1553,7 @@ namespace UltraPuck.Game
             if (mouse != null)
             {
                 var mp = mouse.position.ReadValue();
-                if (mouse.delta.ReadValue().sqrMagnitude > 0.5f && !ScreenRect(_cards[_focus]).Contains(mp) && Time.unscaledTime - _lastHover > 0.12f)
+                if (Ui.MouseMovedNow && !ScreenRect(_cards[_focus]).Contains(mp) && Time.unscaledTime - _lastHover > 0.12f)
                     for (var k = 0; k < _cards.Count; k++)
                     {
                         var row = k / EditCols - _editTop;

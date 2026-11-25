@@ -71,6 +71,14 @@ namespace UltraPuck.Core
             }
             if (T.TeamVote || T.SameDraw) for (var team = 0; team < 2; team++) OnePickerGets(s, team, order);
             if (!any) return;
+            // a card round for each team offered cards (someone joining part-way catches up to this)
+            if (!T.FreePlay)
+                for (var team = 0; team < 2; team++)
+                {
+                    var had = false;
+                    foreach (var i in order) had |= (s.Players[i].Team & 1) == team && s.Players[i].Offer.Length > 0;
+                    if (had) s.TeamRounds[team]++;
+                }
             s.Carrier = -1;
             s.Phase = Phase.Picking;
             s.PhaseTime = T.PickTime;
@@ -272,42 +280,7 @@ namespace UltraPuck.Core
             {
                 if (p.Offer.Length == 0) continue;
                 if (p.Picked < 0) p.Picked = p.Offer[(int)(s.NextRandom() % (uint)p.Offer.Length)];
-                // one a teammate has just taken (only so many a team, like the Portal Gun): the next card offered instead
-                if (Cards.TeamFull(s, p, p.Picked))
-                {
-                    var other = -1;
-                    var at = Array.IndexOf(p.Offer, p.Picked);
-                    for (var k = 1; k < p.Offer.Length && other < 0; k++)
-                    {
-                        var c = p.Offer[(at + k) % p.Offer.Length];
-                        if (!Cards.TeamFull(s, p, c)) other = c;
-                    }
-                    if (other < 0) other = AnyOtherCard(s, Array.IndexOf(s.Players, p), p.Offer);
-                    p.Picked = other;
-                }
-                var took = p.Picked;
-                var wasDeck = p.PickKind == 1;
-                if (took >= 0) GiveCard(s, p, took);
-                p.Offer = new int[0];
-                p.Picked = -1;
-                p.Hover = 0;
-                p.PickKind = 0;
-                p.PickHeld = false;
-                if (took < 0 || wasDeck) continue;
-                var me = Array.IndexOf(s.Players, p);
-                // Choose: straight on to picking any card from the deck (everyone else waits)
-                if (Cards.IsChoose(took))
-                {
-                    var deck = Cards.DeckOffer(s, me, T.CardsOff);
-                    if (deck.Length > 0) { p.Offer = deck; p.PickKind = 1; p.PickHeld = true; again = true; }
-                }
-                // Double Card: two random cards, by the same rules as Choose's deck
-                else if (Cards.IsDouble(took))
-                {
-                    var gifts = new System.Collections.Generic.List<int>();
-                    for (var n = 0; n < 2; n++) { var g = GiveRandom(s, me); if (g >= 0) gifts.Add(g); }
-                    if (gifts.Count > 0) { p.Gifts = gifts.ToArray(); p.Gifted++; }
-                }
+                again |= TakePicked(s, p);
             }
             Cards.Recompute(s);
             if (again)
@@ -327,6 +300,157 @@ namespace UltraPuck.Core
                 foreach (var q in s.Players) gifted |= q.Gifts.Length > 0;
                 if (gifted) s.PhaseTime += T.GiftRevealTime;
             }
+        }
+
+        /// <summary>
+        /// <paramref name="p"/> takes the card they picked (<see cref="PlayerState.Picked"/>): it's theirs, their offer is
+        /// cleared, and its effect on picking happens (Choose: the deck is offered next, Double Card: two random cards).
+        /// True when another pick follows (Choose's deck).
+        /// </summary>
+        private bool TakePicked(GameState s, PlayerState p)
+        {
+            // one a teammate has just taken (only so many a team, like the Portal Gun): the next card offered instead
+            if (p.Picked >= 0 && Cards.TeamFull(s, p, p.Picked))
+            {
+                var other = -1;
+                var at = Array.IndexOf(p.Offer, p.Picked);
+                for (var k = 1; k < p.Offer.Length && other < 0; k++)
+                {
+                    var c = p.Offer[(at + k) % p.Offer.Length];
+                    if (!Cards.TeamFull(s, p, c)) other = c;
+                }
+                if (other < 0) other = AnyOtherCard(s, Array.IndexOf(s.Players, p), p.Offer);
+                p.Picked = other;
+            }
+            var took = p.Picked;
+            var wasDeck = p.PickKind == 1;
+            if (!wasDeck) p.PickRounds++;
+            if (took >= 0) GiveCard(s, p, took);
+            p.Offer = new int[0];
+            p.Picked = -1;
+            p.Hover = 0;
+            p.PickKind = 0;
+            p.PickHeld = false;
+            if (took < 0 || wasDeck) return false;
+            var me = Array.IndexOf(s.Players, p);
+            // Choose: straight on to picking any card from the deck (everyone else waits)
+            if (Cards.IsChoose(took))
+            {
+                var deck = Cards.DeckOffer(s, me, T.CardsOff);
+                if (deck.Length > 0) { p.Offer = deck; p.PickKind = 1; p.PickHeld = true; return true; }
+            }
+            // Double Card: two random cards, by the same rules as Choose's deck
+            else if (Cards.IsDouble(took))
+            {
+                var gifts = new System.Collections.Generic.List<int>();
+                for (var n = 0; n < 2; n++) { var g = GiveRandom(s, me); if (g >= 0) gifts.Add(g); }
+                if (gifts.Count > 0) { p.Gifts = gifts.ToArray(); p.Gifted++; }
+            }
+            return false;
+        }
+
+        /// <summary>Is player <paramref name="i"/> on their catch-up card screen (joined part-way, see <see cref="PlayerState.CatchingUp"/>)?</summary>
+        public static bool CatchingUp(GameState s, int i)
+        {
+            if (s == null || i < 0 || i >= s.Players.Length || s.Phase == Phase.Picking) return false;
+            var p = s.Players[i];
+            return p.CatchingUp || p.Offer.Length > 0;
+        }
+
+        /// <summary>
+        /// Catching up on cards (someone who joined part-way): while the match goes on, each of them picks one card for
+        /// every card round their team has had that they missed, on their own card screen (individual picking; no time
+        /// limit). Team Vote / Same Draw: they're given a teammate's cards straight away instead. Until they're done
+        /// they stand still and can't touch the puck. Returns the controls to play this tick with (theirs emptied).
+        /// </summary>
+        private PlayerInput[] CatchUp(GameState s, PlayerInput[] inputs)
+        {
+            PlayerInput[] own = null;
+            var changed = false;
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var p = s.Players[i];
+                if (!p.CatchingUp && p.Offer.Length == 0) continue;
+                if (own == null)
+                {
+                    own = new PlayerInput[s.Players.Length];
+                    for (var j = 0; j < own.Length; j++) own[j] = InputOf(inputs, j);
+                }
+                var input = own[i];
+                own[i] = new PlayerInput { Buttons = (byte)(input.Buttons & (PlayerInput.DashMove | PlayerInput.NoAutoSwap)) };
+                if (p.Offer.Length > 0)
+                {
+                    // the pick still being sent is for the cards before: wait until it's let go
+                    if (p.PickHeld) { if (input.Pick == 0) p.PickHeld = false; }
+                    else
+                    {
+                        p.Hover = input.Hover <= p.Offer.Length ? input.Hover : (byte)0;
+                        if (input.Pick >= 1 && input.Pick <= p.Offer.Length)
+                        {
+                            p.Picked = p.Offer[input.Pick - 1];
+                            TakePicked(s, p);
+                            if (p.Offer.Length > 0) p.PickHeld = true;
+                            changed = true;
+                        }
+                    }
+                }
+                if (p.Offer.Length == 0 && p.CatchingUp) changed |= NextCatchUp(s, i);
+                if (p.CatchingUp || p.Offer.Length > 0)
+                {
+                    // waiting on their cards: still, and hands off the puck
+                    p.Vel = FixVec2.Zero;
+                    p.Charge = Fix.Zero;
+                    p.NoPickup = Fix.Max(p.NoPickup, T.CheckerPickupDelay);
+                    if (s.Carrier == i) { s.Carrier = -1; s.PassFrom = -1; }
+                }
+            }
+            if (changed && Cards != null) Cards.Recompute(s);
+            return own ?? inputs;
+        }
+
+        /// <summary>Player <paramref name="i"/>'s next catch-up card round: an offer, the team's cards, or done. True when their cards changed.</summary>
+        private bool NextCatchUp(GameState s, int i)
+        {
+            var p = s.Players[i];
+            if (Cards == null || Cards.Cards.Count == 0 || T.FreePlay || s.Phase == Phase.GameOver || s.TeamRounds[p.Team & 1] <= p.PickRounds)
+            {
+                p.CatchingUp = false;
+                return false;
+            }
+            if (T.TeamVote || T.SameDraw)
+            {
+                // a shared hand: the team's cards, from the teammate who has had the most card rounds
+                PlayerState from = null;
+                for (var j = 0; j < s.Players.Length; j++)
+                {
+                    var q = s.Players[j];
+                    if (j == i || q.Team != p.Team || q.CatchingUp) continue;
+                    if (from == null || q.PickRounds > from.PickRounds) from = q;
+                }
+                if (from != null)
+                {
+                    foreach (var c in from.Cards) if (!Cards.TeamFull(s, p, c)) GiveCard(s, p, c);
+                    p.PickRounds = s.TeamRounds[p.Team & 1];
+                    p.CatchingUp = false;
+                    return true;
+                }
+                // no teammate to take them from: they pick their own, like everyone else
+            }
+            var count = Math.Max(1, Math.Min(5, T.CardsOffered));
+            var offer = Cards.DrawOffer(s, i, count, T.CardsOff);
+            if (offer.Length == 0 && T.CardsOff != null && T.CardsOff.Length > 0) offer = Cards.DrawOffer(s, i, count, StandInOff(p));
+            if (offer.Length == 0)
+            {
+                p.PickRounds++; // nothing they can have: that round is skipped
+                return false;
+            }
+            p.Offer = offer;
+            p.Picked = -1;
+            p.Hover = 0;
+            p.PickKind = 0;
+            p.Rerolls = 0;
+            p.PickHeld = true;
+            return false;
         }
 
         private void TeamVoteResult(GameState s, int team)
@@ -776,7 +900,8 @@ namespace UltraPuck.Core
             var sp = FaceOffSpot(team, n);
             var players = new PlayerState[s.Players.Length + 1];
             Array.Copy(s.Players, players, s.Players.Length);
-            players[players.Length - 1] = new PlayerState { Team = team, Pos = sp.Pos, Facing = sp.Facing, Bot = bot };
+            // joined part-way: they catch up on the card rounds their team has had (see CatchUp)
+            players[players.Length - 1] = new PlayerState { Team = team, Pos = sp.Pos, Facing = sp.Facing, Bot = bot, CatchingUp = !T.FreePlay, BotCatchUp = bot };
             s.Players = players;
             return players.Length - 1;
         }
@@ -909,6 +1034,7 @@ namespace UltraPuck.Core
             }
 
             if (s.Phase == Phase.Picking) { StepPicking(s, inputs, dt); return; }
+            if (s.Phase != Phase.GameOver) inputs = CatchUp(s, inputs);
             if (s.Phase == Phase.Countdown || s.Phase == Phase.GameOver)
             {
                 for (var i = 0; i < s.Players.Length; i++) s.Players[i].PrevButtons = InputOf(inputs, i).Buttons;
@@ -1087,6 +1213,9 @@ namespace UltraPuck.Core
                     var p = s.Players[h];
                     if (p.Bot) continue;
                     var held = (InputOf(raw, h).Buttons & PlayerInput.Swap) != 0;
+                    // on their catch-up card screen: on their own player, and nobody else can steer them
+                    if (CatchingUp(s, h)) { p.Pilot = -1; p.SwapHeld = held; continue; }
+                    if (p.Pilot >= 0 && CatchingUp(s, p.Pilot)) p.Pilot = -1;
                     if (held && !p.SwapHeld) SwapToNext(s, h);
                     p.SwapHeld = held;
                 }
@@ -1096,7 +1225,7 @@ namespace UltraPuck.Core
                 {
                     var people = new System.Collections.Generic.List<int>();
                     for (var h = 0; h < n; h++)
-                        if (!s.Players[h].Bot && s.Players[h].Team == s.Players[c].Team && (InputOf(raw, h).Buttons & PlayerInput.NoAutoSwap) == 0) people.Add(h);
+                        if (!s.Players[h].Bot && s.Players[h].Team == s.Players[c].Team && (InputOf(raw, h).Buttons & PlayerInput.NoAutoSwap) == 0 && !CatchingUp(s, h)) people.Add(h);
                     if (people.Count > 0)
                     {
                         var who = people.Count == 1 ? people[0] : people[(int)(s.NextRandom() % (uint)people.Count)];

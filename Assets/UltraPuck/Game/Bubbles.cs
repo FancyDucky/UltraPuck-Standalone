@@ -18,7 +18,7 @@ namespace UltraPuck.Game
         public float[] Streams = { -30f, 30f };
         public Vector2 Size = new Vector2(0.14f, 0.44f), Speed = new Vector2(0.8f, 2.4f);
         public int FrontOrder = 3, BackOrder = -9;
-        [Range(0f, 1f)] public float FrontAlpha = 0.3f, BackAlpha = 0.7f;
+        [Range(0f, 1f)] public float FrontAlpha = 0.18f, BackAlpha = 0.4f;
 
         private sealed class One { public SpriteRenderer R; public float Speed, Wobble, Phase; public Vector2 Pos; }
         private readonly List<One> _all = new List<One>();

@@ -26,7 +26,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _Bottom: -17.5
-    - _Strength: 0.12
+    - _Strength: 0
     - _Top: 20.5
     m_Colors:
     - _Deep: {r: 0.06, g: 0.2, b: 0.25, a: 1}

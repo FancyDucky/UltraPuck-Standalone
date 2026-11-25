@@ -26,7 +26,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _Reach: 49
-    - _Strength: 0.55
+    - _Strength: 0.5
     m_Colors:
     - _Colour: {r: 0.62, g: 0.92, b: 1, a: 1}
     - _Origin: {r: 0, g: 29.5, b: 0, a: 0}

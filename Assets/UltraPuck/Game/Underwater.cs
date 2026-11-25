@@ -15,7 +15,7 @@ namespace UltraPuck.Game
     {
         public const string Theme = "underwater";
         // (for the little rink pictures on the rink screen)
-        public static readonly Color Wall = new Color(0.43f, 0.6f, 0.62f), Sand = new Color(0.8f, 0.71f, 0.46f);
+        public static readonly Color Wall = new Color(0.43f, 0.6f, 0.62f), Sand = new Color(0.73f, 0.645f, 0.415f);
         public static readonly Color DeepWater = new Color(0.06f, 0.2f, 0.25f), ShallowWater = new Color(0.11f, 0.52f, 0.62f);
 
         /// <summary>Put <paramref name="map"/>'s dressing under <paramref name="root"/> (the rink); its settings, or null if there's none.</summary>

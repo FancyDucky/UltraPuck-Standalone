@@ -238,9 +238,14 @@ namespace UltraPuck.Game
                 // the screen the game starts on: partway through its entrance, settled, then handing over to the main menu
                 _mainMenu.TitleStays = true;
                 _mainMenu.Show(MainMenu.Page.Title);
-                yield return new WaitForSecondsRealtime(1.8f);
+                // (it waits ~1.2 s for the window first: the letters, the puck falling, landing, the beams, all done)
+                yield return new WaitForSecondsRealtime(2.4f);
+                yield return Shot("title-0");
+                yield return new WaitForSecondsRealtime(0.75f);
                 yield return Shot("title-1");
-                yield return new WaitForSecondsRealtime(3.0f);
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("title-1b");
+                yield return new WaitForSecondsRealtime(3.2f);
                 yield return Shot("title-2");
                 _mainMenu.LeaveTitle();
                 yield return new WaitForSecondsRealtime(0.2f);
@@ -597,6 +602,166 @@ namespace UltraPuck.Game
                 yield return new WaitForSecondsRealtime(0.5f);
                 yield return Shot("card-list");
                 _menus.Close();
+                GoMainMenu();
+            }
+
+            if (want("mainmenu"))
+            {
+                // the main menu settled: the name and the small line under it (its shadow hugging the letters)
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(2f);
+                yield return Shot("main-menu");
+            }
+
+            if (want("teampage"))
+            {
+                // a local match's pause menu: Change team (under Match settings), then the match settings scrolled to the
+                // bottom (Carry-through and Knock-away)
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(0.5f);
+                _menus.FreePlay = false;
+                _menus.OpenPause("Shot");
+                _menus.ShotFocus("Change team");
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("pause-change-team");
+                _menus.OpenTeam();
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("change-team");
+                _menus.ShowMatchSettings();
+                _menus.ShotFocus("");
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("match-settings-bottom");
+                _menus.Close();
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
+            if (want("freepause"))
+            {
+                // free play's pause menu: the bot count and rink with arrows either side
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(0.5f);
+                _menus.FreePlay = true;
+                _menus.OpenPause("Free play");
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("freeplay-pause");
+                _menus.Close();
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
+            if (want("catchup"))
+            {
+                // a local match where you've just come in part-way: two card rounds to catch up on while the bots play
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Colour = 0, Demo = true });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                _sim.T.TeamVote = false; _sim.T.SameDraw = false;
+                yield return new WaitForSecondsRealtime(4.5f); // past the countdown
+                _state.TeamRounds[0] = 2;
+                _state.Players[0].CatchingUp = true;
+                yield return new WaitForSecondsRealtime(2.4f);
+                yield return Shot("catchup-local-1");
+                _cardScreen.ShotConfirm = true;
+                yield return new WaitForSecondsRealtime(3.4f);
+                yield return Shot("catchup-local-2");
+                _cardScreen.ShotConfirm = true;
+                yield return new WaitForSecondsRealtime(3.0f);
+                yield return Shot("catchup-local-done");
+                Debug.Log("Ultra Puck shots: catch-up local: cards " + _state.Players[0].Cards.Length + ", catching up " + Simulation.CatchingUp(_state, 0));
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
+            if (want("hostlate"))
+            {
+                // two copies of the game (see joinlate): this one hosts by IP with bots until a card round has been, then
+                // says which side had it (a file next to the shots) for the other copy to join part-way
+                _shotRules = true;
+                HostIp();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Colour = 0, Symbol = 2, Name = "Host", Ready = true, Cursor = 0 });
+                yield return new WaitForSecondsRealtime(0.5f);
+                if (_session != null) _session.Bots = 3;
+                yield return new WaitForSecondsRealtime(2f);
+                StartOnlineMatch();
+                var waited = 0f;
+                while (waited < 300f && (_state == null || _session == null || !OnlinePlaying || _state.Phase == Phase.Picking || _state.TeamRounds[0] + _state.TeamRounds[1] == 0))
+                { yield return new WaitForSecondsRealtime(1f); waited += 1f; }
+                var team = _state != null && _state.TeamRounds[1] > _state.TeamRounds[0] ? 1 : 0;
+                Debug.Log("Ultra Puck shots: host: card rounds " + (_state != null ? _state.TeamRounds[0] + "/" + _state.TeamRounds[1] : "none") + " after " + waited + " s");
+                yield return Shot("host-after-round");
+                File.WriteAllText(Path.Combine(ShotDir, "late-team.txt"), _session.TeamColours[team].ToString());
+                var players = _state.Players.Length;
+                waited = 0f;
+                while (waited < 120f && (_state == null || _state.Players.Length <= players)) { yield return new WaitForSecondsRealtime(1f); waited += 1f; }
+                yield return new WaitForSecondsRealtime(2f);
+                yield return Shot("host-joiner-picking");
+                yield return new WaitForSecondsRealtime(40f); // the other copy takes its shots
+                yield return Shot("host-later");
+                Debug.Log("Ultra Puck shots: host: players " + _state.Players.Length + ", last one's cards " + _state.Players[_state.Players.Length - 1].Cards.Length);
+                LeaveOnline(null);
+                GoMainMenu();
+            }
+
+            if (want("joinlate"))
+            {
+                // the other copy (see hostlate): joins the match part-way once a card round has been
+                var file = Path.Combine(ShotDir, "late-team.txt");
+                var waited = 0f;
+                while (waited < 360f && !File.Exists(file)) { yield return new WaitForSecondsRealtime(1f); waited += 1f; }
+                int colour;
+                int.TryParse(File.Exists(file) ? File.ReadAllText(file).Trim() : "0", out colour);
+                JoinIp("127.0.0.1");
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Colour = colour, Symbol = 4, Name = "Late", Ready = false, Cursor = 0 });
+                yield return new WaitForSecondsRealtime(2.5f);
+                yield return Shot("join-lobby");
+                _mainMenu.ShowOptions(true);
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("join-lobby-options");
+                _mainMenu.ShowOptions(false);
+                _local.Slots[0].Ready = true;
+                waited = 0f;
+                while (waited < 60f && !OnlinePlaying) { yield return new WaitForSecondsRealtime(0.5f); waited += 0.5f; }
+                yield return new WaitForSecondsRealtime(2.4f);
+                yield return Shot("join-catchup-1");
+                _cardScreen.ShotConfirm = true;
+                yield return new WaitForSecondsRealtime(3.4f);
+                yield return Shot("join-catchup-2");
+                for (var k = 0; k < 6 && _state != null && _session != null && Simulation.CatchingUp(_state, _session.PlayerOf(0)); k++)
+                { _cardScreen.ShotConfirm = true; yield return new WaitForSecondsRealtime(3f); }
+                yield return new WaitForSecondsRealtime(1f);
+                yield return Shot("join-caught-up");
+                if (_state != null && _session != null)
+                {
+                    var me = _session.PlayerOf(0);
+                    Debug.Log("Ultra Puck shots: joiner: player " + me + ", cards " + (me >= 0 ? _state.Players[me].Cards.Length : -1) + ", team rounds "
+                        + _state.TeamRounds[0] + "/" + _state.TeamRounds[1] + ", catching up " + Simulation.CatchingUp(_state, me) + ", problem " + _session.Problem);
+                }
+                _menus.FreePlay = false;
+                _menus.OpenPause("Online  ·  the match keeps going");
+                _menus.ShotFocus("Change team");
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("join-pause");
+                _menus.ShowMatchSettings();
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("join-match-settings");
+                _menus.ShotFocus("");
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("join-match-settings-bottom");
+                _menus.OpenTeam();
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("join-change-team");
+                _menus.Close();
+                LeaveOnline(null);
                 GoMainMenu();
             }
 
@@ -1479,12 +1644,16 @@ namespace UltraPuck.Game
         private Tuning MatchTuning(bool free) { return RulesTuning(PackRules(), free); }
 
         /// <summary>The match rules as a few bytes, to send to everyone online (the host's rules apply).</summary>
+        /// <summary>Screenshots (hostlate): rounds mode on, each player picking, 3 s to pick, whatever the settings say (they aren't touched).</summary>
+        private static bool _shotRules;
+
         private byte[] PackRules()
         {
             var b = new List<byte>();
             b.Add((byte)((Settings.Rounds ? 1 : 0) | (Settings.TeamVote ? 2 : 0) | (Settings.Replays ? 4 : 0) | (Settings.MultiUtility ? 8 : 0) | (Settings.PickMode == 1 ? 16 : 0)));
+            if (_shotRules) b[0] = (byte)((b[0] | 1) & ~(2 | 4 | 16));
             b.Add((byte)Settings.CardsOffered);
-            b.Add((byte)Mathf.Clamp(Settings.PickTime, 0, 255));
+            b.Add((byte)(_shotRules ? 3 : Mathf.Clamp(Settings.PickTime, 0, 255)));
             b.Add((byte)Settings.MatchMode);
             b.Add((byte)Settings.GoalsToWin);
             b.Add((byte)Settings.MatchMinutes);

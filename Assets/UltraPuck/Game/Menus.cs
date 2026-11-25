@@ -288,7 +288,6 @@ namespace UltraPuck.Game
                     _rows.Add(Slider("UI size", () => (Settings.UiScale - 0.6f) / 1.4f, v => Settings.UiScale = 0.6f + v * 1.4f, v => Mathf.RoundToInt((0.6f + v * 1.4f) * 100f) + "%"));
                     _rows.Add(Switch("Puck trail", () => Settings.PuckTrail, v => Settings.PuckTrail = v));
                     _rows.Add(Switch("Card effects", () => Settings.CardEffects, v => Settings.CardEffects = v, "Holo, foil and polychrome finishes, glare and sparkle on cards."));
-                    _rows.Add(Switch("Caustics", () => Settings.Caustics, v => Settings.Caustics = v, "The moving sunlight over the underwater rink."));
                     break;
                 case 1:
                     _rows.Add(new Row
@@ -515,6 +514,10 @@ namespace UltraPuck.Game
 
         /// <summary>Open the match settings page (for the screenshots).</summary>
         public void ShowMatchSettings() { OpenMatch(); }
+
+        /// <summary>Screenshots: the focus on the row with this label ("": the last row).</summary>
+        public void ShotFocus(string label) { _shotFocus = label; }
+        private string _shotFocus;
 
         /// <summary>Open the card list from the match settings (for the screenshots).</summary>
         public void ShowCardList() { _cardsFrom = Current; Current = Page.Cards; _focus = 0; _first = 0; _focusY = -1f; }
@@ -750,6 +753,12 @@ namespace UltraPuck.Game
             GUI.depth = 0;
             Ui.Begin();
             BuildRows();
+            if (_shotFocus != null && _rows.Count > 0)
+            {
+                var k = _shotFocus == "" ? _rows.Count - 1 : _rows.FindIndex(r => r.Label == _shotFocus);
+                if (k >= 0) { _focus = k; _focusY = -1f; }
+                _shotFocus = null;
+            }
             var t = Time.unscaledTime - _openedAt;
             var appear = Ui.EaseOutBack(t / 0.28f);
             // over a match: a dim, so you can still see it; from the menus: a plain backdrop

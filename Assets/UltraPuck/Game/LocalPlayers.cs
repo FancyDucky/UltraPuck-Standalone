@@ -826,8 +826,9 @@ namespace UltraPuck.Game
                     AimY = PlayerInput.Axis(a.y),
                     Buttons = (byte)(Buttons(s.Device, false) | Buttons(s.Extra, false) | (HasKeyboard(s) ? MouseButtons(false) : 0) | s.Latched
                         | setting | (swap ? PlayerInput.Swap : 0)),
-                    Pick = state != null && state.Phase == Phase.Picking && PickFor != null ? PickFor(i) : PuckDrills ? s.PuckDrill : (byte)0,
-                    Hover = state != null && state.Phase == Phase.Picking && HoverFor != null ? HoverFor(i) : (byte)0,
+                    // (outside the card screen too, for someone catching up on cards after joining part-way)
+                    Pick = state != null && PickFor != null && (state.Phase == Phase.Picking || PickFor(i) != 0) ? PickFor(i) : PuckDrills ? s.PuckDrill : (byte)0,
+                    Hover = state != null && HoverFor != null ? HoverFor(i) : (byte)0,
                 };
                 s.Latched = 0;
                 s.PuckDrill = 0;

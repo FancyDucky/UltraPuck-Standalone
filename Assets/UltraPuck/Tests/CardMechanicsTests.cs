@@ -47,6 +47,116 @@ namespace UltraPuck.Tests
             _lib.Recompute(s);
         }
 
+        /// <summary>No one-a-team cards and no card givers (Choose, Double Card), so every pick is one plain card.</summary>
+        private int[] PlainCardsOnly()
+        {
+            var off = new System.Collections.Generic.List<int>(OneATeamOff());
+            off.AddRange(_lib.CardGivers());
+            return off.ToArray();
+        }
+
+        /// <summary>
+        /// Joining part-way (individual picking): one pick for each card round their team has had, on their own card
+        /// screen while the match goes on; meanwhile they stand still and can't take the puck.
+        /// </summary>
+        [Test]
+        public void JoiningPartWayCatchesUpOnCards()
+        {
+            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3, CardsOff = PlainCardsOnly(), MultiUtility = true }, _lib);
+            var s = sim.NewGame(new[] { 0, 1 }, 5u);
+            for (var round = 0; round < 3; round++)
+            {
+                sim.StartPicking(s, new[] { 0, 1 });
+                sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 } });
+                Assert.AreNotEqual(Phase.Picking, s.Phase);
+            }
+            sim.StartPicking(s, new[] { 1 }); // blue picks once more (red scored)
+            sim.Step(s, new[] { default(PlayerInput), new PlayerInput { Pick = 1 } });
+            Assert.AreEqual(3, s.TeamRounds[0]);
+            Assert.AreEqual(4, s.TeamRounds[1]);
+            Play(s);
+
+            var j = sim.AddPlayer(s, 1, false);
+            var none = new PlayerInput[3];
+            sim.Step(s, none);
+            Assert.AreEqual(Phase.Play, s.Phase, "the match goes on");
+            Assert.IsTrue(Simulation.CatchingUp(s, j));
+            Assert.AreEqual(3, s.Players[j].Offer.Length, "their first catch-up hand");
+            // (a person away for a moment, played by the bot meanwhile: the bot leaves their cards to them)
+            s.Players[j].PickHeld = false;
+            s.Players[j].Bot = true; // (how the rollback marks someone away)
+            Assert.AreEqual(0, Bot.Think(sim, s, j).Pick, "the bot doesn't pick a person's catch-up cards");
+            s.Players[j].Bot = false;
+            s.Players[j].PickHeld = true;
+            // they push the stick and the puck comes right at them: they stay put and can't take it
+            var at = s.Players[j].Pos;
+            s.Carrier = -1;
+            s.PuckPos = at + new FixVec2(Fix.FromInt(2), Fix.Zero);
+            s.PuckVel = new FixVec2(Fix.FromInt(-4), Fix.Zero);
+            for (var t = 0; t < 60; t++) sim.Step(s, new[] { default(PlayerInput), default(PlayerInput), new PlayerInput { MoveX = 127 } });
+            Assert.Less((s.Players[j].Pos - at).Length.ToDouble(), 0.05, "they wait where they are");
+            Assert.AreNotEqual(j, s.Carrier, "and can't take the puck");
+            Assert.AreEqual(0, s.Players[j].Cards.Length);
+            var mid = s.Clone();
+            Assert.AreEqual(s.Checksum(), mid.Clone().Checksum());
+
+            // four picks: each sent until the next hand comes, then let go
+            for (var k = 0; k < 4; k++)
+            {
+                Assert.AreEqual(3, s.Players[j].Offer.Length, "hand " + (k + 1));
+                sim.Step(s, new[] { default(PlayerInput), default(PlayerInput), new PlayerInput { Pick = 2 } });
+                sim.Step(s, none);
+            }
+            Assert.IsFalse(Simulation.CatchingUp(s, j), "caught up");
+            Assert.AreEqual(4, s.Players[j].Cards.Length, "as many cards as their team's card rounds");
+            Assert.AreEqual(4, s.Players[j].PickRounds);
+            Assert.AreEqual(0, s.Players[j].Offer.Length);
+            for (var t = 0; t < 20; t++) sim.Step(s, new[] { default(PlayerInput), default(PlayerInput), new PlayerInput { MoveX = 127 } });
+            Assert.Greater(s.Players[j].Vel.X.ToDouble(), 0.5, "and they play on");
+            Assert.AreNotEqual(mid.Checksum(), s.Checksum(), "the checksum sees it");
+        }
+
+        /// <summary>Joining part-way with a shared hand (Team Vote / Same Draw): the team's cards straight away, no card screen.</summary>
+        [Test]
+        public void JoiningPartWayWithTeamVoteGetsTheTeamsCards()
+        {
+            foreach (var sameDraw in new[] { false, true })
+            {
+                var sim = new Simulation(Rink(), new Tuning { TeamVote = !sameDraw, SameDraw = sameDraw, CardsOffered = 3, CardsOff = PlainCardsOnly(), MultiUtility = true }, _lib);
+                var s = sim.NewGame(new[] { 0, 0, 1 }, 9u);
+                for (var round = 0; round < 2; round++)
+                {
+                    sim.StartPicking(s, new[] { 0, 1, 2 });
+                    sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 2 } });
+                }
+                Play(s);
+                var j = sim.AddPlayer(s, 0, false);
+                sim.Step(s, new PlayerInput[4]);
+                Assert.IsFalse(Simulation.CatchingUp(s, j), "no card screen");
+                CollectionAssert.AreEqual(s.Players[0].Cards, s.Players[j].Cards, "the team's cards");
+                Assert.AreEqual(2, s.Players[j].Cards.Length);
+            }
+        }
+
+        /// <summary>A bot added part-way catches up on its own.</summary>
+        [Test]
+        public void ABotAddedPartWayPicksItsCatchUpCards()
+        {
+            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3, CardsOff = PlainCardsOnly(), MultiUtility = true }, _lib);
+            var s = sim.NewGame(new[] { 0, 1 }, 3u);
+            for (var round = 0; round < 2; round++)
+            {
+                sim.StartPicking(s, new[] { 0, 1 });
+                sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 } });
+            }
+            Play(s);
+            sim.HostCommand(s, PlayerInput.AddBotRed);
+            var j = s.Players.Length - 1;
+            for (var t = 0; t < 120 && Simulation.CatchingUp(s, j); t++) sim.Step(s, sim.Route(s, new PlayerInput[s.Players.Length]));
+            Assert.IsFalse(Simulation.CatchingUp(s, j));
+            Assert.AreEqual(2, s.Players[j].Cards.Length);
+        }
+
         /// <summary>Team Vote: one offer per team, and everyone on the team gets the card most of them voted for.</summary>
         [Test]
         public void TeamVoteGivesTheWholeTeamTheWinningCard()
