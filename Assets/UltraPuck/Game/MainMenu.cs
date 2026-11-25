@@ -139,7 +139,7 @@ namespace UltraPuck.Game
                     _rows.Add(new Row { Label = "Quit", Press = Application.Quit });
                     break;
                 case Page.Profile:
-                    _rows.Add(new Row { Label = "Edit character", Detail = "Dash trail, replay banner and goal explosion", Press = () => Show(Page.Character) });
+                    _rows.Add(new Row { Label = "Edit character", Detail = "Dash trail, goal explosion, replay banner and title", Press = () => Show(Page.Character) });
                     _rows.Add(new Row { Label = "Replays", Detail = "Watch saved matches, and make clips", Press = () => Show(Page.Replays) });
                     _rows.Add(new Row { Label = "Back", Press = () => Show(Page.Main) });
                     break;
@@ -150,6 +150,7 @@ namespace UltraPuck.Game
                     _rows.Add(boom);
                     _rows.Add(Cycle("Replay banner", Cosmetics.BannerNames, () => Cosmetics.MyBanner, v => Cosmetics.MyBanner = v));
                     _rows.Add(Cycle("Banner colour", Cosmetics.BannerColourNames, () => Cosmetics.MyBannerColour, v => Cosmetics.MyBannerColour = v));
+                    _rows.Add(Cycle("Title", Cosmetics.TitleChoices, () => Cosmetics.MyTitle, v => Cosmetics.MyTitle = v));
                     _rows.Add(new Row { Label = "Back", Press = () => Show(Page.Profile) });
                     break;
                 case Page.Replays:
@@ -366,6 +367,7 @@ namespace UltraPuck.Game
                 return;
             }
             if (_rows.Count == 0) return;
+            if (Runner != null) Runner.PreviewDash = Current == Page.Character && _focus == 0;
             if (Current == Page.Character && _focus == 1 && Time.unscaledTime >= _nextBoom) { Runner.PreviewBoom(); _nextBoom = Time.unscaledTime + 3.5f; }
             if (Current == Page.Saved && DeletePressed()) DeleteReplay(_focus);
             if (Current == Page.History && (DeletePressed() || (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.rKey.wasPressedThisFrame))) SaveHistory(_focus);
@@ -412,8 +414,7 @@ namespace UltraPuck.Game
 
             var x = TitleScreen.MenuX;
             if (!arriving) TitleScreen.Logo(x, TitleScreen.MenuY, 1f, 1f);
-            // the shadow as tight to these small letters as the name's is to its big ones (the usual 1.5 / 2 sat apart from them)
-            Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim, new Vector2(0.6f, 0.8f));
+            Ui.Label(new Rect(x + 4f, 150f, 600f, 30f), Subtitle(), Ui.Font(18), Ui.TextDim);
 
             if (Current == Page.Character) CharacterPreview(t);
             // the main page's choices sit right under the title (the other pages have a line of subtitle there)
@@ -612,6 +613,9 @@ namespace UltraPuck.Game
         // ------------------------------------------------------------------ Profile
 
         private float _nextBoom;
+
+        /// <summary>Screenshot runs: put the highlight on this row.</summary>
+        public void FocusRow(int row) { _focus = Mathf.Clamp(row, 0, Mathf.Max(0, _rows.Count - 1)); }
         private readonly List<KeyValuePair<string, MatchReplay>> _replays = new List<KeyValuePair<string, MatchReplay>>();
         private int _confirmDelete = -1;
         private float _confirmAt;
@@ -714,7 +718,7 @@ namespace UltraPuck.Game
             var x = Mathf.Max(660f, Ui.W - 620f);
             var bw = Mathf.Min(560f, Ui.W - x - 30f);
             Ui.Label(new Rect(x, Ui.H - 330f, bw, 24f), "Your replay banner", Ui.Font(15, true), new Color(1f, 1f, 1f, 0.7f * a));
-            Banners.Draw(new Rect(x, Ui.H - 300f, Mathf.Min(280f, bw), 52f), Cosmetics.MyBanner, Cosmetics.MyBannerColour, 0, Settings.PlayerName, "GOAL", "Assist: Bot", a, 0);
+            Banners.Draw(new Rect(x, Ui.H - 300f, Mathf.Min(280f, bw), 52f), Cosmetics.MyBanner, Cosmetics.MyBannerColour, 0, Settings.PlayerName, Cosmetics.MyTitle, "Assist: Bot", a, 0, SteamNet.Avatar(SteamNet.MyId));
             Ui.Label(new Rect(x, Ui.H - 180f, bw, 44f), "Shown when your goal is replayed. Your goal explosion goes off over here, and the bots dash with your trail.",
                 WrapStyle(), new Color(1f, 1f, 1f, 0.55f * a));
         }

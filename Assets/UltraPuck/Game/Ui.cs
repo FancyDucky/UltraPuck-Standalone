@@ -233,13 +233,23 @@ namespace UltraPuck.Game
         /// <summary>Text with a soft shadow, so it reads over anything.</summary>
         public static void Label(Rect r, string text, GUIStyle style, Color c, bool shadow = true)
         {
-            Label(r, text, style, c, shadow ? new Vector2(1.5f, 2f) : Vector2.zero);
+            Label(r, text, style, c, shadow ? ShadowFor(style.fontSize) : Vector2.zero);
         }
 
+        /// <summary>Big text's drop shadow (36 px and up).</summary>
+        public static readonly Vector2 Shadow = new Vector2(1.5f, 2f);
+
         /// <summary>
-        /// Text with its shadow this far down and right (zero: none). Small text wants a smaller offset than the usual
-        /// 1.5 / 2, or the shadow sits apart from the letters instead of hugging them.
+        /// A label's shadow: big text's, shrunk in step with smaller text so it hugs the letters, but never less than
+        /// 1 down and 0.6 across (the owner's pick, "option C").
         /// </summary>
+        public static Vector2 ShadowFor(int size)
+        {
+            var k = Mathf.Min(1f, size / 36f);
+            return new Vector2(Mathf.Max(0.6f, Shadow.x * k), Mathf.Max(1f, Shadow.y * k));
+        }
+
+        /// <summary>Text with its shadow this far down and right (zero: none).</summary>
         public static void Label(Rect r, string text, GUIStyle style, Color c, Vector2 shadowOffset)
         {
             var old = style.normal.textColor;

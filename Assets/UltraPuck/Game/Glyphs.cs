@@ -136,7 +136,7 @@ namespace UltraPuck.Game
     internal static class Glyphs
     {
         /// <summary>Controller face / shoulder / stick / d-pad used by hints and <see cref="InputIcons"/>.</summary>
-        public enum PadButton { South, East, West, North, LB, RB, Start, Select, LS, RS, DPad, DPadLR, LT, RT }
+        public enum PadButton { South, East, West, North, LB, RB, Start, Select, LS, RS, DPad, DPadLR, LT, RT, DPadUD }
 
         /// <summary>Controller button(s) for an action (uses the player's rebinds for shoot / charge / utility / swap).</summary>
         public static PadButton[] PadButtons(string action) { return PadFor(action); }
@@ -172,7 +172,8 @@ namespace UltraPuck.Game
                 case "move": return new[] { PadButton.LS };
                 case "aim": case "look": return new[] { PadButton.RS };
                 case "side": return new[] { PadButton.DPadLR };
-                case "nav": case "updown": return new[] { PadButton.DPad };
+                case "nav": return new[] { PadButton.DPad };
+                case "updown": return new[] { PadButton.DPadUD };
                 default: return new PadButton[0];
             }
         }
@@ -434,12 +435,12 @@ namespace UltraPuck.Game
                     Ui.Box(new Rect(circle.x + d * 0.14f, circle.y + d * 0.14f, d * 0.72f, d * 0.72f), new Color(1f, 1f, 1f, 0.16f * alpha), d * 0.36f);
                     Ui.Label(circle, b == PadButton.LS ? "L" : "R", Ui.Font(Mathf.RoundToInt(size * 0.75f), true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, alpha), false);
                     break;
-                case PadButton.DPad: case PadButton.DPadLR:
+                case PadButton.DPad: case PadButton.DPadLR: case PadButton.DPadUD:
                     var arm = d * 0.32f;
                     var dim = new Color(1f, 1f, 1f, 0.35f * alpha);
                     var lit = new Color(1f, 1f, 1f, 0.95f * alpha);
-                    Ui.Box(new Rect(circle.center.x - arm / 2f, circle.y + d * 0.04f, arm, d * 0.92f), b == PadButton.DPad ? lit : dim, 2.5f);
-                    Ui.Box(new Rect(circle.x + d * 0.04f, circle.center.y - arm / 2f, d * 0.92f, arm), b == PadButton.DPadLR ? lit : dim, 2.5f);
+                    Ui.Box(new Rect(circle.center.x - arm / 2f, circle.y + d * 0.04f, arm, d * 0.92f), b == PadButton.DPadLR ? dim : lit, 2.5f);
+                    Ui.Box(new Rect(circle.x + d * 0.04f, circle.center.y - arm / 2f, d * 0.92f, arm), b == PadButton.DPadUD ? dim : lit, 2.5f);
                     break;
             }
         }

@@ -159,6 +159,7 @@ namespace UltraPuck.Game
                     case Glyphs.PadButton.RS: return "playstation_stick_r.png";
                     case Glyphs.PadButton.DPad: return "playstation_dpad.png";
                     case Glyphs.PadButton.DPadLR: return "playstation_dpad_horizontal.png";
+                    case Glyphs.PadButton.DPadUD: return "playstation_dpad_vertical.png";
                 }
             }
             if (f == InputMode.Family.Switch)
@@ -180,6 +181,7 @@ namespace UltraPuck.Game
                     case Glyphs.PadButton.RS: return "switch_stick_r.png";
                     case Glyphs.PadButton.DPad: return "switch_dpad.png";
                     case Glyphs.PadButton.DPadLR: return "switch_dpad_horizontal.png";
+                    case Glyphs.PadButton.DPadUD: return "switch_dpad_vertical.png";
                 }
             }
             // Xbox + Generic
@@ -199,6 +201,7 @@ namespace UltraPuck.Game
                 case Glyphs.PadButton.RS: return "xbox_stick_r.png";
                 case Glyphs.PadButton.DPad: return "xbox_dpad.png";
                 case Glyphs.PadButton.DPadLR: return "xbox_dpad_horizontal.png";
+                case Glyphs.PadButton.DPadUD: return "xbox_dpad_vertical.png";
                 default: return null;
             }
         }

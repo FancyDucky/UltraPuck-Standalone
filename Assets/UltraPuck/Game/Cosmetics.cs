@@ -25,6 +25,26 @@ namespace UltraPuck.Game
         /// <summary>Banner colour <paramref name="index"/> (0, Team: the team's colour, <paramref name="team"/>).</summary>
         public static Color BannerColour(int index, Color team) { return index <= 0 || index >= BannerColours.Length ? team : BannerColours[index]; }
 
+        /// <summary>
+        /// Titles, shown over a scorer's name on their banner and under it on the scoreboard. The last, Developer, is
+        /// only for the game's developer's Steam account (<see cref="DeveloperAccount"/>): anyone else wearing it is shown none.
+        /// </summary>
+        public static readonly string[] TitleNames = { "None", "Legend", "Master", "Unstoppable", "Rat", "Destroyer", "Developer" };
+        public const int DeveloperTitle = 6;
+        public const ulong DeveloperAccount = 76561198089817775UL;
+
+        /// <summary>The titles this PC's player can pick (Developer only on the developer's account).</summary>
+        public static string[] TitleChoices
+        {
+            get
+            {
+                if (SteamNet.MyId == DeveloperAccount) return TitleNames;
+                var some = new string[DeveloperTitle];
+                Array.Copy(TitleNames, some, DeveloperTitle);
+                return some;
+            }
+        }
+
         public static readonly string[] BannerNames = { "Plain", "Team Stripes", "Flames", "Waves", "Starfield", "Circuit", "Checkered", "Sunburst", "Storm", "Honeycomb", "Sunset" };
 
         // ------------------------------------------------------------------ this PC's own (the first person playing here)
@@ -32,17 +52,52 @@ namespace UltraPuck.Game
         public static int MyDash { get { return ShotLook >= 0 ? Dash(ShotLook) : Clamp(PlayerPrefs.GetInt("look_dash", 0), DashNames); } set { PlayerPrefs.SetInt("look_dash", Clamp(value, DashNames)); } }
         public static int MyBanner { get { return ShotLook >= 0 ? Banner(ShotLook) : Clamp(PlayerPrefs.GetInt("look_banner", 0), BannerNames); } set { PlayerPrefs.SetInt("look_banner", Clamp(value, BannerNames)); } }
         public static int MyBannerColour { get { return ShotLook >= 0 ? BannerTint(ShotLook) : Clamp(PlayerPrefs.GetInt("look_banner_colour", 0), BannerColourNames); } set { PlayerPrefs.SetInt("look_banner_colour", Clamp(value, BannerColourNames)); } }
+        public static int MyTitle
+        {
+            get { var t = ShotLook >= 0 ? Title(ShotLook) : Clamp(PlayerPrefs.GetInt("look_title", 0), TitleNames); return ShotLook < 0 && t == DeveloperTitle && SteamNet.MyId != DeveloperAccount ? 0 : t; }
+            set { PlayerPrefs.SetInt("look_title", Clamp(value, TitleNames)); }
+        }
         public static int MyBoom { get { return ShotLook >= 0 ? Boom(ShotLook) : Clamp(PlayerPrefs.GetInt("look_boom", 0), BoomNames); } set { PlayerPrefs.SetInt("look_boom", Clamp(value, BoomNames)); } }
 
         /// <summary>Screenshot runs: a look to wear instead of the saved one (-1: the saved one). Never saved.</summary>
         public static int ShotLook = -1;
 
         /// <summary>This PC's look, packed.</summary>
-        public static int Mine { get { return Pack(MyDash, MyBanner, MyBoom, MyBannerColour); } }
+        public static int Mine { get { return Pack(MyDash, MyBanner, MyBoom, MyBannerColour, MyTitle); } }
 
-        public static int Pack(int dash, int banner, int boom, int bannerColour = 0) { return (dash & 255) | ((banner & 255) << 8) | ((boom & 255) << 16) | ((bannerColour & 127) << 24); }
+        /// <summary>Bits 0-7 the dash, 8-15 the banner, 16-23 the explosion, 24-27 the banner colour, 28-30 the title.</summary>
+        public static int Pack(int dash, int banner, int boom, int bannerColour = 0, int title = 0) { return (dash & 255) | ((banner & 255) << 8) | ((boom & 255) << 16) | ((bannerColour & 15) << 24) | ((title & 7) << 28); }
         /// <summary>The banner's colour (0: the team's).</summary>
-        public static int BannerTint(int style) { return Clamp((style >> 24) & 127, BannerColourNames); }
+        public static int BannerTint(int style) { return Clamp((style >> 24) & 15, BannerColourNames); }
+        public static int Title(int style) { return Clamp((style >> 28) & 7, TitleNames); }
+        /// <summary><paramref name="style"/> as it may be shown for Steam account <paramref name="account"/>: without the Developer title unless it's theirs.</summary>
+        public static int Allowed(int style, ulong account) { return Title(style) == DeveloperTitle && account != DeveloperAccount ? style & ~(7 << 28) : style; }
+
+        /// <summary>The Black Hole explosion: it pulls everyone in, so it goes with the controls (<see cref="Core.PlayerInput.LookPull"/>).</summary>
+        public const int BlackHoleBoom = 4;
+
+        /// <summary>
+        /// A title in <paramref name="r"/>: white, and the Developer's in glowing green. <paramref name="size"/> is its
+        /// font size; faded by <paramref name="a"/>.
+        /// </summary>
+        public static void DrawTitle(Rect r, int title, int size, TextAnchor align, float a)
+        {
+            if (title <= 0 || title >= TitleNames.Length || a <= 0f) return;
+            var text = TitleNames[title].ToUpperInvariant();
+            var font = Ui.Font(size, true, align);
+            if (title != DeveloperTitle) { Ui.Label(r, text, font, new Color(1f, 1f, 1f, a)); return; }
+            // a soft green glow behind, breathing a little, then the letters bright green over it
+            var pulse = 0.8f + 0.2f * Mathf.Sin(Clock.Now * 3f);
+            var glow = new Color(0.2f, 1f, 0.35f, 0.16f * pulse * a);
+            var reach = Mathf.Max(1.5f, size * 0.16f);
+            for (var k = 0; k < 12; k++)
+            {
+                var ang = k * Mathf.PI / 6f;
+                var d = reach * (k % 2 == 0 ? 1f : 0.55f);
+                Ui.Label(new Rect(r.x + Mathf.Cos(ang) * d, r.y + Mathf.Sin(ang) * d, r.width, r.height), text, font, glow, false);
+            }
+            Ui.Label(r, text, font, new Color(0.55f, 1f, 0.6f, a), false);
+        }
         public static int Dash(int style) { return Clamp(style & 255, DashNames); }
         public static int Banner(int style) { return Clamp((style >> 8) & 255, BannerNames); }
         public static int Boom(int style) { return Clamp((style >> 16) & 255, BoomNames); }
@@ -82,6 +137,8 @@ namespace UltraPuck.Game
             public float Age, Life, Size0, Size1, Drag, Spin, Angle, Grid, Stretch;
             public Color From, To;
             public bool Twinkle;
+            /// <summary>Pulled into <see cref="Centre"/> this hard, swirling round it this fast (0: neither); gone on reaching it.</summary>
+            public Vector2 Centre; public float Pull, Swirl;
         }
 
         private readonly Transform _parent;
@@ -92,6 +149,9 @@ namespace UltraPuck.Game
         private readonly List<Later> _later = new List<Later>();
         private const int MaxBits = 1600;
 
+        /// <summary>Added to every particle's draw order (the dash preview draws over a dimmed screen).</summary>
+        public int OrderBoost;
+
         public StyleFx(Transform parent, Effects fx) { _parent = parent; _fx = fx; }
 
         /// <summary>Drop everything on screen (a jump in a replay, leaving a screen).</summary>
@@ -100,6 +160,9 @@ namespace UltraPuck.Game
             foreach (var b in _live) { b.Go.SetActive(false); Spare(b.Shape).Add(b); }
             _live.Clear();
             _later.Clear();
+            foreach (var l in _lenses) l.Go.SetActive(false);
+            _spareLenses.AddRange(_lenses);
+            _lenses.Clear();
         }
 
         private List<Bit> Spare(Shape s)
@@ -118,10 +181,10 @@ namespace UltraPuck.Game
             else
             {
                 b = new Bit { Shape = shape, Mesh = MeshOf(shape) };
-                b.Go = Draw.Make("Style" + shape, _parent, b.Mesh, shape == Shape.Line ? 24 : 25).gameObject;
+                b.Go = Draw.Make("Style" + shape, _parent, b.Mesh, (shape == Shape.Line ? 24 : 25) + OrderBoost).gameObject;
             }
             b.Go.SetActive(true);
-            b.Age = 0f; b.Gravity = Vector2.zero; b.Drag = 0f; b.Spin = 0f; b.Angle = 0f; b.Grid = 0f; b.Twinkle = false; b.Stretch = 1f;
+            b.Age = 0f; b.Gravity = Vector2.zero; b.Drag = 0f; b.Spin = 0f; b.Angle = 0f; b.Grid = 0f; b.Twinkle = false; b.Stretch = 1f; b.Pull = 0f; b.Swirl = 0f;
             _live.Add(b);
             return b;
         }
@@ -171,14 +234,92 @@ namespace UltraPuck.Game
             {
                 var b = _live[i];
                 b.Age += dt;
-                if (b.Age >= b.Life) { b.Go.SetActive(false); _live.RemoveAt(i); Spare(b.Shape).Add(b); continue; }
+                if (b.Age >= b.Life || (b.Pull > 0f && (b.Centre - b.Pos).sqrMagnitude < 0.04f)) { b.Go.SetActive(false); _live.RemoveAt(i); Spare(b.Shape).Add(b); continue; }
                 Step(b, dt);
             }
+            StepLenses(dt);
+        }
+
+        // ---- the Black Hole's lens: a quad that bends the picture round a dark middle (shader UltraPuck/Lens)
+        private sealed class Lens { public GameObject Go; public MeshRenderer Renderer; public float Age, Life, Size; public Color Colour; }
+        private readonly List<Lens> _lenses = new List<Lens>(), _spareLenses = new List<Lens>();
+        private static Material _lensMat;
+        private static Mesh _lensQuad;
+        private readonly MaterialPropertyBlock _lensBlock = new MaterialPropertyBlock();
+
+        private void AddLens(Vector2 at, float size, float life, Color colour)
+        {
+            if (_lensMat == null)
+            {
+                var shader = Resources.Load<Shader>("UltraPuck/Lens");
+                if (shader == null || !shader.isSupported) return;
+                _lensMat = new Material(shader);
+            }
+            if (_lensQuad == null)
+            {
+                _lensQuad = new Mesh { name = "Lens" };
+                _lensQuad.vertices = new[] { new Vector3(-1f, -1f, 0f), new Vector3(1f, -1f, 0f), new Vector3(1f, 1f, 0f), new Vector3(-1f, 1f, 0f) };
+                _lensQuad.uv = new[] { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) };
+                _lensQuad.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+                _lensQuad.RecalculateBounds();
+            }
+            Lens l;
+            if (_spareLenses.Count > 0) { l = _spareLenses[_spareLenses.Count - 1]; _spareLenses.RemoveAt(_spareLenses.Count - 1); }
+            else
+            {
+                l = new Lens { Go = new GameObject("BlackHole") };
+                l.Go.transform.SetParent(_parent, false);
+                l.Go.AddComponent<MeshFilter>().sharedMesh = _lensQuad;
+                l.Renderer = l.Go.AddComponent<MeshRenderer>();
+                l.Renderer.sharedMaterial = _lensMat;
+                l.Renderer.sortingOrder = 27;
+                l.Renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                l.Renderer.receiveShadows = false;
+            }
+            l.Go.SetActive(true);
+            l.Go.transform.localPosition = new Vector3(at.x, at.y, 0f);
+            l.Age = 0f; l.Life = life; l.Size = size; l.Colour = colour;
+            _lenses.Add(l);
+            StepLens(l);
+        }
+
+        private void StepLenses(float dt)
+        {
+            for (var k = _lenses.Count - 1; k >= 0; k--)
+            {
+                var l = _lenses[k];
+                l.Age += dt;
+                if (l.Age >= l.Life) { l.Go.SetActive(false); _lenses.RemoveAt(k); _spareLenses.Add(l); continue; }
+                StepLens(l);
+            }
+        }
+
+        private void StepLens(Lens l)
+        {
+            // opens quickly, holds (breathing a little), then snaps shut
+            var t = l.Age / l.Life;
+            var open = t < 0.15f ? Mathf.SmoothStep(0f, 1f, t / 0.15f) : t > 0.82f ? Mathf.SmoothStep(1f, 0f, (t - 0.82f) / 0.18f) : 1f;
+            open *= 1f + 0.04f * Mathf.Sin(l.Age * 9f);
+            var size = l.Size * Mathf.Max(0.001f, open);
+            l.Go.transform.localScale = new Vector3(size, size, 1f);
+            l.Go.transform.localRotation = Quaternion.Euler(0f, 0f, l.Age * 40f);
+            _lensBlock.SetFloat("_Open", open);
+            _lensBlock.SetColor("_Tint", l.Colour);
+            l.Renderer.SetPropertyBlock(_lensBlock);
         }
 
         private static void Step(Bit b, float dt)
         {
             b.Vel += b.Gravity * dt;
+            if (b.Pull > 0f)
+            {
+                // drawn in and round, faster the closer it gets (like the portals' motes, but falling in)
+                var to = b.Centre - b.Pos;
+                var d = Mathf.Max(0.3f, to.magnitude);
+                var n = to / d;
+                b.Vel += n * (b.Pull / d) * dt;
+                b.Vel = Vector2.Lerp(b.Vel, n * b.Vel.magnitude * 0.6f + new Vector2(-n.y, n.x) * (b.Swirl / d), Mathf.Min(1f, 4f * dt));
+            }
             if (b.Drag > 0f) b.Vel *= Mathf.Exp(-b.Drag * dt);
             b.Pos += b.Vel * dt;
             b.Angle += b.Spin * dt;
@@ -286,7 +427,6 @@ namespace UltraPuck.Game
 
         private void Fireworks(Vector2 at, Color team)
         {
-            _fx.Ripple(at, team, 6f, 0.9f, 0.03f);
             Color[] colours = { team, Gold, Pink, Mint, Sky, Color.white };
             for (var n = 0; n < 6; n++)
             {
@@ -328,7 +468,6 @@ namespace UltraPuck.Game
 
         private void Confetti(Vector2 at, Color team)
         {
-            _fx.Ripple(at, team, 6f, 0.8f, 0.03f);
             Color[] colours = { team, Gold, Pink, Mint, Sky, Color.white, new Color(1f, 0.5f, 0.2f) };
             for (var k = 0; k < 150; k++)
             {
@@ -339,31 +478,48 @@ namespace UltraPuck.Game
             }
         }
 
+        /// <summary>How long the Black Hole stays open.</summary>
+        public const float BlackHoleTime = 1.7f;
+
         private void BlackHole(Vector2 at, Color team)
         {
-            // everything nearby is pulled in, a dark core swells, then it all bursts back out
-            for (var k = 0; k < 90; k++)
+            // a hole opens where the puck went in: the picture bends round its dark middle (a touch of colour split at
+            // the rim), and glowing motes, the portals' kind, spiral in from all round, then it snaps shut with a pop
+            var violet = new Color(0.62f, 0.42f, 1f);
+            var rim = Color.Lerp(team, violet, 0.5f);
+            AddLens(at, 3.4f, BlackHoleTime, rim);
+            // the glow round it, breathing like a portal's
+            Add(Shape.Disc, at, Vector2.zero, BlackHoleTime, 1.2f, 3.4f, new Color(rim.r, rim.g, rim.b, 0.28f), Palette.Clear(rim));
+            Add(Shape.Ring, at, Vector2.zero, 0.5f, 0.4f, 2.4f, new Color(0.85f, 0.75f, 1f, 0.9f), Palette.Clear(rim));
+            for (var n = 0; n < 14; n++)
             {
-                var from = at + Dir(R(0f, 7f)) * R(3.5f, 6.5f);
-                Add(Shape.Disc, from, (at - from) / 0.5f, 0.5f, R(0.08f, 0.16f), 0.03f, UnityEngine.Random.value < 0.5f ? team : new Color(0.7f, 0.5f, 1f), Color.white);
-            }
-            Add(Shape.Disc, at, Vector2.zero, 0.62f, 0.2f, 1.6f, new Color(0.03f, 0f, 0.06f, 0.95f), new Color(0.03f, 0f, 0.06f, 0.95f));
-            Add(Shape.Ring, at, Vector2.zero, 0.62f, 2.4f, 1.7f, new Color(0.6f, 0.4f, 1f, 0.8f), team);
-            After(0.55f, () =>
-            {
-                _fx.Ripple(at, new Color(0.5f, 0.3f, 0.9f), 13f, 1.3f, 0.07f);
-                Add(Shape.Ring, at, Vector2.zero, 0.7f, 1f, 9f, Color.white, team);
-                for (var k = 0; k < 60; k++)
+                After(n * 0.09f, () =>
                 {
-                    var b = Add(Shape.Line, at, Dir(R(0f, 7f)) * R(8f, 18f), R(0.4f, 0.8f), R(0.5f, 1f), 0.1f, new Color(0.8f, 0.65f, 1f), team);
-                    if (b != null) b.Drag = 3f;
+                    for (var k = 0; k < 9; k++)
+                    {
+                        var from = at + Dir(R(0f, 7f)) * R(3.2f, 7f);
+                        var to = at - from;
+                        var col = UnityEngine.Random.value < 0.3f ? Color.Lerp(rim, Color.white, 0.6f) : UnityEngine.Random.value < 0.5f ? team : violet;
+                        var m = Add(Shape.Disc, from, new Vector2(-to.y, to.x).normalized * R(1f, 2.5f), R(1.1f, 1.6f), R(0.05f, 0.1f), 0.02f, col, Color.white);
+                        if (m != null) { m.Centre = at; m.Pull = R(14f, 22f); m.Swirl = R(5f, 9f); }
+                    }
+                });
+            }
+            After(BlackHoleTime - 0.12f, () =>
+            {
+                // shut: a quick flash and a ring, sparks flung a little way out
+                Add(Shape.Disc, at, Vector2.zero, 0.25f, 0.3f, 2f, new Color(0.95f, 0.9f, 1f, 0.9f), Palette.Clear(rim));
+                Add(Shape.Ring, at, Vector2.zero, 0.5f, 0.4f, 5f, Color.white, Palette.Clear(rim));
+                for (var k = 0; k < 30; k++)
+                {
+                    var b2 = Add(Shape.Line, at, Dir(R(0f, 7f)) * R(5f, 11f), R(0.3f, 0.6f), R(0.3f, 0.6f), 0.08f, new Color(0.85f, 0.75f, 1f), rim);
+                    if (b2 != null) b2.Drag = 4f;
                 }
             });
         }
 
         private void Thunder(Vector2 at, Color team)
         {
-            _fx.Ripple(at, team, 10f, 1.1f, 0.05f);
             Add(Shape.Disc, at, Vector2.zero, 0.25f, 1f, 6f, new Color(0.9f, 0.95f, 1f, 0.8f), Palette.Clear(Sky));
             for (var n = 0; n < 7; n++)
             {
@@ -380,7 +536,6 @@ namespace UltraPuck.Game
 
         private void BubbleBurst(Vector2 at, Color team)
         {
-            _fx.Ripple(at, new Color(0.5f, 0.85f, 1f), 9f, 1.2f, 0.05f);
             for (var k = 0; k < 90; k++)
             {
                 var size = R(0.12f, 0.45f);
@@ -391,7 +546,6 @@ namespace UltraPuck.Game
 
         private void PixelBlast(Vector2 at, Color team)
         {
-            _fx.Ripple(at, team, 7f, 0.8f, 0.035f);
             for (var k = 0; k < 110; k++)
             {
                 var col = UnityEngine.Random.value < 0.25f ? Color.white : UnityEngine.Random.value < 0.5f ? team : Palette.Darker(team, 0.6f);
@@ -403,7 +557,6 @@ namespace UltraPuck.Game
 
         private void Starburst(Vector2 at, Color team)
         {
-            _fx.Ripple(at, Gold, 9f, 1f, 0.045f);
             var spin = R(0f, Mathf.PI * 2f);
             for (var k = 0; k < 16; k++)
             {
@@ -430,10 +583,10 @@ namespace UltraPuck.Game
         private static bool Whole(int style) { return style == 7 || style == 10; }
 
         /// <summary>
-        /// A banner: <paramref name="name"/> big, <paramref name="above"/> small over it (e.g. "GOAL"), and
+        /// A banner: <paramref name="name"/> big, their <paramref name="title"/> small over it ("GOAL" without one), and
         /// <paramref name="below"/> under it (e.g. who assisted), in <paramref name="r"/>; faded by <paramref name="a"/>.
         /// </summary>
-        public static void Draw(Rect r, int style, int tint, int team, string name, string above, string below, float a, int symbol = -1)
+        public static void Draw(Rect r, int style, int tint, int team, string name, int title, string below, float a, int symbol = -1, Texture picture = null)
         {
             if (Event.current.type != EventType.Repaint) return;
             var colour = Cosmetics.BannerColour(tint, Palette.Team(team));
@@ -454,15 +607,30 @@ namespace UltraPuck.Game
             GUI.DrawTexture(new Rect(r.x, r.y, r.width * 0.75f, r.height), Fade);
             GUI.color = keep;
             var x = r.x + 18f;
-            if (symbol >= 0)
+            if (picture != null)
+            {
+                // their Steam picture, in a thin white frame
+                var s = r.height * 0.72f;
+                var pr = new Rect(x - 6f, r.center.y - s / 2f, s, s);
+                Ui.Box(new Rect(pr.x - 1.5f, pr.y - 1.5f, s + 3f, s + 3f), new Color(1f, 1f, 1f, 0.9f * a), 3f);
+                var was = GUI.color;
+                GUI.color = new Color(1f, 1f, 1f, a);
+                GUI.DrawTexture(pr, picture, ScaleMode.ScaleAndCrop);
+                GUI.color = was;
+                x += s + 4f;
+            }
+            else if (symbol >= 0)
             {
                 var s = r.height * 0.56f;
                 Ui.Symbol(new Rect(x, r.center.y - s / 2f, s, s), symbol, new Color(1f, 1f, 1f, a));
                 x += s + 14f;
             }
             var big = Mathf.RoundToInt(Mathf.Clamp(r.height * 0.36f, 16f, 60f));
-            if (!string.IsNullOrEmpty(above)) Ui.Label(new Rect(x, r.y + r.height * 0.06f, r.width - x + r.x, r.height * 0.26f), above, Ui.Font(Mathf.RoundToInt(big * 0.42f), true), new Color(1f, 0.85f, 0.3f, a));
-            Ui.Label(new Rect(x, r.y + r.height * 0.24f, r.width - x + r.x - 10f, r.height * 0.5f), name, Ui.Font(big, true), new Color(1f, 1f, 1f, a), new Vector2(2f, 2f));
+            // their title over the name ("GOAL" without one)
+            var over = new Rect(x, r.y + r.height * 0.06f, r.width - x + r.x, r.height * 0.26f);
+            if (title > 0) Cosmetics.DrawTitle(new Rect(over.x, over.y - 2f, over.width, over.height + 2f), title, Mathf.RoundToInt(big * 0.52f), TextAnchor.MiddleLeft, a);
+            else Ui.Label(over, "GOAL", Ui.Font(Mathf.RoundToInt(big * 0.42f), true), new Color(1f, 0.85f, 0.3f, a));
+            Ui.Label(new Rect(x, r.y + r.height * 0.24f, r.width - x + r.x - 10f, r.height * 0.5f), name, Ui.Font(big, true), new Color(1f, 1f, 1f, a));
             if (!string.IsNullOrEmpty(below)) Ui.Label(new Rect(x, r.y + r.height * 0.72f, r.width - x + r.x, r.height * 0.24f), below, Ui.Font(Mathf.RoundToInt(big * 0.42f), true), new Color(1f, 1f, 1f, 0.85f * a));
         }
 

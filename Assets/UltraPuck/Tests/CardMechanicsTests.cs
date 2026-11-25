@@ -1001,6 +1001,75 @@ namespace UltraPuck.Tests
             Assert.AreEqual(2, s.Players[1].HeldBy, "so did who carries whom");
         }
 
+        /// <summary>Stealing goes by the wedge as drawn: its tip on the carried puck takes it, out of reach of the body.</summary>
+        [Test]
+        public void TheWedgeTipStealsThePuck()
+        {
+            var s = _sim.NewGame(new[] { 0, 1 }, 1u, new[] { false, false });
+            Play(s);
+            var c = s.Players[0]; var q = s.Players[1];
+            c.Pos = At(0, 0); c.Facing = new FixVec2(Fix.One, Fix.Zero);
+            s.Carrier = 0;
+            _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(0, s.Carrier);
+            // the thief faces the puck from beyond it, the tip of their wedge just on it
+            var R = _sim.RadiusOf(q);
+            var puck = s.PuckPos;
+            q.Facing = new FixVec2(-Fix.One, Fix.Zero);
+            q.Pos = puck + new FixVec2(R * _sim.T.WedgeTip + _sim.T.PuckRadius - Fix.Ratio(1, 20), Fix.Zero);
+            q.Vel = FixVec2.Zero;
+            _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(1, s.Carrier, "the wedge's tip took it");
+        }
+
+        /// <summary>Knockback has no speed cap: someone sent far faster than a step can carry them still bounces off the boards.</summary>
+        [Test]
+        public void VeryFastPlayersStillBounceOffTheBoards()
+        {
+            foreach (var dir in new[] { new FixVec2(Fix.One, Fix.Zero), new FixVec2(Fix.Zero, -Fix.One), new FixVec2(-Fix.One, Fix.One).Normalized })
+            {
+                var s = _sim.NewGame(new[] { 0, 1 }, 1u, new[] { false, false });
+                Play(s);
+                var p = s.Players[0];
+                p.Pos = At(0, 0);
+                p.Vel = dir * Fix.FromInt(400);
+                for (var t = 0; t < 60; t++)
+                {
+                    _sim.Step(s, new PlayerInput[2]);
+                    Assert.IsTrue(p.OutTime <= Fix.Zero, "not knocked out through the boards");
+                    Assert.IsTrue(_sim.Map.Inside(p.Pos), "still in the rink");
+                }
+            }
+        }
+
+        /// <summary>A scorer whose goal explosion is the Black Hole (their controls say so) pulls everyone in instead of blasting them away.</summary>
+        [Test]
+        public void TheBlackHolePullsEveryoneIn()
+        {
+            foreach (var pull in new[] { false, true })
+            {
+                var s = _sim.NewGame(new[] { 0, 1 }, 1u, new[] { false, false });
+                Play(s);
+                var g = _sim.Map.Goals[0];
+                var mouth = (g.Min + g.Max) / Fix.FromInt(2);
+                var shooter = s.Players[1 - g.Team];
+                var other = s.Players[g.Team];
+                other.Pos = mouth + new FixVec2(Fix.FromInt(g.Team == 0 ? 5 : -5), Fix.FromInt(2));
+                other.Vel = FixVec2.Zero;
+                shooter.Pos = mouth + new FixVec2(Fix.FromInt(g.Team == 0 ? 8 : -8), -Fix.FromInt(3));
+                s.PuckPos = mouth; s.PuckVel = FixVec2.Zero; s.Carrier = -1;
+                s.PassFrom = 1 - g.Team; s.Touch1 = 1 - g.Team;
+                var inputs = new PlayerInput[2];
+                inputs[1 - g.Team].Look = pull ? PlayerInput.LookPull : (byte)0;
+                var before = (other.Pos - mouth).Length;
+                for (var t = 0; t < 6 && s.Phase == Phase.Play; t++) _sim.Step(s, inputs);
+                Assert.AreEqual(Phase.Scored, s.Phase, "a goal");
+                for (var t = 0; t < 20; t++) _sim.Step(s, inputs);
+                var after = (other.Pos - mouth).Length;
+                if (pull) Assert.Less(after.ToFloat(), before.ToFloat(), "pulled in"); else Assert.Greater(after.ToFloat(), before.ToFloat(), "blasted away");
+            }
+        }
+
         /// <summary>On rinks with nets out on the ice, bots don't get stuck on them: hardly any seconds spent pinned by one.</summary>
         [Test, Timeout(240000)]
         public void BotsDontGetStuckOnNets()

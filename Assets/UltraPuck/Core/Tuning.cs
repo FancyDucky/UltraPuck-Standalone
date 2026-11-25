@@ -125,7 +125,7 @@ namespace UltraPuck.Core
         public Fix CarryFollow = Fix.Ratio(1, 4);
         /// <summary>Losing control of the puck: how fast it rolls off, and how long before you can grab it again.</summary>
         public Fix LoseControlSpeed = Fix.FromInt(3), LoseControlDelay = Fix.Ratio(3, 10);
-        /// <summary>Stealing: an opponent whose wedge tip gets this close to the carried puck's edge takes it.</summary>
+        /// <summary>Stealing: an opponent whose wedge gets this close to the carried puck's edge takes it.</summary>
         public Fix StealReach = Fix.Ratio(3, 20);
         public Fix StolenPickupDelay = Fix.Ratio(1, 2);
 
@@ -200,7 +200,10 @@ namespace UltraPuck.Core
         public int RageChecks = 7;
         public Fix RageTime = Fix.FromInt(7), RageCooldown = Fix.FromInt(20), RageSize = Fix.Ratio(5, 2), RageWeight = Fix.Ratio(5, 2),
             RageSpeed = Fix.Ratio(5, 4), RageKnock = Fix.FromInt(10);
-        /// <summary>The fastest a check sends anyone it doesn't launch out of the rink (faster went through the boards).</summary>
+        /// <summary>
+        /// Not a limit: the fastest a player can move with the usual <see cref="Substeps"/> without going through the
+        /// boards. Anyone faster (a hard check) and that tick is cut into more steps (up to 16 times as many).
+        /// </summary>
         public Fix KnockMaxSpeed = Fix.FromInt(80);
         /// <summary>
         /// RAGE's dash: its coast and hit window last <see cref="RageDashLonger"/> times as long, with the coast's drag

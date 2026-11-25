@@ -179,6 +179,9 @@ namespace UltraPuck.Game
             _viewer.OnExport = (from, to, copy) => StartCoroutine(ExportClip(from, to, copy));
             _viewer.NameOf = SeatName;
             _hud.StyleOf = StyleOf;
+            // the Black Hole explosion pulls everyone in, so the game itself has to know (it goes with the controls)
+            _local.LookFor = slot => slot == FirstPerson() && Cosmetics.MyBoom == Cosmetics.BlackHoleBoom ? PlayerInput.LookPull : (byte)0;
+            _hud.PictureOf = i => SteamNet.Avatar(AccountOf(i));
             _hud.SymbolOf = SymbolOf;
             _shots = new ShotViews(_entities);
             _pylons = new PylonViews(_entities);
@@ -1454,6 +1457,7 @@ namespace UltraPuck.Game
                 _effects.Ripple(r.At, r.Colour, r.Size, r.Life);
                 _ripples.RemoveAt(k);
             }
+            DashPreview();
             _effects.Update();
             _styleFx.Update();
             if (ShotDir != null) CardStats.NoSave = true; // screenshot runs leave the player's card stats alone
@@ -2435,8 +2439,9 @@ namespace UltraPuck.Game
             }
             s.SetLocalPlayers(mine);
             var looks = new List<int>();
-            for (var k = 0; k < _local.Slots.Count; k++) looks.Add(k == FirstPerson() ? Cosmetics.Mine : 0);
-            s.SetLocalStyles(looks);
+            var accounts = new List<ulong>();
+            for (var k = 0; k < _local.Slots.Count; k++) { looks.Add(k == FirstPerson() ? Cosmetics.Mine : 0); accounts.Add(k == FirstPerson() ? SteamNet.MyId : 0); }
+            s.SetLocalStyles(looks, accounts);
         }
 
         /// <summary>The name of the person on this PC's slot <paramref name="k"/>.</summary>

@@ -1049,6 +1049,15 @@ namespace UltraPuck.Game
             w.Renderer.SetPropertyBlock(_block);
         }
 
+        /// <summary>Ends every burst, spark, bolt and ripple now (the Profile page, before showing another explosion).</summary>
+        public void Finish()
+        {
+            foreach (var w in _waves) w.Age = w.Life;
+            foreach (var b in _live) b.Age = b.Life;
+            foreach (var s in _sparks) s.Age = s.Life;
+            foreach (var b in _bolts) b.Age = b.Life;
+        }
+
         public void Update()
         {
             var dt = Clock.Dt;

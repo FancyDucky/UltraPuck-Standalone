@@ -85,6 +85,35 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.70, not released (yet) (Claude, 25 Nov 2026): **Steam profile pictures on replay banners.** The banner shows
+  the scorer's Steam picture (framed, where the symbol was; the symbol when there's none: bots, no Steam, IP-only
+  friends without Steam). `SteamNet.Avatar(id)` (large avatar via `SteamFriends.GetLargeFriendAvatar`, asks Steam with
+  `RequestUserInformation` and retries each second until it's downloaded; cached). Each PC sends its first person's
+  Steam account with the looks (`NetSession.SetLocalStyles(looks, accounts)` / `AccountOf`; NetSession.Version 87).
+  `GameRunner.AccountOf`, `Hud.PictureOf`, `Banners.Draw(..., picture)`; the Edit character preview shows yours.
+  Label drop shadows scale with the text (`Ui.ShadowFor(size)`: 1.5 / 2 from 36 px, shrinking below that but never under
+  0.6 / 1; the owner's pick); the main menu subtitle and banner name lost their own offsets.
+  **Titles**: Profile > Edit character > Title (`Cosmetics.TitleNames`: None, Legend, Master, Unstoppable, Rat, Destroyer,
+  Developer; pref `look_title`; look bits 28-30, banner colour now bits 24-27). Shown over the name on the replay banner
+  (in place of "GOAL"; None keeps "GOAL") and under it on the scoreboard (`Cosmetics.DrawTitle`, Developer in glowing
+  green). Developer only for Steam account `Cosmetics.DeveloperAccount` (the owner's): not offered to others, and
+  stripped from anyone else's look online (`Cosmetics.Allowed(style, account)` in `GameRunner.StyleOf`).
+  **Black Hole** goal explosion: a lens quad (shader `Resources/UltraPuck/Lens.shader`: dark middle, picture bent round
+  it, slight colour split on the rim) for 1.7 s with portal-style motes spiralling in (`StyleFx` bits `Pull`/`Swirl`),
+  and it *pulls* everyone in instead of the goal blast pushing them away: a game rule, so it travels in the controls
+  (`PlayerInput.Look` byte, bit `LookPull`, set by `LocalPlayers.LookFor` for this PC's first person; `Route` keeps it on
+  the person's own player; `PlayerState.GoalPull`; `BlastFrom(..., inward)` at 60%). Goal explosions other than Classic
+  and Supernova no longer ripple the rink. Profile previews: a new explosion first clears the last (`StyleFx.Clear`,
+  `Effects.Finish`); on the Dash trail row a big player dashes back and forth every 2 s over a dimmed screen
+  (`GameRunner.DashPreview`, `PreviewDash`; drawn at order +60). Replay viewer: holding left/right jumps to the next goal
+  *or save*; goal markers as small as save markers; Speed shows an up/down d-pad (`PadButton.DPadUD`); the bar is
+  scrubbed with the mouse read straight from the mouse (plus a hover line with the time), and moving the mouse shows the
+  pointer. **Stealing** goes by the wedge as drawn (`OnWedge(q, puck, PuckRadius + StealReach)`; was a point at the front
+  of the body, well short of the wedge's tip); someone being carried can't steal. **No knockback speed cap**:
+  `KnockMaxSpeed` is now the safe speed for the usual substeps, and a tick with anyone faster is cut into 2/4/8/16x more
+  steps so nobody goes through the boards. NetSession.Version 88. Tests `TheWedgeTipStealsThePuck`,
+  `TheBlackHolePullsEveryoneIn`, `VeryFastPlayersStillBounceOffTheBoards`. Screenshots: `profile` has profile-title,
+  boom-4-BlackHole-later and the dash preview; `replayview` has replay-scoreboard.
 - 0.1.70 (Claude, 25 Nov 2026): **Profile: character looks and match replays.** Main menu >
   Profile > Edit character / Replays (`MainMenu.Page.Profile`, `Character`, `Replays`). *Looks* (`Game/Cosmetics.cs`,
   looks only): dash trail (9), goal explosion (9), replay banner (11) and its colour (Team or 11 colours; pictures with their own colours are hue-shifted to it), saved in PlayerPrefs `look_dash/banner/boom/banner_colour`, packed

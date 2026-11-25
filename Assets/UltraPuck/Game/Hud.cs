@@ -57,6 +57,8 @@ namespace UltraPuck.Game
         public System.Func<int, string> SeatName;
         /// <summary>A player's Profile look (for their replay banner) and symbol.</summary>
         public System.Func<int, int> StyleOf, SymbolOf;
+        /// <summary>A player's Steam profile picture (null: none), shown on their banner instead of their symbol.</summary>
+        public System.Func<int, Texture> PictureOf;
         /// <summary>After the match: 0 no replay to save, 1 one to save, 2 saved.</summary>
         public int ReplaySave;
         /// <summary>Draw a mouse reticle (keyboard players aiming with the mouse).</summary>
@@ -304,8 +306,8 @@ namespace UltraPuck.Game
             var below = assist >= 0 && assist < _state.Players.Length ? "Assist: " + SeatName(assist) : null;
             // centred along the bottom, above the skip hint
             var bw = Mathf.Min(280f, w - 48f);
-            Banners.Draw(new Rect(w / 2f - bw / 2f, h - 118f, bw, 52f), Cosmetics.Banner(look), Cosmetics.BannerTint(look), _state.Players[by].Team, SeatName(by), "GOAL", below, a,
-                SymbolOf != null ? SymbolOf(by) : -1);
+            Banners.Draw(new Rect(w / 2f - bw / 2f, h - 118f, bw, 52f), Cosmetics.Banner(look), Cosmetics.BannerTint(look), _state.Players[by].Team, SeatName(by), Cosmetics.Title(look), below, a,
+                SymbolOf != null ? SymbolOf(by) : -1, PictureOf != null ? PictureOf(by) : null);
             return true;
         }
 
@@ -432,7 +434,14 @@ namespace UltraPuck.Game
                     Ui.Box(r, new Color(1f, 1f, 1f, 0.05f), 8f);
                     Ui.Box(new Rect(r.x, r.y, 5f, r.height), Palette.Team(p.Team), 2.5f);
                     var name = SeatName != null ? SeatName(i) : "P" + (i + 1);
-                    Ui.Label(new Rect(r.x + 16f, r.y, cols - r.x - 24f, r.height), name, Ui.Font(17, true), Color.white);
+                    // their title (Profile) under the name
+                    var title = StyleOf != null ? Cosmetics.Title(StyleOf(i)) : 0;
+                    if (title > 0)
+                    {
+                        Ui.Label(new Rect(r.x + 16f, r.y + 1f, cols - r.x - 24f, 22f), name, Ui.Font(17, true), Color.white);
+                        Cosmetics.DrawTitle(new Rect(r.x + 16f, r.y + 21f, cols - r.x - 24f, 14f), title, 11, TextAnchor.MiddleLeft, 1f);
+                    }
+                    else Ui.Label(new Rect(r.x + 16f, r.y, cols - r.x - 24f, r.height), name, Ui.Font(17, true), Color.white);
                     int[] v = { p.Goals, p.Assists, p.Saves, p.Bumps, Rating(p) };
                     for (var c = 0; c < v.Length; c++) Ui.Label(new Rect(cols + c * colW, r.y, colW, r.height), v[c].ToString(), cell, v[c] > 0 ? Color.white : new Color(1f, 1f, 1f, 0.35f));
                     ty += rowH;

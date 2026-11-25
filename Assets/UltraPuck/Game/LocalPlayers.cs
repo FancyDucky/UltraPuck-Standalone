@@ -804,6 +804,9 @@ namespace UltraPuck.Game
             return f != null && (pressedThisFrame ? f.wasPressedThisFrame : f.isPressed);
         }
 
+        /// <summary>The bits of slot <c>i</c>'s look that change the game (<see cref="PlayerInput.Look"/>).</summary>
+        public System.Func<int, byte> LookFor;
+
         /// <summary>Once per tick: everyone's controls, in slot order. <paramref name="state"/> is only read by computer players.</summary>
         public PlayerInput[] Sample(Simulation sim, GameState state)
         {
@@ -817,7 +820,8 @@ namespace UltraPuck.Game
                 s.WantSwap = false;
                 if (s.Demo) continue;
                 var setting = (byte)((Settings.DashWhereMoving ? PlayerInput.DashMove : 0) | (Settings.AutoSwapBots ? 0 : PlayerInput.NoAutoSwap));
-                if (!(Plugged(s.Device) || Plugged(s.Extra)) || Blocked) { inputs[i].Buttons = setting; continue; } // unplugged, or the Steam overlay is open: stands still
+                var look = LookFor != null ? LookFor(i) : (byte)0;
+                if (!(Plugged(s.Device) || Plugged(s.Extra)) || Blocked) { inputs[i].Buttons = setting; inputs[i].Look = look; continue; } // unplugged, or the Steam overlay is open: stands still
                 var m = StickOf(s);
                 var a = AimOfSlot(s, i);
                 // controllers: holding charge without the puck (a pre-charge) faces the middle of their net, unless
@@ -838,6 +842,7 @@ namespace UltraPuck.Game
                     // (outside the card screen too, for someone catching up on cards after joining part-way)
                     Pick = state != null && PickFor != null && (state.Phase == Phase.Picking || PickFor(i) != 0) ? PickFor(i) : PuckDrills ? s.PuckDrill : (byte)0,
                     Hover = state != null && HoverFor != null ? HoverFor(i) : (byte)0,
+                    Look = look,
                 };
                 s.Latched = 0;
                 s.PuckDrill = 0;

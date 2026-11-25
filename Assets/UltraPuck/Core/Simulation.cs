@@ -1077,6 +1077,7 @@ namespace UltraPuck.Core
         {
             var dt = T.Dt;
             s.Tick++;
+            for (var i = 0; i < s.Players.Length; i++) s.Players[i].GoalPull = (InputOf(inputs, i).Look & PlayerInput.LookPull) != 0;
 
             // the host's match-settings commands, sent as a Pick outside the card screen (even paused): add a bot,
             // back to the kick-off, fix the score
@@ -1123,8 +1124,19 @@ namespace UltraPuck.Core
                 }
             }
 
-            var sub = dt / T.Substeps;
-            for (var k = 0; k < T.Substeps; k++)
+            // anyone knocked faster than a step can safely carry them (they'd go through the boards): this tick is
+            // cut into more, smaller steps instead of capping how fast checks can send people
+            var steps = T.Substeps;
+            var fastest = Fix.Zero;
+            foreach (var p in s.Players) if (p.HitLag <= Fix.Zero && p.OutTime <= Fix.Zero && p.HeldBy < 0) fastest = Fix.Max(fastest, p.Vel.SqrLength);
+            while (steps < T.Substeps * 16)
+            {
+                var safe = T.KnockMaxSpeed * Fix.FromInt(steps) / Fix.FromInt(T.Substeps);
+                if (fastest <= safe * safe) break;
+                steps *= 2;
+            }
+            var sub = dt / steps;
+            for (var k = 0; k < steps; k++)
             {
                 foreach (var p in s.Players)
                 {
@@ -1313,6 +1325,12 @@ namespace UltraPuck.Core
                 var x = InputOf(raw, d);
                 x.Buttons &= unchecked((byte)~(PlayerInput.Swap | PlayerInput.NoAutoSwap));
                 inputs[i] = x;
+            }
+            // a person's look stays with their own player, whoever's steering it (their goals are credited to them)
+            for (var h = 0; h < n; h++)
+            {
+                if (s.Players[h].Bot) { inputs[h].Look = 0; continue; }
+                inputs[h].Look = InputOf(raw, h).Look;
             }
             return inputs;
         }
@@ -2135,8 +2153,8 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// An opponent who gets the tip of their wedge onto the carried puck takes it (no bump needed). Of several,
-        /// the closest; an exact tie is a coin toss. Returns true if the puck changed hands.
+        /// An opponent who gets their wedge (as drawn, a little reach to spare) onto the carried puck takes it (no bump
+        /// needed). Of several, the one whose wedge is most squarely on it; an exact tie is a coin toss. Returns true if the puck changed hands.
         /// </summary>
         private bool Steal(GameState s)
         {
@@ -2146,11 +2164,10 @@ namespace UltraPuck.Core
             for (var j = 0; j < s.Players.Length; j++)
             {
                 var q = s.Players[j];
-                if (j == s.Carrier || q.Team == c.Team || q.NoPickup > Fix.Zero || q.Stun > Fix.Zero || MateHeldBy(s, j) >= 0 || q.RageTime > Fix.Zero) continue;
-                var tip = q.Pos + q.Facing * RadiusOf(q);
-                var r = T.PuckRadius + T.StealReach;
-                var d2 = (s.PuckPos - tip).SqrLength;
-                if (d2 >= r * r) continue;
+                if (j == s.Carrier || q.Team == c.Team || q.NoPickup > Fix.Zero || q.Stun > Fix.Zero || MateHeldBy(s, j) >= 0 || q.HeldBy >= 0 || q.RageTime > Fix.Zero) continue;
+                if (!OnWedge(q, s.PuckPos, T.PuckRadius + T.StealReach)) continue;
+                var mid = q.Pos + q.Facing * (RadiusOf(q) * (T.WedgeTip + T.WedgeBack) / Fix.FromInt(2));
+                var d2 = (s.PuckPos - mid).SqrLength;
                 if (best < 0 || d2 < bestD) { best = j; bestD = d2; ties = 1; }
                 else if (d2 == bestD && s.NextRandom() % (uint)(++ties) == 0) best = j;
             }
@@ -2233,8 +2250,10 @@ namespace UltraPuck.Core
                 s.Phase = Phase.Scored;
                 s.PhaseTime = T.CelebrateTime;
                 foreach (var p in s.Players) p.SkipVote = false;
-                // goal explosion: shove everyone and loose rocks away from the puck (puck stays in the net)
-                BlastFrom(s, blastAt, T.GoalBlastRange, T.DashKnockback * T.GoalBlastPush, -1, true, false, true);
+                // goal explosion: shove everyone and loose rocks away from the puck (puck stays in the net); a scorer
+                // with the Black Hole look pulls them in instead, a little more gently
+                var pull = s.LastGoalBy >= 0 && s.Players[s.LastGoalBy].GoalPull;
+                BlastFrom(s, blastAt, T.GoalBlastRange, T.DashKnockback * T.GoalBlastPush * (pull ? Fix.Ratio(3, 5) : Fix.One), -1, true, false, true, false, pull);
             }
         }
 
@@ -2319,8 +2338,9 @@ namespace UltraPuck.Core
         /// Shove players (except <paramref name="skipPlayer"/>), and optionally the loose puck and loose Swap rocks,
         /// away from <paramref name="at"/>. Used by the goal explosion and Shockwave.
         /// </summary>
-        private void BlastFrom(GameState s, FixVec2 at, Fix radius, Fix push, int skipPlayer, bool markHit, bool shovePuck, bool shoveRocks, bool knockLoose = false)
+        private void BlastFrom(GameState s, FixVec2 at, Fix radius, Fix push, int skipPlayer, bool markHit, bool shovePuck, bool shoveRocks, bool knockLoose = false, bool inward = false)
         {
+            var way = inward ? -Fix.One : Fix.One;
             if (radius.Raw <= 0 || push.Raw <= 0) return;
             for (var j = 0; j < s.Players.Length; j++)
             {
@@ -2337,6 +2357,7 @@ namespace UltraPuck.Core
                     n = new FixVec2((bits & 1) == 0 ? Fix.One : -Fix.One, (bits & 2) == 0 ? Fix.One : -Fix.One).Normalized;
                 }
                 var falloff = Fix.One - Fix.Half * Fix.Clamp01(dist / radius);
+                n = n * way;
                 q.Vel += n * (push * falloff);
                 if (markHit) Hit(q, -n, Fix.Half);
                 if (knockLoose)
@@ -2477,7 +2498,6 @@ namespace UltraPuck.Core
             }
             if (a.Team != b.Team) Enrage(s, to); // (after the puck has been knocked away: a rage starting drops it)
             if (a.RageTime > Fix.Zero && a.Team != b.Team) Launch(s, to, n, T.DashKnockback * heavier * hard);
-            if (b.OutTime <= Fix.Zero && b.Vel.SqrLength > T.KnockMaxSpeed * T.KnockMaxSpeed) b.Vel = b.Vel.Normalized * T.KnockMaxSpeed;
         }
 
         // ------------------------------------------------------------------ Friendly Fire: carrying teammates

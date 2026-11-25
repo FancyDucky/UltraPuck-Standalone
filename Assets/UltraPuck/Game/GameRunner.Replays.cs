@@ -49,19 +49,88 @@ namespace UltraPuck.Game
         /// <summary>Player <paramref name="i"/>'s look (see <see cref="Cosmetics"/>): theirs online, this PC's for the first person here, plain for the rest.</summary>
         private int StyleOf(int i)
         {
+            // (a replay keeps the looks as they were shown: the Developer title was checked then)
             if (_mode == Mode.Replay && _viewer.Replay != null) { var c = ReplayCast(); return c != null && i < c.Styles.Length ? c.Styles[i] : 0; }
-            if (_mode == Mode.Online && _session != null) return _session.StyleOf(i);
+            if (_mode == Mode.Online && _session != null) return Cosmetics.Allowed(_session.StyleOf(i), _session.AccountOf(i));
             if (_mode == Mode.Menu) return PreviewLooks ? Cosmetics.Mine : 0;
             return i >= 0 && i == FirstPerson() ? Cosmetics.Mine : 0;
+        }
+
+        /// <summary>Player <paramref name="i"/>'s Steam account, for their profile picture (0: none, a bot, or a replay).</summary>
+        private ulong AccountOf(int i)
+        {
+            if (_mode == Mode.Replay) return 0;
+            if (_mode == Mode.Online && _session != null) return _session.AccountOf(i);
+            return i >= 0 && i == FirstPerson() ? SteamNet.MyId : 0;
         }
 
         /// <summary>Profile page: set off this PC's goal explosion where it can be seen, to the right of the menu.</summary>
         public void PreviewBoom()
         {
             if (_cam == null) return;
-            var w = _cam.ScreenToWorldPoint(new Vector3(Screen.width * 0.7f, Screen.height * 0.46f, Mathf.Abs(_cam.transform.position.z)));
-            _styleFx.Goal(Cosmetics.MyBoom, new Vector2(w.x, w.y), Palette.Team(0));
+            // the last one stops first, so they don't pile up while flicking through them
+            _styleFx.Clear();
+            _effects.Finish();
+            _styleFx.Goal(Cosmetics.MyBoom, PreviewSpot(), Palette.Team(0));
             _shake = Mathf.Max(_shake, 0.4f);
+        }
+
+        /// <summary>Where the Profile page shows things off: to the right of the menu.</summary>
+        private Vector2 PreviewSpot()
+        {
+            var w = _cam.ScreenToWorldPoint(new Vector3(Screen.width * 0.7f, Screen.height * 0.46f, Mathf.Abs(_cam.transform.position.z)));
+            return new Vector2(w.x, w.y);
+        }
+
+        // ------------------------------------------------------------------ the dash trail preview
+
+        /// <summary>Profile > Edit character, on the Dash trail row: a big player dashing back and forth over a dimmed screen.</summary>
+        public bool PreviewDash;
+        private PlayerView _dashView;
+        private StyleFx _dashFx;
+        private GameObject _dashDim;
+        private float _dashClock, _dashTrailAcc, _dashDimShown;
+        private int _dashShownStyle = -1;
+        private const float DashPreviewRadius = 1.5f, DashEvery = 2f, DashFor = 0.4f, DashAcross = 6f;
+        private const int DashPreviewOrder = 60;
+
+        private void DashPreview()
+        {
+            var on = PreviewDash && _mode == Mode.Menu && _cam != null && !_menus.IsOpen;
+            _dashDimShown = Mathf.MoveTowards(_dashDimShown, on ? 1f : 0f, Clock.Dt * 5f);
+            if (_dashView == null)
+            {
+                if (!on) return;
+                _dashView = new PlayerView(0, DashPreviewRadius, _entities, 0);
+                // over everything else on the rink (and the dimming)
+                foreach (var rend in _dashView.Root.GetComponentsInChildren<Renderer>(true)) rend.sortingOrder += DashPreviewOrder;
+                _dashFx = new StyleFx(_entities, _effects) { OrderBoost = DashPreviewOrder };
+                _dashDim = Draw.Make("PreviewDim", _entities, Draw.Rect(new Vector2(-500f, -500f), new Vector2(500f, 500f), Color.black), DashPreviewOrder - 2).gameObject;
+                _dashClock = 0f;
+            }
+            Draw.Recolor(_dashDim.GetComponent<MeshFilter>().sharedMesh, new Color(0f, 0f, 0f, 0.62f * _dashDimShown));
+            if (_dashDim.activeSelf != _dashDimShown > 0f) _dashDim.SetActive(_dashDimShown > 0f);
+            if (_dashView.Root.activeSelf != on) _dashView.Root.SetActive(on);
+            if (!on) { _dashFx.Clear(); _dashClock = 0f; return; }
+            // another trail picked: the old one's bits go at once
+            if (Cosmetics.MyDash != _dashShownStyle) { _dashFx.Clear(); _dashShownStyle = Cosmetics.MyDash; }
+            // across and back: a dash every couple of seconds, each the other way
+            _dashClock += Clock.Dt;
+            var round = Mathf.FloorToInt(_dashClock / DashEvery);
+            var t = _dashClock - round * DashEvery;
+            var right = round % 2 == 0;
+            var dir = right ? Vector2.right : Vector2.left;
+            var from = PreviewSpot() + Vector2.up * 1.5f + dir * (-DashAcross / 2f);
+            var k = Ui.EaseOut(Mathf.Clamp01(t / DashFor));
+            var pos = from + dir * (DashAcross * k);
+            var dash = t < DashFor ? 1f - t / DashFor : 0f;
+            var team = Palette.Team(0);
+            _dashView.DashColour = Cosmetics.DashTint(Cosmetics.MyDash, team);
+            Vector2 hitAt;
+            _dashView.Show(pos, dir, 1f, 1, 0f, 0, 0f, Vector2.zero, out hitAt);
+            _dashView.Status(false, false, false, false, null, false, dash, false, false, dir);
+            _dashFx.DashTrail(Cosmetics.MyDash, pos, dir, DashPreviewRadius, dash, team, ref _dashTrailAcc);
+            _dashFx.Update();
         }
 
         // ------------------------------------------------------------------ recording a match
@@ -378,25 +447,33 @@ namespace UltraPuck.Game
             if (want("profile"))
             {
                 GoMainMenu();
-                Cosmetics.ShotLook = Cosmetics.Pack(4, 2, 1);
+                Cosmetics.ShotLook = Cosmetics.Pack(4, 2, 1, 0, Cosmetics.DeveloperTitle);
                 _mainMenu.Show(MainMenu.Page.Profile);
                 yield return new WaitForSecondsRealtime(0.7f);
                 yield return Shot("profile");
                 _mainMenu.Show(MainMenu.Page.Character);
                 yield return new WaitForSecondsRealtime(2.5f);
                 yield return Shot("profile-character");
+                _mainMenu.FocusRow(4);
+                yield return new WaitForSecondsRealtime(0.4f);
+                yield return Shot("profile-title");
+                _mainMenu.FocusRow(1);
                 for (var k = 1; k < Cosmetics.BoomNames.Length; k++)
                 {
-                    Cosmetics.ShotLook = Cosmetics.Pack(4, k % Cosmetics.BannerNames.Length, k);
+                    Cosmetics.ShotLook = Cosmetics.Pack(4, k % Cosmetics.BannerNames.Length, k, 0, k % Cosmetics.TitleNames.Length);
                     yield return new WaitForSecondsRealtime(1.2f);
                     PreviewBoom();
                     yield return new WaitForSecondsRealtime(k == 4 ? 0.7f : 0.3f);
                     yield return Shot("boom-" + k + "-" + Cosmetics.BoomNames[k].Replace(" ", ""));
+                    if (k == 4) { yield return new WaitForSecondsRealtime(0.6f); yield return Shot("boom-4-BlackHole-later"); }
                 }
+                // the dash preview: the big player, a moment into a dash
+                _mainMenu.FocusRow(0);
                 for (var k = 1; k < Cosmetics.DashNames.Length; k++)
                 {
                     Cosmetics.ShotLook = Cosmetics.Pack(k, (k + 5) % Cosmetics.BannerNames.Length, 0);
-                    yield return new WaitForSecondsRealtime(1.4f);
+                    _dashClock = DashEvery - 0.05f;
+                    yield return new WaitForSecondsRealtime(0.25f);
                     yield return Shot("dash-" + k + "-" + Cosmetics.DashNames[k]);
                 }
                 for (var k = 0; k < Cosmetics.BannerNames.Length; k++)
@@ -412,7 +489,7 @@ namespace UltraPuck.Game
             if (want("replayview"))
             {
                 // a short match, recorded and saved in the screenshot folder (not the player's replays), then watched
-                Cosmetics.ShotLook = Cosmetics.Pack(4, 4, 2);
+                Cosmetics.ShotLook = Cosmetics.Pack(4, 4, 2, 0, Cosmetics.DeveloperTitle);
                 _local.Slots.Clear();
                 _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
                 _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
@@ -424,6 +501,10 @@ namespace UltraPuck.Game
                 StartMatch(false);
                 _shotRecord = false;
                 yield return new WaitForSecondsRealtime(6f);
+                _shotBoard = true;
+                yield return new WaitForSecondsRealtime(0.2f);
+                yield return Shot("replay-scoreboard");
+                _shotBoard = false;
                 var g = _map.Goals.Find(x => x.Team == 1);
                 _state.PuckPos = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
                 _state.PuckVel = FixVec2.Zero;

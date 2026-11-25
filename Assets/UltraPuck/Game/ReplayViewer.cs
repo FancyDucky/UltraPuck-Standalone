@@ -214,7 +214,7 @@ namespace UltraPuck.Game
             }
             if (dir == 0) return;
             _lrHeld += Time.unscaledDeltaTime;
-            if (_lrHeld >= _lrNext) { _lrNext += HoldRepeat; JumpToMarker(dir, true); Sound.Move(); }
+            if (_lrHeld >= _lrNext) { _lrNext += HoldRepeat; JumpToMarker(dir, false); Sound.Move(); }
         }
 
         private void SetClipStart()
@@ -318,8 +318,8 @@ namespace UltraPuck.Game
             }
 
             var hint = Clipping
-                ? "{tabs} Start / end of the clip here      {side} Move (hold: next goal)      {confirm} Play / pause      {clip} Save as MP4      {copyclip} Copy to clipboard      {back} Cancel clip"
-                : "{confirm} Play / pause      {side} " + (Paused ? "Step" : "Skip 5 s") + " (hold: next goal)      {updown} Speed      {tabs} Clip start / end      {camera} Camera      {clip} Make a clip      {hideui} Hide      {back} Back";
+                ? "{tabs} Start / end of the clip here      {side} Move (hold: next goal or save)      {confirm} Play / pause      {clip} Save as MP4      {copyclip} Copy to clipboard      {back} Cancel clip"
+                : "{confirm} Play / pause      {side} " + (Paused ? "Step" : "Skip 5 s") + " (hold: next goal or save)      {updown} Speed      {tabs} Clip start / end      {camera} Camera      {clip} Make a clip      {hideui} Hide      {back} Back";
             Glyphs.Hint(new Rect(px + 16f, py + 96f, pw - 32f, 28f), hint, 14, new Color(1f, 1f, 1f, 0.7f * a));
 
             // the mouse: buttons along the top of the panel
@@ -387,8 +387,7 @@ namespace UltraPuck.Game
                 {
                     case MatchReplay.MarkerKind.Goal:
                         var gc = mk.Team >= 0 ? Palette.Team(mk.Team) : Color.white;
-                        Ui.Box(new Rect(x - 2f, bar.y - 14f, 4f, bar.height + 28f), new Color(gc.r, gc.g, gc.b, a), 2f);
-                        Ui.Box(new Rect(x - 7f, bar.y - 24f, 14f, 14f), new Color(gc.r, gc.g, gc.b, a), 7f);
+                        Ui.Box(new Rect(x - 1.5f, bar.y - 6f, 3f, bar.height + 12f), new Color(gc.r, gc.g, gc.b, a), 1.5f);
                         break;
                     case MatchReplay.MarkerKind.Save:
                         Ui.Box(new Rect(x - 1.5f, bar.y - 6f, 3f, bar.height + 12f), new Color(1f, 1f, 1f, 0.85f * a), 1.5f);
@@ -403,7 +402,7 @@ namespace UltraPuck.Game
 
             // a little key under the bar
             var ky = bar.yMax + 12f;
-            Ui.Box(new Rect(bar.x, ky + 5f, 10f, 10f), Palette.Team(0), 5f);
+            Ui.Box(new Rect(bar.x + 3f, ky + 3f, 3f, 14f), Palette.Team(0), 1.5f);
             Ui.Label(new Rect(bar.x + 16f, ky, 80f, 20f), "Goal", Ui.Font(12), new Color(1f, 1f, 1f, 0.6f * a));
             Ui.Box(new Rect(bar.x + 70f, ky + 3f, 3f, 14f), Color.white, 1.5f);
             Ui.Label(new Rect(bar.x + 80f, ky, 80f, 20f), "Save", Ui.Font(12), new Color(1f, 1f, 1f, 0.6f * a));
@@ -413,7 +412,17 @@ namespace UltraPuck.Game
             // the mouse: click or drag along the bar (or a clip's handles)
             var e = Event.current;
             var hit = new Rect(bar.x - 10f, bar.y - 26f, bar.width + 20f, bar.height + 46f);
-            if (e.type == EventType.MouseDown && e.button == 0 && hit.Contains(Ui.Mouse))
+            var mouse = Mouse.current;
+            if (mouse != null && mouse.delta.ReadValue().sqrMagnitude > 0.5f) Cursor.visible = true;
+            var pressed = (e.type == EventType.MouseDown && e.button == 0) || (mouse != null && mouse.leftButton.wasPressedThisFrame && !_dragging);
+            if (hit.Contains(Ui.Mouse) && !_dragging && e.type == EventType.Repaint)
+            {
+                // where a click would go
+                var hx = Mathf.Clamp(Ui.Mouse.x, bar.x, bar.xMax);
+                Ui.Box(new Rect(hx - 1f, bar.y - 4f, 2f, bar.height + 8f), new Color(1f, 1f, 1f, 0.6f * a), 1f);
+                Ui.Label(new Rect(hx - 40f, bar.y - 30f, 80f, 20f), Time_((TickOf(bar, hx) - First) / Tps), Ui.Font(12, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.85f * a));
+            }
+            if (pressed && !_dragging && hit.Contains(Ui.Mouse))
             {
                 _dragging = true;
                 _dragWhat = 0;
@@ -422,7 +431,7 @@ namespace UltraPuck.Game
                     if (Mathf.Abs(Ui.Mouse.x - XOf(bar, ClipFrom)) < 10f) _dragWhat = 1;
                     else if (Mathf.Abs(Ui.Mouse.x - XOf(bar, ClipTo)) < 10f) _dragWhat = 2;
                 }
-                e.Use();
+                if (e.type == EventType.MouseDown) e.Use();
             }
             if (_dragging)
             {

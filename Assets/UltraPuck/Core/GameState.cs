@@ -46,6 +46,8 @@ namespace UltraPuck.Core
         /// loose at n × 25% of its usual speed. (Picks 100..200 are free outside the card screen.)
         /// </summary>
         public const byte KnockAway = 100;
+        /// <summary><see cref="Look"/> bit: this person's goal explosion is the Black Hole, which pulls everyone in instead of blasting them away.</summary>
+        public const byte LookPull = 1;
 
         public sbyte MoveX, MoveY;   // -127..127, the left stick
         /// <summary>The right stick: when pushed, you face where it points (twin-stick aiming).</summary>
@@ -55,6 +57,8 @@ namespace UltraPuck.Core
         public byte Pick;
         /// <summary>While picking: the card you're looking at (1, 2, 3...; 0 = none), so the other team can watch you choose.</summary>
         public byte Hover;
+        /// <summary>Not a control: the bits of the person's look that change the game (<see cref="LookPull"/>).</summary>
+        public byte Look;
 
         public bool Has(byte b) { return (Buttons & b) != 0; }
 
@@ -75,7 +79,7 @@ namespace UltraPuck.Core
             return (sbyte)Math.Round(v * 127f);
         }
 
-        public bool Equals(PlayerInput o) { return MoveX == o.MoveX && MoveY == o.MoveY && AimX == o.AimX && AimY == o.AimY && Buttons == o.Buttons && Pick == o.Pick && Hover == o.Hover; }
+        public bool Equals(PlayerInput o) { return MoveX == o.MoveX && MoveY == o.MoveY && AimX == o.AimX && AimY == o.AimY && Buttons == o.Buttons && Pick == o.Pick && Hover == o.Hover && Look == o.Look; }
         public override bool Equals(object obj) { return obj is PlayerInput && Equals((PlayerInput)obj); }
         public override int GetHashCode() { return ((byte)MoveX | ((byte)MoveY << 8) | ((byte)AimX << 16) | ((byte)AimY << 24)) ^ (Buttons * 31 + Pick * 7919); }
     }
@@ -285,6 +289,8 @@ namespace UltraPuck.Core
         public int Pilot = -1;
         /// <summary>The swap button was held last tick (so a press swaps once).</summary>
         public bool SwapHeld;
+        /// <summary>Their goal explosion pulls everyone in (the Black Hole look, from their controls' <see cref="PlayerInput.Look"/>).</summary>
+        public bool GoalPull;
         /// <summary>Match stats (for the screen after the match): goals, assists, saves and checks landed.</summary>
         public int Goals, Assists, Saves, Bumps;
         /// <summary>Cannon Ball: seconds left of being carried off by a caught shot (little control, little drag).</summary>
@@ -582,7 +588,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.GunCooldown); Mix(ref h, p.InvisCooldown); Mix(ref h, p.InvisibleTime); Mix(ref h, p.ShockCooldown);
                 Mix(ref h, p.SlowTime); Mix(ref h, p.Slow); Mix(ref h, p.HeldBy); Mix(ref h, p.HeldTime); Mix(ref h, p.TossTime); Mix(ref h, p.Shocks); Mix(ref h, p.ShockAt);
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);
-                Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps); Mix(ref h, p.Shoved);
+                Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.GoalPull ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps); Mix(ref h, p.Shoved);
                 Mix(ref h, p.ShovedBy); Mix(ref h, p.FastTime); Mix(ref h, p.Fast); Mix(ref h, p.ShockHold);
                 Mix(ref h, p.PortalNext); Mix(ref h, p.PortalCooldown); Mix(ref h, p.PortalVia);
                 Mix(ref h, p.SlotSpin); Mix(ref h, p.SlotWin); Mix(ref h, p.SlotReels); Mix(ref h, p.SlotSpins); Mix(ref h, p.SlotPrize);

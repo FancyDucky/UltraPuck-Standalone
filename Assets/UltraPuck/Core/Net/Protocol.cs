@@ -70,7 +70,7 @@ namespace UltraPuck.Core.Net
         public Writer Input(PlayerInput i)
         {
             _b.Add((byte)i.MoveX); _b.Add((byte)i.MoveY); _b.Add((byte)i.AimX); _b.Add((byte)i.AimY);
-            _b.Add(i.Buttons); _b.Add(i.Pick); _b.Add(i.Hover);
+            _b.Add(i.Buttons); _b.Add(i.Pick); _b.Add(i.Hover); _b.Add(i.Look);
             return this;
         }
 
@@ -111,13 +111,13 @@ namespace UltraPuck.Core.Net
 
         public PlayerInput Input()
         {
-            Need(7);
+            Need(8);
             var i = new PlayerInput
             {
                 MoveX = (sbyte)_b[_i], MoveY = (sbyte)_b[_i + 1], AimX = (sbyte)_b[_i + 2], AimY = (sbyte)_b[_i + 3],
-                Buttons = _b[_i + 4], Pick = _b[_i + 5], Hover = _b[_i + 6],
+                Buttons = _b[_i + 4], Pick = _b[_i + 5], Hover = _b[_i + 6], Look = _b[_i + 7],
             };
-            _i += 7;
+            _i += 8;
             return i;
         }
     }

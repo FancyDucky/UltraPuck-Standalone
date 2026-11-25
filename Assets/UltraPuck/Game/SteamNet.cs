@@ -151,6 +151,53 @@ namespace UltraPuck.Game
 
         public static string Name { get { return Ready ? SteamFriends.GetPersonaName() : "Player"; } }
 
+        // ------------------------------------------------------------------ profile pictures
+
+        /// <summary>This PC's Steam account (0 without Steam).</summary>
+        public static ulong MyId { get { return Ready ? SteamUser.GetSteamID().m_SteamID : 0; } }
+
+        private static readonly Dictionary<ulong, Texture2D> _avatars = new Dictionary<ulong, Texture2D>();
+        private static readonly Dictionary<ulong, float> _avatarRetry = new Dictionary<ulong, float>();
+
+        /// <summary>
+        /// Steam account <paramref name="id"/>'s profile picture (large, 184 px), or null: no Steam, no account, or
+        /// not downloaded yet (Steam is asked for it, and it turns up a moment later).
+        /// </summary>
+        public static Texture2D Avatar(ulong id)
+        {
+            if (!Ready || id == 0) return null;
+            Texture2D tex;
+            if (_avatars.TryGetValue(id, out tex)) return tex;
+            float retry;
+            if (_avatarRetry.TryGetValue(id, out retry) && Time.unscaledTime < retry) return null;
+            _avatarRetry[id] = Time.unscaledTime + 1f;
+            try
+            {
+                var who = new CSteamID(id);
+                var image = SteamFriends.GetLargeFriendAvatar(who);
+                if (image <= 0)
+                {
+                    // -1: being fetched; 0: Steam doesn't know this account yet (ask it to find out)
+                    if (image == 0) SteamFriends.RequestUserInformation(who, false);
+                    return null;
+                }
+                uint w, h;
+                if (!SteamUtils.GetImageSize(image, out w, out h) || w == 0 || h == 0) return null;
+                var rgba = new byte[w * h * 4];
+                if (!SteamUtils.GetImageRGBA(image, rgba, rgba.Length)) return null;
+                // Steam's rows run top to bottom; a texture's bottom to top
+                var flipped = new byte[rgba.Length];
+                var row = (int)w * 4;
+                for (var y = 0; y < h; y++) Buffer.BlockCopy(rgba, y * row, flipped, ((int)h - 1 - y) * row, row);
+                tex = new Texture2D((int)w, (int)h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear, hideFlags = HideFlags.HideAndDontSave };
+                tex.LoadRawTextureData(flipped);
+                tex.Apply();
+                _avatars[id] = tex;
+                return tex;
+            }
+            catch (Exception e) { Debug.LogWarning("Ultra Puck: Steam picture: " + e.Message); return null; }
+        }
+
         // ------------------------------------------------------------------ on-screen keyboard
 
         private static Action<string> _textDone;
