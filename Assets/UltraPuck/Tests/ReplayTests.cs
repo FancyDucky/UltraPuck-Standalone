@@ -52,6 +52,21 @@ namespace UltraPuck.Tests
         }
 
         [Test]
+        public void ScrubbingReadsTheSameFramesAsPlaying()
+        {
+            var sums = new Dictionary<int, ulong>();
+            var rep = Record(false, sums);
+            // jumping about, as dragging along the bar does (each one usually in a chunk not decoded yet)
+            var rng = new System.Random(3);
+            for (var n = 0; n < 200; n++)
+            {
+                var f = rng.Next(rep.Frames);
+                Assert.AreEqual(sums[rep.Ticks[f]], rep.FrameStateQuick(f).Checksum(), "frame " + f);
+            }
+            Assert.AreEqual(sums[rep.Ticks[rep.Frames - 1]], rep.FrameStateQuick(rep.Frames - 1).Checksum(), "the last frame");
+        }
+
+        [Test]
         public void ASavedReplayLoadsTheSame()
         {
             var sums = new Dictionary<int, ulong>();

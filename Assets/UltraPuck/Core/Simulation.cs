@@ -1838,7 +1838,7 @@ namespace UltraPuck.Core
                     var checkedOne = s.Carrier;
                     var dir = q.Vel.SqrLength.Raw > 0 ? q.Vel.Normalized : q.Facing;
                     KnockLoose(s, s.Carrier, dir, j, true);
-                    Enrage(s, checkedOne);
+                    Enrage(s, checkedOne, j);
                     q.DashTime = Fix.Zero; // that was the check
                     return;
                 }
@@ -2496,7 +2496,7 @@ namespace UltraPuck.Core
                 // owns it until someone picks it up (the checker has to wait a moment, so it doesn't just change hands)
                 KnockLoose(s, to, n, from, true);
             }
-            if (a.Team != b.Team) Enrage(s, to); // (after the puck has been knocked away: a rage starting drops it)
+            if (a.Team != b.Team) Enrage(s, to, from); // (after the puck has been knocked away: a rage starting drops it)
             if (a.RageTime > Fix.Zero && a.Team != b.Team) Launch(s, to, n, T.DashKnockback * heavier * hard);
         }
 
@@ -2698,17 +2698,24 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// RAGE: player <paramref name="i"/> was checked by an opponent. With the card (and not raging or cooling down)
-        /// the meter goes up one; full, they rage.
+        /// RAGE: player <paramref name="i"/> was checked by opponent <paramref name="by"/>. With the card (and not raging or
+        /// cooling down) the meter fills by the checker's heft over theirs (one for an even check); once it reaches this
+        /// rage's random need (3-5), they rage.
         /// </summary>
-        private void Enrage(GameState s, int i)
+        /// <summary>RAGE: how heavy a player counts as (weight times Knockback Given, as Heavyweight's "Weight +80%").</summary>
+        public static Fix Heft(PlayerState p) { return WeightOf(p) * Fix.Clamp(p.Stats.KnockbackGiven, Fix.Ratio(1, 20), Fix.FromInt(10)); }
+
+        private void Enrage(GameState s, int i, int by)
         {
             if (i < 0 || i >= s.Players.Length) return;
             var p = s.Players[i];
             if (p.Stats.Rage <= 0 || p.RageTime > Fix.Zero || p.RageCooldown > Fix.Zero) return;
-            p.RageMeter++;
-            if (p.RageMeter < T.RageChecks) return;
-            p.RageMeter = 0;
+            if (p.RageNeed <= 0) p.RageNeed = T.RageNeedMin + (int)(s.NextRandom() % (uint)System.Math.Max(1, T.RageNeedMax - T.RageNeedMin + 1));
+            var fill = by >= 0 && by < s.Players.Length ? Heft(s.Players[by]) / Heft(p) : Fix.One;
+            p.RageFill += Fix.Clamp(fill, T.RageFillMin, T.RageFillMax);
+            if (p.RageFill < Fix.FromInt(p.RageNeed)) return;
+            p.RageFill = Fix.Zero;
+            p.RageNeed = 0;
             p.RageTime = T.RageTime;
             if (s.Carrier == i) KnockLoose(s, i, p.Facing, -1); // no hands for the puck while raging
             if (Cards == null) return;

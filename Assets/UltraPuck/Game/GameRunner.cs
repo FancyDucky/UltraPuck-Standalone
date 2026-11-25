@@ -863,14 +863,19 @@ namespace UltraPuck.Game
                 _state.Players[0].Cards = new[] { _sim.Cards.ById("ultrapuck.rage").Index };
                 _sim.Cards.Recompute(_state);
                 while (_state.Phase == Phase.Countdown) yield return null;
-                _state.Players[0].RageMeter = 5;
+                _state.Players[0].RageFill = Fix.FromInt(4); _state.Players[0].RageNeed = 5;
                 yield return new WaitForSecondsRealtime(0.5f);
                 yield return Shot("rage-meter");
-                _state.Players[0].RageMeter = 0;
+                _state.Players[0].RageFill = Fix.Zero; _state.Players[0].RageNeed = 0;
                 _state.Players[0].RageTime = _sim.T.RageTime;
                 _sim.Cards.Recompute(_state);
                 yield return new WaitForSecondsRealtime(1f);
                 yield return Shot("rage-on");
+                _state.Players[0].RageTime = Fix.Zero; _state.Players[0].RageCooldown = Fix.FromInt(14);
+                _sim.Cards.Recompute(_state);
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("rage-cooldown");
+                _state.Players[0].RageCooldown = Fix.Zero;
                 // a knock-out through the right-hand boards: the blast in from the screen edge, then the respawn pillar
                 var right = new FixVec2(_sim.Map.BoundsMax.X - Fix.One, Fix.Zero);
                 _state.Players[1].Pos = right - new FixVec2(Fix.Two, Fix.Zero);
@@ -3075,15 +3080,19 @@ namespace UltraPuck.Game
         }
 
         /// <summary>
-        /// RAGE: from 4 checks of 7 the player twitches, more often the nearer they are (every 1.8 s at 4, 1.3 s at 5,
-        /// 0.8 s at 6): a quick shake to the side and a jerk of the head, timed by the match clock so every PC sees it alike.
+        /// RAGE: past half full the player twitches, more often the nearer they are (every 1.8 s down to 0.8 s): a quick
+        /// shake to the side and a jerk of the head, timed by the match clock so every PC sees it alike. Only the body
+        /// moves (<see cref="PlayerView.TwitchOffset"/>): the player's place, aim line, bars and the camera don't.
         /// </summary>
-        private void Twitch(GameState b, int i, float t, float radius, ref Vector2 pos, ref Vector2 facing)
+        private void Twitch(GameState b, int i, float t, float radius, Vector2 facing, out Vector2 offset, out float turnDeg)
         {
+            offset = Vector2.zero; turnDeg = 0f;
             var p = b.Players[i];
-            if (p.Stats.Rage <= 0 || p.RageTime > Fix.Zero || p.RageMeter < 4) return;
-            float[] every = { 1.8f, 1.3f, 0.8f };
-            var interval = every[Mathf.Clamp(p.RageMeter - 4, 0, every.Length - 1)];
+            if (p.Stats.Rage <= 0 || p.RageTime > Fix.Zero || p.RageNeed <= 0) return;
+            var full = Mathf.Clamp01(p.RageFill.ToFloat() / p.RageNeed);
+            if (full < 0.5f) return;
+            var near = Mathf.Clamp01((full - 0.5f) / 0.4f);
+            var interval = Mathf.Lerp(1.8f, 0.8f, near);
             var now = (b.Tick + t) / _sim.T.TicksPerSecond + i * 0.37f;
             var phase = now % interval;
             const float length = 0.22f;
@@ -3091,9 +3100,8 @@ namespace UltraPuck.Game
             var k = phase / length;
             var shake = Mathf.Sin(k * Mathf.PI * 6f) * (1f - k);
             var side = facing.sqrMagnitude > 0.0001f ? new Vector2(-facing.y, facing.x).normalized : Vector2.up;
-            pos += side * shake * radius * (0.14f + 0.05f * (p.RageMeter - 4));
-            var turn = shake * 12f * Mathf.Deg2Rad;
-            facing = new Vector2(facing.x * Mathf.Cos(turn) - facing.y * Mathf.Sin(turn), facing.x * Mathf.Sin(turn) + facing.y * Mathf.Cos(turn));
+            offset = side * shake * radius * Mathf.Lerp(0.14f, 0.24f, near);
+            turnDeg = shake * 12f;
         }
 
         private void Show(GameState a, GameState b, float t, bool replay = false)
@@ -3122,7 +3130,10 @@ namespace UltraPuck.Game
                 }
                 var pos = (V.Of(pb.Pos) - V.Of(pa.Pos)).sqrMagnitude > 4f ? V.Of(pb.Pos) : Vector2.Lerp(V.Of(pa.Pos), V.Of(pb.Pos), t);
                 var facing = Vector2.Lerp(V.Of(pa.Facing), V.Of(pb.Facing), t);
-                Twitch(b, i, t, radius, ref pos, ref facing);
+                Vector2 twitchBy; float twitchTurn;
+                Twitch(b, i, t, radius, facing, out twitchBy, out twitchTurn);
+                _players[i].TwitchOffset = twitchBy;
+                _players[i].TwitchTurn = twitchTurn;
                 // knocked out: flying from where they were hit, out through the boards, then gone until the respawn
                 var outNow = pb.OutTime > Fix.Zero;
                 var flown = outNow ? (_sim.T.RespawnTime - pb.OutTime).ToFloat() * LaunchSpeed : 0f;
@@ -3140,7 +3151,6 @@ namespace UltraPuck.Game
                     _hud.Rages.Add(new Hud.RageBar
                     {
                         World = new Vector3(pos.x, pos.y - radius - 0.32f, 0f),
-                        Meter = pb.RageMeter / (float)_sim.T.RageChecks,
                         Raging = pb.RageTime > Fix.Zero ? pb.RageTime.ToFloat() / _sim.T.RageTime.ToFloat() : 0f,
                         Cooling = pb.RageCooldown > Fix.Zero ? pb.RageCooldown.ToFloat() / _sim.T.RageCooldown.ToFloat() : 0f,
                     });

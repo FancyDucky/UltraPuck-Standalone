@@ -419,13 +419,17 @@ namespace UltraPuck.Game
             return c;
         }
 
+        /// <summary>RAGE's twitch: the body alone shakes and turns this much (the player's place, aim and bars stay put).</summary>
+        public Vector2 TwitchOffset;
+        public float TwitchTurn;
+
         public float Show(Vector2 pos, Vector2 facing, float dashCharge, int dashMax, float charge, int hits, float hitPower, Vector2 hitDir, out Vector2 hitAt)
         {
             Root.transform.localPosition = new Vector3(pos.x, pos.y, 0f);
             if (facing.sqrMagnitude > 1e-6f)
             {
                 var turn = Quaternion.Euler(0f, 0f, Mathf.Atan2(facing.y, facing.x) * Mathf.Rad2Deg);
-                _body.localRotation = turn;
+                _body.localRotation = TwitchTurn != 0f ? turn * Quaternion.Euler(0f, 0f, TwitchTurn) : turn;
                 _chargeRoot.localRotation = turn;
             }
 
@@ -601,7 +605,7 @@ namespace UltraPuck.Game
                     : _body.localRotation;
 
             // hit lag: a quick shake while frozen
-            _squash.localPosition = lagged ? (Vector3)(Random.insideUnitCircle * _r * 0.12f) : Vector3.zero;
+            _squash.localPosition = (lagged ? (Vector3)(Random.insideUnitCircle * _r * 0.12f) : Vector3.zero) + (Vector3)TwitchOffset;
             // the cooldown bars, stacked under the check bar, while recharging (or always, by setting)
             var row = 0;
             for (var k = 0; k < 3; k++)

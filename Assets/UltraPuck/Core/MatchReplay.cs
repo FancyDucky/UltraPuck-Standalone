@@ -285,6 +285,86 @@ namespace UltraPuck.Core
             return k < states.Length ? states[k] : states[states.Length - 1];
         }
 
+        // ------------------------------------------------------------------ scrubbing
+
+        // unpacked chunks (bytes only: cheap to keep many) and the last few single frames read from them
+        private readonly Dictionary<int, byte[]> _raw = new Dictionary<int, byte[]>();
+        private readonly List<int> _rawOrder = new List<int>();
+        private readonly Dictionary<int, GameState> _single = new Dictionary<int, GameState>();
+        private readonly List<int> _singleOrder = new List<int>();
+        private const int RawKept = 48, SinglesKept = 8;
+
+        /// <summary>
+        /// <see cref="FrameState"/>, but when its chunk isn't decoded yet only this one frame is (for dragging along the
+        /// time bar, where every move can land in another chunk). The whole chunk is decoded in the background after.
+        /// </summary>
+        public GameState FrameStateQuick(int frame)
+        {
+            if (Frames == 0) return null;
+            frame = Math.Max(0, Math.Min(Frames - 1, frame));
+            var chunk = frame / ChunkFrames;
+            // (playing on: the next chunk is decoded in the background before it's needed)
+            if (frame % ChunkFrames > ChunkFrames / 2) Prefetch(chunk + 1);
+            lock (_cacheLock)
+            {
+                GameState[] got;
+                if (_cache.TryGetValue(chunk, out got)) { var j = frame - chunk * ChunkFrames; return j < got.Length ? got[j] : got[got.Length - 1]; }
+                GameState one;
+                if (_single.TryGetValue(frame, out one)) return one;
+            }
+            var s = DecodeOne(chunk, frame - chunk * ChunkFrames);
+            lock (_cacheLock)
+            {
+                _single[frame] = s;
+                _singleOrder.Add(frame);
+                while (_singleOrder.Count > SinglesKept) { _single.Remove(_singleOrder[0]); _singleOrder.RemoveAt(0); }
+            }
+            Prefetch(chunk);
+            return s;
+        }
+
+        private byte[] RawChunk(int chunk)
+        {
+            lock (_cacheLock)
+            {
+                byte[] got;
+                if (_raw.TryGetValue(chunk, out got)) { _rawOrder.Remove(chunk); _rawOrder.Add(chunk); return got; }
+            }
+            var raw = Unsqueeze(_chunks[chunk]);
+            lock (_cacheLock)
+            {
+                _raw[chunk] = raw;
+                _rawOrder.Remove(chunk);
+                _rawOrder.Add(chunk);
+                while (_rawOrder.Count > RawKept) { _raw.Remove(_rawOrder[0]); _rawOrder.RemoveAt(0); }
+            }
+            return raw;
+        }
+
+        /// <summary>Frame <paramref name="k"/> of a chunk: the differences are undone up to it, and only it is read.</summary>
+        private GameState DecodeOne(int chunk, int k)
+        {
+            var raw = RawChunk(chunk);
+            byte[] cur = null;
+            var pos = 0;
+            for (var i = 0; pos < raw.Length; i++)
+            {
+                var kind = raw[pos];
+                var n = BitConverter.ToInt32(raw, pos + 1);
+                pos += 5;
+                if (n < 0 || pos + n > raw.Length) throw new InvalidDataException("replay: bad frame");
+                if (kind == 1)
+                {
+                    if (cur == null || cur.Length != n) throw new InvalidDataException("replay: a difference with nothing before it");
+                    for (var b = 0; b < n; b++) cur[b] ^= raw[pos + b];
+                }
+                else { cur = new byte[n]; Buffer.BlockCopy(raw, pos, cur, 0, n); }
+                pos += n;
+                if (i == k) break;
+            }
+            return _codec.Read(cur);
+        }
+
         private GameState[] ChunkStates(int chunk)
         {
             lock (_cacheLock)
@@ -322,7 +402,7 @@ namespace UltraPuck.Core
 
         private GameState[] DecodeChunk(int chunk)
         {
-            var raw = Unsqueeze(_chunks[chunk]);
+            var raw = RawChunk(chunk);
             var list = new List<GameState>(ChunkFrames);
             using (var r = new BinaryReader(new MemoryStream(raw)))
             {

@@ -192,12 +192,15 @@ namespace UltraPuck.Core
         /// </summary>
         public Fix DisguiseHold = Fix.One, DisguiseFade = Fix.Ratio(3, 2);
         /// <summary>
-        /// RAGE: <see cref="RageChecks"/> checks taken (by opponents) and you rage for <see cref="RageTime"/>:
+        /// RAGE: checks taken (by opponents) fill a meter by the checker's weight over yours (at least
+        /// <see cref="RageFillMin"/>, at most <see cref="RageFillMax"/> a check); when it reaches a random
+        /// <see cref="RageNeedMin"/>..<see cref="RageNeedMax"/> (3-5 even checks) you rage for <see cref="RageTime"/>:
         /// <see cref="RageSize"/>× size, <see cref="RageWeight"/>× weight, <see cref="RageSpeed"/>× speed,
         /// <see cref="RageKnock"/>× knockback given. Then <see cref="RageCooldown"/>
         /// before checks count again.
         /// </summary>
-        public int RageChecks = 7;
+        public int RageNeedMin = 3, RageNeedMax = 5;
+        public Fix RageFillMin = Fix.Ratio(1, 4), RageFillMax = Fix.FromInt(3);
         public Fix RageTime = Fix.FromInt(7), RageCooldown = Fix.FromInt(20), RageSize = Fix.Ratio(5, 2), RageWeight = Fix.Ratio(5, 2),
             RageSpeed = Fix.Ratio(5, 4), RageKnock = Fix.FromInt(10);
         /// <summary>

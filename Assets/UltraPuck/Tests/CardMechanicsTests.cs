@@ -500,8 +500,8 @@ namespace UltraPuck.Tests
         }
 
         /// <summary>
-        /// RAGE: each check taken fills the meter; the 7th makes you rage for 7 s (2.5x size and weight, +25% speed,
-        /// 3x shot power, 10x knockback given), then 20 s of cooldown when checks don't count.
+        /// RAGE: each even check taken fills the meter by one; at a random 3-5 you rage for 7 s (2.5x size and weight,
+        /// +25% speed, 10x knockback given), then 20 s of cooldown when checks don't count.
         /// </summary>
         [Test]
         public void RageBuildsUpFromChecksAndWearsOff()
@@ -510,15 +510,19 @@ namespace UltraPuck.Tests
             Give(s, 0, "ultrapuck.rage");
             Play(s);
             var size = s.Players[0].Stats.Size;
-            for (var k = 1; k < 7; k++)
+            CheckInto(s);
+            var need = s.Players[0].RageNeed;
+            Assert.That(need, Is.InRange(3, 5), "needs 3-5 checks");
+            for (var k = 1; k < need; k++)
             {
-                CheckInto(s);
-                Assert.AreEqual(k, s.Players[0].RageMeter, "check " + k + " counted");
+                if (k > 1) CheckInto(s);
+                Assert.AreEqual(k, s.Players[0].RageFill.ToDouble(), 1e-6, "check " + k + " counted as one (even weights)");
                 Assert.AreEqual(Fix.Zero, s.Players[0].RageTime);
             }
             CheckInto(s);
-            Assert.Greater(s.Players[0].RageTime.ToDouble(), 6.0, "raging after the 7th");
-            Assert.AreEqual(0, s.Players[0].RageMeter);
+            Assert.Greater(s.Players[0].RageTime.ToDouble(), 6.0, "raging after check " + need);
+            Assert.AreEqual(Fix.Zero, s.Players[0].RageFill);
+            Assert.AreEqual(0, s.Players[0].RageNeed, "a new need is rolled next time");
             var st = s.Players[0].Stats;
             Assert.AreEqual(size.ToDouble() * 2.5, st.Size.ToDouble(), 1e-3, "2.5x bigger");
             Assert.AreEqual(2.5, st.Weight.ToDouble(), 1e-3, "2.5x heavier");
@@ -530,17 +534,39 @@ namespace UltraPuck.Tests
             Assert.AreEqual(size, s.Players[0].Stats.Size, "back to size");
             Assert.Greater(s.Players[0].RageCooldown.ToDouble(), 18.0, "cooling down");
             CheckInto(s);
-            Assert.AreEqual(0, s.Players[0].RageMeter, "no rage builds while cooling down");
+            Assert.AreEqual(Fix.Zero, s.Players[0].RageFill, "no rage builds while cooling down");
             Run(s, 120 * 20, default(PlayerInput), default(PlayerInput));
             Assert.AreEqual(Fix.Zero, s.Players[0].RageCooldown);
             CheckInto(s);
-            Assert.AreEqual(1, s.Players[0].RageMeter, "counting again");
+            Assert.AreEqual(1.0, s.Players[0].RageFill.ToDouble(), 1e-6, "counting again");
             // without the card nothing builds up
             CheckInto(s);
             var plain = Game(0, 1);
             Play(plain);
             CheckInto(plain);
-            Assert.AreEqual(0, plain.Players[0].RageMeter);
+            Assert.AreEqual(Fix.Zero, plain.Players[0].RageFill);
+        }
+
+        /// <summary>RAGE: a heavier checker fills the meter faster (by weight over yours), a lighter one slower.</summary>
+        [Test]
+        public void RageFillsByTheWeightDifference()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.rage");
+            Give(s, 1, "ultrapuck.heavyweight");
+            Play(s);
+            CheckInto(s);
+            var heavy = s.Players[0].RageFill.ToDouble();
+            var ratio = (Simulation.Heft(s.Players[1]) / Simulation.Heft(s.Players[0])).ToDouble();
+            Assert.Greater(ratio, 1.05, "the checker is heavier");
+            Assert.AreEqual(System.Math.Min(ratio, 3.0), heavy, 1e-3, "filled by the weight difference");
+
+            var t = Game(0, 1);
+            Give(t, 0, "ultrapuck.rage", "ultrapuck.heavyweight");
+            Play(t);
+            CheckInto(t);
+            Assert.Less(t.Players[0].RageFill.ToDouble(), 1.0, "a lighter checker fills it less");
+            Assert.Greater(t.Players[0].RageFill.ToDouble(), 0.0);
         }
 
         /// <summary>How far player 0 goes on one dash from standing still (nobody else near).</summary>

@@ -85,6 +85,31 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.71, not released (yet) (Claude, 25 Nov 2026): **smooth scrubbing on long replays.** Dragging along the
+  replay time bar decoded a whole 120-frame chunk (~90 ms) whenever the mouse reached a chunk not in the 6-chunk
+  cache (on a long match nearly every move), and did it for every GUI event, several a frame. Now the drag only sets
+  `Tick` (`_scrubbed` makes `Frame` mark the jump), the frames are fetched once a frame, and while dragging
+  `MatchReplay.FrameStateQuick` undoes the differences up to the frame and reads just that one (~5 ms). It keeps 8
+  single frames plus 48 unpacked chunks (bytes, `RawChunk`, which `DecodeChunk` now shares) and decodes the whole
+  chunk in the background after. The card-pick shading on the bar is worked out once in `Open` (`_picks`) instead of
+  walking every frame on each draw. Then, still laggy: while dragging the frame is read on a worker thread
+  (`ReplayViewer.Scrub` / `ScrubWork`, newest request wins) and the screen shows the newest frame read, still, so the
+  main thread never waits; outside a drag `Fetch` uses `FrameStateQuick` too (no stall when you let go or play into
+  a chunk that isn't decoded yet; it prefetches the next chunk past half way like `FrameState`). Test:
+  `ScrubbingReadsTheSameFramesAsPlaying`.
+  **RAGE rework.** The meter fills by the checker's heft over yours (`Simulation.Heft` = weight × Knockback Given,
+  i.e. Heavyweight's "Weight +80%"; per check clamped `RageFillMin` 0.25 .. `RageFillMax` 3) up to a random whole
+  3-5 (`RageNeedMin` / `RageNeedMax`, rolled with `s.NextRandom()` at the first check after a rage). `PlayerState.
+  RageMeter` (int) is now `RageFill` (Fix) + `RageNeed`; `Tuning.RageChecks` is gone; `Enrage` takes the checker.
+  Even checks: 3-5 to rage. The meter is no longer drawn (only the raging bar, and a smaller 26×3 cooldown bar;
+  screenshot `rage-cooldown`). The near-rage twitch
+  (from half full) now only moves the body (`PlayerView.TwitchOffset` / `TwitchTurn` on `_squash` / `_body`), not
+  the player's root, so the aim line, charge ring, bars and the camera stay put. The card face still says
+  "7 to rage" in `ultrapuck.json` (the owner had uncommitted edits there: left alone). **NetSession.Version 89.**
+  Test: `RageFillsByTheWeightDifference` (and the rage test reworked).
+  Files: `Core/MatchReplay.cs`, `Core/GameState.cs`, `Core/Tuning.cs`, `Core/Simulation.cs`,
+  `Core/Net/NetSession.cs`, `Game/ReplayViewer.cs`, `Game/GameRunner.cs`, `Game/Views.cs`, `Game/Hud.cs`,
+  `Tests/ReplayTests.cs`, `Tests/CardMechanicsTests.cs`, this file.
 - 0.1.71 (Claude, 25 Nov 2026): **Steam profile pictures on replay banners.** The banner shows
   the scorer's Steam picture (framed, where the symbol was; the symbol when there's none: bots, no Steam, IP-only
   friends without Steam). `SteamNet.Avatar(id)` (large avatar via `SteamFriends.GetLargeFriendAvatar`, asks Steam with

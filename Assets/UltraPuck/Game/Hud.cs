@@ -28,7 +28,7 @@ namespace UltraPuck.Game
         public readonly System.Collections.Generic.List<Vector4> Under = new System.Collections.Generic.List<Vector4>();
 
         /// <summary>RAGE: a meter under a player (only the card holder's own, on their own screen).</summary>
-        public struct RageBar { public Vector3 World; public float Meter, Raging, Cooling; }
+        public struct RageBar { public Vector3 World; public float Raging, Cooling; }
 
         /// <summary>A knock-out: the blast bursting in from the edge of the screen the way they flew out (lasts about a second).</summary>
         public sealed class Blast { public Vector2 World, Dir; public Color Colour; public float At; public int Seed; }
@@ -715,40 +715,31 @@ namespace UltraPuck.Game
         }
 
         /// <summary>
-        /// RAGE meters: seven red notches filling with each check taken; while raging a green bar running down; while
-        /// cooling down a grey bar running down (no rage builds up until it's gone).
+        /// RAGE bars: while raging a green bar running down; while cooling down a grey bar running down (no rage builds up
+        /// until it's gone). How close the next rage is isn't shown (only the twitching hints at it).
         /// </summary>
         private void RageMeters()
         {
             if (Cam == null || Rages.Count == 0 || Event.current.type != EventType.Repaint) return;
             var k = Screen.height / 720f * Settings.UiScale;
-            const int notches = 7;
-            const float w = 44f, h = 6f, gap = 1.5f;
+            const float w = 44f, h = 6f;
             foreach (var r in Rages)
             {
+                if (r.Raging <= 0f && r.Cooling <= 0f) continue;
                 var sp = Cam.WorldToScreenPoint(r.World);
                 var c = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
-                var box = new Rect(c.x - w / 2f, c.y, w, h);
-                Ui.Box(new Rect(box.x - 1.5f, box.y - 1.5f, box.width + 3f, box.height + 3f), new Color(0f, 0f, 0f, 0.6f), 4f);
                 if (r.Raging > 0f)
                 {
+                    var box = new Rect(c.x - w / 2f, c.y, w, h);
+                    Ui.Box(new Rect(box.x - 1.5f, box.y - 1.5f, box.width + 3f, box.height + 3f), new Color(0f, 0f, 0f, 0.6f), 4f);
                     Ui.Box(new Rect(box.x, box.y, box.width * r.Raging, box.height), new Color(0.35f, 0.9f, 0.3f), 3f);
                     continue;
                 }
-                if (r.Cooling > 0f)
-                {
-                    Ui.Box(new Rect(box.x, box.y, box.width * r.Cooling, box.height), new Color(1f, 1f, 1f, 0.35f), 3f);
-                    continue;
-                }
-                var filled = Mathf.RoundToInt(r.Meter * notches);
-                var nw = (w - gap * (notches - 1)) / notches;
-                for (var n = 0; n < notches; n++)
-                {
-                    var on = n < filled;
-                    // redder (and brighter) the fuller it is
-                    var col = on ? Color.Lerp(new Color(1f, 0.65f, 0.2f), new Color(1f, 0.15f, 0.1f), filled / (float)notches) : new Color(1f, 1f, 1f, 0.12f);
-                    Ui.Box(new Rect(box.x + n * (nw + gap), box.y, nw, h), col, 1.5f);
-                }
+                // the cooldown: smaller (it's only a reminder)
+                const float cw = 26f, ch = 3f;
+                var cool = new Rect(c.x - cw / 2f, c.y + 1f, cw, ch);
+                Ui.Box(new Rect(cool.x - 1f, cool.y - 1f, cool.width + 2f, cool.height + 2f), new Color(0f, 0f, 0f, 0.5f), 2.5f);
+                Ui.Box(new Rect(cool.x, cool.y, cool.width * r.Cooling, cool.height), new Color(1f, 1f, 1f, 0.35f), 1.5f);
             }
         }
 

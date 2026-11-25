@@ -312,9 +312,11 @@ namespace UltraPuck.Core
         public Fix SlotSpin;
         public int SlotWin, SlotReels, SlotSpins, SlotPrize;
         public Fix SlotPrizeTime, SlotWait;
-        /// <summary>RAGE: checks taken towards the next rage (0 .. Tuning.RageChecks - 1), the rage's seconds left, and the
-        /// cooldown after it (no rage builds up meanwhile).</summary>
-        public int RageMeter;
+        /// <summary>RAGE: how full the meter is (each check adds the checker's weight over yours), how full it has to get
+        /// this time (a random whole number in Tuning.RageNeedMin .. RageNeedMax, rolled at the first check; 0: not yet), the
+        /// rage's seconds left, and the cooldown after it (no rage builds up meanwhile).</summary>
+        public Fix RageFill;
+        public int RageNeed;
         public Fix RageTime, RageCooldown;
         /// <summary>
         /// Knocked out of the rink: seconds until they're back (0 = playing). Meanwhile they're parked far off the ice.
@@ -593,7 +595,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.PortalNext); Mix(ref h, p.PortalCooldown); Mix(ref h, p.PortalVia);
                 Mix(ref h, p.SlotSpin); Mix(ref h, p.SlotWin); Mix(ref h, p.SlotReels); Mix(ref h, p.SlotSpins); Mix(ref h, p.SlotPrize);
                 Mix(ref h, p.SlotPrizeTime); Mix(ref h, p.SlotWait);
-                Mix(ref h, p.RageMeter); Mix(ref h, p.RageTime); Mix(ref h, p.RageCooldown);
+                Mix(ref h, p.RageFill); Mix(ref h, p.RageNeed); Mix(ref h, p.RageTime); Mix(ref h, p.RageCooldown);
                 Mix(ref h, p.OutTime); Mix(ref h, p.RespawnTime); Mix(ref h, p.OutAt); Mix(ref h, p.OutDir); Mix(ref h, p.OutFrom); Mix(ref h, p.Launches); Mix(ref h, p.Respawns);
             }
             return h;

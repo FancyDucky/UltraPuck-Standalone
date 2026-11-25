@@ -52,6 +52,15 @@ namespace UltraPuck.Game
         public Func<int, string> NameOf;
 
         private int[] _afterPicking;
+        // the card picks as stretches of frames (worked out once: the bar is drawn several times a frame)
+        private readonly System.Collections.Generic.List<Vector2Int> _picks = new System.Collections.Generic.List<Vector2Int>();
+        private bool _scrubbed;
+        // dragging: the frame wanted and the newest one read (on a worker thread, so the screen never waits on it)
+        private readonly object _scrubLock = new object();
+        private int _scrubWant = -1, _scrubHave = -1;
+        private GameState _scrubState;
+        private bool _scrubBusy;
+        private MatchReplay _scrubFor;
         private bool _dragging;
         private int _dragWhat; // 0: the playhead, 1: the clip's start, 2: its end
         private float _uiAt;
@@ -72,6 +81,7 @@ namespace UltraPuck.Game
             Clipping = false;
             Exporting = false;
             _dragging = false;
+            lock (_scrubLock) { _scrubWant = _scrubHave = -1; _scrubState = null; _scrubFor = replay; }
             _uiAt = Time.unscaledTime;
             // card picks are skipped while playing: the frame after each pick
             _afterPicking = new int[replay.Frames];
@@ -81,10 +91,18 @@ namespace UltraPuck.Game
                 if (replay.Phases[f] != (byte)Phase.Picking) next = f;
                 _afterPicking[f] = next;
             }
+            _picks.Clear();
+            var f0 = -1;
+            for (var f = 0; f <= replay.Frames; f++)
+            {
+                var picking = f < replay.Frames && replay.Phases[f] == (byte)Phase.Picking;
+                if (picking && f0 < 0) f0 = f;
+                if (!picking && f0 >= 0) { _picks.Add(new Vector2Int(f0, Mathf.Min(f, replay.Frames - 1))); f0 = -1; }
+            }
             Fetch(true);
         }
 
-        public void Close() { Replay = null; }
+        public void Close() { Replay = null; lock (_scrubLock) { _scrubFor = null; _scrubState = null; } }
 
         /// <summary>Jump to <paramref name="tick"/> (a clip being saved starts here).</summary>
         public void Seek(float tick) { Tick = Mathf.Clamp(tick, First, Last); Fetch(true); }
@@ -113,11 +131,56 @@ namespace UltraPuck.Game
         {
             var f = Replay.FrameAt(Tick);
             var g = Mathf.Min(f + 1, Replay.Frames - 1);
-            A = Replay.FrameState(f);
-            B = Replay.FrameState(g);
+            if (_dragging)
+            {
+                // dragging along the bar: the frame under the mouse is read on a worker thread, and the newest one ready
+                // is shown (still), so moving the mouse never waits on the reading
+                var got = Scrub(f);
+                if (got != null) { A = B = got; T = 0f; Jumped = jumped; return; }
+                if (A != null) { Jumped = jumped; return; }
+            }
+            // just the frames shown when their chunk isn't ready (it's read whole in the background meanwhile)
+            A = Replay.FrameStateQuick(f);
+            B = Replay.FrameStateQuick(g);
             var span = Replay.Ticks[g] - Replay.Ticks[f];
             T = span > 0 ? Mathf.Clamp01((Tick - Replay.Ticks[f]) / span) : 0f;
             Jumped = jumped;
+        }
+
+        /// <summary>Ask for frame <paramref name="f"/> while dragging; returns the newest frame read so far (null: none yet).</summary>
+        private GameState Scrub(int f)
+        {
+            lock (_scrubLock)
+            {
+                _scrubWant = f;
+                if (!_scrubBusy && _scrubHave != f)
+                {
+                    _scrubBusy = true;
+                    System.Threading.ThreadPool.QueueUserWorkItem(ScrubWork, Replay);
+                }
+                return _scrubState;
+            }
+        }
+
+        private void ScrubWork(object o)
+        {
+            var rep = (MatchReplay)o;
+            while (true)
+            {
+                int f;
+                lock (_scrubLock)
+                {
+                    if (_scrubFor != rep || _scrubWant == _scrubHave || _scrubWant < 0) { _scrubBusy = false; return; }
+                    f = _scrubWant;
+                }
+                GameState got = null;
+                try { got = rep.FrameStateQuick(f); } catch { /* shown as it was */ }
+                lock (_scrubLock)
+                {
+                    _scrubHave = f;
+                    if (got != null && _scrubFor == rep) _scrubState = got;
+                }
+            }
         }
 
         // ------------------------------------------------------------------ controls
@@ -169,7 +232,8 @@ namespace UltraPuck.Game
                 if (Pad(g => g.buttonWest) || Key(UnityEngine.InputSystem.Key.X)) Export(false);
                 else if (Pad(g => g.buttonNorth) || Key(UnityEngine.InputSystem.Key.V)) Export(true);
             }
-            var wasJump = Jumped;
+            var wasJump = Jumped || _scrubbed;
+            _scrubbed = false;
             Advance(_dragging ? 0f : Time.unscaledDeltaTime);
             Jumped |= wasJump;
         }
@@ -356,17 +420,10 @@ namespace UltraPuck.Game
         {
             // the track, card picks shaded (they're skipped), what's been watched filled in
             Ui.Box(bar, new Color(1f, 1f, 1f, 0.14f * a), 7f);
-            var f0 = -1;
-            for (var f = 0; f <= Replay.Frames; f++)
+            foreach (var pk in _picks)
             {
-                var picking = f < Replay.Frames && Replay.Phases[f] == (byte)Phase.Picking;
-                if (picking && f0 < 0) f0 = f;
-                if (!picking && f0 >= 0)
-                {
-                    var x0 = XOf(bar, Replay.Ticks[f0]); var x1 = XOf(bar, Replay.Ticks[Mathf.Min(f, Replay.Frames - 1)]);
-                    Ui.Box(new Rect(x0, bar.y, Mathf.Max(2f, x1 - x0), bar.height), new Color(0f, 0f, 0f, 0.45f * a), 3f);
-                    f0 = -1;
-                }
+                var x0 = XOf(bar, Replay.Ticks[pk.x]); var x1 = XOf(bar, Replay.Ticks[pk.y]);
+                Ui.Box(new Rect(x0, bar.y, Mathf.Max(2f, x1 - x0), bar.height), new Color(0f, 0f, 0f, 0.45f * a), 3f);
             }
             var head = XOf(bar, Tick);
             Ui.Box(new Rect(bar.x, bar.y, Mathf.Max(bar.height, head - bar.x), bar.height), new Color(1f, 1f, 1f, 0.5f * a), 7f);
@@ -438,7 +495,8 @@ namespace UltraPuck.Game
                 var t = TickOf(bar, Ui.Mouse.x);
                 if (_dragWhat == 1) ClipFrom = Mathf.Min(t, ClipTo - Tps);
                 else if (_dragWhat == 2) ClipTo = Mathf.Max(t, ClipFrom + Tps);
-                else { Tick = t; Fetch(true); }
+                // (the frames are fetched once a frame, in Frame: the bar sees several events a frame)
+                else if (t != Tick) { Tick = t; _scrubbed = true; }
                 if (e.type == EventType.MouseUp || !Input_MouseHeld()) _dragging = false;
             }
         }
