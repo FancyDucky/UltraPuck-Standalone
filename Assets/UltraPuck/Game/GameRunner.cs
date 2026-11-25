@@ -868,6 +868,10 @@ namespace UltraPuck.Game
                 yield return Shot("respawn-1");
                 yield return new WaitForSecondsRealtime(0.35f);
                 yield return Shot("respawn-2");
+                // the countdown on your own screen when it's you who's out
+                _sim.KnockOut(_state, 0, new FixVec2(_sim.Map.BoundsMin.X + Fix.One, Fix.Zero), new FixVec2(-Fix.One, Fix.Zero));
+                yield return new WaitForSecondsRealtime(1.4f);
+                yield return Shot("knockout-countdown");
                 _shotNoInput = false;
                 GoMainMenu();
             }
@@ -3005,9 +3009,10 @@ namespace UltraPuck.Game
             var raging = pb.RageTime > Fix.Zero;
             if (raging && !_seenRaging[i] && _seenLaunches[i] >= 0)
             {
-                Sound.Play(Sfx.RageUp, 0.9f, Random.Range(0.97f, 1.03f), Pan(pos));
+                Sound.Play(Sfx.RageUp, 0.3f, Random.Range(0.97f, 1.03f), Pan(pos));
                 _shake = Mathf.Max(_shake, 0.3f);
             }
+            if (pb.OutTime > Fix.Zero && IsLocalPerson(i)) _hud.OutCountdown = Mathf.Max(_hud.OutCountdown, pb.OutTime.ToFloat());
             _seenLaunches[i] = pb.Launches;
             _seenRespawns[i] = pb.Respawns;
             _seenRaging[i] = raging;
@@ -3055,6 +3060,7 @@ namespace UltraPuck.Game
             _hud.Tags.Clear();
             _hud.Rages.Clear();
             _hud.Pillars.Clear();
+            _hud.OutCountdown = 0f;
             _hud.Under.Clear();
             _hud.Cam = _cam;
             while (_players.Count > b.Players.Length) { Destroy(_players[_players.Count - 1].Root); _players.RemoveAt(_players.Count - 1); }

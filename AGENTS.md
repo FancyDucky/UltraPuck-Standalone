@@ -97,12 +97,14 @@ so whoever works next knows what changed.
   when the rage starts; Head Start skips a raging player), and Stone Walls crumble on contact (`SmashStones`).
   **Knock-outs:** a raging check whose push (knockback x heavier x how square, the check's own numbers) is at least
   `Tuning.KnockOutSpeed` (200: a square raging dash into a plain player is about 280, into a Heavyweight about 160, a glancing one about 170), 1 time in
-  `KnockOutChance` (5, `s.NextRandom()`), launches them; a check that doesn't is capped at `KnockMaxSpeed` (80: the
+  `KnockOutChance` (1 since 0.1.69: every time; `s.NextRandom()` when it's more), launches them, and only if they hold a Featherweight card (`Featherweight`;
+  everyone else bounces round the rink); a check that doesn't is capped at `KnockMaxSpeed` (80: the
   raging push went straight through the boards). Launched (`Launch`): they fly from where they were hit (`OutFrom`) across
   the rink and out where that line leaves it (`OutAt`), the blast and its boom when they get there; so does ending up outside
   the rink any other way (checked at the top of `Control`, not half way through a portal). `KnockOut` (public, for
   future cards that take people out): drops the puck / teammate / rock, parks them 1000 units off the ice (nothing
-  reaches them), `OutTime` = `RespawnTime` (2 s); `Respawn` puts them at their own face-off spot with `RespawnTime`
+  reaches them), `OutTime` = `RespawnTime` (5 s; a big countdown on
+  their own screen: `Hud.OutCountdown_`); `Respawn` puts them at their own face-off spot with `RespawnTime`
   (pillar) `RespawnShow` 1.2 s. Face-offs bring anyone out back. Bots don't pass to someone out. Looks: they fly on
   through the boards for half a second (`GameRunner.KnockOutEffects`), the camera leaves them out (`PlayerView.Out`),
   a blast bursts in from the screen edge they went out at (`Hud.Blasts_`: a flash and hard spiky rays, white, gold,

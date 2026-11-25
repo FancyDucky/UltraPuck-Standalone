@@ -37,6 +37,9 @@ namespace UltraPuck.Game
         /// <summary>A respawn: a pillar of light in the team's colour round the player (<see cref="Pillar.T"/> 0 .. 1 through it).</summary>
         public struct Pillar { public Vector3 World; public float Radius, T; public Color Colour; }
         public readonly System.Collections.Generic.List<Pillar> Pillars = new System.Collections.Generic.List<Pillar>();
+
+        /// <summary>Seconds until a player on this PC who was knocked out comes back (0: nobody's out).</summary>
+        public float OutCountdown;
         public readonly System.Collections.Generic.List<RageBar> Rages = new System.Collections.Generic.List<RageBar>();
         private readonly System.Collections.Generic.Dictionary<int, float> _tagAlpha = new System.Collections.Generic.Dictionary<int, float>();
         private float _tagsAt;
@@ -104,6 +107,7 @@ namespace UltraPuck.Game
             NameTags();
             RageMeters();
             Blasts_();
+            OutCountdown_(w, h);
             // holding the scoreboard button brings up the corner card list too (whatever the setting); let go and it goes
             if (Board && _state.Phase != Phase.GameOver) { Scoreboard(w, h); CornerCards(h, true); return; }
             CornerCards(h);
@@ -619,6 +623,19 @@ namespace UltraPuck.Game
                 Tex(new Rect(edge.x - 20f, edge.y - core / 2f, 950f * grow, core), _spike, new Color(1f, 1f, 1f, fade));
                 GUI.matrix = keep;
             }
+        }
+
+        /// <summary>Knocked out (a player on this PC): "Knocked out!" and the seconds until they're back, big, in the middle.</summary>
+        private void OutCountdown_(float w, float h)
+        {
+            if (OutCountdown <= 0f) return;
+            var n = Mathf.CeilToInt(OutCountdown - 0.001f);
+            var into = OutCountdown - Mathf.Floor(OutCountdown); // each number pops in as it changes
+            var pop = 1f + 0.25f * Mathf.Clamp01((into - 0.8f) / 0.2f);
+            Ui.Label(new Rect(0f, h * 0.30f, w, 40f), "Knocked out!", Ui.Font(28, true, TextAnchor.MiddleCenter), new Color(1f, 0.35f, 0.3f));
+            var size = Mathf.RoundToInt(64f * pop);
+            Ui.Label(new Rect(0f, h * 0.30f + 40f, w, 90f), n.ToString(), Ui.Font(size, true, TextAnchor.MiddleCenter), Color.white);
+            Ui.Label(new Rect(0f, h * 0.30f + 128f, w, 30f), "Back in a moment", Ui.Font(18, false, TextAnchor.MiddleCenter), Ui.TextDim);
         }
 
         /// <summary>

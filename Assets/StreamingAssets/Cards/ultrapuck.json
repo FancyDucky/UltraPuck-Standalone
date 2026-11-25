@@ -224,7 +224,7 @@
         { "label": "Speed", "value": "[good]+25%[/]" },
         { "label": "Knockback", "value": "[good]x10 for 7 s[/]" }
       ],
-      "text": "[note]3x dash, smashes walls, can launch people out, no puck. Then 20 s before rage builds again.[/]",
+      "text": "[note]3x dash, smashes walls, can launch Featherweights out, no puck. Then 20 s before rage builds again.[/]",
       "stats": { "Rage": "+1" }
     },
     {

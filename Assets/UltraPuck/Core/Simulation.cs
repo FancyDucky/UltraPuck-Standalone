@@ -2706,6 +2706,7 @@ namespace UltraPuck.Core
         {
             var p = s.Players[i];
             if (p.OutTime > Fix.Zero || n.SqrLength.Raw <= 0 || push < T.KnockOutSpeed) return;
+            if (!Featherweight(p)) return; // only the light ones fly out; everyone else bounces round the rink
             if (s.NextRandom() % (uint)System.Math.Max(1, T.KnockOutChance) != 0) return;
             n = n.Normalized;
             // where the flight leaves the rink: the first point outside it along the line
@@ -2713,6 +2714,15 @@ namespace UltraPuck.Core
             var step = n * Fix.Half;
             for (var k = 0; k < 600 && Map.Inside(at); k++) at += step;
             KnockOut(s, i, at, n);
+        }
+
+        /// <summary>Holds at least one Featherweight card (light enough to be launched out of the rink).</summary>
+        private bool Featherweight(PlayerState p)
+        {
+            var light = Cards != null ? Cards.ById("ultrapuck.featherweight") : null;
+            if (light == null) return false;
+            foreach (var c in p.Cards) if (c == light.Index) return true;
+            return false;
         }
 
         /// <summary>Player <paramref name="i"/> is out of the rink at <paramref name="at"/>, going <paramref name="dir"/>: off the ice until they respawn.</summary>

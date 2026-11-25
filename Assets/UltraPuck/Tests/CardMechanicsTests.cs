@@ -584,8 +584,8 @@ namespace UltraPuck.Tests
         }
 
         /// <summary>
-        /// A hard raging check launches someone out of the rink 1 time in 5 (here forced: always / never); they're back
-        /// at their spawn 2 s later. A heavy player isn't knocked hard enough to go; a plain check never does; and a check
+        /// A hard raging check launches a Featherweight out of the rink 1 time in 5 (here forced: always / never); they're
+        /// back at their spawn 5 s later. Anyone else just bounces round the rink. A heavy player isn't knocked hard enough to go; a plain check never does; and a check
         /// that doesn't launch doesn't put anyone through the boards either.
         /// </summary>
         [Test]
@@ -616,19 +616,29 @@ namespace UltraPuck.Tests
                 check(_sim.Map.BoundsMax.X.ToDouble() - 3);
                 Assert.AreEqual(0, s.Players[1].Launches, "no knock-out, and not through the boards");
                 Assert.IsTrue(_sim.Map.Inside(s.Players[1].Pos));
-                // always: launched from the middle of the ice, out through the boards
+                // always, but not someone without a Featherweight card: they just bounce round the rink
                 _sim.T.KnockOutChance = 1;
+                check(0);
+                Assert.AreEqual(0, s.Players[1].Launches, "only Featherweights fly out");
+                Assert.IsTrue(_sim.Map.Inside(s.Players[1].Pos));
+                // a Featherweight: launched from the middle of the ice, out through the boards
+                Give(s, 1, "ultrapuck.featherweight");
+                s.Players[0].RageTime = Fix.FromInt(7);
+                _lib.Recompute(s);
+                s.Players[0].RageTime = Fix.FromInt(60);
                 check(0);
                 Assert.AreEqual(1, s.Players[1].Launches, "launched out of the rink");
                 Assert.IsFalse(_sim.Map.Inside(s.Players[1].Pos), "off the ice");
                 Assert.Greater(s.Players[1].OutDir.X.ToDouble(), 0.5, "the way they were hit");
                 Assert.IsFalse(_sim.Map.Inside(s.Players[1].OutAt), "leaving the rink at the boards");
-                Run(s, 240, default(PlayerInput), default(PlayerInput));
-                Assert.AreEqual(Fix.Zero, s.Players[1].OutTime, "back after 2 s");
+                Run(s, 120 * 4, default(PlayerInput), default(PlayerInput));
+                Assert.Greater(s.Players[1].OutTime.ToDouble(), 0.0, "still out after 4 s");
+                Run(s, 120 * 1 + 10, default(PlayerInput), default(PlayerInput));
+                Assert.AreEqual(Fix.Zero, s.Players[1].OutTime, "back after 5 s");
                 Assert.AreEqual(1, s.Players[1].Respawns);
                 Assert.AreEqual(_sim.FaceOffSpot(1, 0).Pos.X.ToDouble(), s.Players[1].Pos.X.ToDouble(), 1.5, "at their spawn");
-                // a heavy player holds on
-                Give(s, 1, "ultrapuck.heavyweight");
+                // a heavy one holds on (a Featherweight with Heavyweights on top: too heavy to launch)
+                Give(s, 1, "ultrapuck.featherweight", "ultrapuck.heavyweight", "ultrapuck.heavyweight");
                 s.Players[0].RageTime = Fix.FromInt(7);
                 _lib.Recompute(s);
                 s.Players[0].RageTime = Fix.FromInt(60);

@@ -209,13 +209,14 @@ namespace UltraPuck.Core
         /// </summary>
         public Fix RageDashLonger = Fix.FromInt(3), RageDashDrag = Fix.Ratio(21, 100);
         /// <summary>
-        /// Knock-outs: a raging check that knocks someone at least <see cref="KnockOutSpeed"/> (the check's push: knockback
-        /// x how much heavier x how squarely it landed) sends them flying out of the rink, 1 time in
-        /// <see cref="KnockOutChance"/>; anyone ending up outside the rink is out too. They come back at their spawn after
+        /// Knock-outs: a raging check that knocks someone holding a Featherweight card at least <see cref="KnockOutSpeed"/>
+        /// (the check's push: knockback x how much heavier x how squarely it landed) sends them flying out of the rink,
+        /// 1 time in <see cref="KnockOutChance"/> (now every time; everyone else just goes bouncing round the rink); anyone ending up
+        /// outside the rink is out too. They come back at their spawn after
         /// <see cref="RespawnTime"/>, in a pillar of light lasting <see cref="RespawnShow"/>.
         /// </summary>
-        public Fix KnockOutSpeed = Fix.FromInt(200), RespawnTime = Fix.Two, RespawnShow = Fix.Ratio(6, 5);
-        public int KnockOutChance = 5;
+        public Fix KnockOutSpeed = Fix.FromInt(200), RespawnTime = Fix.FromInt(5), RespawnShow = Fix.Ratio(6, 5);
+        public int KnockOutChance = 1; // every time (1 in 1)
         /// <summary>
         /// Portal Gun (utility): a portal is as long as a net's back wall. The shot flies at <see cref="PortalShotSpeed"/>
         /// for up to <see cref="PortalShotLife"/> s; <see cref="PortalCooldown"/> between shots. Things come out at least
