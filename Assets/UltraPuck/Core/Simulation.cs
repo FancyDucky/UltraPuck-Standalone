@@ -1387,6 +1387,7 @@ namespace UltraPuck.Core
             p.SwapCooldown = Fix.Max(Fix.Zero, p.SwapCooldown - dt);
             p.PortalCooldown = Fix.Max(Fix.Zero, p.PortalCooldown - dt);
             SlotTimers(s, p, dt);
+            RageTimers(s, p, dt);
             p.SlowTime = Fix.Max(Fix.Zero, p.SlowTime - dt);
             p.FastTime = Fix.Max(Fix.Zero, p.FastTime - dt);
             p.TossTime = Fix.Max(Fix.Zero, p.TossTime - dt);
@@ -1770,6 +1771,7 @@ namespace UltraPuck.Core
                     var reach = RadiusOf(q) + T.PuckRadius;
                     if ((s.PuckPos - q.Pos).SqrLength >= reach * reach) continue;
                     Hit(c, (q.Pos - c.Pos).Normalized, Fix.Half);
+                    Enrage(s, s.Carrier);
                     var dir = q.Vel.SqrLength.Raw > 0 ? q.Vel.Normalized : q.Facing;
                     KnockLoose(s, s.Carrier, dir, j, true);
                     q.DashTime = Fix.Zero; // that was the check
@@ -2414,6 +2416,7 @@ namespace UltraPuck.Core
             }
             // a real check frees a carried teammate, and makes a carrier drop the one they hold
             s.Players[Credit(s, from)].Bumps++;
+            if (a.Team != b.Team) Enrage(s, to);
             b.HeldBy = -1; b.HeldTime = Fix.Zero;
             DropMate(s, to);
             // no daze from a check (only the Puck Gun stuns): the hit lag above is the pause
@@ -2622,6 +2625,40 @@ namespace UltraPuck.Core
             p.SlotReels = a | (b << 4) | (c << 8);
             p.SlotSpin = T.SlotSpinTime;
             p.SlotSpins++;
+        }
+
+        /// <summary>
+        /// RAGE: player <paramref name="i"/> was checked by an opponent. With the card (and not raging or cooling down)
+        /// the meter goes up one; full, they rage.
+        /// </summary>
+        private void Enrage(GameState s, int i)
+        {
+            if (i < 0 || i >= s.Players.Length) return;
+            var p = s.Players[i];
+            if (p.Stats.Rage <= 0 || p.RageTime > Fix.Zero || p.RageCooldown > Fix.Zero) return;
+            p.RageMeter++;
+            if (p.RageMeter < T.RageChecks) return;
+            p.RageMeter = 0;
+            p.RageTime = T.RageTime;
+            if (Cards == null) return;
+            Cards.RageSize = T.RageSize; Cards.RageWeight = T.RageWeight; Cards.RageSpeed = T.RageSpeed;
+            Cards.RageShot = T.RageShot; Cards.RageKnock = T.RageKnock;
+            Cards.Recompute(s);
+        }
+
+        /// <summary>RAGE: the rage running out (then the cooldown starts), and the cooldown running out.</summary>
+        private void RageTimers(GameState s, PlayerState p, Fix dt)
+        {
+            if (p.RageTime > Fix.Zero)
+            {
+                p.RageTime -= dt;
+                if (p.RageTime > Fix.Zero) return;
+                p.RageTime = Fix.Zero;
+                p.RageCooldown = T.RageCooldown;
+                if (Cards != null) Cards.Recompute(s);
+                return;
+            }
+            p.RageCooldown = Fix.Max(Fix.Zero, p.RageCooldown - dt);
         }
 
         /// <summary>Slot Machine: the spin landing (a prize starts), a prize running out, the wait after a loss.</summary>

@@ -832,6 +832,33 @@ namespace UltraPuck.Game
                 UseMap(startMap);
             }
 
+            if (want("rage"))
+            {
+                // RAGE: the meter under your own player at 5 of 7 (twitching), then raging (big and green)
+                _shotWholeRink = false;
+                _local.Slots.Clear();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0, Name = "Ava" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return null;
+                _shotNoInput = true;
+                _state.Players[0].Cards = new[] { _sim.Cards.ById("ultrapuck.rage").Index };
+                _sim.Cards.Recompute(_state);
+                while (_state.Phase == Phase.Countdown) yield return null;
+                _state.Players[0].RageMeter = 5;
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("rage-meter");
+                _state.Players[0].RageMeter = 0;
+                _state.Players[0].RageTime = _sim.T.RageTime;
+                _sim.Cards.Recompute(_state);
+                yield return new WaitForSecondsRealtime(1f);
+                yield return Shot("rage-on");
+                _shotNoInput = false;
+                GoMainMenu();
+            }
+
             if (want("agent"))
             {
                 // Double Agent on the Backwards Rink: the face-off groups behind the turned-round nets, Ava starting on
@@ -2929,9 +2956,41 @@ namespace UltraPuck.Game
             return Mathf.Clamp01((time - _sim.T.DisguiseHold.ToFloat()) / Mathf.Max(0.01f, _sim.T.DisguiseFade.ToFloat()));
         }
 
+        /// <summary>RAGE: how green player <paramref name="p"/> is (in over its first and out over its last third of a second).</summary>
+        private float RageShown(PlayerState p)
+        {
+            if (p.RageTime <= Fix.Zero) return 0f;
+            var left = p.RageTime.ToFloat();
+            var gone = _sim.T.RageTime.ToFloat() - left;
+            return Mathf.Clamp01(Mathf.Min(gone, left) / 0.3f);
+        }
+
+        /// <summary>
+        /// RAGE: from 4 checks of 7 the player twitches, more often the nearer they are (every 1.8 s at 4, 1.3 s at 5,
+        /// 0.8 s at 6): a quick shake to the side and a jerk of the head, timed by the match clock so every PC sees it alike.
+        /// </summary>
+        private void Twitch(GameState b, int i, float t, float radius, ref Vector2 pos, ref Vector2 facing)
+        {
+            var p = b.Players[i];
+            if (p.Stats.Rage <= 0 || p.RageTime > Fix.Zero || p.RageMeter < 4) return;
+            float[] every = { 1.8f, 1.3f, 0.8f };
+            var interval = every[Mathf.Clamp(p.RageMeter - 4, 0, every.Length - 1)];
+            var now = (b.Tick + t) / _sim.T.TicksPerSecond + i * 0.37f;
+            var phase = now % interval;
+            const float length = 0.22f;
+            if (phase > length) return;
+            var k = phase / length;
+            var shake = Mathf.Sin(k * Mathf.PI * 6f) * (1f - k);
+            var side = facing.sqrMagnitude > 0.0001f ? new Vector2(-facing.y, facing.x).normalized : Vector2.up;
+            pos += side * shake * radius * (0.14f + 0.05f * (p.RageMeter - 4));
+            var turn = shake * 12f * Mathf.Deg2Rad;
+            facing = new Vector2(facing.x * Mathf.Cos(turn) - facing.y * Mathf.Sin(turn), facing.x * Mathf.Sin(turn) + facing.y * Mathf.Cos(turn));
+        }
+
         private void Show(GameState a, GameState b, float t, bool replay = false)
         {
             _hud.Tags.Clear();
+            _hud.Rages.Clear();
             _hud.Under.Clear();
             _hud.Cam = _cam;
             while (_players.Count > b.Players.Length) { Destroy(_players[_players.Count - 1].Root); _players.RemoveAt(_players.Count - 1); }
@@ -2952,10 +3011,20 @@ namespace UltraPuck.Game
                 }
                 var pos = (V.Of(pb.Pos) - V.Of(pa.Pos)).sqrMagnitude > 4f ? V.Of(pb.Pos) : Vector2.Lerp(V.Of(pa.Pos), V.Of(pb.Pos), t);
                 var facing = Vector2.Lerp(V.Of(pa.Facing), V.Of(pb.Facing), t);
+                Twitch(b, i, t, radius, ref pos, ref facing);
                 var full = Simulation.MaxDashes(pb).ToFloat();
                 Vector2 hitAt;
                 var hit = _players[i].Show(pos, facing, pb.DashCharge.ToFloat(), Mathf.RoundToInt(full), pb.Charge.ToFloat(), pb.Hits, pb.HitPower.ToFloat(), V.Of(pb.HitDir), out hitAt);
-                _players[i].Disguise(DisguiseShown(pa, pb, t));
+                _players[i].Disguise(DisguiseShown(pa, pb, t), RageShown(pb));
+                // RAGE: the meter, for the person holding the card only
+                if (pb.Stats.Rage > 0 && IsLocalPerson(i))
+                    _hud.Rages.Add(new Hud.RageBar
+                    {
+                        World = new Vector3(pos.x, pos.y - radius - 0.32f, 0f),
+                        Meter = pb.RageMeter / (float)_sim.T.RageChecks,
+                        Raging = pb.RageTime > Fix.Zero ? pb.RageTime.ToFloat() / _sim.T.RageTime.ToFloat() : 0f,
+                        Cooling = pb.RageCooldown > Fix.Zero ? pb.RageCooldown.ToFloat() / _sim.T.RageCooldown.ToFloat() : 0f,
+                    });
                 var hiddenNow = CardEffects(i, pb, pos);
                 // Slot Machine: the reels under them while they spin (and a moment after, to see what came up)
                 _slots.Show(i, pb, pos, radius, _sim.T.SlotSpinTime.ToFloat(), hiddenNow);

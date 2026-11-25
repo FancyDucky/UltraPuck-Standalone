@@ -143,12 +143,26 @@ namespace UltraPuck.Tests
                 Assert.AreNotEqual(p.Offer[1], p.Offer[2]);
                 Assert.AreNotEqual(p.Offer[0], p.Offer[2]);
             }
-            var want1 = s.Players[1].Offer[2];
-            var want3 = s.Players[3].Offer[0];
-            // player 1 takes the third card; player 3 hasn't chosen yet, so play waits
-            sim.Step(s, new[] { default(PlayerInput), new PlayerInput { Pick = 3 }, default(PlayerInput), default(PlayerInput) });
+            // an ordinary card from each offer (not one that hands out more cards: Choose, Double Card, New Hand)
+            System.Func<int[], int> plain = offer =>
+            {
+                for (var k = offer.Length - 1; k >= 0; k--)
+                {
+                    var giver = false;
+                    foreach (var m in lib.Cards[offer[k]].Mods) giver |= m.Stat == "Choose" || m.Stat == "DoubleCard" || m.Stat == "NewHand";
+                    if (!giver) return k;
+                }
+                return -1;
+            };
+            var k1 = plain(s.Players[1].Offer);
+            var k3 = plain(s.Players[3].Offer);
+            Assert.GreaterOrEqual(k1, 0); Assert.GreaterOrEqual(k3, 0);
+            var want1 = s.Players[1].Offer[k1];
+            var want3 = s.Players[3].Offer[k3];
+            // player 1 takes theirs; player 3 hasn't chosen yet, so play waits
+            sim.Step(s, new[] { default(PlayerInput), new PlayerInput { Pick = (byte)(k1 + 1) }, default(PlayerInput), default(PlayerInput) });
             Assert.AreEqual(Phase.Picking, s.Phase);
-            sim.Step(s, new[] { default(PlayerInput), default(PlayerInput), default(PlayerInput), new PlayerInput { Pick = 1 } });
+            sim.Step(s, new[] { default(PlayerInput), default(PlayerInput), default(PlayerInput), new PlayerInput { Pick = (byte)(k3 + 1) } });
             Assert.AreEqual(Phase.Countdown, s.Phase, "everyone chose: on to the face-off");
             CollectionAssert.AreEqual(new[] { want1 }, s.Players[1].Cards);
             CollectionAssert.AreEqual(new[] { want3 }, s.Players[3].Cards);

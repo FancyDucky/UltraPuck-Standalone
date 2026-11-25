@@ -85,6 +85,16 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.67, not released (yet) (Claude, 24 Nov 2026): **RAGE card** (`ultrapuck.rage`, art from the owner's
+  RAGE.jpg). Every check taken from an opponent (a body check in `Knock`, or a check into the puck you carry) fills a
+  meter (`PlayerState.RageMeter`, `Simulation.Enrage`); at `Tuning.RageChecks` (7) you rage for `RageTime` (7 s):
+  2.5x size and weight, +25% speed, 3x shot power, 10x knockback given (`CardLibrary.Recompute` while `RageTime` > 0),
+  then `RageCooldown` (20 s) when checks don't count (`RageTimers`). Looks only: green while raging
+  (`PlayerView.Disguise(own, rage)`), twitching from 4 checks (every 1.8 / 1.3 / 0.8 s at 4 / 5 / 6, timed by the
+  match clock: `GameRunner.Twitch`), and a meter under the player for the card holder only (`Hud.RageMeters`: red
+  notches; green bar while raging, grey during the cooldown). NetSession.Version 80. Test
+  `RageBuildsUpFromChecksAndWearsOff`; `TheTeamThatConcededPicksACard` now takes a plain card from each offer (a new
+  card changed the draw). Screenshot scene `rage`.
 - 0.1.67 (Claude, 24 Nov 2026): **mouse cursor size works.** 0.1.66's slider changed nothing: Windows shows a
   hardware cursor at its own pointer size. Sizes other than 100% now use `CursorMode.ForceSoftware` (`Crosshairs.UseGameCursor`).
 - 0.1.66 (Claude, 24 Nov 2026): **Stone Wall, scoreboards, controls, cursor and

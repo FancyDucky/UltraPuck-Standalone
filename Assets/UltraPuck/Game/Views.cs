@@ -212,7 +212,8 @@ namespace UltraPuck.Game
         // Double Agent's disguise: the body and arrow drawn in the other team's colours, shifting back to the own ones
         private readonly Mesh _fillMesh, _frontMesh;
         private readonly int _ownTeam;
-        private float _ownShown = 1f;
+        private float _ownShown = 1f, _rageShown;
+        private static readonly Color RageGreen = new Color(0.28f, 0.78f, 0.25f), RageTint = new Color(0.68f, 0.95f, 0.6f);
 
         public PlayerView(int team, float radius, Transform parent, int symbol)
         {
@@ -385,14 +386,17 @@ namespace UltraPuck.Game
         /// Double Agent's disguise: <paramref name="own"/> 0 shows the other team's colours, 1 the player's own, and in
         /// between the hue shifts round from one to the other.
         /// </summary>
-        public void Disguise(float own)
+        /// <param name="rage">RAGE: 0 the usual colours, 1 green all over (raging).</param>
+        public void Disguise(float own, float rage = 0f)
         {
             own = Mathf.Clamp01(own);
-            if (Mathf.Abs(own - _ownShown) < 0.002f) return;
+            rage = Mathf.Clamp01(rage);
+            if (Mathf.Abs(own - _ownShown) < 0.002f && Mathf.Abs(rage - _rageShown) < 0.002f) return;
             _ownShown = own;
+            _rageShown = rage;
             var other = 1 - _ownTeam;
-            Draw.Recolor(_fillMesh, HueShift(Palette.Team(other), Palette.Team(_ownTeam), own));
-            Draw.Recolor(_frontMesh, HueShift(Palette.TeamTint(other), Palette.TeamTint(_ownTeam), own));
+            Draw.Recolor(_fillMesh, Color.Lerp(HueShift(Palette.Team(other), Palette.Team(_ownTeam), own), RageGreen, rage));
+            Draw.Recolor(_frontMesh, Color.Lerp(HueShift(Palette.TeamTint(other), Palette.TeamTint(_ownTeam), own), RageTint, rage));
         }
 
         /// <summary>From <paramref name="a"/> to <paramref name="b"/> round the colour wheel (the short way), not through grey.</summary>

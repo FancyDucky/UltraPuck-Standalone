@@ -488,6 +488,61 @@ namespace UltraPuck.Tests
             }
         }
 
+        /// <summary>One check from player 1 into player 0 (both put in place first).</summary>
+        private void CheckInto(GameState s)
+        {
+            s.Players[0].Pos = At(0, 0); s.Players[0].Vel = FixVec2.Zero;
+            s.Players[1].Pos = At(-2.2, 0); s.Players[1].Vel = FixVec2.Zero; s.Players[1].Facing = FixVec2.Right;
+            s.Players[1].DashCharge = Fix.One; s.Players[1].DashTime = Fix.Zero; s.Players[1].HitLag = Fix.Zero; s.Players[0].HitLag = Fix.Zero;
+            s.Carrier = -1; s.PuckPos = At(0, 9); s.PuckVel = FixVec2.Zero;
+            _sim.Step(s, new[] { default(PlayerInput), Press(PlayerInput.ShootCheck) });
+            Run(s, 50, default(PlayerInput), default(PlayerInput));
+        }
+
+        /// <summary>
+        /// RAGE: each check taken fills the meter; the 7th makes you rage for 7 s (2.5x size and weight, +25% speed,
+        /// 3x shot power, 10x knockback given), then 20 s of cooldown when checks don't count.
+        /// </summary>
+        [Test]
+        public void RageBuildsUpFromChecksAndWearsOff()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.rage");
+            Play(s);
+            var size = s.Players[0].Stats.Size;
+            for (var k = 1; k < 7; k++)
+            {
+                CheckInto(s);
+                Assert.AreEqual(k, s.Players[0].RageMeter, "check " + k + " counted");
+                Assert.AreEqual(Fix.Zero, s.Players[0].RageTime);
+            }
+            CheckInto(s);
+            Assert.Greater(s.Players[0].RageTime.ToDouble(), 6.0, "raging after the 7th");
+            Assert.AreEqual(0, s.Players[0].RageMeter);
+            var st = s.Players[0].Stats;
+            Assert.AreEqual(size.ToDouble() * 2.5, st.Size.ToDouble(), 1e-3, "2.5x bigger");
+            Assert.AreEqual(2.5, st.Weight.ToDouble(), 1e-3, "2.5x heavier");
+            Assert.AreEqual(1.25, st.MoveSpeed.ToDouble(), 1e-3, "25% faster");
+            Assert.AreEqual(3.0, st.ShotPower.ToDouble(), 1e-3, "3x shot power");
+            Assert.AreEqual(10.0, st.KnockbackGiven.ToDouble(), 1e-3, "10x knockback");
+            Run(s, 120 * 7, default(PlayerInput), default(PlayerInput));
+            Assert.AreEqual(Fix.Zero, s.Players[0].RageTime, "over after 7 s");
+            Assert.AreEqual(size, s.Players[0].Stats.Size, "back to size");
+            Assert.Greater(s.Players[0].RageCooldown.ToDouble(), 18.0, "cooling down");
+            CheckInto(s);
+            Assert.AreEqual(0, s.Players[0].RageMeter, "no rage builds while cooling down");
+            Run(s, 120 * 20, default(PlayerInput), default(PlayerInput));
+            Assert.AreEqual(Fix.Zero, s.Players[0].RageCooldown);
+            CheckInto(s);
+            Assert.AreEqual(1, s.Players[0].RageMeter, "counting again");
+            // without the card nothing builds up
+            CheckInto(s);
+            var plain = Game(0, 1);
+            Play(plain);
+            CheckInto(plain);
+            Assert.AreEqual(0, plain.Players[0].RageMeter);
+        }
+
         [Test]
         public void PuckGunKnocksBackAndKnocksThePuckLoose()
         {

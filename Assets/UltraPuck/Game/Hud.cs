@@ -26,6 +26,10 @@ namespace UltraPuck.Game
         /// in the world. A tag over any of them (but its own player) fades out.
         /// </summary>
         public readonly System.Collections.Generic.List<Vector4> Under = new System.Collections.Generic.List<Vector4>();
+
+        /// <summary>RAGE: a meter under a player (only the card holder's own, on their own screen).</summary>
+        public struct RageBar { public Vector3 World; public float Meter, Raging, Cooling; }
+        public readonly System.Collections.Generic.List<RageBar> Rages = new System.Collections.Generic.List<RageBar>();
         private readonly System.Collections.Generic.Dictionary<int, float> _tagAlpha = new System.Collections.Generic.Dictionary<int, float>();
         private float _tagsAt;
         private const float TagFaded = 0.22f, TagFull = 0.85f, TagFadeSpeed = 8f;
@@ -89,6 +93,7 @@ namespace UltraPuck.Game
             if (Reticle) DrawReticle();
             if (_state == null || _covered) return;
             NameTags();
+            RageMeters();
             // holding the scoreboard button brings up the corner card list too (whatever the setting); let go and it goes
             if (Board && _state.Phase != Phase.GameOver) { Scoreboard(w, h); CornerCards(h, true); return; }
             CornerCards(h);
@@ -495,6 +500,44 @@ namespace UltraPuck.Game
             GUI.matrix = Matrix4x4.identity;
             GUI.Label(new Rect(6f, 4f, 64f, 18f), _fpsShown.ToString(), _fpsStyle);
             GUI.matrix = prev;
+        }
+
+        /// <summary>
+        /// RAGE meters: seven red notches filling with each check taken; while raging a green bar running down; while
+        /// cooling down a grey bar running down (no rage builds up until it's gone).
+        /// </summary>
+        private void RageMeters()
+        {
+            if (Cam == null || Rages.Count == 0 || Event.current.type != EventType.Repaint) return;
+            var k = Screen.height / 720f * Settings.UiScale;
+            const int notches = 7;
+            const float w = 44f, h = 6f, gap = 1.5f;
+            foreach (var r in Rages)
+            {
+                var sp = Cam.WorldToScreenPoint(r.World);
+                var c = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
+                var box = new Rect(c.x - w / 2f, c.y, w, h);
+                Ui.Box(new Rect(box.x - 1.5f, box.y - 1.5f, box.width + 3f, box.height + 3f), new Color(0f, 0f, 0f, 0.6f), 4f);
+                if (r.Raging > 0f)
+                {
+                    Ui.Box(new Rect(box.x, box.y, box.width * r.Raging, box.height), new Color(0.35f, 0.9f, 0.3f), 3f);
+                    continue;
+                }
+                if (r.Cooling > 0f)
+                {
+                    Ui.Box(new Rect(box.x, box.y, box.width * r.Cooling, box.height), new Color(1f, 1f, 1f, 0.35f), 3f);
+                    continue;
+                }
+                var filled = Mathf.RoundToInt(r.Meter * notches);
+                var nw = (w - gap * (notches - 1)) / notches;
+                for (var n = 0; n < notches; n++)
+                {
+                    var on = n < filled;
+                    // redder (and brighter) the fuller it is
+                    var col = on ? Color.Lerp(new Color(1f, 0.65f, 0.2f), new Color(1f, 0.15f, 0.1f), filled / (float)notches) : new Color(1f, 1f, 1f, 0.12f);
+                    Ui.Box(new Rect(box.x + n * (nw + gap), box.y, nw, h), col, 1.5f);
+                }
+            }
         }
 
         /// <summary>Names over the players, so it's easy to tell who is who.</summary>

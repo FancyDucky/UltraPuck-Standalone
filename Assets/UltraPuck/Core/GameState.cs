@@ -148,6 +148,8 @@ namespace UltraPuck.Core
         public int PortalGun;
         /// <summary>Utility: spin a slot machine for a short power-up (speed, giant, invisible, strong).</summary>
         public int SlotMachine;
+        /// <summary>RAGE: checks you take fill a meter; full, you rage (bigger, heavier, faster, harder) for a while.</summary>
+        public int Rage;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
@@ -161,7 +163,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
             GameState.Mix(ref h, Swap); GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
-            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine);
+            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine); GameState.Mix(ref h, Rage);
         }
     }
 
@@ -304,6 +306,10 @@ namespace UltraPuck.Core
         public Fix SlotSpin;
         public int SlotWin, SlotReels, SlotSpins, SlotPrize;
         public Fix SlotPrizeTime, SlotWait;
+        /// <summary>RAGE: checks taken towards the next rage (0 .. Tuning.RageChecks - 1), the rage's seconds left, and the
+        /// cooldown after it (no rage builds up meanwhile).</summary>
+        public int RageMeter;
+        public Fix RageTime, RageCooldown;
 
         public PlayerState Clone()
         {
@@ -572,6 +578,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.PortalNext); Mix(ref h, p.PortalCooldown); Mix(ref h, p.PortalVia);
                 Mix(ref h, p.SlotSpin); Mix(ref h, p.SlotWin); Mix(ref h, p.SlotReels); Mix(ref h, p.SlotSpins); Mix(ref h, p.SlotPrize);
                 Mix(ref h, p.SlotPrizeTime); Mix(ref h, p.SlotWait);
+                Mix(ref h, p.RageMeter); Mix(ref h, p.RageTime); Mix(ref h, p.RageCooldown);
             }
             return h;
         }

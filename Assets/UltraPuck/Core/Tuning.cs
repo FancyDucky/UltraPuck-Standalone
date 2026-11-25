@@ -192,6 +192,15 @@ namespace UltraPuck.Core
         /// </summary>
         public Fix DisguiseHold = Fix.One, DisguiseFade = Fix.Ratio(3, 2);
         /// <summary>
+        /// RAGE: <see cref="RageChecks"/> checks taken (by opponents) and you rage for <see cref="RageTime"/>:
+        /// <see cref="RageSize"/>× size, <see cref="RageWeight"/>× weight, <see cref="RageSpeed"/>× speed,
+        /// <see cref="RageShot"/>× shot power, <see cref="RageKnock"/>× knockback given. Then <see cref="RageCooldown"/>
+        /// before checks count again.
+        /// </summary>
+        public int RageChecks = 7;
+        public Fix RageTime = Fix.FromInt(7), RageCooldown = Fix.FromInt(20), RageSize = Fix.Ratio(5, 2), RageWeight = Fix.Ratio(5, 2),
+            RageSpeed = Fix.Ratio(5, 4), RageShot = Fix.FromInt(3), RageKnock = Fix.FromInt(10);
+        /// <summary>
         /// Portal Gun (utility): a portal is as long as a net's back wall. The shot flies at <see cref="PortalShotSpeed"/>
         /// for up to <see cref="PortalShotLife"/> s; <see cref="PortalCooldown"/> between shots. Things come out at least
         /// <see cref="PortalExitSpeed"/> fast. (<see cref="PortalRepeat"/> is from 0.1.49, unused.)

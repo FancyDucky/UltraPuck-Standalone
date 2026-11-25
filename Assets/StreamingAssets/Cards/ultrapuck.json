@@ -211,6 +211,24 @@
       "stats": { "PortalGun": "+1" }
     },
     {
+      "id": "ultrapuck.rage",
+      "name": "RAGE",
+      "tier": "A",
+      "glare": false,
+      "max": 1,
+      "color": "#3FA34D",
+      "flavor": "Seven strikes and you're out.",
+      "face": [
+        { "label": "Checks taken", "value": "[good]7 to rage[/]" },
+        { "label": "Size, weight", "value": "[good]x2.5[/]" },
+        { "label": "Speed", "value": "[good]+25%[/]" },
+        { "label": "Shot power", "value": "[good]x3[/]" },
+        { "label": "Knockback", "value": "[good]x10 for 7 s[/]" }
+      ],
+      "text": "[note]Then 20 s before rage builds again.[/]",
+      "stats": { "Rage": "+1" }
+    },
+    {
       "id": "ultrapuck.slotmachine",
       "name": "Slot Machine",
       "tier": "B",

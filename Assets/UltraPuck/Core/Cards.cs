@@ -84,7 +84,7 @@ namespace UltraPuck.Core
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
             "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "Swap", "PassRefresh", "PassRefreshTeam", "IceTrail",
             "QuickShotFull", "GhostShot", "CannonBall", "PassSpeed", "StoneWall", "PortalGun", "SlotMachine",
-            "Choose", "DoubleCard", "NewHand",
+            "Choose", "DoubleCard", "NewHand", "Rage",
         };
 
         /// <summary>Stats that need the utility button (Triangle / Y). Used to offer only one utility at a time.</summary>
@@ -202,9 +202,18 @@ namespace UltraPuck.Core
                     var oc = ById("ultrapuck.overcharge");
                     if (oc != null) for (var k = 0; k < StrongCards; k++) Apply(oc.Index, st, false);
                 }
+                // RAGE: raging right now
+                if (p.RageTime > Fix.Zero)
+                {
+                    st.Size *= RageSize; st.Weight *= RageWeight; st.MoveSpeed *= RageSpeed;
+                    st.ShotPower *= RageShot; st.KnockbackGiven *= RageKnock;
+                }
                 p.Stats = st;
             }
         }
+
+        /// <summary>Set from the match's tuning by the simulation: what raging does (RAGE).</summary>
+        public Fix RageSize = Fix.Ratio(5, 2), RageWeight = Fix.Ratio(5, 2), RageSpeed = Fix.Ratio(5, 4), RageShot = Fix.FromInt(3), RageKnock = Fix.FromInt(10);
 
         /// <summary>Slot Machine prizes (<see cref="PlayerState.SlotPrize"/>).</summary>
         public const int SlotSpeed = 1, SlotGiant = 2, SlotInvisible = 3, SlotStrong = 4;
@@ -246,6 +255,7 @@ namespace UltraPuck.Core
                 case "Swap": st.Swap = Count(st.Swap, m); break;
                 case "PortalGun": st.PortalGun = Count(st.PortalGun, m); break;
                 case "SlotMachine": st.SlotMachine = Count(st.SlotMachine, m); break;
+                case "Rage": st.Rage = Count(st.Rage, m); break;
                 case "IceTrail": st.IceTrail = Count(st.IceTrail, m); break;
                 case "QuickShotFull": st.QuickShotFull = Count(st.QuickShotFull, m); break;
                 case "GhostShot": st.GhostShot = Count(st.GhostShot, m); break;
