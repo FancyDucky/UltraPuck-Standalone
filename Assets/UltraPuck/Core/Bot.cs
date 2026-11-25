@@ -413,7 +413,7 @@ namespace UltraPuck.Core
             {
                 if (j == i || s.Players[j].Team != me.Team) continue;
                 var them = s.Players[j];
-                if (them.HeldBy >= 0 || them.TossTime > Fix.Zero) continue;
+                if (them.HeldBy >= 0 || them.TossTime > Fix.Zero || them.OutTime > Fix.Zero) continue;
                 var prog = FixVec2.Dot(them.Pos - defend, attack - defend);
                 var shot = LaneClear(s, them.Pos, attack, me.Team, lane);
                 // not ahead of us (level, or a little back, is fine to keep it moving) / with the net covered, no shot either

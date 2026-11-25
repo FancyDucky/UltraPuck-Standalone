@@ -20,6 +20,12 @@ namespace UltraPuck.Game
         SlotStop, SlotWin, SlotDud,
         /// <summary>Shockwave: a loop, a low rising hum while it's held (higher as it grows); then the blast when it goes.</summary>
         ShockHum, ShockBlast,
+        /// <summary>RAGE: the transformation, a deep growl swelling into a roar.</summary>
+        RageUp,
+        /// <summary>A knock-out: a crack, a huge boom and a rush of air as they fly out of the rink.</summary>
+        Launch,
+        /// <summary>Coming back: a rising shimmer of bells as the pillar of light comes down.</summary>
+        Respawn,
     }
 
     /// <summary>
@@ -256,6 +262,52 @@ namespace UltraPuck.Game
                     Tone(s, 0.002f, 0.045f, 0.12f, Wave.Sine, t => 1250f, t => Mathf.Exp(-t * 48f)); // hollow palm cavity
                     Noise(s, 0.025f, 0.12f, 0.18f, t => Glide(3800f, 700f, t, 0.07f), 450f, t => Mathf.Exp(-t * 16f), 94u);
                     Reverb(s, 0.48f);
+                    break;
+
+                case Sfx.RageUp:
+                    // a growl down low that swells, bends up into a roar and breaks up at the top, with a thump of a heartbeat first
+                    s = New(1.5f);
+                    Tone(s, 0f, 0.12f, 0.9f, Wave.Sine, t => Glide(90f, 45f, t, 0.04f), t => Pluck(t, 0.002f, 22f));
+                    Tone(s, 0.2f, 0.12f, 0.9f, Wave.Sine, t => Glide(90f, 45f, t, 0.04f), t => Pluck(t, 0.002f, 22f));
+                    Tone(s, 0.3f, 1.2f, 0.75f, Wave.Square, t => 55f * Mathf.Pow(2.2f, Mathf.Clamp01(t / 0.7f)) * (1f + 0.06f * Mathf.Sin(Tau * 23f * t)),
+                        t => Mathf.Clamp01(t / 0.5f) * Mathf.Exp(-Mathf.Max(0f, t - 0.75f) * 3.2f));
+                    Tone(s, 0.3f, 1.2f, 0.55f, Wave.Triangle, t => 82f * Mathf.Pow(2.2f, Mathf.Clamp01(t / 0.7f)),
+                        t => Mathf.Clamp01(t / 0.5f) * Mathf.Exp(-Mathf.Max(0f, t - 0.75f) * 3.2f));
+                    Noise(s, 0.3f, 1.2f, 0.7f, t => 400f + 2400f * Mathf.Clamp01(t / 0.7f), 60f, t => Mathf.Clamp01(t / 0.45f) * Mathf.Exp(-Mathf.Max(0f, t - 0.7f) * 3f), 121u);
+                    Crackle(s, 0.6f, 0.7f, 0.25f, 14f, 122u);
+                    Drive(s, 3.2f);
+                    break;
+
+                case Sfx.Launch:
+                    // a sharp crack, a huge boom that drops away, a rush of air flying off, and a bright ring at the top
+                    s = New(1.8f);
+                    Noise(s, 0f, 0.025f, 1f, t => 11000f, 800f, t => 1f, 131u);
+                    Tone(s, 0f, 1.4f, 1f, Wave.Sine, t => Glide(180f, 28f, t, 0.22f), t => Pluck(t, 0.002f, 2.4f));
+                    Tone(s, 0f, 0.45f, 0.45f, Wave.Square, t => Glide(360f, 50f, t, 0.1f), t => Pluck(t, 0.002f, 8f));
+                    Noise(s, 0f, 1.6f, 0.95f, t => Glide(7000f, 200f, t, 0.35f), 0f, t => Pluck(t, 0.003f, 2.2f), 132u);
+                    Wind(s, 0.05f, 0.9f, 0.9f, t => 2600f * Mathf.Pow(0.25f, t / 0.9f), 4f, t => Mathf.Exp(-t * 2.5f), 133u);
+                    Tone(s, 0.04f, 1.2f, 0.12f, Wave.Sine, t => 2637f, t => Pluck(t, 0.01f, 3f));
+                    Tone(s, 0.04f, 1.2f, 0.08f, Wave.Sine, t => 3951f, t => Pluck(t, 0.01f, 3.5f));
+                    Drive(s, 2f);
+                    Reverb(s, 0.4f);
+                    break;
+
+                case Sfx.Respawn:
+                    // a soft swell, then bells climbing up a bright chord, shimmering as they ring out
+                    s = New(1.4f);
+                    Noise(s, 0f, 0.5f, 0.3f, t => 2000f + 7000f * Mathf.Clamp01(t / 0.5f), 1200f, t => Mathf.Sin(Mathf.PI * Mathf.Clamp01(t / 0.5f)), 141u);
+                    {
+                        var run = new[] { 659.3f, 830.6f, 987.8f, 1318.5f, 1661.2f, 1975.5f };
+                        for (var k = 0; k < run.Length; k++)
+                        {
+                            var f = run[k];
+                            var phase = k * 1.3f;
+                            Tone(s, 0.05f + k * 0.06f, 1.2f - k * 0.06f, 0.32f, Wave.Sine, t => f, t => Pluck(t, 0.004f, 3.8f) * (0.75f + 0.25f * Mathf.Sin(Tau * 8f * t + phase)));
+                            Tone(s, 0.05f + k * 0.06f, 0.4f, 0.08f, Wave.Triangle, t => f * 2f, t => Pluck(t, 0.002f, 9f));
+                        }
+                    }
+                    Tone(s, 0f, 0.9f, 0.35f, Wave.Sine, t => Glide(110f, 220f, t, 0.3f), t => Mathf.Sin(Mathf.PI * Mathf.Clamp01(t / 0.9f)) * 0.8f);
+                    Reverb(s, 0.35f);
                     break;
 
                 default:

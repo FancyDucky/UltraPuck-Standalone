@@ -566,6 +566,7 @@ namespace UltraPuck.Core
                 p.GunCooldown = Fix.Zero; p.InvisCooldown = Fix.Zero; p.InvisibleTime = Fix.Zero; p.ShockCooldown = Fix.Zero; p.ShockHold = Fix.Zero;
                 p.SlowTime = Fix.Zero; p.HeldBy = -1; p.HeldTime = Fix.Zero; p.TossTime = Fix.Zero;
                 p.FastTime = Fix.Zero; p.Shoved = Fix.Zero; p.ShovedBy = -1;
+                p.OutTime = Fix.Zero; p.RespawnTime = Fix.Zero; // knocked out: back for the face-off
             }
             s.PuckPos = Map.PuckSpot;
             s.PuckVel = FixVec2.Zero;
@@ -844,7 +845,7 @@ namespace UltraPuck.Core
             for (var agents = 0; agents < 2 && best < 0; agents++)
                 for (var i = 0; i < s.Players.Length; i++)
                 {
-                    if (s.Players[i].Team != team || (s.Players[i].Stats.DoubleAgent > 0) != (agents == 1)) continue;
+                    if (s.Players[i].Team != team || (s.Players[i].Stats.DoubleAgent > 0) != (agents == 1) || s.Players[i].RageTime > Fix.Zero) continue;
                     var d = (s.Players[i].Pos - Map.PuckSpot).SqrLength;
                     if (best < 0 || d < bestD) { best = i; bestD = d; }
                 }
@@ -1144,7 +1145,11 @@ namespace UltraPuck.Core
                     CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce, s, inPortal);
                     // (also the step it leaves the portal: part way into the boards, the wall's push mustn't send it out the far side)
                     if ((inPortal >= 0 || wasIn) && Escaped(wasAt, p.Pos)) { p.Pos = wasAt; p.Vel = FixVec2.Zero; p.PortalVia = 0; }
-                    if (s.Stones.Length > 0) CollideStones(s, ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
+                    if (s.Stones.Length > 0)
+                    {
+                        if (p.RageTime > Fix.Zero) SmashStones(s, p.Pos, RadiusOf(p)); // RAGE: straight through
+                        else CollideStones(s, ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce);
+                    }
                     PushPylons(s, p);
                     PushRocks(s, p);
                 }
@@ -1358,6 +1363,23 @@ namespace UltraPuck.Core
         private void Control(GameState s, int i, PlayerInput input, Fix dt)
         {
             var p = s.Players[i];
+            // knocked out of the rink: waiting to come back
+            if (p.OutTime > Fix.Zero)
+            {
+                p.PrevButtons = input.Buttons;
+                p.Vel = FixVec2.Zero;
+                p.OutTime -= dt;
+                if (p.OutTime > Fix.Zero) return;
+                Respawn(s, i);
+            }
+            p.RespawnTime = Fix.Max(Fix.Zero, p.RespawnTime - dt);
+            // gone through the boards some other way (very fast): out as well (not half way through a portal)
+            if (p.PortalVia == 0 && !Map.Inside(p.Pos))
+            {
+                var away = p.Pos - Map.PuckSpot;
+                KnockOut(s, i, p.Pos, away.SqrLength.Raw > 0 ? away.Normalized : p.Facing);
+                return;
+            }
             if (p.HitLag > Fix.Zero)
             {
                 // frozen by a hit: no control until it's over (presses made now don't count later either)
@@ -1429,7 +1451,8 @@ namespace UltraPuck.Core
             var braking = !holding && input.Has(PlayerInput.ChargeBrake);
             p.DashCoast = Fix.Max(Fix.Zero, p.DashCoast - dt);
             // after a dash, lighter drag for a bit so you keep more speed when you chain them
-            var drag = p.TossTime > Fix.Zero ? T.MateTossDrag : p.Shoved > Fix.Zero ? T.TossDrag : braking ? T.BrakeDrag : (p.DashCoast > Fix.Zero ? T.DashCoastDrag : T.Drag);
+            var drag = p.TossTime > Fix.Zero ? T.MateTossDrag : p.Shoved > Fix.Zero ? T.TossDrag : braking ? T.BrakeDrag
+                : (p.DashCoast > Fix.Zero ? (p.RageTime > Fix.Zero ? T.DashCoastDrag * T.RageDashDrag : T.DashCoastDrag) : T.Drag);
             p.Vel -= p.Vel * Fix.Min(Fix.One, drag * dt);
 
             var maxDashes = MaxDashes(p);
@@ -1478,6 +1501,8 @@ namespace UltraPuck.Core
                     p.DashCharge -= Fix.One;
                     p.DashTime = T.DashHitTime;
                     p.DashCoast = T.DashCoast;
+                    // RAGE: a long lunge (it still hits all the way)
+                    if (p.RageTime > Fix.Zero) { p.DashTime *= T.RageDashLonger; p.DashCoast *= T.RageDashLonger; }
                 }
                 return;
             }
@@ -1614,6 +1639,27 @@ namespace UltraPuck.Core
                 foreach (var st in s.Stones) if (st.Life > Fix.Zero) keep[j++] = st;
                 s.Stones = keep;
             }
+        }
+
+        /// <summary>RAGE: every piece of Stone Wall a raging player touches crumbles at once.</summary>
+        private void SmashStones(GameState s, FixVec2 pos, Fix r)
+        {
+            r += WallHalf;
+            var hit = 0;
+            for (var k = 0; k < s.Stones.Length; k++)
+            {
+                var st = s.Stones[k];
+                var half = (st.B - st.A) * Fix.Half;
+                var mid = st.A + half;
+                var len2 = half.SqrLength;
+                var c = len2.Raw == 0 ? mid : mid + half * Fix.Clamp(FixVec2.Dot(pos - mid, half) / len2, -Fix.One, Fix.One);
+                if ((pos - c).SqrLength < r * r) { s.Stones[k].Life = Fix.Zero; hit++; }
+            }
+            if (hit == 0) return;
+            var keep = new Stone[s.Stones.Length - hit];
+            var j = 0;
+            foreach (var st in s.Stones) if (st.Life > Fix.Zero) keep[j++] = st;
+            s.Stones = keep;
         }
 
         /// <summary>Keep a circle out of the Stone Walls (bouncing off them like the boards).</summary>
@@ -1771,9 +1817,10 @@ namespace UltraPuck.Core
                     var reach = RadiusOf(q) + T.PuckRadius;
                     if ((s.PuckPos - q.Pos).SqrLength >= reach * reach) continue;
                     Hit(c, (q.Pos - c.Pos).Normalized, Fix.Half);
-                    Enrage(s, s.Carrier);
+                    var checkedOne = s.Carrier;
                     var dir = q.Vel.SqrLength.Raw > 0 ? q.Vel.Normalized : q.Facing;
                     KnockLoose(s, s.Carrier, dir, j, true);
+                    Enrage(s, checkedOne);
                     q.DashTime = Fix.Zero; // that was the check
                     return;
                 }
@@ -1832,6 +1879,7 @@ namespace UltraPuck.Core
                     var d2 = (s.PuckPos - p.Pos).SqrLength;
                     // already holding a Swap rock or a teammate: can't pick the puck up until they shoot/drop it
                     if (RockCarriedBy(s, i) >= 0 || MateHeldBy(s, i) >= 0) continue;
+                    if (p.RageTime > Fix.Zero) continue; // RAGE: no hands for the puck
                     if (p.NoPickup > Fix.Zero || (d2 >= r * r && !(T.WedgePickup && OnWedge(p, s.PuckPos)))) continue;
                     if (best < 0 || d2 < bestD) { best = i; bestD = d2; ties = 1; }
                     else if (d2 == bestD && s.NextRandom() % (uint)(++ties) == 0) best = i; // fair among equals
@@ -2098,7 +2146,7 @@ namespace UltraPuck.Core
             for (var j = 0; j < s.Players.Length; j++)
             {
                 var q = s.Players[j];
-                if (j == s.Carrier || q.Team == c.Team || q.NoPickup > Fix.Zero || q.Stun > Fix.Zero || MateHeldBy(s, j) >= 0) continue;
+                if (j == s.Carrier || q.Team == c.Team || q.NoPickup > Fix.Zero || q.Stun > Fix.Zero || MateHeldBy(s, j) >= 0 || q.RageTime > Fix.Zero) continue;
                 var tip = q.Pos + q.Facing * RadiusOf(q);
                 var r = T.PuckRadius + T.StealReach;
                 var d2 = (s.PuckPos - tip).SqrLength;
@@ -2416,7 +2464,6 @@ namespace UltraPuck.Core
             }
             // a real check frees a carried teammate, and makes a carrier drop the one they hold
             s.Players[Credit(s, from)].Bumps++;
-            if (a.Team != b.Team) Enrage(s, to);
             b.HeldBy = -1; b.HeldTime = Fix.Zero;
             DropMate(s, to);
             // no daze from a check (only the Puck Gun stuns): the hit lag above is the pause
@@ -2428,6 +2475,9 @@ namespace UltraPuck.Core
                 // owns it until someone picks it up (the checker has to wait a moment, so it doesn't just change hands)
                 KnockLoose(s, to, n, from, true);
             }
+            if (a.Team != b.Team) Enrage(s, to); // (after the puck has been knocked away: a rage starting drops it)
+            if (a.RageTime > Fix.Zero && a.Team != b.Team) Launch(s, to, n, T.DashKnockback * heavier * hard);
+            if (b.OutTime <= Fix.Zero && b.Vel.SqrLength > T.KnockMaxSpeed * T.KnockMaxSpeed) b.Vel = b.Vel.Normalized * T.KnockMaxSpeed;
         }
 
         // ------------------------------------------------------------------ Friendly Fire: carrying teammates
@@ -2640,10 +2690,69 @@ namespace UltraPuck.Core
             if (p.RageMeter < T.RageChecks) return;
             p.RageMeter = 0;
             p.RageTime = T.RageTime;
+            if (s.Carrier == i) KnockLoose(s, i, p.Facing, -1); // no hands for the puck while raging
             if (Cards == null) return;
             Cards.RageSize = T.RageSize; Cards.RageWeight = T.RageWeight; Cards.RageSpeed = T.RageSpeed;
-            Cards.RageShot = T.RageShot; Cards.RageKnock = T.RageKnock;
+            Cards.RageKnock = T.RageKnock;
             Cards.Recompute(s);
+        }
+
+        /// <summary>
+        /// A raging check that knocked player <paramref name="i"/> at <paramref name="push"/> the way
+        /// <paramref name="n"/>: hard enough (a heavy player may hold on), 1 time in Tuning.KnockOutChance, they fly
+        /// out of the rink, leaving it where that line crosses the boards.
+        /// </summary>
+        private void Launch(GameState s, int i, FixVec2 n, Fix push)
+        {
+            var p = s.Players[i];
+            if (p.OutTime > Fix.Zero || n.SqrLength.Raw <= 0 || push < T.KnockOutSpeed) return;
+            if (s.NextRandom() % (uint)System.Math.Max(1, T.KnockOutChance) != 0) return;
+            n = n.Normalized;
+            // where the flight leaves the rink: the first point outside it along the line
+            var at = p.Pos;
+            var step = n * Fix.Half;
+            for (var k = 0; k < 600 && Map.Inside(at); k++) at += step;
+            KnockOut(s, i, at, n);
+        }
+
+        /// <summary>Player <paramref name="i"/> is out of the rink at <paramref name="at"/>, going <paramref name="dir"/>: off the ice until they respawn.</summary>
+        public void KnockOut(GameState s, int i, FixVec2 at, FixVec2 dir)
+        {
+            var p = s.Players[i];
+            if (p.OutTime > Fix.Zero) return;
+            if (s.Carrier == i) KnockLoose(s, i, dir, -1);
+            if (s.PassFrom == i) s.PassFrom = -1;
+            DropMate(s, i);
+            p.HeldBy = -1; p.HeldTime = Fix.Zero;
+            foreach (var q in s.Players) if (q.HeldBy == i) { q.HeldBy = -1; q.HeldTime = Fix.Zero; }
+            for (var k = 0; k < s.Rocks.Length; k++) if (s.Rocks[k].Carrier == i) s.Rocks[k].Carrier = -1;
+            p.OutTime = T.RespawnTime;
+            p.OutFrom = p.Pos;
+            p.OutAt = at;
+            p.OutDir = dir.SqrLength.Raw > 0 ? dir.Normalized : FixVec2.Right;
+            p.Launches++;
+            // parked far off the ice (nothing reaches them there)
+            p.Pos = at + p.OutDir * Fix.FromInt(1000);
+            p.Vel = FixVec2.Zero;
+            p.DashTime = Fix.Zero; p.DashCoast = Fix.Zero; p.Charge = Fix.Zero; p.ShockHold = Fix.Zero;
+            p.Shoved = Fix.Zero; p.ShovedBy = -1; p.TossTime = Fix.Zero;
+        }
+
+        /// <summary>Back from a knock-out: at their own spot of their team's face-off group, in a pillar of light.</summary>
+        private void Respawn(GameState s, int i)
+        {
+            var p = s.Players[i];
+            var slot = 0;
+            for (var j = 0; j < i; j++) if (s.Players[j].Team == p.Team) slot++;
+            var sp = FaceOffSpot(p.Team, slot);
+            p.Pos = sp.Pos;
+            p.Facing = sp.Facing;
+            p.Vel = FixVec2.Zero;
+            p.OutTime = Fix.Zero;
+            p.RespawnTime = T.RespawnShow;
+            p.Respawns++;
+            p.DashCharge = MaxDashes(p);
+            p.NoPickup = Fix.Zero;
         }
 
         /// <summary>RAGE: the rage running out (then the cooldown starts), and the cooldown running out.</summary>

@@ -523,7 +523,7 @@ namespace UltraPuck.Tests
             Assert.AreEqual(size.ToDouble() * 2.5, st.Size.ToDouble(), 1e-3, "2.5x bigger");
             Assert.AreEqual(2.5, st.Weight.ToDouble(), 1e-3, "2.5x heavier");
             Assert.AreEqual(1.25, st.MoveSpeed.ToDouble(), 1e-3, "25% faster");
-            Assert.AreEqual(3.0, st.ShotPower.ToDouble(), 1e-3, "3x shot power");
+            Assert.AreEqual(1.0, st.ShotPower.ToDouble(), 1e-3, "no extra shot power (no puck while raging)");
             Assert.AreEqual(10.0, st.KnockbackGiven.ToDouble(), 1e-3, "10x knockback");
             Run(s, 120 * 7, default(PlayerInput), default(PlayerInput));
             Assert.AreEqual(Fix.Zero, s.Players[0].RageTime, "over after 7 s");
@@ -541,6 +541,111 @@ namespace UltraPuck.Tests
             Play(plain);
             CheckInto(plain);
             Assert.AreEqual(0, plain.Players[0].RageMeter);
+        }
+
+        /// <summary>How far player 0 goes on one dash from standing still (nobody else near).</summary>
+        private double DashDistance(GameState s)
+        {
+            s.Players[0].Pos = At(-20, 0); s.Players[0].Vel = FixVec2.Zero; s.Players[0].Facing = FixVec2.Right;
+            s.Players[0].DashCharge = Fix.One; s.Players[0].DashTime = Fix.Zero; s.Players[0].DashCoast = Fix.Zero;
+            s.Players[1].Pos = At(10, 10);
+            s.Carrier = -1; s.PuckPos = At(0, -10); s.PuckVel = FixVec2.Zero;
+            var from = s.Players[0].Pos.X.ToDouble();
+            _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput) });
+            Run(s, 360, default(PlayerInput), default(PlayerInput));
+            return s.Players[0].Pos.X.ToDouble() - from;
+        }
+
+        /// <summary>RAGE: a raging dash goes about 3 times as far; no picking up the puck; straight through Stone Walls.</summary>
+        [Test]
+        public void RagingDashesFarSmashesWallsAndCantTakeThePuck()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.rage");
+            Play(s);
+            var plain = DashDistance(s);
+            s.Players[0].RageTime = Fix.FromInt(7);
+            _lib.Recompute(s);
+            s.Players[0].RageTime = Fix.FromInt(30); // (long enough for the measuring)
+            var raging = DashDistance(s);
+            TestContext.WriteLine("dash: " + plain + " plain, " + raging + " raging");
+            Assert.AreEqual(3.0, raging / plain, 0.35, "about 3x as far");
+            // the puck right in front: not taken
+            s.Players[0].Pos = At(0, 0); s.Players[0].Vel = FixVec2.Zero;
+            s.PuckPos = At(0.5, 0); s.PuckVel = FixVec2.Zero; s.Carrier = -1;
+            Run(s, 30, default(PlayerInput), default(PlayerInput));
+            Assert.AreNotEqual(0, s.Carrier, "no hands for the puck");
+            // a wall across the way: straight through, and it's gone where they went
+            s.Stones = new[] { new Stone { A = At(5, -3), B = At(5, 3), Life = Fix.FromInt(10), Wall = 1 } };
+            s.Players[0].Pos = At(0, 0); s.Players[0].Vel = FixVec2.Zero;
+            Run(s, 180, new PlayerInput { MoveX = 127 }, default(PlayerInput));
+            Assert.Greater(s.Players[0].Pos.X.ToDouble(), 7.0, "through the wall");
+            Assert.AreEqual(0, s.Stones.Length, "smashed");
+        }
+
+        /// <summary>
+        /// A hard raging check launches someone out of the rink 1 time in 5 (here forced: always / never); they're back
+        /// at their spawn 2 s later. A heavy player isn't knocked hard enough to go; a plain check never does; and a check
+        /// that doesn't launch doesn't put anyone through the boards either.
+        /// </summary>
+        [Test]
+        public void RagingChecksCanLaunchPeopleOutAndTheyRespawn()
+        {
+            var s = Game(0, 1);
+            Give(s, 0, "ultrapuck.rage");
+            Play(s);
+            s.Players[0].RageTime = Fix.FromInt(7);
+            _lib.Recompute(s);
+            s.Players[0].RageTime = Fix.FromInt(60);
+            var chance = _sim.T.KnockOutChance;
+            System.Action<double> check = bx =>
+            {
+                var r0 = _sim.RadiusOf(s.Players[0]).ToDouble();
+                s.Players[1].Pos = At(bx, 0); s.Players[1].Vel = FixVec2.Zero;
+                s.Players[0].Pos = At(bx - r0 - 1.2, 0); s.Players[0].Vel = FixVec2.Zero; s.Players[0].Facing = FixVec2.Right;
+                s.Players[0].DashCharge = Fix.One; s.Players[0].DashTime = Fix.Zero; s.Players[0].HitLag = Fix.Zero; s.Players[1].HitLag = Fix.Zero;
+                s.Carrier = -1; s.PuckPos = At(0, 9);
+                _sim.Step(s, new[] { Press(PlayerInput.ShootCheck), default(PlayerInput) });
+                Run(s, 40, default(PlayerInput), default(PlayerInput));
+            };
+            try
+            {
+                // never: knocked back hard, but stays in the rink, even right by the boards
+                _sim.T.KnockOutChance = 1000000;
+                check(0);
+                check(_sim.Map.BoundsMax.X.ToDouble() - 3);
+                Assert.AreEqual(0, s.Players[1].Launches, "no knock-out, and not through the boards");
+                Assert.IsTrue(_sim.Map.Inside(s.Players[1].Pos));
+                // always: launched from the middle of the ice, out through the boards
+                _sim.T.KnockOutChance = 1;
+                check(0);
+                Assert.AreEqual(1, s.Players[1].Launches, "launched out of the rink");
+                Assert.IsFalse(_sim.Map.Inside(s.Players[1].Pos), "off the ice");
+                Assert.Greater(s.Players[1].OutDir.X.ToDouble(), 0.5, "the way they were hit");
+                Assert.IsFalse(_sim.Map.Inside(s.Players[1].OutAt), "leaving the rink at the boards");
+                Run(s, 240, default(PlayerInput), default(PlayerInput));
+                Assert.AreEqual(Fix.Zero, s.Players[1].OutTime, "back after 2 s");
+                Assert.AreEqual(1, s.Players[1].Respawns);
+                Assert.AreEqual(_sim.FaceOffSpot(1, 0).Pos.X.ToDouble(), s.Players[1].Pos.X.ToDouble(), 1.5, "at their spawn");
+                // a heavy player holds on
+                Give(s, 1, "ultrapuck.heavyweight");
+                s.Players[0].RageTime = Fix.FromInt(7);
+                _lib.Recompute(s);
+                s.Players[0].RageTime = Fix.FromInt(60);
+                check(0);
+                Assert.AreEqual(1, s.Players[1].Launches, "too heavy to launch");
+                // a plain check: never
+                Give(s, 1);
+                s.Players[0].RageTime = Fix.Zero; s.Players[0].RageCooldown = Fix.FromInt(60);
+                _lib.Recompute(s);
+                check(0);
+                Assert.AreEqual(1, s.Players[1].Launches, "no knock-out without the rage");
+            }
+            finally { _sim.T.KnockOutChance = chance; }
+            // anyone ending up outside the rink is out as well
+            s.Players[1].Pos = At(_sim.Map.BoundsMax.X.ToDouble() + 5, 0);
+            Run(s, 2, default(PlayerInput), default(PlayerInput));
+            Assert.AreEqual(2, s.Players[1].Launches);
         }
 
         [Test]

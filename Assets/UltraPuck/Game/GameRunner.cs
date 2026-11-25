@@ -855,6 +855,19 @@ namespace UltraPuck.Game
                 _sim.Cards.Recompute(_state);
                 yield return new WaitForSecondsRealtime(1f);
                 yield return Shot("rage-on");
+                // a knock-out through the right-hand boards: the blast in from the screen edge, then the respawn pillar
+                var right = new FixVec2(_sim.Map.BoundsMax.X - Fix.One, Fix.Zero);
+                _state.Players[1].Pos = right - new FixVec2(Fix.Two, Fix.Zero);
+                _sim.KnockOut(_state, 1, right, FixVec2.Right);
+                yield return new WaitForSecondsRealtime(0.12f);
+                yield return Shot("knockout-1");
+                yield return new WaitForSecondsRealtime(0.25f);
+                yield return Shot("knockout-2");
+                while (_state.Players[1].OutTime > Fix.Zero) yield return null;
+                yield return new WaitForSecondsRealtime(0.15f);
+                yield return Shot("respawn-1");
+                yield return new WaitForSecondsRealtime(0.35f);
+                yield return Shot("respawn-2");
                 _shotNoInput = false;
                 GoMainMenu();
             }
@@ -1307,6 +1320,7 @@ namespace UltraPuck.Game
                 lo = hi = V.Of3(_puck.Root.transform.position);
                 foreach (var p in _players)
                 {
+                    if (p.Out) continue; // knocked out of the rink: the camera stays on the ice
                     var at = V.Of3(p.Root.transform.position);
                     lo = Vector2.Min(lo, at); hi = Vector2.Max(hi, at);
                 }
@@ -2956,6 +2970,55 @@ namespace UltraPuck.Game
             return Mathf.Clamp01((time - _sim.T.DisguiseHold.ToFloat()) / Mathf.Max(0.01f, _sim.T.DisguiseFade.ToFloat()));
         }
 
+        private readonly List<int> _seenLaunches = new List<int>(), _seenRespawns = new List<int>();
+        private readonly List<bool> _seenRaging = new List<bool>();
+        // knock-out booms waiting for the flight to reach the boards: (when, x, y)
+        private readonly List<Vector3> _launchBooms = new List<Vector3>();
+        /// <summary>How fast a knocked-out player is shown flying (units a second).</summary>
+        private const float LaunchSpeed = 80f;
+
+        /// <summary>
+        /// Knock-outs, respawns and rages for player <paramref name="i"/>: the blast and its sound as they go out, the
+        /// pillar of light and its sound as they come back, the roar as a rage starts. (Counters in the state: a rewind
+        /// that takes one back just catches up, so nothing goes off twice.)
+        /// </summary>
+        private void KnockOutEffects(int i, PlayerState pa, PlayerState pb, Vector2 pos, float radius, float t)
+        {
+            while (_seenLaunches.Count <= i) { _seenLaunches.Add(-1); _seenRespawns.Add(-1); _seenRaging.Add(false); }
+            if (_seenLaunches[i] >= 0 && pb.Launches > _seenLaunches[i])
+            {
+                // the blast (and its boom) when the flight leaves the rink
+                var delay = (V.Of(pb.OutAt) - V.Of(pb.OutFrom)).magnitude / LaunchSpeed;
+                _hud.Blasts.Add(new Hud.Blast { World = V.Of(pb.OutAt), Dir = V.Of(pb.OutDir), Colour = Palette.Team(pb.Team), At = Time.unscaledTime + delay, Seed = i * 7919 + pb.Launches });
+                _launchBooms.Add(new Vector3(Time.unscaledTime + delay, pb.OutAt.X.ToFloat(), pb.OutAt.Y.ToFloat()));
+                Sound.Play(Sfx.BigHit, 1f, 0.8f, Pan(pos));
+            }
+            for (var k = _launchBooms.Count - 1; k >= 0; k--)
+                if (Time.unscaledTime >= _launchBooms[k].x)
+                {
+                    Sound.Play(Sfx.Launch, 0.95f, Random.Range(0.97f, 1.03f), Pan(new Vector2(_launchBooms[k].y, _launchBooms[k].z)));
+                    _shake = Mathf.Max(_shake, 0.45f);
+                    _launchBooms.RemoveAt(k);
+                }
+            if (_seenRespawns[i] >= 0 && pb.Respawns > _seenRespawns[i])
+                Sound.Play(Sfx.Respawn, 0.75f, 1f, Pan(pos));
+            var raging = pb.RageTime > Fix.Zero;
+            if (raging && !_seenRaging[i] && _seenLaunches[i] >= 0)
+            {
+                Sound.Play(Sfx.RageUp, 0.9f, Random.Range(0.97f, 1.03f), Pan(pos));
+                _shake = Mathf.Max(_shake, 0.3f);
+            }
+            _seenLaunches[i] = pb.Launches;
+            _seenRespawns[i] = pb.Respawns;
+            _seenRaging[i] = raging;
+            // the pillar of light while they come back
+            if (pb.RespawnTime > Fix.Zero && pb.OutTime <= Fix.Zero)
+            {
+                var left = pa.RespawnTime > Fix.Zero ? Mathf.Lerp(pa.RespawnTime.ToFloat(), pb.RespawnTime.ToFloat(), t) : pb.RespawnTime.ToFloat();
+                _hud.Pillars.Add(new Hud.Pillar { World = new Vector3(pos.x, pos.y, 0f), Radius = radius, T = 1f - left / _sim.T.RespawnShow.ToFloat(), Colour = Palette.Team(pb.Team) });
+            }
+        }
+
         /// <summary>RAGE: how green player <paramref name="p"/> is (in over its first and out over its last third of a second).</summary>
         private float RageShown(PlayerState p)
         {
@@ -2991,6 +3054,7 @@ namespace UltraPuck.Game
         {
             _hud.Tags.Clear();
             _hud.Rages.Clear();
+            _hud.Pillars.Clear();
             _hud.Under.Clear();
             _hud.Cam = _cam;
             while (_players.Count > b.Players.Length) { Destroy(_players[_players.Count - 1].Root); _players.RemoveAt(_players.Count - 1); }
@@ -3012,6 +3076,14 @@ namespace UltraPuck.Game
                 var pos = (V.Of(pb.Pos) - V.Of(pa.Pos)).sqrMagnitude > 4f ? V.Of(pb.Pos) : Vector2.Lerp(V.Of(pa.Pos), V.Of(pb.Pos), t);
                 var facing = Vector2.Lerp(V.Of(pa.Facing), V.Of(pb.Facing), t);
                 Twitch(b, i, t, radius, ref pos, ref facing);
+                // knocked out: flying from where they were hit, out through the boards, then gone until the respawn
+                var outNow = pb.OutTime > Fix.Zero;
+                var flown = outNow ? (_sim.T.RespawnTime - pb.OutTime).ToFloat() * LaunchSpeed : 0f;
+                var flight = outNow ? (V.Of(pb.OutAt) - V.Of(pb.OutFrom)).magnitude + 4f : 0f;
+                if (outNow) pos = V.Of(pb.OutFrom) + V.Of(pb.OutDir) * flown;
+                _players[i].Out = outNow;
+                if (_players[i].Root.activeSelf != (!outNow || flown < flight)) _players[i].Root.SetActive(!outNow || flown < flight);
+                KnockOutEffects(i, pa, pb, pos, radius, t);
                 var full = Simulation.MaxDashes(pb).ToFloat();
                 Vector2 hitAt;
                 var hit = _players[i].Show(pos, facing, pb.DashCharge.ToFloat(), Mathf.RoundToInt(full), pb.Charge.ToFloat(), pb.Hits, pb.HitPower.ToFloat(), V.Of(pb.HitDir), out hitAt);
@@ -3028,7 +3100,7 @@ namespace UltraPuck.Game
                 var hiddenNow = CardEffects(i, pb, pos);
                 // Slot Machine: the reels under them while they spin (and a moment after, to see what came up)
                 _slots.Show(i, pb, pos, radius, _sim.T.SlotSpinTime.ToFloat(), hiddenNow);
-                if (!hiddenNow)
+                if (!hiddenNow && !outNow)
                 {
                     // Double Agent: under a borrowed name from the other team until the colour has shifted back
                     // (but not to themselves: a person playing here sees their own name, unless someone on the other

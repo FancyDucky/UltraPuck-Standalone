@@ -215,6 +215,9 @@ namespace UltraPuck.Game
         private float _ownShown = 1f, _rageShown;
         private static readonly Color RageGreen = new Color(0.28f, 0.78f, 0.25f), RageTint = new Color(0.68f, 0.95f, 0.6f);
 
+        /// <summary>Knocked out of the rink (the camera leaves them out).</summary>
+        public bool Out;
+
         public PlayerView(int team, float radius, Transform parent, int symbol)
         {
             _r = radius;

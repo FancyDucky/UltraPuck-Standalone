@@ -310,6 +310,15 @@ namespace UltraPuck.Core
         /// cooldown after it (no rage builds up meanwhile).</summary>
         public int RageMeter;
         public Fix RageTime, RageCooldown;
+        /// <summary>
+        /// Knocked out of the rink: seconds until they're back (0 = playing). Meanwhile they're parked far off the ice.
+        /// <see cref="OutAt"/> is where they went through the boards and <see cref="OutDir"/> which way (for the blast).
+        /// <see cref="Launches"/> / <see cref="Respawns"/> count them (for the effects and sounds), and
+        /// <see cref="RespawnTime"/> runs down from Tuning.RespawnShow after coming back (the pillar of light).
+        /// </summary>
+        public Fix OutTime, RespawnTime;
+        public FixVec2 OutAt, OutDir, OutFrom;
+        public int Launches, Respawns;
 
         public PlayerState Clone()
         {
@@ -579,6 +588,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.SlotSpin); Mix(ref h, p.SlotWin); Mix(ref h, p.SlotReels); Mix(ref h, p.SlotSpins); Mix(ref h, p.SlotPrize);
                 Mix(ref h, p.SlotPrizeTime); Mix(ref h, p.SlotWait);
                 Mix(ref h, p.RageMeter); Mix(ref h, p.RageTime); Mix(ref h, p.RageCooldown);
+                Mix(ref h, p.OutTime); Mix(ref h, p.RespawnTime); Mix(ref h, p.OutAt); Mix(ref h, p.OutDir); Mix(ref h, p.OutFrom); Mix(ref h, p.Launches); Mix(ref h, p.Respawns);
             }
             return h;
         }

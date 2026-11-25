@@ -206,14 +206,14 @@ namespace UltraPuck.Core
                 if (p.RageTime > Fix.Zero)
                 {
                     st.Size *= RageSize; st.Weight *= RageWeight; st.MoveSpeed *= RageSpeed;
-                    st.ShotPower *= RageShot; st.KnockbackGiven *= RageKnock;
+                    st.KnockbackGiven *= RageKnock;
                 }
                 p.Stats = st;
             }
         }
 
         /// <summary>Set from the match's tuning by the simulation: what raging does (RAGE).</summary>
-        public Fix RageSize = Fix.Ratio(5, 2), RageWeight = Fix.Ratio(5, 2), RageSpeed = Fix.Ratio(5, 4), RageShot = Fix.FromInt(3), RageKnock = Fix.FromInt(10);
+        public Fix RageSize = Fix.Ratio(5, 2), RageWeight = Fix.Ratio(5, 2), RageSpeed = Fix.Ratio(5, 4), RageKnock = Fix.FromInt(10);
 
         /// <summary>Slot Machine prizes (<see cref="PlayerState.SlotPrize"/>).</summary>
         public const int SlotSpeed = 1, SlotGiant = 2, SlotInvisible = 3, SlotStrong = 4;

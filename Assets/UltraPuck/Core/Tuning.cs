@@ -194,12 +194,28 @@ namespace UltraPuck.Core
         /// <summary>
         /// RAGE: <see cref="RageChecks"/> checks taken (by opponents) and you rage for <see cref="RageTime"/>:
         /// <see cref="RageSize"/>× size, <see cref="RageWeight"/>× weight, <see cref="RageSpeed"/>× speed,
-        /// <see cref="RageShot"/>× shot power, <see cref="RageKnock"/>× knockback given. Then <see cref="RageCooldown"/>
+        /// <see cref="RageKnock"/>× knockback given. Then <see cref="RageCooldown"/>
         /// before checks count again.
         /// </summary>
         public int RageChecks = 7;
         public Fix RageTime = Fix.FromInt(7), RageCooldown = Fix.FromInt(20), RageSize = Fix.Ratio(5, 2), RageWeight = Fix.Ratio(5, 2),
-            RageSpeed = Fix.Ratio(5, 4), RageShot = Fix.FromInt(3), RageKnock = Fix.FromInt(10);
+            RageSpeed = Fix.Ratio(5, 4), RageKnock = Fix.FromInt(10);
+        /// <summary>The fastest a check sends anyone it doesn't launch out of the rink (faster went through the boards).</summary>
+        public Fix KnockMaxSpeed = Fix.FromInt(80);
+        /// <summary>
+        /// RAGE's dash: its coast and hit window last <see cref="RageDashLonger"/> times as long, with the coast's drag
+        /// times <see cref="RageDashDrag"/>, so it goes about 3 times as far. Raging, you can't take the puck, and you
+        /// smash through Stone Walls.
+        /// </summary>
+        public Fix RageDashLonger = Fix.FromInt(3), RageDashDrag = Fix.Ratio(21, 100);
+        /// <summary>
+        /// Knock-outs: a raging check that knocks someone at least <see cref="KnockOutSpeed"/> (the check's push: knockback
+        /// x how much heavier x how squarely it landed) sends them flying out of the rink, 1 time in
+        /// <see cref="KnockOutChance"/>; anyone ending up outside the rink is out too. They come back at their spawn after
+        /// <see cref="RespawnTime"/>, in a pillar of light lasting <see cref="RespawnShow"/>.
+        /// </summary>
+        public Fix KnockOutSpeed = Fix.FromInt(200), RespawnTime = Fix.Two, RespawnShow = Fix.Ratio(6, 5);
+        public int KnockOutChance = 5;
         /// <summary>
         /// Portal Gun (utility): a portal is as long as a net's back wall. The shot flies at <see cref="PortalShotSpeed"/>
         /// for up to <see cref="PortalShotLife"/> s; <see cref="PortalCooldown"/> between shots. Things come out at least

@@ -29,6 +29,14 @@ namespace UltraPuck.Game
 
         /// <summary>RAGE: a meter under a player (only the card holder's own, on their own screen).</summary>
         public struct RageBar { public Vector3 World; public float Meter, Raging, Cooling; }
+
+        /// <summary>A knock-out: the blast bursting in from the edge of the screen the way they flew out (lasts about a second).</summary>
+        public sealed class Blast { public Vector2 World, Dir; public Color Colour; public float At; public int Seed; }
+        public readonly System.Collections.Generic.List<Blast> Blasts = new System.Collections.Generic.List<Blast>();
+
+        /// <summary>A respawn: a pillar of light in the team's colour round the player (<see cref="Pillar.T"/> 0 .. 1 through it).</summary>
+        public struct Pillar { public Vector3 World; public float Radius, T; public Color Colour; }
+        public readonly System.Collections.Generic.List<Pillar> Pillars = new System.Collections.Generic.List<Pillar>();
         public readonly System.Collections.Generic.List<RageBar> Rages = new System.Collections.Generic.List<RageBar>();
         private readonly System.Collections.Generic.Dictionary<int, float> _tagAlpha = new System.Collections.Generic.Dictionary<int, float>();
         private float _tagsAt;
@@ -92,8 +100,10 @@ namespace UltraPuck.Game
             if (_lobby) { if (!_covered) Lobby(w, h); return; }
             if (Reticle) DrawReticle();
             if (_state == null || _covered) return;
+            Pillars_();
             NameTags();
             RageMeters();
+            Blasts_();
             // holding the scoreboard button brings up the corner card list too (whatever the setting); let go and it goes
             if (Board && _state.Phase != Phase.GameOver) { Scoreboard(w, h); CornerCards(h, true); return; }
             CornerCards(h);
@@ -500,6 +510,154 @@ namespace UltraPuck.Game
             GUI.matrix = Matrix4x4.identity;
             GUI.Label(new Rect(6f, 4f, 64f, 18f), _fpsShown.ToString(), _fpsStyle);
             GUI.matrix = prev;
+        }
+
+        // soft-edged pictures for the light effects, made once
+        private static Texture2D _streak, _glow, _beam, _spike;
+
+        private static void MakeLightTextures()
+        {
+            if (_streak != null) return;
+            const int n = 64;
+            _streak = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            _glow = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            _beam = new Texture2D(n, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            _spike = new Texture2D(n * 4, n, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            for (var y = 0; y < n; y++)
+                for (var x = 0; x < n * 4; x++)
+                {
+                    // a spike: a hard-edged sliver, full width at its base (left), narrowing to a sharp point at its end
+                    float u = (x + 0.5f) / (n * 4), v = Mathf.Abs((y + 0.5f) / n * 2f - 1f);
+                    var halfWidth = 1f - u;
+                    var a = Mathf.Clamp01((halfWidth - v) * n * 0.6f); // (a pixel or so of softening on the edge only)
+                    _spike.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                }
+            _spike.Apply();
+            for (var y = 0; y < n; y++)
+                for (var x = 0; x < n; x++)
+                {
+                    float u = (x + 0.5f) / n, v = (y + 0.5f) / n;
+                    var across = 1f - Mathf.Abs(v * 2f - 1f);
+                    // a streak: bright at its start (left), thinning and fading to its end; soft along its sides
+                    _streak.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Pow(across, 1.6f) * Mathf.Pow(1f - u, 1.3f)));
+                    var d = Mathf.Clamp01(new Vector2(u * 2f - 1f, v * 2f - 1f).magnitude);
+                    _glow.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Pow(1f - d, 2.2f)));
+                    // a beam of light: soft at its sides, strongest at the bottom (texture y 0) fading towards the top
+                    var side = 1f - Mathf.Abs(u * 2f - 1f);
+                    // (softly in at its very bottom too, so it melts into the glow instead of ending in a line)
+                    _beam.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Pow(side, 0.9f) * Mathf.Pow(1f - v, 1.4f) * Mathf.SmoothStep(0f, 1f, v / 0.12f)));
+                }
+            _streak.Apply(); _glow.Apply(); _beam.Apply();
+        }
+
+        private Vector2 ToCanvas(Vector3 world)
+        {
+            var k = Screen.height / 720f * Settings.UiScale;
+            var sp = Cam.WorldToScreenPoint(world);
+            return new Vector2(sp.x / k, (Screen.height - sp.y) / k);
+        }
+
+        private static void Tex(Rect r, Texture2D tex, Color c)
+        {
+            var keep = GUI.color;
+            GUI.color = c;
+            GUI.DrawTexture(r, tex);
+            GUI.color = keep;
+        }
+
+        /// <summary>
+        /// Knock-out blasts: where the flight leaves the screen, a burst of hard, spiky rays shoots back in (white and
+        /// gold, the team's colour, and red rays with black cores), with a flash at the edge; quick in, then fading.
+        /// </summary>
+        private void Blasts_()
+        {
+            if (Cam == null || Blasts.Count == 0) return;
+            if (Event.current.type != EventType.Repaint) return;
+            MakeLightTextures();
+            const float life = 1.0f;
+            for (var b = Blasts.Count - 1; b >= 0; b--)
+            {
+                var bl = Blasts[b];
+                var age = Time.unscaledTime - bl.At;
+                if (age < 0f) continue; // still flying there
+                if (age > life) { Blasts.RemoveAt(b); continue; }
+                var k = age / life;
+                // where the flight crosses the edge of the screen (canvas units; y down)
+                var from = ToCanvas(new Vector3(bl.World.x, bl.World.y, 0f));
+                var dir = new Vector2(bl.Dir.x, -bl.Dir.y).normalized;
+                if (dir.sqrMagnitude < 0.5f) dir = Vector2.right;
+                float tx = dir.x > 0.001f ? (Ui.W - from.x) / dir.x : dir.x < -0.001f ? -from.x / dir.x : float.MaxValue;
+                float ty = dir.y > 0.001f ? (Ui.H - from.y) / dir.y : dir.y < -0.001f ? -from.y / dir.y : float.MaxValue;
+                var edge = from + dir * Mathf.Max(0f, Mathf.Min(tx, ty));
+                edge = new Vector2(Mathf.Clamp(edge.x, 0f, Ui.W), Mathf.Clamp(edge.y, 0f, Ui.H));
+                var back = Mathf.Atan2(-dir.y, -dir.x) * Mathf.Rad2Deg; // pointing back into the screen
+                var grow = 1f - Mathf.Pow(1f - Mathf.Clamp01(k / 0.12f), 3f);
+                var fade = 1f - Mathf.Clamp01((k - 0.3f) / 0.7f);
+                // the flash where it went out
+                var flash = Mathf.Lerp(150f, 70f, k);
+                Tex(new Rect(edge.x - flash, edge.y - flash, flash * 2f, flash * 2f), _glow, new Color(1f, 1f, 1f, fade));
+                var rng = new System.Random(bl.Seed);
+                var keep = GUI.matrix;
+                var red = new Color(0.95f, 0.08f, 0.06f);
+                for (var s = 0; s < 14; s++)
+                {
+                    var kind = s % 4; // 0 white, 1 gold, 2 team colour, 3 red with a black core
+                    var spread = (float)(rng.NextDouble() * 2.0 - 1.0) * (kind == 3 ? 26f : 20f);
+                    var len = Mathf.Lerp(500f, 1150f, (float)rng.NextDouble()) * grow * (1f - Mathf.Abs(spread) / 70f);
+                    var wide = Mathf.Lerp(22f, 54f, (float)rng.NextDouble()) * (1f - 0.5f * k);
+                    Color col = kind == 0 ? Color.white : kind == 1 ? new Color(1f, 0.85f, 0.3f) : kind == 2 ? Color.Lerp(bl.Colour, Color.white, 0.15f) : red;
+                    col.a = fade;
+                    GUI.matrix = keep;
+                    GUIUtility.RotateAroundPivot(back + spread, edge * GUI.matrix.m00);
+                    Tex(new Rect(edge.x - 10f, edge.y - wide / 2f, len, wide), _spike, col);
+                    if (kind == 3) Tex(new Rect(edge.x - 10f, edge.y - wide * 0.22f, len * 0.92f, wide * 0.44f), _spike, new Color(0f, 0f, 0f, fade));
+                }
+                // the core: one big white spike straight back in
+                GUI.matrix = keep;
+                GUIUtility.RotateAroundPivot(back, edge * GUI.matrix.m00);
+                var core = 70f * (1f - 0.45f * k);
+                Tex(new Rect(edge.x - 20f, edge.y - core / 2f, 950f * grow, core), _spike, new Color(1f, 1f, 1f, fade));
+                GUI.matrix = keep;
+            }
+        }
+
+        /// <summary>
+        /// Respawns: a pillar of light in the team's colour rising round the player from a glowing ring on the ice,
+        /// with motes drifting up through it; it rises fast, holds, and fades away.
+        /// </summary>
+        private void Pillars_()
+        {
+            if (Cam == null || Pillars.Count == 0 || Event.current.type != EventType.Repaint) return;
+            MakeLightTextures();
+            foreach (var pl in Pillars)
+            {
+                var c = ToCanvas(pl.World);
+                // (the player's size on screen, made bigger: a pillar the size of the player is too small to see)
+                var r = Mathf.Max(18f, Mathf.Abs(ToCanvas(pl.World + new Vector3(pl.Radius, 0f, 0f)).x - c.x) * 1.8f);
+                var rise = 1f - Mathf.Pow(1f - Mathf.Clamp01(pl.T / 0.18f), 3f);
+                var fade = 1f - Mathf.Clamp01((pl.T - 0.6f) / 0.4f);
+                var col = pl.Colour;
+                var light = Color.Lerp(col, Color.white, 0.45f);
+                // a soft glow on the ice where the beam comes down
+                var ringW = r * 3.2f;
+                var ringH = r * 1.1f;
+                Tex(new Rect(c.x - ringW, c.y - ringH + r * 0.55f, ringW * 2f, ringH * 2f), _glow, new Color(col.r, col.g, col.b, 0.8f * fade));
+                // the beam: wide and coloured, a white core inside it
+                var h = r * 10f * rise;
+                var w = r * 2.6f;
+                Tex(new Rect(c.x - w / 2f, c.y + r * 0.6f - h, w, h), _beam, new Color(light.r, light.g, light.b, 0.85f * fade));
+                Tex(new Rect(c.x - w / 2f, c.y + r * 0.6f - h, w, h), _beam, new Color(col.r, col.g, col.b, 0.6f * fade));
+                Tex(new Rect(c.x - w * 0.2f, c.y + r * 0.6f - h * 0.9f, w * 0.4f, h * 0.9f), _beam, new Color(1f, 1f, 1f, 0.7f * fade));
+                // motes drifting up
+                for (var m = 0; m < 8; m++)
+                {
+                    var phase = (pl.T * 2.2f + m * 0.137f) % 1f;
+                    var x = c.x + Mathf.Sin(m * 2.3f) * w * 0.38f;
+                    var y = c.y + r * 0.4f - phase * r * 8f * rise;
+                    var s = r * 0.22f * (1f - phase);
+                    Tex(new Rect(x - s, y - s, s * 2f, s * 2f), _glow, new Color(1f, 1f, 1f, 0.9f * fade * (1f - phase)));
+                }
+            }
         }
 
         /// <summary>

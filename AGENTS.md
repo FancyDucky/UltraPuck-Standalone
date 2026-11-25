@@ -88,11 +88,26 @@ so whoever works next knows what changed.
 - After 0.1.67, not released (yet) (Claude, 24 Nov 2026): **RAGE card** (`ultrapuck.rage`, art from the owner's
   RAGE.jpg). Every check taken from an opponent (a body check in `Knock`, or a check into the puck you carry) fills a
   meter (`PlayerState.RageMeter`, `Simulation.Enrage`); at `Tuning.RageChecks` (7) you rage for `RageTime` (7 s):
-  2.5x size and weight, +25% speed, 3x shot power, 10x knockback given (`CardLibrary.Recompute` while `RageTime` > 0),
+  2.5x size and weight, +25% speed, 10x knockback given (no shot power: no puck while raging) (`CardLibrary.Recompute` while `RageTime` > 0),
   then `RageCooldown` (20 s) when checks don't count (`RageTimers`). Looks only: green while raging
   (`PlayerView.Disguise(own, rage)`), twitching from 4 checks (every 1.8 / 1.3 / 0.8 s at 4 / 5 / 6, timed by the
   match clock: `GameRunner.Twitch`), and a meter under the player for the card holder only (`Hud.RageMeters`: red
-  notches; green bar while raging, grey during the cooldown). NetSession.Version 80. Test
+  notches; green bar while raging, grey during the cooldown). Raging: the dash's coast and hit window last 3x as long
+  with lighter drag (`RageDashLonger`, `RageDashDrag`: about 3x as far), no picking up or stealing the puck (it drops
+  when the rage starts; Head Start skips a raging player), and Stone Walls crumble on contact (`SmashStones`).
+  **Knock-outs:** a raging check whose push (knockback x heavier x how square, the check's own numbers) is at least
+  `Tuning.KnockOutSpeed` (200: a square raging dash into a plain player is about 280, into a Heavyweight about 160, a glancing one about 170), 1 time in
+  `KnockOutChance` (5, `s.NextRandom()`), launches them; a check that doesn't is capped at `KnockMaxSpeed` (80: the
+  raging push went straight through the boards). Launched (`Launch`): they fly from where they were hit (`OutFrom`) across
+  the rink and out where that line leaves it (`OutAt`), the blast and its boom when they get there; so does ending up outside
+  the rink any other way (checked at the top of `Control`, not half way through a portal). `KnockOut` (public, for
+  future cards that take people out): drops the puck / teammate / rock, parks them 1000 units off the ice (nothing
+  reaches them), `OutTime` = `RespawnTime` (2 s); `Respawn` puts them at their own face-off spot with `RespawnTime`
+  (pillar) `RespawnShow` 1.2 s. Face-offs bring anyone out back. Bots don't pass to someone out. Looks: they fly on
+  through the boards for half a second (`GameRunner.KnockOutEffects`), the camera leaves them out (`PlayerView.Out`),
+  a blast bursts in from the screen edge they went out at (`Hud.Blasts_`: a flash and hard spiky rays, white, gold,
+  team colour, and red with black cores), and a respawn pillar of light in the team colour (`Hud.Pillars_`). Sounds `Sfx.RageUp`,
+  `Sfx.Launch`, `Sfx.Respawn`. NetSession.Version 82. Test
   `RageBuildsUpFromChecksAndWearsOff`; `TheTeamThatConcededPicksACard` now takes a plain card from each offer (a new
   card changed the draw). Screenshot scene `rage`.
 - 0.1.67 (Claude, 24 Nov 2026): **mouse cursor size works.** 0.1.66's slider changed nothing: Windows shows a
