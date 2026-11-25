@@ -85,7 +85,7 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.70, not released (yet) (Claude, 25 Nov 2026): **Steam profile pictures on replay banners.** The banner shows
+- 0.1.71 (Claude, 25 Nov 2026): **Steam profile pictures on replay banners.** The banner shows
   the scorer's Steam picture (framed, where the symbol was; the symbol when there's none: bots, no Steam, IP-only
   friends without Steam). `SteamNet.Avatar(id)` (large avatar via `SteamFriends.GetLargeFriendAvatar`, asks Steam with
   `RequestUserInformation` and retries each second until it's downloaded; cached). Each PC sends its first person's
