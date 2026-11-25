@@ -104,7 +104,9 @@ so whoever works next knows what changed.
   opens a picker page (`Menus.Page.Crosshair`: 14 crosshairs, Apply / Cancel); pref `crosshair` (default 6, the ring
   with a cross); drawn by `Hud.DrawCrosshair`. The third is the game's original crosshair, drawn in code
   (`Crosshairs.Original`, `Hud.OriginalCrosshair`). Crosshair size 50-1000% in 10s (pref `crosshair_size`, default 100). Mouse cursor size 50-400% (Graphics tab, under Resolution; pref `cursor_size`):
-  `Crosshairs.UseGameCursor` scales `Cursors/pointer-2x.png` (64 px) to 32 px x size, hotspot scaled with it. The game's own mouse pointer (`Crosshairs.UseGameCursor`). Pictures
+  `Crosshairs.UseGameCursor` scales `Cursors/pointer-2x.png` (64 px) to 32 px x size, hotspot scaled with it.
+  Any size but 100% uses `CursorMode.ForceSoftware`: Windows draws a hardware cursor at its own size (0.1.66's
+  slider did nothing for that reason). The game's own mouse pointer (`Crosshairs.UseGameCursor`). Pictures
   are Kenney's CC0 Cursor and Crosshair packs (the PNG copies of the SVGs the owner named: Unity can't load SVG
   without a package) in `StreamingAssets/Cursors` and `StreamingAssets/Crosshairs`. Screenshot `settings-crosshair`.
 - 0.1.66 (Claude, 24 Nov 2026): **Double Agent reworked, Backwards Rink.**

@@ -61,8 +61,9 @@ namespace UltraPuck.Game
                     px[y * size + x] = _pointer.GetPixelBilinear((x + 0.5f) / size, (y + 0.5f) / size);
             tex.SetPixels(px);
             tex.Apply(false);
-            // the arrow's tip: (9, 7) in the normal 32 x 32 picture
-            Cursor.SetCursor(tex, new Vector2(9f, 7f) * (size / 32f), CursorMode.Auto);
+            // the arrow's tip: (9, 7) in the normal 32 x 32 picture. Windows shows a hardware cursor at its own pointer
+            // size whatever the picture's size, so any other size is drawn by the game instead (ForceSoftware)
+            Cursor.SetCursor(tex, new Vector2(9f, 7f) * (size / 32f), pct == 100 ? CursorMode.Auto : CursorMode.ForceSoftware);
         }
 
         private static Texture2D Load(string path, bool smooth)
