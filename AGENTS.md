@@ -85,7 +85,7 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.69, not released (yet) (Claude, 25 Nov 2026): **Profile: character looks and match replays.** Main menu >
+- 0.1.70 (Claude, 25 Nov 2026): **Profile: character looks and match replays.** Main menu >
   Profile > Edit character / Replays (`MainMenu.Page.Profile`, `Character`, `Replays`). *Looks* (`Game/Cosmetics.cs`,
   looks only): dash trail (9), goal explosion (9), replay banner (11) and its colour (Team or 11 colours; pictures with their own colours are hue-shifted to it), saved in PlayerPrefs `look_dash/banner/boom/banner_colour`, packed
   into one int (`Cosmetics.Pack`). The first person on a PC wears that PC's look (`GameRunner.StyleOf`); online each PC
