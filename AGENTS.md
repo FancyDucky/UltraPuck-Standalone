@@ -85,7 +85,7 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.72, not released (yet) (Claude, 25 Nov 2026): **Momentum and Loyal cards; resolution arrows.**
+- 0.1.73 (Claude, 25 Nov 2026): **Momentum and Loyal cards; resolution arrows; puck bounce sound; goal removes the puck; Black Hole swallows; borealis / rainbow finishes; new display defaults.**
   MOMENTUM (`Stats.Momentum`, no max): while the loose puck is the shot of a player holding it (`s.PassFrom`), it
   never slows below `Tuning.MomentumPercent` (33) % x cards (capped at 100%) of the speed it was shot at
   (`GameState.ShotSpeed`, set in `Shoot`, cleared once someone has the puck; `Simulation.Momentum`, run right after
