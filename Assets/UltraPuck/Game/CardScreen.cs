@@ -1691,11 +1691,15 @@ namespace UltraPuck.Game
             }
         }
 
-        /// <summary>"textShadow" cards: a dark copy of a piece of text, a little down and to the right of it (kept in step with it).</summary>
-        private sealed class TextShadow
+        /// <summary>
+        /// "textOutline" cards: dark copies of a piece of text, nudged a hair each way round it (eight of them), so the
+        /// words get a thin dark outline. Kept in step with the text.
+        /// </summary>
+        private sealed class TextOutline
         {
-            public TextMesh Src, Dst;
-            public Renderer R;
+            public TextMesh Src;
+            public readonly List<TextMesh> Copies = new List<TextMesh>();
+            public readonly List<Renderer> Rs = new List<Renderer>();
             private string _was;
             private static readonly System.Text.RegularExpressions.Regex Colours = new System.Text.RegularExpressions.Regex("</?color[^>]*>");
 
@@ -1703,7 +1707,8 @@ namespace UltraPuck.Game
             {
                 if (Src.text == _was) return;
                 _was = Src.text;
-                Dst.text = Colours.Replace(Src.text, ""); // its own colour tags would show through the shadow's black
+                var plain = Colours.Replace(Src.text, ""); // its own colour tags would show through the outline's black
+                foreach (var c in Copies) c.text = plain;
             }
         }
 
@@ -1735,7 +1740,7 @@ namespace UltraPuck.Game
             public bool Rare;
             /// <summary>"textBoxes" cards: a snug black box behind each piece of text.</summary>
             public readonly List<TextBox> TextBoxes = new List<TextBox>();
-            public readonly List<TextShadow> Shadows = new List<TextShadow>();
+            public readonly List<TextOutline> Outlines = new List<TextOutline>();
             public float SweepAt = -10f, NextSweep, GlowBoost, GlowTarget, MoteTimer;
             public bool Landed;
             /// <summary>Has left the deck (its deal sound has played).</summary>
@@ -1766,7 +1771,7 @@ namespace UltraPuck.Game
                 var front = Vector3.Dot(Tilt.forward, cam.transform.forward) > 0f;
                 for (var k = 0; k < Front.Count; k++) { Front[k].enabled = front; Front[k].sortingOrder = order + FrontOrder[k]; }
                 foreach (var r in Texts) { r.enabled = front; r.sortingOrder = order + 5; }
-                foreach (var s in Shadows) { s.Sync(); s.R.enabled = front; s.R.sortingOrder = order + 4; } // over any text box (3), under the text
+                foreach (var o in Outlines) { o.Sync(); foreach (var r in o.Rs) { r.enabled = front; r.sortingOrder = order + 4; } } // over any text box (3), under the text
                 foreach (var r in Back) { r.enabled = !front; r.sortingOrder = order + 1; }
                 foreach (var r in BackTexts) { r.enabled = !front; r.sortingOrder = order + 5; }
                 // the finishes follow the tilt (and a little of the movement), like light on a real card
@@ -1922,20 +1927,26 @@ namespace UltraPuck.Game
                     v.TextBoxes.Add(new TextBox { Text = t, Box = v.Tilt.GetChild(v.Tilt.childCount - 1), Mat = m });
                 }
 
-            // "textShadow": a soft dark drop shadow under each piece of text (easier to read over a bright finish)
-            if (def.TextShadow)
+            // "textOutline": a thin dark outline round each piece of text (easier to read over a bright finish)
+            if (def.TextOutline)
                 foreach (var t in new List<Renderer>(v.Texts))
                 {
                     var src = t.GetComponent<TextMesh>();
                     if (src == null) continue;
-                    var shadows = new List<Renderer>();
-                    var dst = Text(v, "", src.transform.localPosition + new Vector3(0.011f, -0.011f, 0.0003f), src.fontSize, src.characterSize,
-                        new Color(0f, 0f, 0f, 0.8f), src.fontStyle, src.anchor, shadows);
-                    dst.alignment = src.alignment;
-                    dst.lineSpacing = src.lineSpacing;
-                    var sh = new TextShadow { Src = src, Dst = dst, R = shadows[0] };
-                    sh.Sync();
-                    v.Shadows.Add(sh);
+                    var ol = new TextOutline { Src = src };
+                    // how thick: a little thicker for bigger text
+                    var w = Mathf.Clamp(src.characterSize * src.fontSize * 0.0032f, 0.0024f, 0.0085f);
+                    for (var k = 0; k < 8; k++)
+                    {
+                        var ang = k * Mathf.PI / 4f;
+                        var at = src.transform.localPosition + new Vector3(Mathf.Cos(ang) * w, Mathf.Sin(ang) * w, 0.0003f);
+                        var copy = Text(v, "", at, src.fontSize, src.characterSize, new Color(0f, 0f, 0f, 0.9f), src.fontStyle, src.anchor, ol.Rs);
+                        copy.alignment = src.alignment;
+                        copy.lineSpacing = src.lineSpacing;
+                        ol.Copies.Add(copy);
+                    }
+                    ol.Sync();
+                    v.Outlines.Add(ol);
                 }
 
             // the back: dark with the game's name

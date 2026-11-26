@@ -593,10 +593,10 @@ namespace UltraPuck.Game
                 var fx = new[] { "ultrapuck.momentum", "ultrapuck.loyal" };
                 var was = new string[fx.Length];
                 for (var k = 0; k < fx.Length; k++) { var c = _cards != null ? _cards.ById(fx[k]) : null; if (c != null) { was[k] = c.Finish; c.Finish = k == 0 ? "borealis" : "rainbow"; } }
-                // and the text shadow on the first (as "textShadow": true would)
-                var shadowCard = _cards != null ? _cards.ById(fx[0]) : null;
-                var hadShadow = shadowCard != null && shadowCard.TextShadow;
-                if (shadowCard != null) shadowCard.TextShadow = true;
+                // and the text outline on the first (as "textOutline": true would)
+                var outlineCard = _cards != null ? _cards.ById(fx[0]) : null;
+                var hadOutline = outlineCard != null && outlineCard.TextOutline;
+                if (outlineCard != null) outlineCard.TextOutline = true;
                 PickACard();
                 if (_cards != null && _state.Players.Length > 0)
                 {
@@ -609,7 +609,7 @@ namespace UltraPuck.Game
                 yield return new WaitForSecondsRealtime(2.5f);
                 yield return Shot("cardfx-2");
                 for (var k = 0; k < fx.Length; k++) { var c = _cards != null ? _cards.ById(fx[k]) : null; if (c != null) c.Finish = was[k]; }
-                if (shadowCard != null) shadowCard.TextShadow = hadShadow;
+                if (outlineCard != null) outlineCard.TextOutline = hadOutline;
                 GoMainMenu();
                 yield return new WaitForSecondsRealtime(0.5f);
             }

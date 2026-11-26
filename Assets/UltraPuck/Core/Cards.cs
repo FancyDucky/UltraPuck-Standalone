@@ -42,8 +42,8 @@ namespace UltraPuck.Core
         public bool Glare = true;
         /// <summary>A black box behind each piece of the card's text, display only: "textBoxes": true.</summary>
         public bool TextBoxes;
-        /// <summary>A soft dark drop shadow under each piece of the card's text, display only: "textShadow": true.</summary>
-        public bool TextShadow;
+        /// <summary>A thin dark outline round each piece of the card's text (easier to read), display only: "textOutline": true.</summary>
+        public bool TextOutline;
         /// <summary>Every "finish" a card file may use (see Card.shader for what each looks like).</summary>
         public static readonly string[] FinishNames =
             { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass", "borealis", "rainbow" };
@@ -118,7 +118,7 @@ namespace UltraPuck.Core
                     NoBots = Json.Get(o, "noBots") is bool && (bool)Json.Get(o, "noBots"),
                     Glare = !(Json.Get(o, "glare") is bool) || (bool)Json.Get(o, "glare"),
                     TextBoxes = Json.Get(o, "textBoxes") is bool && (bool)Json.Get(o, "textBoxes"),
-                    TextShadow = Json.Get(o, "textShadow") is bool && (bool)Json.Get(o, "textShadow"),
+                    TextOutline = Json.Get(o, "textOutline") is bool && (bool)Json.Get(o, "textOutline"),
                 };
                 if (string.IsNullOrEmpty(c.Id)) throw new FormatException(what + ": needs an id");
                 if (_byId.ContainsKey(c.Id)) throw new FormatException(what + ": a card with the id \"" + c.Id + "\" already exists");

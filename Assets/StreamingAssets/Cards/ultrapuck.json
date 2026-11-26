@@ -402,7 +402,7 @@
       "finish": "polychrome",
       "glare": false,
       "color": "#FF8A3D",
-      "flavor": "An object in motion...",
+      "flavor": "Infinite energy!",
       "face": [
         { "label": "Your shots keep", "value": "[good]+33% speed[/]" }
       ],
@@ -413,16 +413,12 @@
       "id": "ultrapuck.loyal",
       "name": "Loyal",
       "tier": "C",
-      "finish": "borealis",
+      "finish": "prism",
       "glare": false,
-      "textBoxes": true,
       "max": 1,
       "color": "#E6C34A",
-      "flavor": "Never against my own.",
-      "face": [
-        { "label": "Own goals", "value": "[good]None[/]" }
-      ],
-      "text": "[note]Your shots can go in your own net without counting. A Cannon Ball shoving you in still does.[/]",
+      "flavor": "You wouldn't shoot on your own net, right?",
+      "text": "[note]Your shots can go in your own net without counting. Cannon Ball cards will still apply however.[/]",
       "stats": { "Loyal": "+1" }
     }
   ]
