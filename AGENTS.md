@@ -85,6 +85,22 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.75 (Claude, 26 Nov 2026): **custom arenas.** Zips in `Custom_Arenas` next to the exe
+  (`ArenaSkin.Folder`, made with a README and `sample arena.json` on start; the project folder in the editor) hold
+  Background / Arena Floor / Foreground / Shadows pictures (any png/jpg whose name says so; "guide" ignored) and an optional arena.json {name, rink}; rink =
+  json, else a rink named in the zip's file name, else hockey-rink (`ArenaSkin.FromZip`). Only a look: `ArenaView`
+  puts them on the rink as sprites (orders -50 background, 5 shadows, 45 foreground; the floor is a mesh of the rink's outline at order 1, over
+  the ice and under the lines, so it never shows outside the walls) over `ArenaSkin.Canvas(map)`,
+  the same rectangle the Desktop templates use (every screen shape's whole-rink view + 3%). Picked per rink (pref
+  `arena_<map file>`) as extra looks on the rink screen (up / down: `LookCount` / `LookHere` / `LookLabel` /
+  `StepLook`), plain look only; the online lobby has an "Arena" row (host) / shown row (others). Online: the host's
+  arena name / hash / size ride in the lobby message; a joiner who wants it (Settings > Graphics > "Other players'
+  arenas", `Settings.OtherArenas`, on by default) downloads it in 1 KB pieces (Msg.ArenaAsk / ArenaPart, up to 255
+  pieces per ask in the lobby, 12 during a match, re-asks every 0.12 s, checked by FNV-1a hash, max 64 MB) and keeps
+  it in `Custom_Arenas/_downloaded` (not offered to pick). Nothing in the simulation: replays and rollback unaffected.
+  `GameRunner.RefreshArena` (every frame) decides what's shown. **NetSession.Version 91.** Tests:
+  `ArenaZipsAreReadAndMatchedToTheirRink`, `TheHostsArenaDownloadsOverALossyNetwork`. Screenshots: `arena-pick`,
+  `arena-match` (a made-up arena; screenshot runs don't read the folder).
 - 0.1.74 (Claude, 25 Nov 2026): **card text outline.** Card file `"textOutline": true`
   (`CardDef.TextOutline`; card editor checkbox "Text outline", previewed there as an 8-way CSS text-shadow) gives
   each piece of the card's text a thin dark outline: eight black copies nudged round it (`CardScreen.TextOutline`,

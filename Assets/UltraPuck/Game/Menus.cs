@@ -302,6 +302,8 @@ namespace UltraPuck.Game
                     _rows.Add(Slider("UI size", () => (Settings.UiScale - 0.6f) / 1.4f, v => Settings.UiScale = 0.6f + v * 1.4f, v => Mathf.RoundToInt((0.6f + v * 1.4f) * 100f) + "%"));
                     _rows.Add(Switch("Puck trail", () => Settings.PuckTrail, v => Settings.PuckTrail = v));
                     _rows.Add(Switch("Card effects", () => Settings.CardEffects, v => Settings.CardEffects = v, "Holo, foil and polychrome finishes, glare and sparkle on cards."));
+                    _rows.Add(Switch("Other players' arenas", () => Settings.OtherArenas, v => Settings.OtherArenas = v,
+                        "Online: see the host's custom arena (downloaded from them the first time). Off: you see the plain rink."));
                     break;
                 case 1:
                     _rows.Add(new Row

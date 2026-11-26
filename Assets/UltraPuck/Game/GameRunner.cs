@@ -90,6 +90,7 @@ namespace UltraPuck.Game
             _mainMenu.Local = _local;
             LoadMaps();
             if (_maps.Count == 0) { _error = "Couldn't load any map: " + _mapProblem; Debug.LogError(_error); return; }
+            if (ShotDir == null) _arenas = ArenaSkin.LoadAll(PlainMapFiles(), RinkNameOf); // (screenshot runs show only their own test arena)
             _cards = LoadCards();
             InputIcons.Warm(); // Kenney button pictures for hints and utility card prompts
             _fingerprint = Fingerprint();
@@ -351,6 +352,37 @@ namespace UltraPuck.Game
                 yield return Shot("underwater-2");
                 _shotWholeRink = false;
                 GoMainMenu();
+                UseMap(startMap);
+            }
+
+            if (want("arenas"))
+            {
+                // a custom arena (made here, as a zip in memory, like one from the Custom_Arenas folder): picked on the
+                // rink screen with up / down, then on the rink with bots playing (background, shadows, foreground)
+                var startMap = _mapIndex;
+                var hockey = _mapFiles.IndexOf("hockey-rink.json");
+                if (hockey >= 0) UseMap(hockey);
+                _shotArena = ArenaSkin.FromZip(TestArenaZip(_map), "Test Arena.zip", PlainMapFiles(), RinkNameOf);
+                _shotArena.Name = "Test Arena";
+                _arenas.Add(_shotArena);
+                GoLocalLobby();
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Colour = 0, Symbol = 0, Name = "FancyDuck" });
+                _play.Open(PlayScreens.Page.Map);
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("arena-pick");
+                _play.Open(PlayScreens.Page.None);
+                _local.Slots.Clear();
+                for (var b = 0; b < 4; b++) _local.Slots.Add(new LocalPlayers.Slot { Team = b & 1, Colour = b & 1, Demo = true, Name = "Bot" });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                _shotWholeRink = true;
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(3f);
+                yield return Shot("arena-match");
+                _shotWholeRink = false;
+                GoMainMenu();
+                _arenas.Remove(_shotArena);
+                _shotArena = null;
                 UseMap(startMap);
             }
 
@@ -1734,13 +1766,202 @@ namespace UltraPuck.Game
             UseMap(rinks[((Mathf.Max(0, here) + d) % rinks.Count + rinks.Count) % rinks.Count]);
         }
 
-        /// <summary>The rink screen: the next / previous look of this rink.</summary>
+        /// <summary>The rink screen: the next / previous look of this rink (its own looks, then its custom arenas).</summary>
         public void StepLook(int d)
         {
+            var n = LookCount();
+            if (n < 2) return;
+            var to = ((LookHere() + d) % n + n) % n;
             var looks = Looks(_mapIndex);
-            if (looks.Count < 2) return;
-            var here = looks.IndexOf(_mapIndex);
-            UseMap(looks[((here + d) % looks.Count + looks.Count) % looks.Count]);
+            var arenas = ArenasFor(_mapIndex);
+            if (to < looks.Count) { ChooseArena(_mapIndex, null); UseMap(looks[to]); }
+            else { var plain = looks.Count > 0 ? looks[0] : _mapIndex; ChooseArena(plain, arenas[to - looks.Count]); UseMap(plain); }
+        }
+
+        /// <summary>Screenshots: a made-up arena for <paramref name="map"/> as a zip (a striped background, a mown-grass
+        /// floor over the whole canvas (only the rink's part shows), a dark band and pillars in front along the edges, a
+        /// soft shadow under them).</summary>
+        private static byte[] TestArenaZip(MapDef map)
+        {
+            var at = ArenaSkin.Canvas(map);
+            const float ppu = 16f;
+            int w = Mathf.RoundToInt(at.width * ppu), h = Mathf.RoundToInt(at.height * ppu);
+            var back = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            var front = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            var shade = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            var floor = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            var bp = new Color32[w * h]; var fp = new Color32[w * h]; var sp = new Color32[w * h]; var gp = new Color32[w * h];
+            for (var y = 0; y < h; y++)
+                for (var x = 0; x < w; x++)
+                {
+                    var i = y * w + x;
+                    float u = x / (float)w, v = y / (float)h;
+                    var stripe = ((x + y) / 24) % 2 == 0 ? 0.06f : 0f;
+                    bp[i] = new Color(0.1f + stripe, 0.32f + 0.2f * v + stripe, 0.18f + stripe, 1f);
+                    gp[i] = (int)(u * 14f) % 2 == 0 ? new Color(0.36f, 0.62f, 0.26f, 1f) : new Color(0.3f, 0.55f, 0.22f, 1f);
+                    // in front: a dark band along the bottom and a pillar in each top corner
+                    var band = v < 0.16f;
+                    var pillar = v > 0.55f && (u < 0.13f || u > 0.87f);
+                    fp[i] = band || pillar ? new Color(0.05f, 0.05f, 0.08f, 1f) : new Color(0f, 0f, 0f, 0f);
+                    // its shadow, falling just above the band
+                    var d = Mathf.Clamp01((v - 0.16f) / 0.06f);
+                    sp[i] = v >= 0.16f && v < 0.22f ? new Color(0f, 0f, 0f, 0.45f * (1f - d)) : new Color(0f, 0f, 0f, 0f);
+                }
+            back.SetPixels32(bp); front.SetPixels32(fp); shade.SetPixels32(sp); floor.SetPixels32(gp);
+            var files = new[] { new KeyValuePair<string, byte[]>("Background.png", back.EncodeToPNG()), new KeyValuePair<string, byte[]>("Foreground.png", front.EncodeToPNG()),
+                new KeyValuePair<string, byte[]>("Shadows.png", shade.EncodeToPNG()), new KeyValuePair<string, byte[]>("Floor.png", floor.EncodeToPNG()), new KeyValuePair<string, byte[]>("arena.json", System.Text.Encoding.UTF8.GetBytes("{ \"name\": \"Test Arena\", \"rink\": \"hockey-rink\" }")) };
+            Destroy(back); Destroy(front); Destroy(shade); Destroy(floor);
+            using (var m = new MemoryStream())
+            {
+                using (var zip = new System.IO.Compression.ZipArchive(m, System.IO.Compression.ZipArchiveMode.Create, true))
+                    foreach (var f in files)
+                        using (var s = zip.CreateEntry(f.Key).Open()) s.Write(f.Value, 0, f.Value.Length);
+                return m.ToArray();
+            }
+        }
+
+        /// <summary>How many looks this rink has (its own looks and its custom arenas), which one is on, and each one's name.</summary>
+        public int LookCount() { return Looks(_mapIndex).Count + ArenasFor(_mapIndex).Count; }
+        public int LookHere()
+        {
+            var looks = Looks(_mapIndex);
+            var a = ChosenArena(_mapIndex);
+            if (a != null) return looks.Count + ArenasFor(_mapIndex).IndexOf(a);
+            return Mathf.Max(0, looks.IndexOf(_mapIndex));
+        }
+        public string LookLabel(int k)
+        {
+            var looks = Looks(_mapIndex);
+            if (k < looks.Count) return LookName(looks[k]);
+            var arenas = ArenasFor(_mapIndex);
+            return k - looks.Count < arenas.Count ? arenas[k - looks.Count].Name : "?";
+        }
+
+        // ------------------------------------------------------------------ custom arenas
+
+        /// <summary>The arena skins in the Custom_Arenas folder.</summary>
+        private List<ArenaSkin> _arenas = new List<ArenaSkin>();
+        private ArenaView _arenaView;
+        private ArenaSkin _arenaShown;
+        private int _arenaMap = -1;
+        /// <summary>Online, not hosting: the host's arena once this PC has it (its hash looked for, to look only once).</summary>
+        private ArenaSkin _hostArena;
+        private ulong _hostArenaFor;
+        /// <summary>Screenshots: the arena to show, whatever's saved.</summary>
+        private ArenaSkin _shotArena;
+
+        private List<string> PlainMapFiles()
+        {
+            var list = new List<string>();
+            foreach (var i in Rinks()) list.Add(_mapFiles[i]);
+            return list;
+        }
+
+        private string RinkNameOf(string file) { return RinkName(_mapFiles.IndexOf(file)); }
+
+        /// <summary>Rink <paramref name="i"/>'s custom arenas (any of its looks: they're all the same rink).</summary>
+        private List<ArenaSkin> ArenasFor(int i)
+        {
+            var list = new List<ArenaSkin>();
+            if (i < 0 || i >= _mapBase.Count) return list;
+            foreach (var a in _arenas) if (a.Rink == _mapBase[i]) list.Add(a);
+            return list;
+        }
+
+        /// <summary>The arena picked for rink <paramref name="i"/> (saved per rink), shown on its plain look only; null for none.</summary>
+        private ArenaSkin ChosenArena(int i)
+        {
+            if (i < 0 || i >= _mapBase.Count) return null;
+            var looks = Looks(i);
+            if (looks.Count > 0 && looks[0] != i) return null;
+            if (_shotArena != null) return _shotArena.Rink == _mapBase[i] ? _shotArena : null;
+            var file = PlayerPrefs.GetString("arena_" + _mapBase[i], "");
+            if (file.Length == 0) return null;
+            foreach (var a in ArenasFor(i)) if (a.File == file) return a;
+            return null;
+        }
+
+        private void ChooseArena(int i, ArenaSkin a)
+        {
+            if (i < 0 || i >= _mapBase.Count || ShotDir != null) return;
+            PlayerPrefs.SetString("arena_" + _mapBase[i], a != null ? a.File : "");
+        }
+
+        /// <summary>Online lobby, hosting: the arena for this rink, and changing it (none, then each of its arenas).</summary>
+        public bool HasArenas { get { return _arenas.Count > 0; } }
+        public string ArenaLabel() { var a = ChosenArena(_mapIndex); return a != null ? a.Name : ArenasFor(_mapIndex).Count > 0 ? "None" : "None (none for this rink)"; }
+        public void StepArena(int d)
+        {
+            var looks = Looks(_mapIndex);
+            var plain = looks.Count > 0 ? looks[0] : _mapIndex;
+            var arenas = ArenasFor(plain);
+            if (arenas.Count == 0) return;
+            var here = ChosenArena(_mapIndex);
+            var at = here != null ? arenas.IndexOf(here) + 1 : 0; // 0 = none
+            var to = ((at + d) % (arenas.Count + 1) + arenas.Count + 1) % (arenas.Count + 1);
+            ChooseArena(plain, to == 0 ? null : arenas[to - 1]);
+            if (plain != _mapIndex) UseMap(plain);
+        }
+
+        /// <summary>Online lobby, joined: the host's arena, and whether it's here yet.</summary>
+        public string HostArenaText()
+        {
+            var s = _session;
+            if (s == null || s.ArenaHash == 0) return "None";
+            var name = string.IsNullOrEmpty(s.ArenaName) ? "Custom" : s.ArenaName;
+            if (!Settings.OtherArenas) return name + " (off in Settings)";
+            if (_hostArena != null && _hostArena.Hash == s.ArenaHash) return name;
+            if (s.ArenaSize > NetSession.ArenaMax) return name + " (too big to send)";
+            return name + " (downloading " + Mathf.FloorToInt(s.ArenaProgress * 100f) + "%)";
+        }
+
+        /// <summary>
+        /// Every frame: which arena should be on the rink, and put it there if it changed. Online, joined: the host's
+        /// (downloaded from them if need be, when Settings allows). Otherwise: the one picked for this rink. Hosting
+        /// also tells everyone which it is.
+        /// </summary>
+        private void RefreshArena()
+        {
+            ArenaSkin want = null;
+            var s = _session;
+            if (s != null && !s.IsHost && s.Current != NetSession.Stage.Closed)
+            {
+                s.WantArena = false;
+                if (Settings.OtherArenas && s.ArenaHash != 0)
+                {
+                    if (_hostArenaFor != s.ArenaHash)
+                    {
+                        _hostArenaFor = s.ArenaHash;
+                        _hostArena = _arenas.Find(a => a.Hash == s.ArenaHash) ?? ArenaSkin.FromDownloads(s.ArenaHash, PlainMapFiles(), RinkNameOf);
+                    }
+                    if (_hostArena == null && s.ArenaDone != null)
+                    {
+                        var bytes = s.ArenaDone;
+                        s.ArenaDone = null;
+                        try
+                        {
+                            var a = ArenaSkin.FromZip(bytes, (s.ArenaName ?? "arena") + ".zip", PlainMapFiles(), RinkNameOf);
+                            if (a != null && a.Hash == s.ArenaHash) { ArenaSkin.Keep(a); _hostArena = a; }
+                            if (a != null) Debug.Log("Ultra Puck: got the host's arena " + a.Name + " (" + bytes.Length / 1024 + " KB)");
+                        }
+                        catch (System.Exception ex) { Debug.LogWarning("Ultra Puck: the host's arena couldn't be read: " + ex.Message); }
+                    }
+                    if (_hostArena == null) s.WantArena = true;
+                    var looks = Looks(_mapIndex);
+                    if (_hostArena != null && _hostArena.Rink == _mapBase[_mapIndex] && (looks.Count == 0 || looks[0] == _mapIndex)) want = _hostArena;
+                }
+            }
+            else
+            {
+                want = ChosenArena(_mapIndex);
+                if (s != null && s.IsHost) s.SetArena(want != null ? want.Name : null, want != null ? want.Bytes : null);
+            }
+            if (want == _arenaShown && _arenaMap == _mapIndex && (want == null) == (_arenaView == null)) return;
+            if (_arenaView != null) { _arenaView.Destroy(); _arenaView = null; }
+            if (_arenaShown != null && _arenaShown != want) _arenaShown.Unload();
+            _arenaShown = want;
+            _arenaMap = _mapIndex;
+            if (want != null) _arenaView = new ArenaView(_map, want);
         }
 
         /// <summary>Every map in the Maps folder (the Test Rink first, then the rest by file name).</summary>
@@ -3287,6 +3508,7 @@ namespace UltraPuck.Game
             var puckAt = (pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t);
             _puck.Look(_rink != null ? _rink.Dress : null);
             if (_rink != null) _rink.Settle();
+            RefreshArena();
             _puck.Show(puckAt, b.PuckTeam);
             // anything half way through a portal: cut at one, coming out of the other
             var wallHalf = _sim.T.WallThickness.ToFloat() * 0.5f;

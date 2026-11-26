@@ -37,6 +37,51 @@ namespace UltraPuck.Tests
         }
 
         /// <summary>
+        /// A custom arena: the host's is named in the lobby; a client that wants it downloads it a piece at a time over a
+        /// lossy network and ends up with exactly the same bytes (and asks for nothing when it doesn't want it).
+        /// </summary>
+        [Test, Timeout(120000)]
+        public void TheHostsArenaDownloadsOverALossyNetwork()
+        {
+            var map = Rink();
+            System.Func<Simulation> make = () => new Simulation(map, null, null);
+            var net = new FakeNetwork(99) { Latency = 0.04, Jitter = 0.02, Loss = 0.1 };
+            var host = NetSession.Host(net.Add(), make, 42u);
+            var client = NetSession.Join(net.Add(), make, 42u);
+            host.SetLocalPlayers(new[] { new KeyValuePair<string, int>("Host", 0) });
+            client.SetLocalPlayers(new[] { new KeyValuePair<string, int>("Guest", 1) });
+            var arena = new byte[300 * 1024 + 77];
+            new System.Random(5).NextBytes(arena);
+            host.SetArena("Backyard", arena);
+
+            const double dt = 1.0 / 120.0;
+            var now = 0.0;
+            System.Action tickNet = () => { now += dt; net.Advance(dt); host.Update(now); client.Update(now); };
+            for (var k = 0; k < 600 && client.ArenaHash == 0; k++) tickNet();
+            Assert.AreEqual("Backyard", client.ArenaName);
+            Assert.AreEqual(NetSession.HashBytes(arena), client.ArenaHash);
+            Assert.AreEqual(arena.Length, client.ArenaSize);
+            for (var k = 0; k < 240; k++) tickNet();
+            Assert.AreEqual(0f, client.ArenaProgress, "nothing asked for while it isn't wanted");
+
+            client.WantArena = true;
+            var ticks = 0;
+            for (; ticks < 120 * 60 && client.ArenaDone == null; ticks++) tickNet();
+            Assert.IsNotNull(client.ArenaDone, "it all arrived");
+            CollectionAssert.AreEqual(arena, client.ArenaDone);
+            TestContext.WriteLine("300 KB arena in " + (ticks / 120.0).ToString("0.0") + " s at 10% loss");
+
+            // a different one: the client sees the new hash and downloads that instead
+            var other = new byte[5000];
+            new System.Random(6).NextBytes(other);
+            host.SetArena("Pond", other);
+            client.ArenaDone = null;
+            for (var k = 0; k < 120 * 20 && (client.ArenaDone == null || client.ArenaHash != NetSession.HashBytes(other)); k++) tickNet();
+            CollectionAssert.AreEqual(other, client.ArenaDone);
+            Assert.AreEqual("Pond", client.ArenaName);
+        }
+
+        /// <summary>
         /// Two PCs over a bad network (latency, jitter, 10% loss), one person on each plus two bots, cards on:
         /// after half a minute of play both PCs must have exactly the same game, with rewinds along the way.
         /// </summary>

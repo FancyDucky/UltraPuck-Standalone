@@ -221,6 +221,7 @@ namespace UltraPuck.Game
                             Press = () => StepLength(1),
                         });
                         if (Runner.MapCount > 1) _rows.Add(new Row { Label = "Rink", Value = () => Runner.MapName(Runner.MapIndex), Step = d => Runner.StepMap(d), Press = () => Runner.StepMap(1) });
+                        if (Runner.HasArenas) _rows.Add(new Row { Label = "Arena", Value = Runner.ArenaLabel, Step = Runner.StepArena, Press = () => Runner.StepArena(1) });
                         _rows.Add(Cycle("Rounds mode", new[] { "Off", "On" }, () => Settings.Rounds ? 1 : 0, v => Settings.Rounds = v == 1));
                         _rows.Add(Cycle("Goal replays", new[] { "Off", "On" }, () => Settings.Replays ? 1 : 0, v => Settings.Replays = v == 1));
                         var picking = Cycle("Picking", Settings.PickModes, () => Settings.PickMode, v => Settings.PickMode = v);
@@ -259,6 +260,7 @@ namespace UltraPuck.Game
                         {
                             _rows.Add(Shown("Match", () => r.MatchText));
                             if (Runner.MapCount > 1) _rows.Add(Shown("Rink", () => Runner.MapName(s.Map)));
+                            _rows.Add(Shown("Arena", Runner.HostArenaText));
                             _rows.Add(Shown("Rounds mode", () => r.Rounds ? "On" : "Off"));
                             _rows.Add(Shown("Goal replays", () => r.Replays ? "On" : "Off"));
                             _rows.Add(Shown("Picking", () => Settings.PickModes[Mathf.Clamp(r.PickMode, 0, Settings.PickModes.Length - 1)]));

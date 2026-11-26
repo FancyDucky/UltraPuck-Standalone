@@ -79,7 +79,7 @@ namespace UltraPuck.Game
             if (m.Back) { Sound.Back(); Open(Page.Join); return; }
             if (m.X != 0) { Runner.StepRink(m.X); Sound.Step(m.X); _lookSlide = 0f; }
             // up / down: the rink's looks (Classic, Underwater...)
-            if (m.Y != 0 && Runner.Looks(Runner.MapIndex).Count > 1) { Runner.StepLook(-m.Y); Sound.Step(-m.Y); _lookSlide = m.Y; }
+            if (m.Y != 0 && Runner.LookCount() > 1) { Runner.StepLook(-m.Y); Sound.Step(-m.Y); _lookSlide = m.Y; }
             if (m.Confirm || Local.StartPressed()) { Sound.Select(); Open(Page.Rules); }
         }
 
@@ -488,11 +488,12 @@ namespace UltraPuck.Game
             Title(w, "CHOOSE A RINK", null, appear);
             var rinks = Runner.Rinks();
             var looks = Runner.Looks(Runner.MapIndex);
+            var lookCount = Runner.LookCount();
             var count = rinks.Count;
             var at = rinks.IndexOf(looks.Count > 0 ? looks[0] : Runner.MapIndex);
             if (at < 0) at = 0;
             _lookSlide = Mathf.MoveTowards(_lookSlide, 0f, Time.unscaledDeltaTime * 6f);
-            if (looks.Count > 1) DrawLooks(w, h, looks);
+            if (lookCount > 1) DrawLooks(w, h, lookCount);
             for (var k = -1; k <= 1; k++)
             {
                 if (count < 2 && k != 0) continue;
@@ -501,7 +502,7 @@ namespace UltraPuck.Game
                 var cw = big ? 620f : 300f;
                 var chh = cw * 9f / 16f;
                 var cx = w / 2 + k * 520f;
-                var r = new Rect(cx - cw / 2, h / 2 - chh / 2 - (big ? 10f : -20f) + (looks.Count > 1 ? 28f : 0f), cw, chh);
+                var r = new Rect(cx - cw / 2, h / 2 - chh / 2 - (big ? 10f : -20f) + (lookCount > 1 ? 28f : 0f), cw, chh);
                 var a = big ? 1f : 0.45f;
                 if (big) Ui.Box(new Rect(r.x - 4, r.y - 4, r.width + 8, r.height + 8), new Color(1f, 1f, 1f, 0.9f), 18f);
                 Ui.Box(r, new Color(0.08f, 0.08f, 0.09f, 1f), 14f);
@@ -516,29 +517,29 @@ namespace UltraPuck.Game
             }
             if (count > 1)
             {
-                var dy = looks.Count > 1 ? 28f : 0f;
+                var dy = lookCount > 1 ? 28f : 0f;
                 Ui.Label(new Rect(w / 2 - 380, h / 2 - 40 + dy, 40, 60), "‹", Ui.Font(54, true, TextAnchor.MiddleCenter), Color.white);
                 Ui.Label(new Rect(w / 2 + 340, h / 2 - 40 + dy, 40, 60), "›", Ui.Font(54, true, TextAnchor.MiddleCenter), Color.white);
             }
-            Glyphs.Hint(new Rect(0, h - 52, w, 30), (looks.Count > 1 ? "{updown} Look      " : "") + "{side} Rink      {confirm} Choose      {back} Back", 17, new Color(1f, 1f, 1f, 0.8f));
+            Glyphs.Hint(new Rect(0, h - 52, w, 30), (lookCount > 1 ? "{updown} Look      " : "") + "{side} Rink      {confirm} Choose      {back} Back", 17, new Color(1f, 1f, 1f, 0.8f));
         }
 
-        /// <summary>The rink's looks, stacked: the chosen one in the middle (bright, between up and down arrows), the ones before and after it faint above and below.</summary>
-        private void DrawLooks(float w, float h, List<int> looks)
+        /// <summary>The rink's looks (custom arenas too), stacked: the chosen one in the middle (bright, between up and down arrows), the ones before and after it faint above and below.</summary>
+        private void DrawLooks(float w, float h, int count)
         {
-            var here = looks.IndexOf(Runner.MapIndex);
+            var here = Runner.LookHere();
             var cx = w / 2f;
             const float mid = 140f, step = 30f;
             var shift = _lookSlide * step;
             for (var k = -1; k <= 1; k++)
             {
-                if (looks.Count < 3 && k != 0 && (here + k < 0 || here + k >= looks.Count)) continue;
-                var i = looks[((here + k) % looks.Count + looks.Count) % looks.Count];
+                if (count < 3 && k != 0 && (here + k < 0 || here + k >= count)) continue;
+                var i = ((here + k) % count + count) % count;
                 var y = mid + k * step + shift;
                 var big = k == 0;
                 var a = big ? 1f : 0.35f;
                 if (big) Ui.Box(new Rect(cx - 120f, y - 15f, 240f, 30f), new Color(1f, 1f, 1f, 0.12f), 15f);
-                Ui.Label(new Rect(cx - 200f, y - 15f, 400f, 30f), Runner.LookName(i), Ui.Font(big ? 20 : 15, big, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
+                Ui.Label(new Rect(cx - 200f, y - 15f, 400f, 30f), Runner.LookLabel(i), Ui.Font(big ? 20 : 15, big, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, a));
             }
         }
 

@@ -32,3 +32,6 @@ results.xml
 net.xml
 fair.xml
 diag.xml
+
+# custom arena zips (the game makes this folder next to it; in the editor, here)
+/Custom_Arenas/

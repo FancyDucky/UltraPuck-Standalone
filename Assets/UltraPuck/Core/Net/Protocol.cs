@@ -24,6 +24,8 @@ namespace UltraPuck.Core.Net
         CardStats = 15, // in the lobby, both ways: the card pick counts this PC knows of (the host passes them on)
         Styles = 16,    // client to host: the looks (Profile: dash, banner, goal explosion) of the players on my PC
         StyleTable = 17,// host to everyone: every PC's players' looks
+        ArenaAsk = 18,  // client to host: please send these pieces of your custom arena (its hash, then the piece numbers)
+        ArenaPart = 19, // host to client: one piece of the custom arena (its hash, the piece number, the bytes)
     }
 
     /// <summary>Writes a message into bytes (little-endian, compact).</summary>

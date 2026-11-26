@@ -17,7 +17,7 @@ namespace UltraPuck.Core.Net
     /// </summary>
     public sealed class NetSession : IDisposable
     {
-        public const int Version = 90;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card. 43: swapping onto bots is part of the game (input bits 64/128, Pilot), mid-match bots (Pick 201/202), match stats, Puck Gun knockback (no stun, 1 s), 30% slower while charging, puck drag 7/11, bot pass/positioning, Team Vote people draw first, lobby/start messages ordered. 44: countdown waits 1.5 s after picks, leave/rejoin mid-match (Away / Rejoin messages, state hand-over), host kick-off and score commands (Pick 203-207). 45: bot-run players wait between Swap uses, bots throw a carried teammate at the puck. 46: Power Shot = full charge quick shot (QuickShotFull), Invisible Quick Shot (PuckHidden), Cannon Ball (CannonTeam). 47: Cannon Ball shoves the catcher along the shot (Shoved), no hit lag. 48: Swap rock gone once stopped / no swap to a held rock, Ice Trail on every shot (teammates +, 3x longer), Team Play = pass speed boost (Fast), Cannon Ball shove into your own net scores (ShovedBy), Stone Wall (Stones). 49: Same Draw picking (rules bit 16), Stone Wall up to 30 long / 3 s. 50: Swap rock glides 35% less (RockDrag 0.277), Ice Trail 15 s, teammates +60% (IceBoost), RockDrag 0.326, swapping gives you the rock's momentum and the rock keeps its own. 51: Friendly Fire grabs only while holding charge/brake, throws like a shot (MateTossDrag, TossEndSpeed), +15% speed 4 s after. 52: Invisible Shot 0.5 s. 53: host takes a bot out mid-match (Pick 208 + player). 54: Stone Wall stands 6 s. 55: no charging slow-down while carrying a teammate. 56: Shockwave held to grow (ShockHold, 1.5-6 units over 6 s, no cooldown), Stone Wall goes on after bounces and stands 5.5 s, Heavyweight size x1.16. 57: Shockwave grows from 0. 58: Swap rock lasts 10 s (Rock.Life), passes only end when an opponent takes the puck. 59: side colours in the lobby message, Recolour message. 60: bots pass more / quick shots / go round nets; Hockey and Big Rink nets say which way they open. 61: cards go with the person on a swap. 62: Puck Gun on the utility button, 0.85 s cooldown, +3 s for bots. 63: kick-off spot rotates, tight face-off groups in front of the nets, Portal Gun, Team Play +50%. 64: portals only on the back of nets, one Portal Gun a team (maxTeam), going through a portal a bit at a time (PortalVia), Invisible Shot gone. 65: one-a-team cards to one picker in shared hands (Swap too), portals replace the other team's, free play puck drills (Pick 220-223), Slot Machine. 66: Shockwave charges faster (3.6 s), pushes up to 3.5x harder at a full charge. 67: Swap trades momentum again (you take the rock's, it takes yours). 68: own goal only if nobody on the scoring team touched it (TeamTouch0/1), at most two portals a team, slot reels only prize symbols. 69: Choose (pick from the deck), New Hand (re-roll a pick), Double Card (two random cards). 70: a dash counts as a check for 0.4 s (DashHitTime, was 0.25). 71: the Portal Gun keeps its colour until a portal sticks. 72: Double Card shows its two cards before the countdown (Gifts, GiftRevealTime). 73: bots look over their cards for 1.8 s before taking one (BotPickDelay). 74: after new cards (Choose deck, re-roll) a pick waits until the old one is let go (PickHeld). 75: Carry-through (CarryOn / CarryPercent, Pick 224-246, rules byte after the card list), the host's rules in the lobby message, joining a match in progress, changing team and watching mid-match (the match is re-seated: Layout in Inputs / Away / Checksum, inputs in the hand-over, look bit 128 = watching). 76: Knock-away (KnockPercent, Pick 100-120, rules byte after Carry-through). 77: catching up on cards after joining part-way (PlayerState.CatchingUp / PickRounds, GameState.TeamRounds). 78: Double Agents take turns round the other side's face-off spots (kick-off too), face the puck, and start disguised (PlayerState.Disguised / DisguiseAs / DisguiseTime); Head Start skips agents; Backwards Rink (net "faceoff" side); a carried puck shoved dead in line goes straight out (no random side). 79: Stone Wall stands 11 s, up to 45 long / 4.5 s of laying. 80: RAGE (Stats.Rage, PlayerState.RageMeter / RageTime / RageCooldown). 81: raging: 3x dash, no taking the puck, smashes Stone Walls. 82: knock-outs (a raging check near the boards, or leaving the rink) and respawns (PlayerState.OutTime / OutAt / OutDir / RespawnTime / Launches / Respawns). 83: knock-outs need a hard raging hit and a 1-in-5 roll, from anywhere (OutFrom). 84: only Featherweights get launched, 5 s respawn. 85: no 1-in-5 roll for a launch. 86: Profile looks (Styles / StyleTable messages). 87: Steam accounts with the looks (profile pictures on banners). 88: PlayerInput.Look (the Black Hole goal explosion pulls everyone in: PlayerState.GoalPull); stealing with the whole wedge as drawn (was a point at the body's front); no cap on how fast a check sends someone (the tick is cut into more steps instead). 89: RAGE fills by the checker's weight over yours, to a random 3-5 (PlayerState.RageFill / RageNeed, was 7 checks). 90: Momentum and Loyal cards.
+        public const int Version = 91;// 2: knock-loose checks, bigger puck, Puck Gun on brake. 3: carried puck physics, card hover. 4: thick walls, faster shots. 5: bots go round nets. 6: hit lag, timed matches, team colours and symbols. 7: no daze on checks, pushable pylons, smaller nets. 8: 8 players, goals on touch, charge from the pickup, hit strength by weight. 9: Shockwave slows 45%. 10: Ice Trail. 11: ice melts from 1 s, slower. 12: ice melts slower still. 13: replay skip votes, ready up, bots with their own team and symbol. 14: S and U rinks, bots follow routes, smaller Test Rink nets. 15: faster wall checks, rewinds gathered, 0.4 s prediction. 16: ice lasts 3 s and melts at half pace, pass boost, wedge pickups. 17: 3 s countdown, deeper nets, carrying into your own net. 18: hold to keep dashing, wider S and U rinks. 19: quicker acceleration. 20: the host pauses everyone. 21: shots counted (for sounds). 22: every card as likely as any other, nets 30% bigger, S Rink nets on the ice, upright U Rink, pylons by the way a net faces, bots pass. 23: no check after a quick shot until Shoot is let go, carried puck may sit in the carrier at a wall. 24: Over Charge shot speed scales past a full charge (1.5×/2×/…); puck speed cap raised so it can. 25: Shockwave is a utility (Triangle / Y), not on check. 26: Shockwave 3 s / range 15 radii / 6 s cooldown. 27: Shockwave 50% / 2 s / range 5 / 6 s cooldown. 28: Shockwave pushes everyone (no slow), thin expanding ring. 29: Shockwave push 2×. 30: one utility at a time (replace), MultiUtility setting, Swap rock card. 31: Swap clap (teleport). 32: clap only on teleport (not throw); rock lighter and glidey. 33: bot Swap CD 3 s, swap keeps momentum, rocks pickable/shootable. 34: rock↔puck collide (gun-style knock when carried). 35: team vote counts humans only (bots follow). 36: bot-only team still picks by tier. 37: goal blast shove + LastGoalPlayer; Shockwave shoves puck and rocks; replay after 3 s. 38: no Swap utility while holding puck; dash CD +10% + longer coast. 39: goal box front at the net opening. 40: team-vote bots hover-follow without locking until a human locks. 41: Friendly Fire picks up and throws teammates, Shockwave knocks the puck loose, one Pylon Goalie that grows a size a card and stays out of the nets; teammates picked up on the wedge; pre-charge without the puck; dash where you move (input bit 32); Team Play refreshes the team, Team Play II gone. 42: Pylon Goalie grows 55% a card. 43: swapping onto bots is part of the game (input bits 64/128, Pilot), mid-match bots (Pick 201/202), match stats, Puck Gun knockback (no stun, 1 s), 30% slower while charging, puck drag 7/11, bot pass/positioning, Team Vote people draw first, lobby/start messages ordered. 44: countdown waits 1.5 s after picks, leave/rejoin mid-match (Away / Rejoin messages, state hand-over), host kick-off and score commands (Pick 203-207). 45: bot-run players wait between Swap uses, bots throw a carried teammate at the puck. 46: Power Shot = full charge quick shot (QuickShotFull), Invisible Quick Shot (PuckHidden), Cannon Ball (CannonTeam). 47: Cannon Ball shoves the catcher along the shot (Shoved), no hit lag. 48: Swap rock gone once stopped / no swap to a held rock, Ice Trail on every shot (teammates +, 3x longer), Team Play = pass speed boost (Fast), Cannon Ball shove into your own net scores (ShovedBy), Stone Wall (Stones). 49: Same Draw picking (rules bit 16), Stone Wall up to 30 long / 3 s. 50: Swap rock glides 35% less (RockDrag 0.277), Ice Trail 15 s, teammates +60% (IceBoost), RockDrag 0.326, swapping gives you the rock's momentum and the rock keeps its own. 51: Friendly Fire grabs only while holding charge/brake, throws like a shot (MateTossDrag, TossEndSpeed), +15% speed 4 s after. 52: Invisible Shot 0.5 s. 53: host takes a bot out mid-match (Pick 208 + player). 54: Stone Wall stands 6 s. 55: no charging slow-down while carrying a teammate. 56: Shockwave held to grow (ShockHold, 1.5-6 units over 6 s, no cooldown), Stone Wall goes on after bounces and stands 5.5 s, Heavyweight size x1.16. 57: Shockwave grows from 0. 58: Swap rock lasts 10 s (Rock.Life), passes only end when an opponent takes the puck. 59: side colours in the lobby message, Recolour message. 60: bots pass more / quick shots / go round nets; Hockey and Big Rink nets say which way they open. 61: cards go with the person on a swap. 62: Puck Gun on the utility button, 0.85 s cooldown, +3 s for bots. 63: kick-off spot rotates, tight face-off groups in front of the nets, Portal Gun, Team Play +50%. 64: portals only on the back of nets, one Portal Gun a team (maxTeam), going through a portal a bit at a time (PortalVia), Invisible Shot gone. 65: one-a-team cards to one picker in shared hands (Swap too), portals replace the other team's, free play puck drills (Pick 220-223), Slot Machine. 66: Shockwave charges faster (3.6 s), pushes up to 3.5x harder at a full charge. 67: Swap trades momentum again (you take the rock's, it takes yours). 68: own goal only if nobody on the scoring team touched it (TeamTouch0/1), at most two portals a team, slot reels only prize symbols. 69: Choose (pick from the deck), New Hand (re-roll a pick), Double Card (two random cards). 70: a dash counts as a check for 0.4 s (DashHitTime, was 0.25). 71: the Portal Gun keeps its colour until a portal sticks. 72: Double Card shows its two cards before the countdown (Gifts, GiftRevealTime). 73: bots look over their cards for 1.8 s before taking one (BotPickDelay). 74: after new cards (Choose deck, re-roll) a pick waits until the old one is let go (PickHeld). 75: Carry-through (CarryOn / CarryPercent, Pick 224-246, rules byte after the card list), the host's rules in the lobby message, joining a match in progress, changing team and watching mid-match (the match is re-seated: Layout in Inputs / Away / Checksum, inputs in the hand-over, look bit 128 = watching). 76: Knock-away (KnockPercent, Pick 100-120, rules byte after Carry-through). 77: catching up on cards after joining part-way (PlayerState.CatchingUp / PickRounds, GameState.TeamRounds). 78: Double Agents take turns round the other side's face-off spots (kick-off too), face the puck, and start disguised (PlayerState.Disguised / DisguiseAs / DisguiseTime); Head Start skips agents; Backwards Rink (net "faceoff" side); a carried puck shoved dead in line goes straight out (no random side). 79: Stone Wall stands 11 s, up to 45 long / 4.5 s of laying. 80: RAGE (Stats.Rage, PlayerState.RageMeter / RageTime / RageCooldown). 81: raging: 3x dash, no taking the puck, smashes Stone Walls. 82: knock-outs (a raging check near the boards, or leaving the rink) and respawns (PlayerState.OutTime / OutAt / OutDir / RespawnTime / Launches / Respawns). 83: knock-outs need a hard raging hit and a 1-in-5 roll, from anywhere (OutFrom). 84: only Featherweights get launched, 5 s respawn. 85: no 1-in-5 roll for a launch. 86: Profile looks (Styles / StyleTable messages). 87: Steam accounts with the looks (profile pictures on banners). 88: PlayerInput.Look (the Black Hole goal explosion pulls everyone in: PlayerState.GoalPull); stealing with the whole wedge as drawn (was a point at the body's front); no cap on how fast a check sends someone (the tick is cut into more steps instead). 89: RAGE fills by the checker's weight over yours, to a random 3-5 (PlayerState.RageFill / RageNeed, was 7 checks). 90: Momentum and Loyal cards. 91: custom arenas (the host's arena in the lobby message, ArenaAsk / ArenaPart).
         public const int MaxPlayers = 8;
         /// <summary>Your own controls take effect this many ticks later (25 ms at 120 a second), which hides a little lag for free.</summary>
         public const int InputDelay = 3;
@@ -235,6 +235,114 @@ namespace UltraPuck.Core.Net
             set { if (!IsHost || value == _map) return; _map = Math.Max(0, Math.Min(255, value)); _lobbyVersion++; }
         }
         private int _map;
+
+        // ------------------------------------------------------------------ custom arena
+
+        /// <summary>
+        /// The host's custom arena (a zip of pictures, only a look), or none: its name, a hash of its bytes and its size.
+        /// The host sets it (<see cref="SetArena"/>); everyone else gets these in the lobby message and, when they want it
+        /// (<see cref="WantArena"/>), downloads it a piece at a time.
+        /// </summary>
+        public string ArenaName { get; private set; }
+        public ulong ArenaHash { get; private set; }
+        public int ArenaSize { get; private set; }
+        private byte[] _arenaBytes;
+
+        /// <summary>Host: the arena everyone should see (null: none).</summary>
+        public void SetArena(string name, byte[] bytes)
+        {
+            if (!IsHost) return;
+            var hash = bytes != null && bytes.Length > 0 ? HashBytes(bytes) : 0UL;
+            if (hash == ArenaHash && (name ?? "") == (ArenaName ?? "")) return;
+            ArenaName = hash != 0 ? name ?? "" : "";
+            ArenaHash = hash;
+            ArenaSize = hash != 0 ? bytes.Length : 0;
+            _arenaBytes = hash != 0 ? bytes : null;
+            _lobbyVersion++;
+        }
+
+        /// <summary>Client: download the host's arena (set by the game when it doesn't have it and the setting allows).</summary>
+        public bool WantArena;
+        /// <summary>Client: the host's arena, once all of it has arrived (the game takes it and sets this back to null).</summary>
+        public byte[] ArenaDone;
+        /// <summary>Client: how much of the host's arena has arrived (0..1).</summary>
+        public float ArenaProgress { get { return _dlHash != 0 && _dlGot != null && _dlGot.Length > 0 ? _dlCount / (float)_dlGot.Length : 0f; } }
+
+        /// <summary>The biggest arena sent, and the piece size (small enough for any network path, Steam's included).</summary>
+        public const int ArenaMax = 64 * 1024 * 1024, ArenaPiece = 1024;
+        private ulong _dlHash;
+        private byte[] _dlBytes;
+        private bool[] _dlGot;
+        private int _dlCount;
+        private double _dlAsked = -10;
+        private readonly HashSet<int> _dlPending = new HashSet<int>();
+
+        /// <summary>FNV-1a, 64 bits: tells two arenas apart (and a download from a damaged one).</summary>
+        public static ulong HashBytes(byte[] b)
+        {
+            var h = 14695981039346656037UL;
+            for (var k = 0; k < b.Length; k++) { h ^= b[k]; h *= 1099511628211UL; }
+            return h == 0 ? 1UL : h;
+        }
+
+        /// <summary>Client: ask for the pieces still missing (a few at a time; fewer during a match, to leave room for the game).</summary>
+        private void ArenaDownload()
+        {
+            if (IsHost || !WantArena || ArenaHash == 0 || ArenaSize <= 0 || ArenaSize > ArenaMax || ArenaDone != null) return;
+            if (_dlHash != ArenaHash)
+            {
+                _dlHash = ArenaHash;
+                _dlBytes = new byte[ArenaSize];
+                _dlGot = new bool[(ArenaSize + ArenaPiece - 1) / ArenaPiece];
+                _dlCount = 0;
+                _dlAsked = -10;
+            }
+            if (_dlCount >= _dlGot.Length || _now - _dlAsked < 0.12) return;
+            _dlAsked = _now;
+            var window = Current == Stage.Playing ? 12 : 255;
+            var w = new Writer(Msg.ArenaAsk).U64(_dlHash);
+            var n = 0;
+            var asked = new List<int>();
+            for (var k = 0; k < _dlGot.Length && n < window; k++) if (!_dlGot[k]) { asked.Add(k); n++; }
+            w.U8(asked.Count);
+            foreach (var k in asked) w.I32(k);
+            _dlPending.Clear();
+            foreach (var k in asked) _dlPending.Add(k);
+            Send(0, w.ToArray());
+        }
+
+        private void ArenaAsked(Link l, Reader r)
+        {
+            var hash = r.U64();
+            var count = r.U8();
+            if (!IsHost || hash != ArenaHash || _arenaBytes == null) return;
+            var pieces = (_arenaBytes.Length + ArenaPiece - 1) / ArenaPiece;
+            for (var k = 0; k < count; k++)
+            {
+                var i = r.I32();
+                if (i < 0 || i >= pieces) continue;
+                var len = Math.Min(ArenaPiece, _arenaBytes.Length - i * ArenaPiece);
+                var chunk = new byte[len];
+                Array.Copy(_arenaBytes, i * ArenaPiece, chunk, 0, len);
+                Send(l.Conn, new Writer(Msg.ArenaPart).U64(hash).I32(i).BigBytes(chunk).ToArray());
+            }
+        }
+
+        private void ArenaPartArrived(Reader r)
+        {
+            var hash = r.U64();
+            var i = r.I32();
+            var chunk = r.BigBytes();
+            if (IsHost || hash != _dlHash || _dlGot == null || i < 0 || i >= _dlGot.Length || _dlGot[i]) return;
+            if (i * ArenaPiece + chunk.Length > _dlBytes.Length) return;
+            Array.Copy(chunk, 0, _dlBytes, i * ArenaPiece, chunk.Length);
+            _dlGot[i] = true;
+            _dlCount++;
+            // the whole lot asked for is in: ask for the next straight away
+            if (_dlCount < _dlGot.Length) { if (_dlPending.Remove(i) && _dlPending.Count == 0) _dlAsked = -10; return; }
+            if (HashBytes(_dlBytes) == _dlHash) ArenaDone = _dlBytes;
+            else { _dlHash = 0; } // damaged on the way: start again
+        }
 
         /// <summary>The host's match rules (rounds, picking, which cards...), packed by the game; sent with every match start.</summary>
         public byte[] Rules = new byte[0];
@@ -499,6 +607,7 @@ namespace UltraPuck.Core.Net
             // (mid-match too: someone changing team, or going to watch, keeps asking until the host has it)
             if (!IsHost && (Current == Stage.Lobby || Current == Stage.Playing) && _now - _lastHello >= 1.0) { _lastHello = _now; SendPlayers(); }
             if (Current == Stage.Lobby && CardStatsOut != null && _now - _lastStats >= StatsEvery) { _lastStats = _now; SendCardStats(); }
+            if (Current == Stage.Lobby || Current == Stage.Playing) ArenaDownload();
 
             if (Current == Stage.Playing && Match != null)
             {
@@ -626,6 +735,12 @@ namespace UltraPuck.Core.Net
                     break;
                 case Msg.Leave:
                     Lost(l, "left the game");
+                    break;
+                case Msg.ArenaAsk:
+                    ArenaAsked(l, r);
+                    break;
+                case Msg.ArenaPart:
+                    ArenaPartArrived(r);
                     break;
             }
         }
@@ -804,6 +919,7 @@ namespace UltraPuck.Core.Net
         {
             var w = new Writer(Msg.Lobby).I32(_lobbyVersion).U8(Current == Stage.Playing ? 1 : 0).I32(MatchId);
             w.Bytes(LobbyRules);
+            w.Str(ArenaName ?? "").U64(ArenaHash).I32(ArenaSize);
             WriteSeats(w);
             w.U8(_map);
             w.U8(TeamColours[0]).U8(TeamColours[1]).I32(Recolours);
@@ -817,11 +933,15 @@ namespace UltraPuck.Core.Net
             var playing = r.U8() != 0;
             var match = r.I32();
             var rules = r.Bytes();
+            var arenaName = r.Str();
+            var arenaHash = r.U64();
+            var arenaSize = r.I32();
             // messages can arrive late and out of order: an old one mustn't undo a newer one (an old "in the lobby"
             // landing after the start used to drop this PC out of the match while everyone else waited for it)
             if (version < _theirLobby) return;
             _theirLobby = version;
             LobbyRules = rules;
+            ArenaName = arenaName; ArenaHash = arenaHash; ArenaSize = arenaSize;
             HostPlaying = playing;
             if (Current == Stage.Playing && !playing && match >= MatchId) { Match = null; Current = Stage.Lobby; } // the host went back to the lobby
             if (Current == Stage.Playing) return; // the seats are fixed for the match

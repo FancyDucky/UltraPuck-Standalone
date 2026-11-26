@@ -65,6 +65,13 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Holo, foil and glare on cards (off: plain printed cards).</summary>
+        /// <summary>Online: see (and download) the host's custom arena. On by default.</summary>
+        public static bool OtherArenas
+        {
+            get { return PlayerPrefs.GetInt("other_arenas", 1) != 0; }
+            set { PlayerPrefs.SetInt("other_arenas", value ? 1 : 0); }
+        }
+
         public static bool CardEffects
         {
             get { return PlayerPrefs.GetInt("card_fx", 1) != 0; }
