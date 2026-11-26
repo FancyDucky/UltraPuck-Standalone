@@ -276,12 +276,16 @@ namespace UltraPuck.Game
                     var sizes = Settings.Resolutions();
                     var sizeNames = new string[sizes.Length];
                     for (var k = 0; k < sizes.Length; k++) sizeNames[k] = sizes[k].x + " × " + sizes[k].y;
-                    _rows.Add(Choice("Resolution", sizeNames, () =>
+                    Func<int> sizeAt = () =>
                     {
                         var now = Settings.Resolution.x > 0 ? Settings.Resolution : new Vector2Int(Screen.width, Screen.height);
                         var at = Array.IndexOf(sizes, now);
-                        return at >= 0 ? at : 0;
-                    }, v => Settings.Resolution = sizes[v], "How many pixels the game draws. Lower is faster on slow PCs."));
+                        return at >= 0 ? at : sizes.Length - 1;
+                    };
+                    var res = Choice("Resolution", sizeNames, sizeAt, v => Settings.Resolution = sizes[v], "How many pixels the game draws. Lower is faster on slow PCs.");
+                    // left is lower, right is higher, and it stops at each end (no jumping from the biggest to the smallest)
+                    res.Step = d => { var to = Mathf.Clamp(sizeAt() + d, 0, sizes.Length - 1); if (to != sizeAt()) Settings.Resolution = sizes[to]; };
+                    _rows.Add(res);
                     const float cursorSpan = Settings.CursorMax - Settings.CursorMin;
                     var cursor = Slider("Mouse cursor size", () => (Settings.CursorSize - Settings.CursorMin) / cursorSpan,
                         v => Settings.CursorSize = Settings.CursorMin + Mathf.RoundToInt(v * cursorSpan / 10f) * 10,
@@ -347,6 +351,10 @@ namespace UltraPuck.Game
                     _rows.Add(Slider("Volume", () => Settings.Volume, v => Settings.Volume = v, Percent, "How loud the whole game is."));
                     _rows.Add(Slider("Music", () => Settings.MusicVolume, v => Settings.MusicVolume = v, Percent, "How loud the music is next to everything else."));
                     _rows.Add(Slider("Sound effects", () => Settings.SoundVolume, v => Settings.SoundVolume = v, Percent, "Hits, shots, goals, cards and menu sounds."));
+                    // (each choice plays as you pick it: a soft bounce, then a hard one)
+                    _rows.Add(Choice("Puck bounce", Settings.PuckBounceNames, () => Settings.PuckBounceSound,
+                        v => { Settings.PuckBounceSound = v; Sound.Bounce(1f, 0f); },
+                        "The sound of the puck bouncing off the boards: lower and quieter when it's slow, higher when it's fast."));
                     _rows.Add(Switch("Pause music when unfocused", () => Settings.PauseMusicWhenUnfocused, v => Settings.PauseMusicWhenUnfocused = v,
                         "When the game window isn't focused: pause the music. Leave this off and the next song still starts if one ends while you're looking elsewhere."));
                     _rows.Add(Switch("Music in clips", () => Settings.MusicInClips, v => Settings.MusicInClips = v,

@@ -570,7 +570,7 @@ namespace UltraPuck.Game
                     if (count == 4 && _cards != null && _state.Players.Length > 0)
                     {
                         // the newest cards, so their faces get looked at
-                        var ids = new[] { "ultrapuck.friendlyfire", "ultrapuck.swap", "ultrapuck.portalgun", "ultrapuck.stonewall" };
+                        var ids = new[] { "ultrapuck.momentum", "ultrapuck.loyal", "ultrapuck.portalgun", "ultrapuck.stonewall" };
                         var offer = new List<int>();
                         foreach (var id in ids) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                         _state.Players[0].Offer = offer.ToArray();
@@ -580,6 +580,33 @@ namespace UltraPuck.Game
                     GoMainMenu();
                     yield return new WaitForSecondsRealtime(0.5f);
                 }
+            }
+
+            if (want("cardfx"))
+            {
+                // the animated finishes (borealis, rainbow), put on two cards for this run only (not saved), at two moments
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                _sim.T.CardsOffered = 4;
+                yield return new WaitForSecondsRealtime(0.8f);
+                var fx = new[] { "ultrapuck.momentum", "ultrapuck.loyal" };
+                var was = new string[fx.Length];
+                for (var k = 0; k < fx.Length; k++) { var c = _cards != null ? _cards.ById(fx[k]) : null; if (c != null) { was[k] = c.Finish; c.Finish = k == 0 ? "borealis" : "rainbow"; } }
+                PickACard();
+                if (_cards != null && _state.Players.Length > 0)
+                {
+                    var offer = new List<int>();
+                    foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.loyal", "ultrapuck.portalgun", "ultrapuck.stonewall" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                    _state.Players[0].Offer = offer.ToArray();
+                }
+                yield return new WaitForSecondsRealtime(2.2f);
+                yield return Shot("cardfx-1");
+                yield return new WaitForSecondsRealtime(2.5f);
+                yield return Shot("cardfx-2");
+                for (var k = 0; k < fx.Length; k++) { var c = _cards != null ? _cards.ById(fx[k]) : null; if (c != null) c.Finish = was[k]; }
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
             }
 
             if (want("samedraw"))
@@ -2751,7 +2778,7 @@ namespace UltraPuck.Game
         // what the match looked like the last time its sounds were worked out
         private int _heardTick = int.MinValue;
         private Phase _heardPhase;
-        private int _heardCount;
+        private int _heardCount, _heardKnocks;
         private float _heardMovingAt;
         private readonly List<int> _heardHits = new List<int>(), _heardShots = new List<int>(), _heardSwaps = new List<int>();
         private readonly List<float> _heardDashes = new List<float>();
@@ -2805,6 +2832,12 @@ namespace UltraPuck.Game
                 // the big checks (the ones with lightning) get the heavy sound; light bumps a soft thud
                 if (hit >= 0.75f) Sound.Play(Sfx.BigHit, Mathf.Lerp(0.8f, 1f, (hit - 0.75f) / 0.25f), Random.Range(0.95f, 1.05f), Pan(hitAt));
                 else if (hit > 0.1f) Sound.Play(Sfx.Hit, Mathf.Lerp(0.25f, 0.85f, hit / 0.75f), Mathf.Lerp(1.2f, 0.92f, hit / 0.75f) * Random.Range(0.96f, 1.04f), Pan(hitAt));
+                // the puck off the boards: higher and louder the faster it was going
+                if (s.PuckKnocks > _heardKnocks && _sim != null)
+                {
+                    var v = s.PuckKnockSpeed.ToFloat();
+                    if (v > 3f) Sound.Bounce((v - 3f) / Mathf.Max(1f, _sim.T.ChargedShotMax.ToFloat() - 3f), Pan(V.Of(s.PuckPos)));
+                }
                 if (s.Phase == Phase.Scored && _heardPhase != Phase.Scored) Sound.Play(Sfx.Goal, 0.55f, 1f, Pan(V.Of(s.PuckPos))); // it's a long, thick sound: at full level it drowned everything else
             }
 
@@ -2832,6 +2865,7 @@ namespace UltraPuck.Game
 
             _heardTick = s.Tick;
             _heardPhase = s.Phase;
+            _heardKnocks = s.PuckKnocks;
             _heardHits.Clear(); _heardShots.Clear(); _heardDashes.Clear(); _heardSwaps.Clear();
             foreach (var p in s.Players)
             {
@@ -3058,7 +3092,7 @@ namespace UltraPuck.Game
                 Sound.Play(Sfx.RageUp, 0.3f, Random.Range(0.97f, 1.03f), Pan(pos));
                 _shake = Mathf.Max(_shake, 0.3f);
             }
-            if (pb.OutTime > Fix.Zero && IsLocalPerson(i)) _hud.OutCountdown = Mathf.Max(_hud.OutCountdown, pb.OutTime.ToFloat());
+            if (pb.OutTime > Fix.Zero && !pb.Swallowed && IsLocalPerson(i)) _hud.OutCountdown = Mathf.Max(_hud.OutCountdown, pb.OutTime.ToFloat());
             _seenLaunches[i] = pb.Launches;
             _seenRespawns[i] = pb.Respawns;
             _seenRaging[i] = raging;
@@ -3139,6 +3173,7 @@ namespace UltraPuck.Game
                 var flown = outNow ? (_sim.T.RespawnTime - pb.OutTime).ToFloat() * LaunchSpeed : 0f;
                 var flight = outNow ? (V.Of(pb.OutAt) - V.Of(pb.OutFrom)).magnitude + 4f : 0f;
                 if (outNow) pos = V.Of(pb.OutFrom) + V.Of(pb.OutDir) * flown;
+                if (outNow && pb.Swallowed) flight = 0f; // swallowed by a Black Hole: just gone
                 _players[i].Out = outNow;
                 if (_players[i].Root.activeSelf != (!outNow || flown < flight)) _players[i].Root.SetActive(!outNow || flown < flight);
                 KnockOutEffects(i, pa, pb, pos, radius, t);

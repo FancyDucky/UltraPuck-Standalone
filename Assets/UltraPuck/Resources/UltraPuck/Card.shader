@@ -9,7 +9,10 @@
 //             5 neon (the frame becomes a glowing tube in its colour that hums and flickers; body only),
 //             6 aurora (green / violet curtains of light), 7 molten (glowing cracks that pulse), 8 glitch (bands tear sideways, outline and
 //             frame included; colour split, coloured blocks, scan lines), 9 glass (see-through, bright edges, a light
-//             streak; the picture shows faintly)
+//             streak; the picture shows faintly), 10 borealis (soft coloured glows drifting, turning and swelling
+//             behind the card's things, on deep blue), 11 rainbow (a rainbow gradient drifting back and forth, with a
+//             fine diagonal holographic grating over it). 10 and 11 replace the card's own fill (body only; the
+//             picture, text and frame stay); _FxSpeed, _FxBright, _FxSat, _FxFoil (11's grating) and _FxPhase tune them.
 //   _Glare    a soft light streak and hotspot that move opposite the tilt, like light on a glossy card
 //   _Sparkle  tiny glints that twinkle as the card moves
 //   _Sweep    a bright band of light crossing the card (its position; animated from C#), _SweepStrength how bright
@@ -32,6 +35,11 @@ Shader "UltraPuck/Card"
         _Poly ("Polychrome finish", Range(0,1)) = 0
         _Special ("Special finish (1-9)", Float) = 0
         _SpecialAmt ("Special finish strength", Range(0,1)) = 0
+        _FxSpeed ("Animated finish speed", Float) = 1
+        _FxBright ("Animated finish brightness", Float) = 1
+        _FxSat ("Animated finish saturation", Float) = 1
+        _FxFoil ("Animated finish foil (grating)", Range(0,2)) = 1
+        _FxPhase ("Animated finish phase (seconds)", Float) = 0
         _Glare ("Glare", Range(0,1)) = 0.35
         _Sparkle ("Sparkle", Range(0,1)) = 0
         _Tilt ("Tilt (x, y)", Vector) = (0,0,0,0)
@@ -61,6 +69,7 @@ Shader "UltraPuck/Card"
             fixed4 _Color, _Color2, _BorderColor;
             float4 _Size, _Tilt;
             float _Border, _Foil, _Pearl, _Metal, _Poly, _Special, _SpecialAmt, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
+            float _FxSpeed, _FxBright, _FxSat, _FxFoil, _FxPhase;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
 
@@ -118,6 +127,85 @@ Shader "UltraPuck/Card"
                 float dot1 = exp(-dot(f, f) * (1350.0 / sc));
                 float rays = (exp(-abs(f.x) * 90.0) * exp(-abs(f.y) * 9.0) + exp(-abs(f.y) * 90.0) * exp(-abs(f.x) * 9.0)) * step(0.97, r);
                 return step(th, r) * tw * (dot1 + rays * 0.25);
+            }
+
+            float3 Hex(float r, float g, float b) { return float3(r, g, b) / 255.0; }
+            // CSS ease-in-out between the two ends of an "alternate" animation that takes `half` seconds each way
+            float PingPong(float half)
+            {
+                float k = (_Time.y * _FxSpeed + _FxPhase) / half;
+                float x = 1.0 - abs(frac(k * 0.5) * 2.0 - 1.0);
+                return x * x * (3.0 - 2.0 * x);
+            }
+            float3 Grade(float3 col)
+            {
+                float l = dot(col, float3(0.299, 0.587, 0.114));
+                return max(0.0, lerp(float3(l, l, l), col, _FxSat)) * _FxBright;
+            }
+            // radial-gradient(ellipse at c, col, transparent r): the ellipse's size is the farthest corner's (CSS)
+            float3 Glow(float3 under, float2 u, float2 c, float3 col, float r)
+            {
+                float2 e = max(c, 1.0 - c) * 1.41421;
+                float dn = length((u - c) / e) / r;
+                float w = saturate(1.0 - dn);
+                w = w * w * (3.0 - 2.0 * w); // softened edge (the CSS blur)
+                return lerp(under, col, w);
+            }
+
+            // BOREALIS: four soft glows on deep blue, on a layer 45% bigger than the card on every side that turns
+            // (-25 to 55 degrees), swells (0.9 to 1.15) and drifts, 4 s each way
+            float3 Borealis(float2 uv)
+            {
+                float a = PingPong(4.0);
+                float2 card = _Size.xy;
+                float2 pc = (uv - 0.5) * card;
+                pc.y = -pc.y; // CSS: y down
+                float ang = radians(lerp(-25.0, 55.0, a));
+                float sc = lerp(0.9, 1.15, a);
+                float2 layer = card * 1.9;
+                float2 tr = lerp(float2(-0.06, 0.05), float2(0.07, -0.05), a) * layer;
+                // undo rotate(ang) scale(sc) translate(tr): rotate back, unscale, untranslate
+                float cs = cos(ang), sn = sin(ang);
+                float2 l = float2(cs * pc.x + sn * pc.y, -sn * pc.x + cs * pc.y) / sc - tr;
+                float2 u = l / layer + 0.5; // 0..1 across the layer, y down
+                float3 col = Hex(7, 21, 44);
+                col = Glow(col, u, float2(0.70, 0.70), Hex(255, 122, 201), 0.30);
+                col = Glow(col, u, float2(0.40, 0.65), Hex(19, 158, 255), 0.35);
+                col = Glow(col, u, float2(0.65, 0.40), Hex(142, 92, 255), 0.35);
+                col = Glow(col, u, float2(0.30, 0.40), Hex(83, 255, 216), 0.30);
+                return Grade(col);
+            }
+
+            // RAINBOW: a 110-degree rainbow gradient on a background four times the card's size, drifting from its
+            // corner to (100%, 85%), 5 s each way; then a fine 120-degree grating overlaid like holographic foil
+            float3 Rainbow(float2 uv)
+            {
+                float a = PingPong(5.0);
+                float2 css = float2(uv.x, 1.0 - uv.y); // 0..1, y down
+                float2 b = (css + 3.0 * a * float2(1.0, 0.85)) / 4.0; // where on the big background this spot is
+                float2 box = _Size.xy * 4.0;
+                float2 pnt = (b - 0.5) * box;
+                float th = radians(110.0);
+                float2 dir = float2(sin(th), -cos(th));
+                float len = abs(box.x * sin(th)) + abs(box.y * cos(th));
+                float g = saturate(dot(pnt, dir) / len + 0.5) * 6.0;
+                float3 c0 = Hex(255, 82, 124), c1 = Hex(251, 233, 154), c2 = Hex(79, 239, 181), c3 = Hex(75, 200, 255),
+                       c4 = Hex(164, 119, 255), c5 = Hex(255, 82, 124), c6 = Hex(255, 232, 155);
+                float f = frac(g);
+                float3 col = g < 1.0 ? lerp(c0, c1, f) : g < 2.0 ? lerp(c1, c2, f) : g < 3.0 ? lerp(c2, c3, f)
+                           : g < 4.0 ? lerp(c3, c4, f) : g < 5.0 ? lerp(c4, c5, f) : lerp(c5, c6, saturate(g - 5.0));
+                // the grating: 8 "px" stripes (a card is about 250 px wide), dark with a bright line, overlay-blended
+                float px = 250.0 / _Size.x;
+                float2 cp = css * _Size.xy * px;
+                float th2 = radians(120.0);
+                float s = fmod(dot(cp, float2(sin(th2), -cos(th2))) + 800.0, 8.0);
+                float4 st = s < 2.0 ? float4(0, 0, 0, 0.133)
+                          : s < 3.0 ? lerp(float4(0, 0, 0, 0.133), float4(1, 1, 1, 0.533), s - 2.0)
+                          : s < 4.0 ? lerp(float4(1, 1, 1, 0.533), float4(0, 0, 0, 0.133), s - 3.0)
+                          : float4(0, 0, 0, 0.133);
+                float3 over = lerp(2.0 * col * st.rgb, 1.0 - 2.0 * (1.0 - col) * (1.0 - st.rgb), step(0.5, col));
+                col = lerp(col, over, saturate(st.a * _FxFoil));
+                return Grade(col);
             }
 
             fixed4 frag(v2f i) : SV_Target
@@ -333,6 +421,11 @@ Shader "UltraPuck/Card"
                         c.rgb = lerp(c.rgb, c.rgb * 0.6 + tint * 0.25, amt * 0.6);
                         c.rgb += tint * (fres * 0.22 + streak * 0.12) * amt;
                         glass = lerp(1.0, saturate(0.1 + fres * 0.45 + streak * 0.12 + frame * 0.5 + lum * 0.6), amt);
+                    }
+                    else if (id == 10 || id == 11) // borealis / rainbow: an animated fill in place of the card's own
+                    {
+                        float3 fill = id == 10 ? Borealis(uv) : Rainbow(uv);
+                        c.rgb = lerp(c.rgb, fill, amt * inside);
                     }
                 }
 

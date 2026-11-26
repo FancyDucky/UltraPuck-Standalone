@@ -191,7 +191,10 @@ namespace UltraPuck.Tests
         [Test]
         public void TeamVoteBotsFollowHumanMajority()
         {
-            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3, CardsOff = OneATeamOff() }, _lib);
+            // (and none of the cards that hand out more cards: the last card held has to be the one picked)
+            var off = new System.Collections.Generic.List<int>(OneATeamOff());
+            foreach (var id in new[] { "ultrapuck.doublecard", "ultrapuck.choose", "ultrapuck.newhand" }) off.Add(_lib.ById(id).Index);
+            var sim = new Simulation(Rink(), new Tuning { TeamVote = true, CardsOffered = 3, CardsOff = off.ToArray() }, _lib);
             var s = sim.NewGame(new[] { 0, 0, 0, 1 }, 11u);
             s.Players[1].Bot = true;
             s.Players[2].Bot = true;
@@ -545,6 +548,157 @@ namespace UltraPuck.Tests
             Play(plain);
             CheckInto(plain);
             Assert.AreEqual(Fix.Zero, plain.Players[0].RageFill);
+        }
+
+        /// <summary>Player 0's shot sent straight up from the middle at 40 u/s (players out of the way): its speed 5 s later.</summary>
+        private double SpeedLater(int cards)
+        {
+            var s = Game(0, 1);
+            var hand = new string[cards];
+            for (var k = 0; k < cards; k++) hand[k] = "ultrapuck.momentum";
+            if (cards > 0) Give(s, 0, hand);
+            Play(s);
+            s.Players[0].Pos = At(-10, 0); s.Players[1].Pos = At(10, 0);
+            s.Carrier = -1; s.PassFrom = 0;
+            s.PuckPos = At(0, 0); s.PuckVel = new FixVec2(Fix.Zero, Fix.FromInt(40)); s.ShotSpeed = Fix.FromInt(40);
+            for (var t = 0; t < 600; t++) _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            return s.PuckVel.Length.ToDouble();
+        }
+
+        /// <summary>Once it's in, the puck is gone: it stops where it went in, no more bounces (sounds) and no more ice being laid.</summary>
+        [Test]
+        public void ThePuckIsGoneOnceItsAGoal()
+        {
+            var s = Game(0, 1);
+            Play(s);
+            var g = _sim.Map.Goals.Find(x => x.Team == 1);
+            var mid = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
+            var toward = mid.X < Fix.Zero ? -Fix.One : Fix.One;
+            s.Players[0].Pos = At(0, 7); s.Players[1].Pos = At(0, -7);
+            s.Carrier = -1; s.PassFrom = 0; s.PuckTeam = 0;
+            s.PuckPos = new FixVec2(mid.X - toward * Fix.FromInt(5), mid.Y);
+            s.PuckVel = new FixVec2(toward * Fix.FromInt(40), Fix.Zero);
+            s.IceLaying = Fix.FromInt(3);
+            for (var t = 0; t < 120 && s.Phase == Phase.Play; t++) _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(Phase.Scored, s.Phase, "scored");
+            var at = s.PuckPos; var knocks = s.PuckKnocks;
+            for (var t = 0; t < 60; t++) _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(at, s.PuckPos, "stopped where it went in");
+            Assert.AreEqual(knocks, s.PuckKnocks, "no more bounces");
+            Assert.AreEqual(0.0, s.IceLaying.ToDouble(), "no more ice laid");
+        }
+
+        /// <summary>A Black Hole goal swallows the players it pulls in (gone, not flown out of the rink); a plain goal doesn't.</summary>
+        [Test]
+        public void ABlackHoleSwallowsPlayersWhoReachIt()
+        {
+            foreach (var hole in new[] { true, false })
+            {
+                var s = Game(0, 1);
+                Play(s);
+                var g = _sim.Map.Goals.Find(x => x.Team == 1);
+                var mid = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
+                var toward = mid.X < Fix.Zero ? -Fix.One : Fix.One;
+                s.Players[0].Pos = At(0, 7);
+                s.Players[1].Pos = new FixVec2(mid.X - toward * Fix.FromInt(4), mid.Y + Fix.FromInt(2));
+                s.Carrier = -1; s.PassFrom = 0; s.PuckTeam = 0;
+                s.PuckPos = new FixVec2(mid.X - toward * Fix.FromInt(5), mid.Y);
+                s.PuckVel = new FixVec2(toward * Fix.FromInt(40), Fix.Zero);
+                var look = new PlayerInput { Look = hole ? PlayerInput.LookPull : (byte)0 };
+                for (var t = 0; t < 120 && s.Phase == Phase.Play; t++) _sim.Step(s, new[] { look, default(PlayerInput) });
+                Assert.AreEqual(Phase.Scored, s.Phase, "scored");
+                var launches = s.Players[1].Launches;
+                for (var t = 0; t < 90; t++) _sim.Step(s, new[] { look, default(PlayerInput) });
+                var p = s.Players[1];
+                if (hole)
+                {
+                    Assert.IsTrue(p.Swallowed && p.OutTime > Fix.Zero, "swallowed");
+                    Assert.AreEqual(launches, p.Launches, "not a launch out of the rink");
+                }
+                else Assert.IsFalse(p.Swallowed || p.OutTime > Fix.Zero, "a plain goal leaves them be");
+                for (var t = 0; t < 600 && s.Phase != Phase.Play; t++) _sim.Step(s, new[] { look, default(PlayerInput) });
+                Assert.IsFalse(s.Players[1].Swallowed || s.Players[1].OutTime > Fix.Zero, "back for the face-off");
+            }
+        }
+
+        /// <summary>The puck's wall bounces are counted for their sound, with the speed going in.</summary>
+        [Test]
+        public void PuckBouncesAreCountedForTheirSound()
+        {
+            var s = Game(0, 1);
+            Play(s);
+            s.Players[0].Pos = At(-10, 0); s.Players[1].Pos = At(10, 0);
+            s.Carrier = -1; s.PassFrom = -1;
+            s.PuckPos = At(0, 0); s.PuckVel = new FixVec2(Fix.Zero, Fix.FromInt(40));
+            var knocks = s.PuckKnocks;
+            for (var t = 0; t < 240 && s.PuckKnocks == knocks; t++) _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(knocks + 1, s.PuckKnocks, "one bounce");
+            Assert.Greater(s.PuckKnockSpeed.ToDouble(), 20.0, "going in fast");
+        }
+
+        /// <summary>MOMENTUM: the shot never slows below 33% of its speed per card (bar the moment of a wall bounce).</summary>
+        [Test]
+        public void MomentumKeepsAShareOfTheShotsSpeed()
+        {
+            var plain = SpeedLater(0);
+            var one = SpeedLater(1);
+            var three = SpeedLater(3);
+            Assert.Less(plain, 40 * 0.33 * 0.8, "slows right down without the card");
+            Assert.GreaterOrEqual(one, 40 * 0.33 * 0.8, "one card: about a third");
+            Assert.LessOrEqual(one, 40 * 0.33 * 1.05, "one card: but no more");
+            Assert.GreaterOrEqual(three, 40 * 0.99 * 0.8, "three cards: nearly all of it");
+        }
+
+        /// <summary>LOYAL: your own shot goes into your own net without counting (without the card it's a goal for the other team).</summary>
+        [Test]
+        public void LoyalShotsDontGoInYourOwnNet()
+        {
+            foreach (var loyal in new[] { true, false })
+            {
+                var s = Game(0, 1);
+                if (loyal) Give(s, 0, "ultrapuck.loyal");
+                Play(s);
+                var g = _sim.Map.Goals.Find(x => x.Team == 0);
+                var mid = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
+                var toward = mid.X < Fix.Zero ? -Fix.One : Fix.One; // the way to that net from the middle
+                s.Players[0].Pos = At(0, 7); s.Players[1].Pos = At(3, 7);
+                s.Carrier = -1; s.PassFrom = 0;
+                s.PuckPos = new FixVec2(mid.X - toward * Fix.FromInt(4), mid.Y);
+                s.PuckVel = new FixVec2(toward * Fix.FromInt(40), Fix.Zero);
+                var wentIn = false;
+                for (var t = 0; t < 120 && s.Phase == Phase.Play; t++)
+                {
+                    _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) });
+                    if (g.Touches(s.PuckPos, Fix.Zero)) wentIn = true;
+                }
+                if (loyal)
+                {
+                    Assert.IsTrue(wentIn, "the puck goes into the net");
+                    Assert.AreEqual(0, s.Score[0] + s.Score[1], "no own goal");
+                    Assert.AreEqual(Phase.Play, s.Phase);
+                }
+                else Assert.AreEqual(1, s.Score[1], "an own goal without the card");
+            }
+        }
+
+        /// <summary>LOYAL doesn't stop a Cannon Ball: shoved into your own net by the other team's full charge is still their goal.</summary>
+        [Test]
+        public void LoyalStillLetsACannonBallShoveYouIn()
+        {
+            var s = Game(0, 1);
+            Give(s, 1, "ultrapuck.loyal");
+            Play(s);
+            var g = _sim.Map.Goals.Find(x => x.Team == 1);
+            var mid = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
+            var toward = mid.X < Fix.Zero ? -Fix.One : Fix.One;
+            s.Players[0].Pos = At(0, 7);
+            var c = s.Players[1];
+            c.Pos = new FixVec2(mid.X - toward * Fix.FromInt(5), mid.Y);
+            c.Vel = new FixVec2(toward * Fix.FromInt(30), Fix.Zero);
+            c.Shoved = _sim.T.CannonTime; c.ShovedBy = 0;
+            s.Carrier = 1; s.PassFrom = -1;
+            for (var t = 0; t < 120 && s.Phase == Phase.Play; t++) { c.Shoved = _sim.T.CannonTime; _sim.Step(s, new[] { default(PlayerInput), default(PlayerInput) }); }
+            Assert.AreEqual(1, s.Score[0], "the Cannon Ball's goal");
         }
 
         /// <summary>RAGE: a heavier checker fills the meter faster (by weight over yours), a lighter one slower.</summary>

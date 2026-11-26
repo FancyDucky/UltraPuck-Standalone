@@ -481,7 +481,11 @@ namespace UltraPuck.Tests
         [Test]
         public void CountdownWaitsForTheCardsToLeave()
         {
-            var sim = new Simulation(Rink(), null, Cards());
+            // (no cards that hand out more cards: Double Card shows its two before the countdown)
+            var lib = Cards();
+            var off = new System.Collections.Generic.List<int>();
+            foreach (var id in new[] { "ultrapuck.doublecard", "ultrapuck.choose", "ultrapuck.newhand" }) off.Add(lib.ById(id).Index);
+            var sim = new Simulation(Rink(), new Tuning { CardsOff = off.ToArray() }, lib);
             var s = sim.NewGame(new[] { 0, 1 }, 3u);
             s.Phase = Phase.Play;
             sim.StartPicking(s, new[] { 0, 1 });

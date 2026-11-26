@@ -1917,10 +1917,11 @@ namespace UltraPuck.Game
             return v;
         }
 
-        // the shader's special finishes (_Special 1..9, see Card.shader) and how strong each is on the body / the picture
-        private static readonly string[] SpecialNames = { "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass" };
-        private static readonly float[] SpecialBody = { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f };
-        private static readonly float[] SpecialArt = { 0.8f, 0.5f, 0.7f, 0.8f, 0f, 0.6f, 0.5f, 1f, 0.8f };
+        // the shader's special finishes (_Special 1..11, see Card.shader) and how strong each is on the body / the
+        // picture (borealis and rainbow are animated fills behind the picture: never on it)
+        private static readonly string[] SpecialNames = { "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass", "borealis", "rainbow" };
+        private static readonly float[] SpecialBody = { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f };
+        private static readonly float[] SpecialArt = { 0.8f, 0.5f, 0.7f, 0.8f, 0f, 0.6f, 0.5f, 1f, 0.8f, 0f, 0f };
 
         private static void Special(Material m, bool fx, string finish, bool body)
         {

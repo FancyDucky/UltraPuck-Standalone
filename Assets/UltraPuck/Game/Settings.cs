@@ -12,11 +12,11 @@ namespace UltraPuck.Game
 
         public static Window WindowMode
         {
-            get { return (Window)Mathf.Clamp(PlayerPrefs.GetInt("window_mode", (int)Window.Windowed), 0, 2); }
+            get { return (Window)Mathf.Clamp(PlayerPrefs.GetInt("window_mode", (int)Window.Borderless), 0, 2); }
             set { PlayerPrefs.SetInt("window_mode", (int)value); ApplyGraphics(); }
         }
 
-        /// <summary>The screen sizes this monitor offers (biggest first, each once).</summary>
+        /// <summary>The screen sizes this monitor offers (smallest first, each once: left in the menu is lower).</summary>
         public static Vector2Int[] Resolutions()
         {
             var list = new System.Collections.Generic.List<Vector2Int>();
@@ -26,7 +26,7 @@ namespace UltraPuck.Game
                 if (v.x >= 640 && v.y >= 360 && !list.Contains(v)) list.Add(v);
             }
             if (list.Count == 0) list.Add(new Vector2Int(Screen.currentResolution.width, Screen.currentResolution.height));
-            list.Sort((a, b) => b.x != a.x ? b.x.CompareTo(a.x) : b.y.CompareTo(a.y));
+            list.Sort((a, b) => a.x != b.x ? a.x.CompareTo(b.x) : a.y.CompareTo(b.y));
             return list.ToArray();
         }
 
@@ -120,6 +120,19 @@ namespace UltraPuck.Game
         }
 
         /// <summary>The sound effects' share of <see cref="Volume"/>, 0 (off) .. 1.</summary>
+        /// <summary>
+        /// The puck's wall-bounce sound: 0 = none, 1 = the dry snap (Sfx.BounceSnap, the usual one), 2..4 = the toks,
+        /// 5 = the plink, 6..11 = the drum taps A..F.
+        /// </summary>
+        public static int PuckBounceSound
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt("puck_bounce_snap", 1), 0, PuckBounceNames.Length - 1); }
+            set { PlayerPrefs.SetInt("puck_bounce_snap", Mathf.Clamp(value, 0, PuckBounceNames.Length - 1)); }
+        }
+
+        public static readonly string[] PuckBounceNames = { "Off", "Snap", "Tok", "Tok: rounder", "Tok: brighter", "Plink",
+            "Drum A: clean", "Drum B: tight", "Drum C: round", "Drum D: soft click", "Drum E: deep", "Drum F: snappy" };
+
         public static float SoundVolume
         {
             get { return Mathf.Clamp01(PlayerPrefs.GetFloat("sound_volume", 1f)); }
@@ -463,10 +476,10 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("charge_zoom_max", value); }
         }
 
-        /// <summary>The camera follows the action and zooms (on), or always shows the whole rink (off).</summary>
+        /// <summary>The camera follows the action and zooms (on), or always shows the whole rink (off, the default).</summary>
         public static bool FollowCamera
         {
-            get { return PlayerPrefs.GetInt("follow_camera", 1) != 0; }
+            get { return PlayerPrefs.GetInt("follow_camera", 0) != 0; }
             set { PlayerPrefs.SetInt("follow_camera", value ? 1 : 0); }
         }
 

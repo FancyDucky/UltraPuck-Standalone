@@ -217,14 +217,14 @@
       "glare": false,
       "max": 1,
       "color": "#3FA34D",
-      "flavor": "Seven strikes and you're out.",
+      "flavor": "PUCK SMASH",
       "face": [
         { "label": "Checks taken", "value": "[good]7 to rage[/]" },
         { "label": "Size, weight", "value": "[good]x2.5[/]" },
         { "label": "Speed", "value": "[good]+25%[/]" },
         { "label": "Knockback", "value": "[good]x10 for 7 s[/]" }
       ],
-      "text": "[note]3x dash, smashes walls, can launch Featherweights out, no puck. Then 20 s before rage builds again.[/]",
+      "text": "[note]Cannot pick up the puck while enraged.[/]",
       "stats": { "Rage": "+1" }
     },
     {
@@ -394,6 +394,36 @@
       ],
       "text": "[note]Get two random cards from the deck.[/]",
       "stats": { "DoubleCard": "+1" }
+    },
+    {
+      "id": "ultrapuck.momentum",
+      "name": "Momentum",
+      "tier": "B",
+      "finish": "polychrome",
+      "glare": false,
+      "color": "#FF8A3D",
+      "flavor": "An object in motion...",
+      "face": [
+        { "label": "Your shots keep", "value": "[good]+33% speed[/]" }
+      ],
+      "text": "[note]Your shot never slows below 33% of the speed you shot it at. Each card adds 33%.[/]",
+      "stats": { "Momentum": "+1" }
+    },
+    {
+      "id": "ultrapuck.loyal",
+      "name": "Loyal",
+      "tier": "C",
+      "finish": "borealis",
+      "glare": false,
+      "textBoxes": true,
+      "max": 1,
+      "color": "#E6C34A",
+      "flavor": "Never against my own.",
+      "face": [
+        { "label": "Own goals", "value": "[good]None[/]" }
+      ],
+      "text": "[note]Your shots can go in your own net without counting. A Cannon Ball shoving you in still does.[/]",
+      "stats": { "Loyal": "+1" }
     }
   ]
 }

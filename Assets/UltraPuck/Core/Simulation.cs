@@ -566,7 +566,7 @@ namespace UltraPuck.Core
                 p.GunCooldown = Fix.Zero; p.InvisCooldown = Fix.Zero; p.InvisibleTime = Fix.Zero; p.ShockCooldown = Fix.Zero; p.ShockHold = Fix.Zero;
                 p.SlowTime = Fix.Zero; p.HeldBy = -1; p.HeldTime = Fix.Zero; p.TossTime = Fix.Zero;
                 p.FastTime = Fix.Zero; p.Shoved = Fix.Zero; p.ShovedBy = -1;
-                p.OutTime = Fix.Zero; p.RespawnTime = Fix.Zero; // knocked out: back for the face-off
+                p.OutTime = Fix.Zero; p.RespawnTime = Fix.Zero; p.Swallowed = false; // knocked out: back for the face-off
             }
             s.PuckPos = Map.PuckSpot;
             s.PuckVel = FixVec2.Zero;
@@ -575,6 +575,7 @@ namespace UltraPuck.Core
             s.PassFrom = -1;
             s.TeamTouch0 = -1; s.TeamTouch1 = -1;
             s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1; s.CannonTeam = -1;
+            s.HoleTime = Fix.Zero;
             s.Shots = new Shot[0];
             s.Ice = new IcePoint[0];
             s.IceLaying = Fix.Zero;
@@ -929,6 +930,7 @@ namespace UltraPuck.Core
             s.PuckTeam = -1;
             s.PassFrom = -1;
             StopLaying(s, false);
+            s.HoleTime = Fix.Zero;
             foreach (var p in s.Players) { p.Charge = Fix.Zero; p.NoPickup = Fix.Zero; }
         }
 
@@ -1197,7 +1199,10 @@ namespace UltraPuck.Core
 
             // the puck slows down on its own
             s.PuckVel -= s.PuckVel * Fix.Min(Fix.One, T.PuckDrag * dt);
+            Momentum(s);
             s.PuckVel = s.PuckVel.ClampLength(T.PuckMaxSpeed);
+
+            if (s.HoleTime > Fix.Zero) Swallow(s, dt);
 
             if (s.Phase == Phase.Scored)
             {
@@ -1573,6 +1578,7 @@ namespace UltraPuck.Core
             s.PuckVel = p.Facing * speed + p.Vel * Fix.Half;
             s.PuckTeam = p.Team;
             s.PassFrom = i; // a pass, if a teammate gets it before an opponent touches it
+            s.ShotSpeed = s.PuckVel.Length; // (Momentum: the least it slows down to is a share of this)
             // noted for the sound side: a shot, and how hard next to a fully charged one
             p.ShotsFired++;
             p.ShotStrength = Fix.Clamp01(speed / T.ChargedShotMax);
@@ -1821,6 +1827,7 @@ namespace UltraPuck.Core
 
         private void MovePuck(GameState s, Fix sub)
         {
+            if (s.Phase == Phase.Scored) { s.PuckVel = FixVec2.Zero; return; } // gone into the net: nothing moves it
             if (s.Carrier >= 0)
             {
                 var c = s.Players[s.Carrier];
@@ -1873,10 +1880,13 @@ namespace UltraPuck.Core
                 // never through a wall: if the step crossed one, stop just before it and bounce
                 var hit = FirstWallHit(from, s.PuckPos);
                 if (hit < Fix.One) s.PuckPos = from;
+                var was = s.PuckVel;
                 CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
                 if (hit < Fix.One && FixVec2.Dot(s.PuckVel, s.PuckPos - from) >= Fix.Zero) s.PuckVel = -s.PuckVel * T.PuckWallBounce;
                 CollidePylons(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
                 if (s.Stones.Length > 0) CollideStones(s, ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
+                // a real bounce (not just sliding along a wall): the puck's speed changed by more than 2 u/s (for its sound)
+                if ((s.PuckVel - was).SqrLength > Fix.FromInt(4)) { s.PuckKnocks++; s.PuckKnockSpeed = was.Length; }
             }
             KeepPuckIn(s, before);
 
@@ -2177,6 +2187,20 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
+        /// MOMENTUM: while it's the loose shot of a player holding Momentum, the puck doesn't slow below 33% (per card,
+        /// up to all) of the speed it was shot at. Ends once someone has the puck or the other team touches it.
+        /// </summary>
+        private void Momentum(GameState s)
+        {
+            if (s.Carrier >= 0 || s.PassFrom < 0 || s.PassFrom >= s.Players.Length) { s.ShotSpeed = Fix.Zero; return; }
+            var cards = s.Players[s.PassFrom].Stats.Momentum;
+            if (cards <= 0 || s.ShotSpeed <= Fix.Zero) return;
+            var least = s.ShotSpeed * Fix.Min(Fix.One, Fix.Ratio(T.MomentumPercent * cards, 100));
+            var now = s.PuckVel.Length;
+            if (now > Fix.Zero && now < least) s.PuckVel = s.PuckVel * (least / now);
+        }
+
+        /// <summary>
         /// The safety net: if the puck ever ends up outside the rink (or its centre inside a wall), put it back where it
         /// was and send it back the way it came.
         /// </summary>
@@ -2210,6 +2234,10 @@ namespace UltraPuck.Core
                 // a defender may carry the puck into their own net (it's safe while they hold it); let it go in there
                 // and it's a goal for the other team
                 if (s.Carrier >= 0 && s.Players[s.Carrier].Team == g.Team) continue;
+                // LOYAL: a loose shot of a player holding it can go into their own net without counting (until someone
+                // else touches it). A Cannon Ball shoving them in still counts (that's the check above).
+                if (s.Carrier < 0 && s.PassFrom >= 0 && s.PassFrom < s.Players.Length
+                    && s.Players[s.PassFrom].Team == g.Team && s.Players[s.PassFrom].Stats.Loyal > 0) continue;
                 Goal(s, 1 - g.Team, -1);
                 return;
             }
@@ -2246,7 +2274,13 @@ namespace UltraPuck.Core
                 s.Touch1 = -1; s.Touch2 = -1;
                 s.TeamTouch0 = -1; s.TeamTouch1 = -1;
                 var blastAt = s.PuckPos;
-                if (s.Carrier >= 0) { s.PuckVel = s.Players[s.Carrier].Vel; s.Carrier = -1; }
+                // the puck is gone (until the face-off): it stops where it went in, and anything it was doing ends
+                if (s.Carrier >= 0) s.Carrier = -1;
+                s.PuckVel = FixVec2.Zero;
+                s.ShotSpeed = Fix.Zero;
+                StopLaying(s, false);
+                s.StoneLaying = Fix.Zero;
+                s.PuckHidden = Fix.Zero; s.PuckHiddenTeam = -1; s.CannonTeam = -1;
                 s.Phase = Phase.Scored;
                 s.PhaseTime = T.CelebrateTime;
                 foreach (var p in s.Players) p.SkipVote = false;
@@ -2254,6 +2288,7 @@ namespace UltraPuck.Core
                 // with the Black Hole look pulls them in instead, a little more gently
                 var pull = s.LastGoalBy >= 0 && s.Players[s.LastGoalBy].GoalPull;
                 BlastFrom(s, blastAt, T.GoalBlastRange, T.DashKnockback * T.GoalBlastPush * (pull ? Fix.Ratio(3, 5) : Fix.One), -1, true, false, true, false, pull);
+                if (pull) { s.HoleAt = blastAt; s.HoleTime = T.HoleTime; }
             }
         }
 
@@ -2775,6 +2810,29 @@ namespace UltraPuck.Core
             p.Shoved = Fix.Zero; p.ShovedBy = -1; p.TossTime = Fix.Zero;
         }
 
+        /// <summary>
+        /// BLACK HOLE goal: anyone it has pulled in to its middle is gone (out until the face-off, or a respawn in free
+        /// play), with no flight out of the rink.
+        /// </summary>
+        private void Swallow(GameState s, Fix dt)
+        {
+            s.HoleTime -= dt;
+            if (s.HoleTime <= Fix.Zero) { s.HoleTime = Fix.Zero; return; }
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var p = s.Players[i];
+                if (p.OutTime > Fix.Zero) continue;
+                var reach = T.HoleReach + RadiusOf(p);
+                if ((p.Pos - s.HoleAt).SqrLength > reach * reach) continue;
+                var toward = s.HoleAt - p.Pos;
+                KnockOut(s, i, s.HoleAt, toward.SqrLength.Raw > 0 ? toward.Normalized : p.Facing);
+                p.Launches--; // (not a launch: no blast at the boards)
+                p.Swallowed = true;
+                p.OutFrom = s.HoleAt;
+                p.OutTime = Fix.Max(s.PhaseTime, Fix.Half); // back as play goes on (the face-off brings them back anyway)
+            }
+        }
+
         /// <summary>Back from a knock-out: at their own spot of their team's face-off group, in a pillar of light.</summary>
         private void Respawn(GameState s, int i)
         {
@@ -2786,6 +2844,7 @@ namespace UltraPuck.Core
             p.Facing = sp.Facing;
             p.Vel = FixVec2.Zero;
             p.OutTime = Fix.Zero;
+            p.Swallowed = false;
             p.RespawnTime = T.RespawnShow;
             p.Respawns++;
             p.DashCharge = MaxDashes(p);
@@ -3460,6 +3519,7 @@ namespace UltraPuck.Core
         /// </summary>
         private void BouncePuckAndRocks(GameState s)
         {
+            if (s.Phase == Phase.Scored) return; // the puck is gone
             for (var k = 0; k < s.Rocks.Length; k++)
             {
                 var rk = s.Rocks[k];

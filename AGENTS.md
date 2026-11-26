@@ -85,6 +85,51 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.72, not released (yet) (Claude, 25 Nov 2026): **Momentum and Loyal cards; resolution arrows.**
+  MOMENTUM (`Stats.Momentum`, no max): while the loose puck is the shot of a player holding it (`s.PassFrom`), it
+  never slows below `Tuning.MomentumPercent` (33) % x cards (capped at 100%) of the speed it was shot at
+  (`GameState.ShotSpeed`, set in `Shoot`, cleared once someone has the puck; `Simulation.Momentum`, run right after
+  drag). The other team touching it ends it (PassFrom goes -1). (This replaced a short-lived Ricochet card with
+  1-600% / bounce-limit tuning sliders, never released.) LOYAL (`Stats.Loyal`, max 1): while the loose puck is their
+  shot, it can go into their own net without counting (`CheckGoal` skips that net; it counts again once someone else
+  touches it, since PassFrom changes). A Cannon Ball shoving them in is still a goal (its check comes first). Card art from the owner (`Cards/Art/ultrapuck.momentum.jpg`,
+  `ultrapuck.loyal.jpg`); card text/tier/colour in `ultrapuck.json` are first guesses. Two seed-dependent tests now
+  keep Double Card, Choose and New Hand out of their decks (adding cards changed what those seeds draw). Resolution
+  list is now smallest first (left = lower, right = higher) and the row stops at each end. **NetSession.Version 90.**
+  Tests: `MomentumKeepsAShareOfTheShotsSpeed`, `LoyalShotsDontGoInYourOwnNet`, `LoyalStillLetsACannonBallShoveYouIn`.
+  PUCK BOUNCE SOUND: the sim counts the loose puck's real wall/pylon/Stone Wall bounces (`GameState.PuckKnocks`,
+  speed going in `PuckKnockSpeed`, in the hash); `GameRunner.MatchSounds` plays `Sound.Bounce` for each, an octave
+  lower and quieter for a slow puck (3 u/s .. ChargedShotMax). The default is a dry snap (`Sfx.BounceSnap`:
+  a 40 ms 1500 Hz triangle tick + a noise click), picked by the owner after trying a wooden tok (`Sfx.BounceTok`,
+  `SoundBank.Tok`, also rounder / brighter), a pure sine plink (`Sfx.BouncePlink`) and six bass-drum taps
+  (`Sfx.BounceA..F`, `SoundBank.Kick`), all still choices: Sound settings "Puck bounce" (`Settings.PuckBounceSound`,
+  pref `puck_bounce_snap`: 0 = Off, 1 snap, 2..4 toks, 5 plink, 6..11 drums), each choice plays as it's picked. AUDIO LATENCY: `ProjectSettings/AudioManager.asset` DSP buffer is now
+  256 ("best latency", was 1024) so sounds land closer to what's on screen (the owner heard bounces late); the log
+  says the buffer and its delay at start-up. If anyone reports crackling, try 512.
+  DASH PREVIEW (Profile > Edit character): picking another trail starts a fresh dash at once; the player is drawn at
+  radius 0.75 (was 1.5) and goes as far for its size as a real dash (`DashReach`: dash speed under the coasting drag,
+  then the usual drag, about 9 player widths), with the same slowing-down curve.
+  GOAL = PUCK GONE: `Simulation.Goal` stops the puck where it went in (vel 0, ShotSpeed 0), ends Ice Trail laying,
+  Stone Wall laying, Invisible Shot and Cannon Ball; `MovePuck` / `BouncePuckAndRocks` leave it alone while
+  Phase.Scored (no bounce sounds, nothing pushes it). BLACK HOLE goals now swallow: `GameState.HoleAt/HoleTime`
+  (Tuning.HoleTime 1.7 s, as long as it's drawn), `Simulation.Swallow` knocks out anyone within `Tuning.HoleReach`
+  (1.2) + their radius of it, marked `PlayerState.Swallowed` (no launch blast or flight, no out countdown; drawn as
+  just gone), out for the rest of the celebration (the face-off / a free-play respawn brings them back). Tests:
+  `ThePuckIsGoneOnceItsAGoal`, `ABlackHoleSwallowsPlayersWhoReachIt`.
+  NEW DEFAULTS: camera shows the whole rink (`Settings.FollowCamera` default off), window Borderless
+  (`Settings.WindowMode`; `BuildScript.Prepare` sets PlayerSettings.fullScreenMode to FullScreenWindow for the first
+  frame: edit it there, Unity rewrites ProjectSettings.asset), resolution
+  stays the monitor's own (0,0). Only people who never changed these get the new defaults.
+  ANIMATED FINISHES "borealis" and "rainbow" (card file "finish", `CardDef.FinishNames`; Card.shader `_Special` 10 /
+  11, from CSS the owner brought from ChatGPT): an animated fill in place of the card body's own colour, never on the
+  picture (`SpecialArt` 0), text and frame on top as before. Borealis: four soft radial glows on #07152c on a layer
+  1.9x the card that turns -25..55 deg, scales 0.9..1.15 and drifts, 4 s each way (8 s loop). Rainbow: a 110 deg
+  7-stop gradient on a 4x background drifting to (100%, 85%), 5 s each way (10 s loop), with a 120 deg 8 px
+  holographic grating overlay-blended on top. Smooth falloffs stand in for the CSS blur; no textures. Tunable per
+  material: `_FxSpeed`, `_FxBright`, `_FxSat`, `_FxFoil` (grating), `_FxPhase` (all default 1 / 0, nothing sets
+  them yet). Settings > Card effects off = the plain card (as for every finish). They use `_Time` like the other
+  finishes (the game never changes Time.timeScale). Screenshots: `cardfx-1` / `cardfx-2` (put them on Momentum and
+  Loyal for that run only). Test: `PuckBouncesAreCountedForTheirSound`. Screenshots: `cards-4` shows both cards.
 - 0.1.72 (Claude, 25 Nov 2026): **smooth scrubbing on long replays.** Dragging along the
   replay time bar decoded a whole 120-frame chunk (~90 ms) whenever the mouse reached a chunk not in the 6-chunk
   cache (on a long match nearly every move), and did it for every GUI event, several a frame. Now the drag only sets

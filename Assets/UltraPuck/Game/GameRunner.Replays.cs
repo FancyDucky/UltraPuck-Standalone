@@ -91,7 +91,22 @@ namespace UltraPuck.Game
         private GameObject _dashDim;
         private float _dashClock, _dashTrailAcc, _dashDimShown;
         private int _dashShownStyle = -1;
-        private const float DashPreviewRadius = 1.5f, DashEvery = 2f, DashFor = 0.4f, DashAcross = 6f;
+        // the player at 1.5x their size in a match, going as far for their size as a real dash does (about 9 widths)
+        private const float DashPreviewRadius = 0.75f, DashEvery = 2f, DashFor = 0.4f;
+        private float DashAcross { get { return _sim != null ? DashReach() / _sim.T.PlayerRadius.ToFloat() * DashPreviewRadius : 6.9f; } }
+
+        /// <summary>
+        /// How far a dash from standing has gone after <paramref name="t"/> seconds: the dash speed, slowed by the lighter
+        /// coasting drag and then the usual one (as in a match). No time: the whole way.
+        /// </summary>
+        private float DashReach(float t = 99f)
+        {
+            var tu = _sim.T;
+            float v = tu.DashSpeed.ToFloat(), coast = tu.DashCoast.ToFloat(), d1 = tu.DashCoastDrag.ToFloat(), d2 = tu.Drag.ToFloat();
+            if (t <= coast) return v / d1 * (1f - Mathf.Exp(-d1 * t));
+            var left = v * Mathf.Exp(-d1 * coast);
+            return v / d1 * (1f - Mathf.Exp(-d1 * coast)) + left / d2 * (1f - Mathf.Exp(-d2 * (t - coast)));
+        }
         private const int DashPreviewOrder = 60;
 
         private void DashPreview()
@@ -113,16 +128,23 @@ namespace UltraPuck.Game
             if (_dashView.Root.activeSelf != on) _dashView.Root.SetActive(on);
             if (!on) { _dashFx.Clear(); _dashClock = 0f; return; }
             // another trail picked: the old one's bits go at once
-            if (Cosmetics.MyDash != _dashShownStyle) { _dashFx.Clear(); _dashShownStyle = Cosmetics.MyDash; }
+            // (and it dashes again straight away, so each style is seen as it's picked)
+            if (Cosmetics.MyDash != _dashShownStyle)
+            {
+                _dashFx.Clear();
+                if (_dashShownStyle >= 0) _dashClock = (Mathf.Floor(_dashClock / DashEvery) + 1f) * DashEvery;
+                _dashShownStyle = Cosmetics.MyDash;
+            }
             // across and back: a dash every couple of seconds, each the other way
             _dashClock += Clock.Dt;
             var round = Mathf.FloorToInt(_dashClock / DashEvery);
             var t = _dashClock - round * DashEvery;
             var right = round % 2 == 0;
             var dir = right ? Vector2.right : Vector2.left;
-            var from = PreviewSpot() + Vector2.up * 1.5f + dir * (-DashAcross / 2f);
-            var k = Ui.EaseOut(Mathf.Clamp01(t / DashFor));
-            var pos = from + dir * (DashAcross * k);
+            var across = DashAcross;
+            var from = PreviewSpot() + Vector2.up * 1.5f + dir * (-across / 2f);
+            var k = _sim != null ? DashReach(t) / DashReach() : Ui.EaseOut(Mathf.Clamp01(t / DashFor));
+            var pos = from + dir * (across * k);
             var dash = t < DashFor ? 1f - t / DashFor : 0f;
             var team = Palette.Team(0);
             _dashView.DashColour = Cosmetics.DashTint(Cosmetics.MyDash, team);

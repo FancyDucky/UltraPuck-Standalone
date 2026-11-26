@@ -154,6 +154,8 @@ namespace UltraPuck.Core
         public int SlotMachine;
         /// <summary>RAGE: checks you take fill a meter; full, you rage (bigger, heavier, faster, harder) for a while.</summary>
         public int Rage;
+        /// <summary>Momentum: your shot doesn't slow below 33% of its speed (per card). Loyal: your shot into your own net bounces out (no own goal).</summary>
+        public int Momentum, Loyal;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
@@ -167,7 +169,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
             GameState.Mix(ref h, Swap); GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
-            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine); GameState.Mix(ref h, Rage);
+            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine); GameState.Mix(ref h, Rage); GameState.Mix(ref h, Momentum); GameState.Mix(ref h, Loyal);
         }
     }
 
@@ -327,6 +329,8 @@ namespace UltraPuck.Core
         public Fix OutTime, RespawnTime;
         public FixVec2 OutAt, OutDir, OutFrom;
         public int Launches, Respawns;
+        /// <summary>Out because a Black Hole goal swallowed them (gone where it is, no flight out of the rink).</summary>
+        public bool Swallowed;
 
         public PlayerState Clone()
         {
@@ -528,6 +532,17 @@ namespace UltraPuck.Core
         /// its usual speed. Starts from the match rules.
         /// </summary>
         public int KnockPercent;
+        /// <summary>Momentum: the speed the loose puck was shot at (zero once someone has it).</summary>
+        public Fix ShotSpeed;
+        /// <summary>
+        /// Noted for the sound side: how many times the loose puck has bounced off a wall, a pylon or a Stone Wall, and
+        /// how fast it was going into the latest one.
+        /// </summary>
+        public int PuckKnocks;
+        public Fix PuckKnockSpeed;
+        /// <summary>A Black Hole goal: where it is, and how long it keeps swallowing anyone who reaches it.</summary>
+        public FixVec2 HoleAt;
+        public Fix HoleTime;
 
         public GameState Clone()
         {
@@ -567,7 +582,7 @@ namespace UltraPuck.Core
             foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); Mix(ref h, rk.Life); Mix(ref h, rk.PortalVia); }
             foreach (var po in Portals) { Mix(ref h, po.Pos); Mix(ref h, po.Normal); Mix(ref h, po.Owner); Mix(ref h, po.Colour); Mix(ref h, po.Wall); Mix(ref h, po.At); Mix(ref h, po.Uses); Mix(ref h, po.Id); }
             foreach (var sh in PortalShots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); Mix(ref h, sh.Kind); }
-            Mix(ref h, PortalsMade); Mix(ref h, PuckPortal); Mix(ref h, CarryOn ? 1 : 0); Mix(ref h, CarryPercent); Mix(ref h, KnockPercent);
+            Mix(ref h, PortalsMade); Mix(ref h, PuckPortal); Mix(ref h, CarryOn ? 1 : 0); Mix(ref h, CarryPercent); Mix(ref h, KnockPercent); Mix(ref h, ShotSpeed); Mix(ref h, PuckKnocks); Mix(ref h, PuckKnockSpeed); Mix(ref h, HoleAt); Mix(ref h, HoleTime);
             Mix(ref h, IceLaying); Mix(ref h, IceAge); Mix(ref h, IceTrails);
             Mix(ref h, CannonFrom); Mix(ref h, StoneLaying); Mix(ref h, StoneLeft); Mix(ref h, StoneTip); Mix(ref h, StoneDir); Mix(ref h, StoneWalls);
             foreach (var st in Stones) { Mix(ref h, st.A); Mix(ref h, st.B); Mix(ref h, st.Life); Mix(ref h, st.Wall); }
@@ -596,7 +611,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.SlotSpin); Mix(ref h, p.SlotWin); Mix(ref h, p.SlotReels); Mix(ref h, p.SlotSpins); Mix(ref h, p.SlotPrize);
                 Mix(ref h, p.SlotPrizeTime); Mix(ref h, p.SlotWait);
                 Mix(ref h, p.RageFill); Mix(ref h, p.RageNeed); Mix(ref h, p.RageTime); Mix(ref h, p.RageCooldown);
-                Mix(ref h, p.OutTime); Mix(ref h, p.RespawnTime); Mix(ref h, p.OutAt); Mix(ref h, p.OutDir); Mix(ref h, p.OutFrom); Mix(ref h, p.Launches); Mix(ref h, p.Respawns);
+                Mix(ref h, p.OutTime); Mix(ref h, p.RespawnTime); Mix(ref h, p.OutAt); Mix(ref h, p.OutDir); Mix(ref h, p.OutFrom); Mix(ref h, p.Launches); Mix(ref h, p.Respawns); Mix(ref h, p.Swallowed ? 1 : 0);
             }
             return h;
         }

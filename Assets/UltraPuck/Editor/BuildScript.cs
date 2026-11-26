@@ -117,7 +117,9 @@ namespace UltraPuck.Editor
             PlayerSettings.productName = "Ultra Puck";
             // Mono, not IL2CPP: mods can then be loaded as ordinary C# DLLs
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.Mono2x);
-            PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
+            // borderless at the monitor's own size from the first frame (Settings.WindowMode's default; 1280x720 is for windowed)
+            PlayerSettings.fullScreenMode = FullScreenMode.FullScreenWindow;
+            PlayerSettings.defaultIsNativeResolution = true;
             PlayerSettings.defaultScreenWidth = 1280;
             PlayerSettings.defaultScreenHeight = 720;
             PlayerSettings.resizableWindow = true;

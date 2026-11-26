@@ -26,6 +26,14 @@ namespace UltraPuck.Game
         Launch,
         /// <summary>Coming back: a rising shimmer of bells as the pillar of light comes down.</summary>
         Respawn,
+        /// <summary>The puck bouncing off a wall: six clean bass-drum taps to choose from (Sound settings), played lower and quieter for a slower puck.</summary>
+        BounceA, BounceB, BounceC, BounceD, BounceE, BounceF,
+        /// <summary>The puck bouncing off a wall: a clean high sine plink.</summary>
+        BouncePlink,
+        /// <summary>The puck bouncing off a wall (the usual one): a short wooden "tok"; a rounder and a brighter one too.</summary>
+        BounceTok, BounceTokRound, BounceTokBright,
+        /// <summary>The puck bouncing off a wall (the usual one): a tiny dry snap, a very short high tick.</summary>
+        BounceSnap,
     }
 
     /// <summary>
@@ -310,6 +318,33 @@ namespace UltraPuck.Game
                     Reverb(s, 0.35f);
                     break;
 
+                // a clean bass-drum tap: one sine whose pitch drops quickly, a smooth decay
+                case Sfx.BounceA: s = Kick(210f, 120f, 0.02f, 48f, 0.1f, 0f, 0f); break;   // clean
+                case Sfx.BounceB: s = Kick(190f, 260f, 0.012f, 60f, 0.08f, 0f, 0f); break; // tight
+                case Sfx.BounceC: s = Kick(170f, 110f, 0.03f, 34f, 0.14f, 0f, 0f); break;  // round
+                case Sfx.BounceD: s = Kick(200f, 160f, 0.015f, 50f, 0.1f, 0.25f, 0f); break; // a soft click on top
+                case Sfx.BounceE: s = Kick(150f, 140f, 0.02f, 38f, 0.14f, 0f, 0.35f); break; // deep, a sub under it
+                case Sfx.BounceF: s = Kick(260f, 300f, 0.01f, 64f, 0.08f, 0f, 0f); break;  // snappy, higher
+
+                // a short wooden tok: a sine that snaps down a little at once, a tiny click on the front
+                case Sfx.BounceTok: s = Tok(620f, 180f, 55f, 0.07f, 0.25f, 4000f, 0.2f, 2.3f); break;
+                case Sfx.BounceTokRound: s = Tok(520f, 120f, 45f, 0.08f, 0.12f, 3000f, 0f, 2f); break;
+                case Sfx.BounceTokBright: s = Tok(760f, 220f, 65f, 0.06f, 0.3f, 5000f, 0.25f, 2f); break;
+
+                case Sfx.BounceSnap:
+                    // a very short high tick (triangle) with a click of bright noise on the front
+                    s = New(0.045f); // (a hair of quiet after it)
+                    Tone(s, 0f, 0.04f, 1f, Wave.Triangle, t => 1500f, t => Pluck(t, 0.0003f, 140f));
+                    Noise(s, 0f, 0.015f, 0.5f, t => 8000f, 0f, t => Pluck(t, 0.0002f, 500f), 37u);
+                    break;
+
+                case Sfx.BouncePlink:
+                    // a clean high plink: a pure sine (C7) with a quiet octave over it
+                    s = New(0.22f);
+                    Tone(s, 0f, 0.22f, 1f, Wave.Sine, t => 2093f, t => Pluck(t, 0.001f, 28f));
+                    Tone(s, 0f, 0.22f, 0.15f, Wave.Sine, t => 4186f, t => Pluck(t, 0.001f, 45f));
+                    break;
+
                 default:
                     throw new ArgumentOutOfRangeException("id");
             }
@@ -321,6 +356,35 @@ namespace UltraPuck.Game
         // ------------------------------------------------------------------ building blocks
 
         private static float[] New(float seconds) { return new float[Mathf.RoundToInt(seconds * Rate)]; }
+
+        /// <summary>
+        /// A bass-drum tap: a sine from <paramref name="hz"/> + <paramref name="bend"/> dropping to <paramref name="hz"/>
+        /// (most of the way in <paramref name="bendTime"/> s), with an optional beater click and a sub an octave down.
+        /// </summary>
+        /// <summary>
+        /// A wooden tok: a sine from <paramref name="hz"/> + <paramref name="bend"/> snapping down to <paramref name="hz"/>,
+        /// an overtone at <paramref name="overRatio"/> times it, and a click of noise at the very start.
+        /// </summary>
+        private static float[] Tok(float hz, float bend, float decay, float seconds, float click, float lowpass, float over, float overRatio)
+        {
+            var s = New(seconds);
+            Curve pitch = t => hz + bend * Mathf.Exp(-t / 0.006f);
+            Tone(s, 0f, seconds, 1f, Wave.Sine, pitch, t => Pluck(t, 0.0008f, decay));
+            if (over > 0f) Tone(s, 0f, seconds, over, Wave.Sine, t => pitch(t) * overRatio, t => Pluck(t, 0.0008f, decay * 1.8f));
+            if (click > 0f) Noise(s, 0f, Mathf.Min(seconds, 0.015f), click, t => 6000f, 0f, t => Pluck(t, 0.0002f, 600f), 31u);
+            Lowpass(s, lowpass);
+            return s;
+        }
+
+        private static float[] Kick(float hz, float bend, float bendTime, float decay, float seconds, float click, float sub)
+        {
+            var s = New(seconds);
+            Tone(s, 0f, seconds, 1f, Wave.Sine, t => hz + bend * Mathf.Exp(-t / bendTime), t => Pluck(t, 0.0015f, decay));
+            if (sub > 0f) Tone(s, 0f, seconds, sub, Wave.Sine, t => hz * 0.5f, t => Pluck(t, 0.003f, decay * 0.6f));
+            if (click > 0f) Tone(s, 0f, Mathf.Min(seconds, 0.02f), click, Wave.Sine, t => 1800f, t => Pluck(t, 0.0003f, 400f));
+            Lowpass(s, 2500f);
+            return s;
+        }
         private static float Sq(float x) { x = Mathf.Clamp01(x); return x * x; }
 
         // the dash whoosh passes by at this moment (seconds in)
@@ -668,6 +732,10 @@ namespace UltraPuck.Game
             Debug.Log("Ultra Puck: music: " + (_theme != null ? "theme " + _theme.Name + " (" + Mathf.RoundToInt(theme.length) + " s)" : "no theme (Resources/" + ThemePath + ")") +
                 "; " + (_songs.Count > 0 ? _songs.Count + " match songs: " + string.Join(", ", names.ToArray()) : "no match songs (Resources/" + SongsPath + ")"));
 
+            int bufLen, bufCount;
+            AudioSettings.GetDSPBufferSize(out bufLen, out bufCount);
+            Debug.Log("Ultra Puck: audio buffer " + bufLen + " x " + bufCount + " at " + AudioSettings.outputSampleRate + " Hz (about " +
+                Mathf.RoundToInt(1000f * bufLen * bufCount / Mathf.Max(1, AudioSettings.outputSampleRate)) + " ms)");
             Debug.Log("Ultra Puck: sound ready, " + ids.Length + " effects" + (replaced.Count > 0 ? " (from files: " + string.Join(", ", replaced.ToArray()) + ")" : "") +
                 ", volume " + (Master * 100f).ToString("0.##") + "%" + (_fixedVolume >= 0f ? " (screenshot mode; the saved setting is " + Mathf.RoundToInt(Settings.Volume * 100f) + "%)" : ""));
         }
@@ -719,6 +787,19 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Moving the highlight in a menu.</summary>
+        /// <summary>
+        /// The puck bouncing off a wall, with the sound chosen in Sound settings (none if it's off). <paramref name="hard"/>:
+        /// 0 for a slow puck (an octave lower and quieter) .. 1 for a hard shot.
+        /// </summary>
+        public static void Bounce(float hard, float pan, int which = -1)
+        {
+            if (which < 0) which = Settings.PuckBounceSound;
+            if (which <= 0 || which >= Settings.PuckBounceNames.Length) return;
+            hard = Mathf.Clamp01(hard);
+            var id = which == 1 ? Sfx.BounceSnap : which <= 4 ? Sfx.BounceTok + (which - 2) : which == 5 ? Sfx.BouncePlink : Sfx.BounceA + (which - 6);
+            Play(id, Mathf.Lerp(0.3f, 0.85f, hard), Mathf.Lerp(0.5f, 1f, hard), pan, 0.03f);
+        }
+
         public static void Move() { Play(Sfx.UiMove, 0.4f, 1f, 0f, 0.03f); }
         /// <summary>Changing a value left or right (a touch higher for more, lower for less).</summary>
         public static void Step(int direction) { Play(Sfx.UiMove, 0.4f, direction > 0 ? 1.19f : direction < 0 ? 0.84f : 1f, 0f, 0.03f); }

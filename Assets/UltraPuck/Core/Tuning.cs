@@ -99,6 +99,11 @@ namespace UltraPuck.Core
         /// <see cref="KnockLooseSpeed"/> (0..500).
         /// </summary>
         public int KnockAwayPercent = 100;
+        /// <summary>
+        /// Momentum: each card the shooter holds keeps this % of the shot's starting speed as the least the puck slows
+        /// down to (up to all of it), until someone gets the puck or the other team touches it.
+        /// </summary>
+        public int MomentumPercent = 33;
         /// <summary>Team Play: after a clean pass the passer and the teammate are this much faster (0.8 = 80%) for this long.</summary>
         public Fix PassSpeedBoost = Fix.Ratio(5, 10), PassSpeedTime = Fix.FromInt(3);
         /// <summary>
@@ -150,6 +155,8 @@ namespace UltraPuck.Core
         public Fix ShockFullPush = Fix.Ratio(7, 2);
         /// <summary>Goal explosion: shove everyone (and loose rocks) away from the puck; reach in world units, push as a share of a check's knockback.</summary>
         public Fix GoalBlastRange = Fix.FromInt(12), GoalBlastPush = Fix.FromInt(3);
+        /// <summary>A Black Hole goal swallows anyone within this of its middle (counted from their edge) for this long (as long as it's drawn).</summary>
+        public Fix HoleReach = Fix.Ratio(6, 5), HoleTime = Fix.Ratio(17, 10);
         /// <summary>
         /// Ice Trail: the puck lays ice for up to <see cref="IceTime"/>. The start of the trail lasts
         /// <see cref="IceLife"/>, then the melting creeps along it <see cref="IceMeltPace"/> times slower than it was
