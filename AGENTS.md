@@ -85,7 +85,7 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.73, not released (yet) (Claude, 25 Nov 2026): **card text outline.** Card file `"textOutline": true`
+- 0.1.74 (Claude, 25 Nov 2026): **card text outline.** Card file `"textOutline": true`
   (`CardDef.TextOutline`; card editor checkbox "Text outline", previewed there as an 8-way CSS text-shadow) gives
   each piece of the card's text a thin dark outline: eight black copies nudged round it (`CardScreen.TextOutline`,
   width scales with the text size, colour tags stripped, kept in step with its text in `Apply`, sorting order +4).
