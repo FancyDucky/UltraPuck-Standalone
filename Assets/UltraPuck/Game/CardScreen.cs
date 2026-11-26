@@ -1691,6 +1691,22 @@ namespace UltraPuck.Game
             }
         }
 
+        /// <summary>"textShadow" cards: a dark copy of a piece of text, a little down and to the right of it (kept in step with it).</summary>
+        private sealed class TextShadow
+        {
+            public TextMesh Src, Dst;
+            public Renderer R;
+            private string _was;
+            private static readonly System.Text.RegularExpressions.Regex Colours = new System.Text.RegularExpressions.Regex("</?color[^>]*>");
+
+            public void Sync()
+            {
+                if (Src.text == _was) return;
+                _was = Src.text;
+                Dst.text = Colours.Replace(Src.text, ""); // its own colour tags would show through the shadow's black
+            }
+        }
+
         private sealed class CardView
         {
             public Transform Root, Tilt;
@@ -1719,6 +1735,7 @@ namespace UltraPuck.Game
             public bool Rare;
             /// <summary>"textBoxes" cards: a snug black box behind each piece of text.</summary>
             public readonly List<TextBox> TextBoxes = new List<TextBox>();
+            public readonly List<TextShadow> Shadows = new List<TextShadow>();
             public float SweepAt = -10f, NextSweep, GlowBoost, GlowTarget, MoteTimer;
             public bool Landed;
             /// <summary>Has left the deck (its deal sound has played).</summary>
@@ -1749,6 +1766,7 @@ namespace UltraPuck.Game
                 var front = Vector3.Dot(Tilt.forward, cam.transform.forward) > 0f;
                 for (var k = 0; k < Front.Count; k++) { Front[k].enabled = front; Front[k].sortingOrder = order + FrontOrder[k]; }
                 foreach (var r in Texts) { r.enabled = front; r.sortingOrder = order + 5; }
+                foreach (var s in Shadows) { s.Sync(); s.R.enabled = front; s.R.sortingOrder = order + 4; } // over any text box (3), under the text
                 foreach (var r in Back) { r.enabled = !front; r.sortingOrder = order + 1; }
                 foreach (var r in BackTexts) { r.enabled = !front; r.sortingOrder = order + 5; }
                 // the finishes follow the tilt (and a little of the movement), like light on a real card
@@ -1897,11 +1915,27 @@ namespace UltraPuck.Game
             if (def.TextBoxes)
                 foreach (var t in v.Texts)
                 {
-                    var m = Part(v, "TextBox", Vector2.one, Vector3.zero, 4, 0.035f);
+                    var m = Part(v, "TextBox", Vector2.one, Vector3.zero, 3, 0.035f);
                     m.SetColor("_Color", new Color(0f, 0f, 0f, 0.85f));
                     m.SetColor("_Color2", new Color(0f, 0f, 0f, 0.85f));
                     m.SetFloat("_Glare", 0f);
                     v.TextBoxes.Add(new TextBox { Text = t, Box = v.Tilt.GetChild(v.Tilt.childCount - 1), Mat = m });
+                }
+
+            // "textShadow": a soft dark drop shadow under each piece of text (easier to read over a bright finish)
+            if (def.TextShadow)
+                foreach (var t in new List<Renderer>(v.Texts))
+                {
+                    var src = t.GetComponent<TextMesh>();
+                    if (src == null) continue;
+                    var shadows = new List<Renderer>();
+                    var dst = Text(v, "", src.transform.localPosition + new Vector3(0.011f, -0.011f, 0.0003f), src.fontSize, src.characterSize,
+                        new Color(0f, 0f, 0f, 0.8f), src.fontStyle, src.anchor, shadows);
+                    dst.alignment = src.alignment;
+                    dst.lineSpacing = src.lineSpacing;
+                    var sh = new TextShadow { Src = src, Dst = dst, R = shadows[0] };
+                    sh.Sync();
+                    v.Shadows.Add(sh);
                 }
 
             // the back: dark with the game's name

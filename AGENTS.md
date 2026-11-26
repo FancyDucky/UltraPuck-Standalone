@@ -85,6 +85,11 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.73, not released (yet) (Claude, 25 Nov 2026): **card text drop shadow.** Card file `"textShadow": true`
+  (`CardDef.TextShadow`; card editor checkbox "Text shadow", previewed there as a CSS text-shadow) gives each piece of
+  the card's text a dark copy 0.011 down-right (`CardScreen.TextShadow`, colour tags stripped, kept in step with its
+  text in `Apply`, sorting order +4). Text boxes moved to order +3 so a card can have both (shadow over the box,
+  under the text). Screenshot `cardfx-1` puts it on Momentum for that run.
 - 0.1.73 (Claude, 25 Nov 2026): **Momentum and Loyal cards; resolution arrows; puck bounce sound; goal removes the puck; Black Hole swallows; borealis / rainbow finishes; new display defaults.**
   MOMENTUM (`Stats.Momentum`, no max): while the loose puck is the shot of a player holding it (`s.PassFrom`), it
   never slows below `Tuning.MomentumPercent` (33) % x cards (capped at 100%) of the speed it was shot at

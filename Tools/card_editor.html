@@ -42,6 +42,7 @@
   .face { padding:0 9px; font-size:12px; }
   .face div { display:flex; justify-content:space-between; gap:6px; }
   .text { padding:4px 9px; font-size:11.5px; }
+  .inner.shadowed .title, .inner.shadowed .flavor, .inner.shadowed .face, .inner.shadowed .text { text-shadow:1px 1px 1px rgba(0,0,0,.85); }
   .tags { position:absolute; bottom:8px; right:10px; font-size:10px; color:var(--dim); }
   .good { color:var(--good); } .bad { color:var(--bad); } .note { color:var(--note); } .gold { color:var(--gold); }
 </style>
@@ -62,7 +63,7 @@
 
 <script>
 const TIER = { S:'#F5C442', A:'#BA8CFF', B:'#5CA8F5', C:'#6BD68A', D:'#A1A1A1', F:'#C27A59' };
-const ORDER = ['id','name','tier','finish','glare','textBoxes','max','maxTeam','minTeam','requires','noBots','art','color','flavor','face','text','stats'];
+const ORDER = ['id','name','tier','finish','glare','textBoxes','textShadow','max','maxTeam','minTeam','requires','noBots','art','color','flavor','face','text','stats'];
 let cards = [], stats = [], finishes = [], art = [], version = '', sel = -1, dirty = false;
 
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -84,7 +85,7 @@ function cardHtml(c, i) {
   const tags = [c.max ? 'max ' + c.max : '', c.maxTeam ? 'team max ' + c.maxTeam : '', c.minTeam ? 'team of ' + c.minTeam + '+' : '',
                 c.noBots ? 'no bots' : '', c.requires ? 'needs ' + c.requires.replace(/^ultrapuck\./,'') : ''].filter(Boolean).join(' · ');
   return `<div class="card${i === sel ? ' sel' : ''}" style="--accent:${esc(accent)};background:linear-gradient(150deg,${frame},#333 55%,${frame})" onclick="pick(${i})">
-    <div class="inner">
+    <div class="inner${c.textShadow ? ' shadowed' : ''}">
       <div class="title"><span style="color:${esc(accent)}">${esc(c.name || '?')}</span><span class="tier" style="background:${frame}">${esc(tier)}</span></div>
       <div class="art" style="${f ? `background-image:url('/art/${encodeURIComponent(f)}')` : ''}">${f ? '' : 'no art: ' + esc(c.art || c.id)}</div>
       ${c.flavor ? `<div class="flavor">${markup(c.flavor)}</div>` : '<div style="height:8px"></div>'}
@@ -145,6 +146,7 @@ function form() {
     <div class="nums">${num('max', 'Max each')}${num('maxTeam', 'Max a team')}${num('minTeam', 'Team size')}
       <div><label class="f">Glare</label><input type="checkbox" style="width:auto" ${c.glare === false ? '' : 'checked'} onchange="setField('glare', this.checked ? '' : false)"></div>
       <div><label class="f">Text boxes</label><input type="checkbox" style="width:auto" ${c.textBoxes ? 'checked' : ''} onchange="setField('textBoxes', this.checked)"></div>
+      <div><label class="f">Text shadow</label><input type="checkbox" style="width:auto" ${c.textShadow ? 'checked' : ''} onchange="setField('textShadow', this.checked)"></div>
       <div><label class="f">No bots</label><input type="checkbox" style="width:auto" ${c.noBots ? 'checked' : ''} onchange="setField('noBots', this.checked)"></div></div>
     <label class="f">Accent colour</label>
     <div class="row"><input type="color" value="${esc(c.color || '#888888')}" oninput="setField('color', this.value.toUpperCase()); this.nextElementSibling.value = this.value.toUpperCase()" style="flex:0 0 44px;padding:0;height:30px">
