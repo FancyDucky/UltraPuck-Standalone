@@ -3092,9 +3092,9 @@ namespace UltraPuck.Tests
             Assert.Contains(Id("ultrapuck.doubledash"), s.Players[1].Cards, "not outvoted: each picks their own from the deck");
         }
 
-        /// <summary>Two teammates both taking Choose in one pick: Swap (one a team) is in only one of their decks.</summary>
+        /// <summary>Two teammates both taking Choose in one pick: a one-a-team card (Swap, Portal Gun) is in only one of their decks.</summary>
         [Test]
-        public void TeammatesBothChoosingOnlyOneCanTakeSwap([Values(1u, 2u, 3u, 4u, 5u, 6u)] uint seed)
+        public void TeammatesBothChoosingOnlyOneCanTakeSwap([Values(1u, 2u, 3u, 4u, 5u, 6u)] uint seed, [Values("ultrapuck.swap", "ultrapuck.portalgun")] string card)
         {
             var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3 }, _lib);
             var s = sim.NewGame(new[] { 0, 0, 1 }, seed, new[] { false, false, true });
@@ -3104,10 +3104,10 @@ namespace UltraPuck.Tests
             sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 }, default(PlayerInput) });
             Assert.AreEqual(1, s.Players[0].PickKind);
             Assert.AreEqual(1, s.Players[1].PickKind);
-            var swap = Id("ultrapuck.swap");
+            var swap = Id(card);
             var with = 0;
             foreach (var i in new[] { 0, 1 }) if (System.Array.IndexOf(s.Players[i].Offer, swap) >= 0) with++;
-            Assert.AreEqual(1, with, "Swap in one deck, not both");
+            Assert.AreEqual(1, with, card + " in one deck, not both");
             // and taking it from there works
             var who = System.Array.IndexOf(s.Players[0].Offer, swap) >= 0 ? 0 : 1;
             var inputs = new PlayerInput[3];
@@ -3126,7 +3126,7 @@ namespace UltraPuck.Tests
         /// goes on.
         /// </summary>
         [Test]
-        public void ChooseAndDoubleCardTogether([Values(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u)] uint seed)
+        public void ChooseAndDoubleCardTogether([Values(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u)] uint seed, [Values("ultrapuck.swap", "ultrapuck.portalgun")] string card)
         {
             var sim = new Simulation(Rink(), new Tuning { CardsOffered = 5 }, _lib);
             var s = sim.NewGame(new[] { 0, 1, 0, 1 }, seed);
@@ -3136,7 +3136,7 @@ namespace UltraPuck.Tests
             var inputs = new PlayerInput[4];
             inputs[1].Pick = 1; inputs[3].Pick = 2;
             sim.Step(s, inputs);
-            var swap = Id("ultrapuck.swap");
+            var swap = Id(card);
             Assert.AreEqual(Phase.Picking, s.Phase, "the Choose deck is next");
             Assert.AreEqual(1, s.Players[1].PickKind);
             Assert.AreEqual(2, s.Players[3].Gifts.Length, "Double Card's two cards");
@@ -3152,7 +3152,7 @@ namespace UltraPuck.Tests
             Assert.AreEqual(2, s.Players[1].Cards.Length);
             var holders = 0;
             foreach (var i in new[] { 1, 3 }) if (System.Array.IndexOf(s.Players[i].Cards, swap) >= 0) holders++;
-            Assert.LessOrEqual(holders, 1, "one Swap a team");
+            Assert.LessOrEqual(holders, 1, "one " + card + " a team");
             var ticks = 0;
             for (; ticks < 120 * 30 && s.Phase != Phase.Play; ticks++) sim.Step(s, new PlayerInput[4]);
             Assert.AreEqual(Phase.Play, s.Phase, "the match goes on (" + ticks + " ticks, " + s.PhaseTime.ToDouble() + " s left)");
