@@ -87,6 +87,11 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 27 Nov 2026): **a card the mouse leaves goes back to its own size.** Every card screen (pick,
+  team vote, free play's editor, the card list): when the mouse has moved and is no longer over the card it raised,
+  that card drops back (`CardScreen.MouseOver` / `MouseLeft`, `_mouseOff` for this screen only), but stays the one
+  Enter / a button acts on. Moving with the keyboard or a controller, or the mouse coming back, raises it again; a
+  new screen starts raised. Display only, no rules change.
 - unreleased (Claude, 27 Nov 2026): **chaos glitch over the text (picture only); pure black card setting.** The
   chaos overlay is now drawn over the text (order 6). In the text area it only draws the picture's own pixels: some
   twitch frames the picture slips down 0.05-0.22 (`drop`) over the top of the title, and torn bands of the picture

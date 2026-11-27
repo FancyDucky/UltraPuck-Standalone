@@ -47,6 +47,26 @@ namespace UltraPuck.Game
         private Stage _stage = Stage.Idle;
         private int _slot = -1, _focus, _chosen = -1;
         private float _stageAt, _lastHover;
+        /// <summary>
+        /// The mouse moved off the card it had raised (<see cref="_mouseCard"/>), on this screen (<see cref="_mouseOffStage"/>):
+        /// that card goes back to its own size until the mouse comes back or the keyboard / a controller moves.
+        /// The card stays the one a key or button acts on.
+        /// </summary>
+        private bool _mouseOff;
+        private int _mouseCard = -1;
+        private float _mouseOffStage = -1f;
+
+        /// <summary>After the mouse has moved: is it still over card <paramref name="k"/> (which it raised)?</summary>
+        private void MouseOver(int k, Vector2 mp)
+        {
+            if (!Ui.MouseMovedNow || k < 0 || k >= _cards.Count) return;
+            _mouseCard = k;
+            _mouseOff = !ScreenRect(_cards[k]).Contains(mp);
+            _mouseOffStage = _stageAt;
+        }
+
+        /// <summary>Is card <paramref name="k"/> back to its own size because the mouse left it?</summary>
+        private bool MouseLeft(int k) { return _mouseOff && _mouseOffStage == _stageAt && k == _mouseCard; }
         private int _testStep;
         private GameState _state;
 
@@ -473,6 +493,7 @@ namespace UltraPuck.Game
                 {
                     var to = Mathf.Clamp(focus + m.X, 0, _cards.Count - 1);
                     if (to != focus) { _cursors[player] = to; Sound.Move(); }
+                    if (n == 0) _mouseOff = false;
                 }
                 // mouse: the first local voter still choosing steers with it (keyboard players especially)
                 if (n == 0)
@@ -484,6 +505,7 @@ namespace UltraPuck.Game
                         for (var k = 0; k < _cards.Count; k++)
                             if (ScreenRect(_cards[k]).Contains(mp)) { if (k != focus) { _cursors[player] = k; focus = k; Sound.Move(); _lastHover = Time.unscaledTime; } break; }
                     }
+                    if (mouse != null) MouseOver(focus, mouse.position.ReadValue());
                     if (mouse != null && mouse.leftButton.wasPressedThisFrame && ScreenRect(_cards[_cursors[player]]).Contains(mouse.position.ReadValue()))
                         m.Confirm = true;
                 }
@@ -693,6 +715,7 @@ namespace UltraPuck.Game
                 }
             }
             if (ShotConfirm) { m.Confirm = true; ShotConfirm = false; }
+            if (m.X != 0 || m.Y != 0) _mouseOff = false; // the keyboard / a controller: the focused card is raised again
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, _cards.Count - 1));
             if (_deck && m.Tab != 0) ResizeGrid(m.Tab);
             if (_deck && m.Y != 0)
@@ -716,6 +739,7 @@ namespace UltraPuck.Game
                         if (_deck && (row < 0 || row >= EditRows)) continue; // off-screen rows of the deck
                         if (ScreenRect(_cards[k]).Contains(mp)) { SetFocus(k); _lastHover = Time.unscaledTime; break; }
                     }
+                MouseOver(_focus, mp);
                 if (mouse.leftButton.wasPressedThisFrame && !_miniClick && _bigMini < 0 && ScreenRect(_cards[_focus]).Contains(mp)) m.Confirm = true;
                 var wheel = _deck ? mouse.scroll.ReadValue().y : 0f;
                 // the wheel scrolls the grid (the focus stays where it is)
@@ -833,7 +857,8 @@ namespace UltraPuck.Game
                 }
                 else
                 {
-                    var focused = k == _focus || (_teamVote && CursorOn(k));
+                    // (the mouse moved off it: back to its own size, though it's still the one a key acts on)
+                    var focused = (k == _focus || (_teamVote && CursorOn(k))) && !MouseLeft(k);
                     var bob = Mathf.Sin(t * 1.7f + c.Phase) * 0.06f;
                     tp = c.Home + new Vector3(0f, bob * size + (focused ? 0.25f * size : 0f), focused ? (grid ? -2.2f : -0.9f) : 0f);
                     tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.2f + c.Phase) * 1.8f + c.Fan * (focused ? 0.25f : 1f));
@@ -1513,6 +1538,7 @@ namespace UltraPuck.Game
             foreach (var s in Local.Slots)
                 if (!s.Demo && Local.AnyHeld(s, g => g.buttonNorth.wasPressedThisFrame, k => k.tabKey.wasPressedThisFrame)) next = true;
             if (next && _people.Count > 1) { _who = (_who + 1) % _people.Count; _slot = _people[_who]; foreach (var c in _cards) c.ScaleVel += 1.5f; Sound.Move(); }
+            if (m.X != 0 || m.Y != 0) _mouseOff = false; // the keyboard / a controller: the focused card is raised again
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, EditCount - 1));
             if (m.Y != 0)
             {
@@ -1533,6 +1559,7 @@ namespace UltraPuck.Game
                         if (row < 0 || row >= EditRows || !ScreenRect(_cards[k]).Contains(mp)) continue;
                         SetFocus(k); _lastHover = Time.unscaledTime; break;
                     }
+                MouseOver(_focus, mp);
                 var over = ScreenRect(_cards[_focus]).Contains(mp);
                 if (ready && over && mouse.leftButton.wasPressedThisFrame) EditAdd(_focus, 1);
                 if (ready && over && mouse.rightButton.wasPressedThisFrame) EditAdd(_focus, -1);
@@ -1833,6 +1860,7 @@ namespace UltraPuck.Game
             var ready = Time.unscaledTime - _stageAt > 0.4f;
             if (ready && m.Back) { BrowseClose(); return; }
             if (ready && m.Tab != 0) Resort(m.Tab);
+            if (m.X != 0 || m.Y != 0) _mouseOff = false; // the keyboard / a controller: the focused card is raised again
             if (m.X != 0) SetFocus(Mathf.Clamp(_focus + m.X, 0, EditCount - 1));
             if (m.Y != 0)
             {
@@ -1851,6 +1879,7 @@ namespace UltraPuck.Game
                         if (row < 0 || row >= EditRows || !ScreenRect(_cards[k]).Contains(mp)) continue;
                         SetFocus(k); _lastHover = Time.unscaledTime; break;
                     }
+                MouseOver(_focus, mp);
                 if (ready && mouse.rightButton.wasPressedThisFrame) { BrowseClose(); return; }
                 if (ready && mouse.leftButton.wasPressedThisFrame && new Rect(Ui.W / 2f - 220f, 58f, 440f, 34f).Contains(GuiMouse(mp))) Resort(1);
                 var wheel = mouse.scroll.ReadValue().y;
