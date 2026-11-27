@@ -801,6 +801,55 @@ namespace UltraPuck.Game
                 yield return new WaitForSecondsRealtime(0.5f);
             }
 
+            if (want("chaos"))
+            {
+                // chaos cards: Giant Nets glitching in a pick, in free play's card
+                // editor grid, then held, with both nets twice as wide
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                _sim.T.CardsOffered = 3;
+                yield return new WaitForSecondsRealtime(0.8f);
+                PickACard();
+                var wide = _cards != null ? _cards.ById("ultrapuck.widenets") : null;
+                if (wide != null && _state.Players.Length > 0)
+                {
+                    var offer = new List<int>();
+                    foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.widenets", "ultrapuck.loyal" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                    _state.Players[0].Offer = offer.ToArray();
+                }
+                yield return new WaitForSecondsRealtime(2.2f);
+                // eight moments half a second apart: calm most of the time, a twitch now and then
+                for (var k = 1; k <= 8; k++)
+                {
+                    yield return Shot("chaos-pick-" + k);
+                    yield return new WaitForSecondsRealtime(0.5f);
+                }
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(0.8f);
+                EditCards();
+                yield return new WaitForSecondsRealtime(1.2f);
+                _cardScreen.ShotGrid(3, 999);
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("chaos-editor");
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(2f);
+                yield return Shot("chaos-nets-before");
+                if (wide != null && _state.Players.Length > 0) { _sim.GiveCard(_state, _state.Players[0], wide.Index); _cards.Recompute(_state); }
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("chaos-nets");
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
             if (want("cardfx"))
             {
                 // the animated finishes (borealis, rainbow), put on two cards for this run only (not saved), at two moments
@@ -831,58 +880,6 @@ namespace UltraPuck.Game
                 if (outlineCard != null) outlineCard.TextOutline = hadOutline;
                 GoMainMenu();
                 yield return new WaitForSecondsRealtime(0.5f);
-            if (want("chaos"))
-            {
-                // chaos cards: 2x Goal Size glitching in a pick (three moments, to catch a burst), in free play's card
-                // editor grid, then held, with both nets twice as wide
-                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
-                _mainMenu.Show(MainMenu.Page.None);
-                StartMatch(true);
-                _sim.T.CardsOffered = 3;
-                yield return new WaitForSecondsRealtime(0.8f);
-                PickACard();
-                var wide = _cards != null ? _cards.ById("ultrapuck.widenets") : null;
-                // (no picture of its own yet: borrow one for this run, so the glitch has something to tear)
-                var wideArt = wide != null ? wide.Art : null;
-                if (wide != null && !File.Exists(Path.Combine(Application.streamingAssetsPath, "Cards/Art/" + wide.Art + ".jpg"))) wide.Art = "ultrapuck.portalgun";
-                if (wide != null && _state.Players.Length > 0)
-                {
-                    var offer = new List<int>();
-                    foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.widenets", "ultrapuck.loyal" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
-                    _state.Players[0].Offer = offer.ToArray();
-                }
-                yield return new WaitForSecondsRealtime(2.2f);
-                yield return Shot("chaos-pick-1");
-                yield return new WaitForSecondsRealtime(0.37f);
-                yield return Shot("chaos-pick-2");
-                yield return new WaitForSecondsRealtime(0.61f);
-                yield return Shot("chaos-pick-3");
-                GoMainMenu();
-                yield return new WaitForSecondsRealtime(0.5f);
-                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
-                _mainMenu.Show(MainMenu.Page.None);
-                StartMatch(true);
-                yield return new WaitForSecondsRealtime(0.8f);
-                EditCards();
-                yield return new WaitForSecondsRealtime(1.2f);
-                _cardScreen.ShotGrid(3, 999);
-                yield return new WaitForSecondsRealtime(1.2f);
-                yield return Shot("chaos-editor");
-                if (wide != null) wide.Art = wideArt;
-                GoMainMenu();
-                yield return new WaitForSecondsRealtime(0.5f);
-                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
-                _mainMenu.Show(MainMenu.Page.None);
-                StartMatch(true);
-                yield return new WaitForSecondsRealtime(2f);
-                yield return Shot("chaos-nets-before");
-                if (wide != null && _state.Players.Length > 0) { _sim.GiveCard(_state, _state.Players[0], wide.Index); _cards.Recompute(_state); }
-                yield return new WaitForSecondsRealtime(1.2f);
-                yield return Shot("chaos-nets");
-                GoMainMenu();
-                yield return new WaitForSecondsRealtime(0.5f);
-            }
-
             }
 
             if (want("samedraw"))
@@ -3686,7 +3683,7 @@ namespace UltraPuck.Game
         /// <summary>The map the rink on screen was drawn from (the loaded one, or its wide-net copy).</summary>
         private MapDef _rinkDrawn;
 
-        /// <summary>2x Goal Size (a chaos card): draw the rink again when the nets on screen change size.</summary>
+        /// <summary>Giant Nets (a chaos card): draw the rink again when the nets on screen change size.</summary>
         private void RinkNets(GameState b)
         {
             if (_rink == null || _sim == null || b == null) return;
@@ -3970,6 +3967,7 @@ namespace UltraPuck.Game
             _puck.Ghost(ghost);
             var puckAt = (pb2 - pa2).sqrMagnitude > 4f ? pb2 : Vector2.Lerp(pa2, pb2, t);
             _puck.Look(_rink != null ? _rink.Dress : null);
+            RinkNets(b);
             if (_rink != null) _rink.Settle();
             RefreshArena();
             _puck.Show(puckAt, b.PuckTeam);
@@ -3996,4 +3994,3 @@ namespace UltraPuck.Game
         }
     }
 }
-            RinkNets(b);

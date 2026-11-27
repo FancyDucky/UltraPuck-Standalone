@@ -11,7 +11,7 @@ namespace UltraPuck.Core
     {
         /// <summary>
         /// The map as it plays in the state last handed to this simulation (every public call that takes a state
-        /// switches to it first): <see cref="BaseMap"/>, or its wide-net copy while anyone holds 2x Goal Size.
+        /// switches to it first): <see cref="BaseMap"/>, or its wide-net copy while anyone holds Giant Nets.
         /// </summary>
         public MapDef Map { get { return _wide ? WideMap : BaseMap; } }
         /// <summary>The map as loaded.</summary>
@@ -20,7 +20,7 @@ namespace UltraPuck.Core
         private bool _wide;
         /// <summary>The map with every net twice as wide (made the first time it's needed; the same on every PC).</summary>
         public MapDef WideMap { get { return _wideMap ?? (_wideMap = BaseMap.WithWideNets(2)); } }
-        /// <summary>Does anyone in <paramref name="s"/> hold 2x Goal Size (the nets are twice as wide)?</summary>
+        /// <summary>Does anyone in <paramref name="s"/> hold Giant Nets (the nets are twice as wide)?</summary>
         public static bool WideNets(GameState s)
         {
             if (s == null || s.Players == null) return false;

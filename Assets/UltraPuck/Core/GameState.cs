@@ -161,7 +161,7 @@ namespace UltraPuck.Core
         public int Rage;
         /// <summary>Momentum: your shot doesn't slow below 33% of its speed (per card). Loyal: your shot into your own net bounces out (no own goal).</summary>
         public int Momentum, Loyal;
-        /// <summary>2x Goal Size (a chaos card): while anyone holds it, every net is twice as wide (Simulation.WideNets).</summary>
+        /// <summary>Giant Nets (a chaos card): while anyone holds it, every net is twice as wide (Simulation.WideNets).</summary>
         public int WideNets;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }

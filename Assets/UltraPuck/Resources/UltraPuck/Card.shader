@@ -41,6 +41,7 @@ Shader "UltraPuck/Card"
         _FxFoil ("Animated finish foil (grating)", Range(0,2)) = 1
         _FxPhase ("Animated finish phase (seconds)", Float) = 0
         _GlitchSeed ("Glitch seed (chaos cards: in step with their glitch)", Float) = 0
+        _GlitchTwitch ("Glitch only in twitches (chaos cards)", Float) = 0
         _Glare ("Glare", Range(0,1)) = 0.35
         _Sparkle ("Sparkle", Range(0,1)) = 0
         _Tilt ("Tilt (x, y)", Vector) = (0,0,0,0)
@@ -70,7 +71,7 @@ Shader "UltraPuck/Card"
             fixed4 _Color, _Color2, _BorderColor;
             float4 _Size, _Tilt;
             float _Border, _Foil, _Pearl, _Metal, _Poly, _Special, _SpecialAmt, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
-            float _FxSpeed, _FxBright, _FxSat, _FxFoil, _FxPhase, _GlitchSeed;
+            float _FxSpeed, _FxBright, _FxSat, _FxFoil, _FxPhase, _GlitchSeed, _GlitchTwitch;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
 
@@ -97,6 +98,20 @@ Shader "UltraPuck/Card"
                 return col * ca + cross(k, col) * sin(a) + k * dot(k, col) * (1.0 - ca);
             }
             float Hash(float2 p) { return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
+
+            // chaos cards' twitch: calm most of the time, then now and then (every ~4.5 s, some skipped) a twitch of
+            // 0.5 to 2 seconds; 1 during a twitch, else 0. The same in ChaosGlitch.shader and Card.shader, so the
+            // picture tears in step with the glitch over the card.
+            float Twitch(float t, float seed)
+            {
+                const float L = 4.5;
+                float tt = t + seed * 3.1;
+                float c = floor(tt / L);
+                float at = tt - c * L;
+                float dur = 0.5 + 1.5 * Hash(float2(c, 11.3 + seed));
+                float start = 0.8 + Hash(float2(c, 5.7 + seed)) * (L - 0.8 - dur); // at least 0.8 s calm between
+                return step(start, at) * step(at, start + dur) * step(0.3, Hash(float2(c, 2.9 + seed)));
+            }
 
             float Noise(float2 q)
             {
@@ -213,7 +228,8 @@ Shader "UltraPuck/Card"
             {
                 // glitch: bands of the card jump sideways now and then (the outline and border tear with them)
                 float2 uv = i.uv;
-                float gAmt = round(_Special) == 8 ? _SpecialAmt : 0.0;
+                float gGate = _GlitchTwitch > 0.5 ? Twitch(_Time.y, _GlitchSeed) : 1.0; // chaos cards: only in a twitch
+                float gAmt = round(_Special) == 8 ? _SpecialAmt * gGate : 0.0;
                 float gSlice = 0.0, gBurst = 0.0, gSplit = 0.0;
                 if (gAmt > 0.001)
                 {
@@ -395,6 +411,7 @@ Shader "UltraPuck/Card"
                     }
                     else if (id == 8) // glitch: colour split (frame too), coloured blocks, scan lines, pixel noise
                     {
+                        amt *= gGate;
                         float3 gm = lerp(_Color2, _Color, uv.y).rgb;
                         float rr = tex2D(_MainTex, TRANSFORM_TEX(uv + float2(gSplit, 0), _MainTex)).r * gm.r;
                         float bb = tex2D(_MainTex, TRANSFORM_TEX(uv - float2(gSplit, 0), _MainTex)).b * gm.b;

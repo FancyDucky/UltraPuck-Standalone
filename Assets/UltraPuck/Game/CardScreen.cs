@@ -2163,7 +2163,7 @@ namespace UltraPuck.Game
             // a chaos card with no finish of its own: the picture tears inside too (the glitch finish), in step with
             // the glitch over the card (same seed)
             if (def.Chaos && def.Finish == null) Special(art, fx, "glitch", false);
-            if (def.Chaos) art.SetFloat("_GlitchSeed", v.Phase);
+            if (def.Chaos) { art.SetFloat("_GlitchSeed", v.Phase); art.SetFloat("_GlitchTwitch", 1f); }
             v.Finishes.Add(art);
             art.SetFloat("_SweepStrength", 0f);
             v.ArtMat = art;

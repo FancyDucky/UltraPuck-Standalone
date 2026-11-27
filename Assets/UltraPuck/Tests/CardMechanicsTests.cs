@@ -3321,7 +3321,7 @@ namespace UltraPuck.Tests
         {
             var card = _lib.ById("ultrapuck.widenets");
             Assert.IsNotNull(card);
-            Assert.IsTrue(card.Chaos, "2x Goal Size is a chaos card");
+            Assert.IsTrue(card.Chaos, "Giant Nets is a chaos card");
             foreach (var file in new[] { "test-rink.json", "hockey-rink.json", "s-rink.json", "u-rink.json" })
             {
                 var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));

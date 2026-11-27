@@ -87,6 +87,14 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 27 Nov 2026): **chaos glitch is an occasional twitch; 2x Goal Size renamed Giant Nets.**
+  The glitch (overlay and the picture's tear) now only plays in twitches of 0.5-2 s, about every 4.5 s with some
+  skipped and at least 0.8 s calm between (`Twitch(t, seed)`, the same in `ChaosGlitch.shader` and `Card.shader`;
+  `_GlitchTwitch` 1 on chaos cards' picture, 0 = the "glitch" finish runs all the time as before). Calm the rest of
+  the time (about 75%); a twitch stutters (some of its frames hold still); the 2.7 s big burst is gone. Card editor
+  preview twitches likewise. Giant Nets has the owner's art (`Cards/Art/ultrapuck.widenets.jpg`; id and stat
+  unchanged, protocol stays 93). Screenshot scene `chaos` takes 8 pick shots 0.5 s apart. Also fixes the previous
+  commit, which left `RinkNets(b)` after the end of GameRunner.cs (a staging slip; it didn't compile).
 - unreleased (Claude, 27 Nov 2026): **chaos cards, 2x Goal Size, protocol 93.** Card file `"chaos": true`
   (`CardDef.Chaos`; card editor checkbox "Chaos card", previewed there with a CSS glitch): a card that changes the
   arena for everyone. Its face glitches out (`CardScreen.ChaosGlitch`, `Resources/UltraPuck/ChaosGlitch.shader`): a

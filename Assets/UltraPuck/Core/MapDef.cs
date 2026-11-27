@@ -332,7 +332,7 @@ namespace UltraPuck.Core
         }
 
         /// <summary>
-        /// A copy of this map with every net <paramref name="times"/> as wide (the 2x Goal Size chaos card): each goal
+        /// A copy of this map with every net <paramref name="times"/> as wide (the Giant Nets chaos card): each goal
         /// box grows across its mouth about its middle, and the wall points round it (the net's sides, or the notch in
         /// the boards on a rink whose nets sit in the outline) move out with its sides, so the gap to the box stays.
         /// </summary>

@@ -1,7 +1,7 @@
 // Ultra Puck chaos cards: a glitch drawn over the card, on a quad bigger than the card so it spills past the border.
 // Like a broken digital picture: horizontal slices of the card (frame and picture) jump sideways with the red and
 // blue split apart, red / cyan ghost edges stick out of the frame, blocks of digital noise pop up, scan lines and
-// static, and every couple of seconds a big burst. It never draws over _TextRect (the name, flavour line, rows and
+// static. Not all the time: a twitch of 0.5 to 2 seconds now and then (Twitch), calm in between. It never draws over _TextRect (the name, flavour line, rows and
 // note stay clean), so the text is always easy to read.
 //   _MainTex   the card's picture; _ArtRect its centre (x, y) and half size (z, w) in card units
 //   _Card      the card's width, height, corner radius and border width
@@ -53,6 +53,20 @@ Shader "UltraPuck/ChaosGlitch"
 
             float Hash(float2 p) { return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
 
+            // chaos cards' twitch: calm most of the time, then now and then (every ~4.5 s, some skipped) a twitch of
+            // 0.5 to 2 seconds; 1 during a twitch, else 0. The same in ChaosGlitch.shader and Card.shader, so the
+            // picture tears in step with the glitch over the card.
+            float Twitch(float t, float seed)
+            {
+                const float L = 4.5;
+                float tt = t + seed * 3.1;
+                float c = floor(tt / L);
+                float at = tt - c * L;
+                float dur = 0.5 + 1.5 * Hash(float2(c, 11.3 + seed));
+                float start = 0.8 + Hash(float2(c, 5.7 + seed)) * (L - 0.8 - dur); // at least 0.8 s calm between
+                return step(start, at) * step(at, start + dur) * step(0.3, Hash(float2(c, 2.9 + seed)));
+            }
+
             float RoundedBox(float2 p, float2 b, float r)
             {
                 float2 q = abs(p) - b + r;
@@ -74,17 +88,17 @@ Shader "UltraPuck/ChaosGlitch"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                if (_Amt <= 0.001) return 0;
+                if (_Amt <= 0.001 || Twitch(_Time.y, _Seed) < 0.5) return 0; // calm between twitches
                 float2 p = (i.uv - 0.5) * _Size.xy; // card units, the card's centre at 0
                 float aa = max(fwidth(p.x), 1e-4);
                 float2 hb = _Card.xy * 0.5;
 
-                // the clock: 15 glitch frames a second; some frames burst, and every ~2.7 s a big burst
+                // during a twitch: 15 glitch frames a second, some of them bursts
                 float slice = floor(_Time.y * 15.0) + _Seed * 101.0;
                 float burst = step(0.78, Hash(float2(slice, 1.7)));
-                float cyc = frac(_Time.y / 2.7 + _Seed * 0.37);
-                float big = step(cyc, 0.1);
-                float k = saturate(0.2 + burst * 0.55 + big) * _Amt;
+                // a twitch stutters: a few of its frames hold still
+                if (Hash(float2(slice, 7.7)) < 0.22) return 0;
+                float k = saturate(0.35 + burst * 0.55) * _Amt;
 
                 // horizontal bands: some of them torn sideways this frame
                 float bands = lerp(9.0, 30.0, Hash(float2(slice, 8.8)));
