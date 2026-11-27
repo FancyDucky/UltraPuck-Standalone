@@ -13,7 +13,7 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed partial class GameRunner : MonoBehaviour
     {
-        private enum Mode { Menu, Lobby, Match, Online, Replay }
+        private enum Mode { Menu, Lobby, Match, Online, Replay, Editor }
 
         private Mode _mode = Mode.Menu;
         private MainMenu _mainMenu;
@@ -84,12 +84,16 @@ namespace UltraPuck.Game
             _play = gameObject.AddComponent<PlayScreens>();
             _play.Runner = this;
             _play.Local = _local;
+            _maker = gameObject.AddComponent<RinkMaker>();
+            _maker.Runner = this;
             gameObject.AddComponent<Updater>();
             gameObject.AddComponent<Toasts>();
             _mainMenu.Runner = this;
             _mainMenu.Local = _local;
             LoadMaps();
             if (_maps.Count == 0) { _error = "Couldn't load any map: " + _mapProblem; Debug.LogError(_error); return; }
+            _builtinMaps = _maps.Count;
+            LoadCustomMaps(); // the rinks from the rink maker, after the game's own
             if (ShotDir == null) _arenas = ArenaSkin.LoadAll(PlainMapFiles(), RinkNameOf); // (screenshot runs show only their own test arena)
             _cards = LoadCards();
             InputIcons.Warm(); // Kenney button pictures for hints and utility card prompts
@@ -98,7 +102,7 @@ namespace UltraPuck.Game
             // behind the main menu: a random rink (not saved: the one you picked comes back when you go to play).
             // Screenshot runs keep the saved one, so their pictures don't change.
             _menuRink = ShotDir == null && _maps.Count > 1;
-            BuildSims(_menuRink ? UnityEngine.Random.Range(0, _maps.Count) : Mathf.Max(0, _mapFiles.IndexOf(saved)));
+            BuildSims(_menuRink ? UnityEngine.Random.Range(0, _builtinMaps) : Mathf.Max(0, _mapFiles.IndexOf(saved)));
 
             SteamNet.Init();
             LogDevices("at start");
@@ -157,7 +161,7 @@ namespace UltraPuck.Game
             _menus.TeamBots = t => { var n = 0; if (_state != null) foreach (var p in _state.Players) if (p.Bot && (p.Team & 1) == (t & 1)) n++; return n; };
             _menus.TeamCount = t => { var n = 0; if (_state != null) foreach (var p in _state.Players) if (p.Team == t) n++; return n; };
             _menus.TeamName = t => Palette.TeamName(t);
-            _menus.MapCount = () => _maps.Count;
+            _menus.MapCount = () => _mode == Mode.Online ? _builtinMaps : PlayableMaps; // (online: only the game's own rinks)
             _menus.MapName = MapName;
             _menus.CurrentMap = () => _mapIndex;
             _menus.OnRestart = map =>
@@ -669,6 +673,64 @@ namespace UltraPuck.Game
                     GoMainMenu();
                     yield return new WaitForSecondsRealtime(0.5f);
                 }
+            }
+
+            if (want("rinkmaker"))
+            {
+                // the rink maker: the Custom Rinks screen, making a rink (a pillar, a bump, some stray ice), testing it,
+                // and the rink screen's Custom Rinks (LB / RB)
+                OpenCustomRinks();
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("rinkmaker-library");
+                _maker.CloseLibrary();
+                var plan = RinkPlan.Starter();
+                plan.Name = "Pillar Park";
+                for (var cy = 4; cy < 8; cy++) for (var cx = -3; cx < 3; cx++) plan.SetIce(cx, cy, false);
+                for (var cy = 13; cy < 17; cy++) for (var cx = -7; cx < 7; cx++) plan.SetIce(cx, cy, true);
+                for (var cy = 18; cy < 21; cy++) for (var cx = 30; cx < 34; cx++) plan.SetIce(cx, cy, true);
+                // wall lines: a mirrored L in each half, and a short divider in front of each net
+                foreach (var side in new[] { -1, 1 })
+                {
+                    for (var x = 8; x < 14; x++) plan.SetWall(side < 0 ? -x - 1 : x, -6, false, true);
+                    for (var y = -6; y < -2; y++) plan.SetWall(side * 14, y, true, true);
+                    for (var y = 5; y < 9; y++) plan.SetWall(side * 17, y, true, true);
+                }
+                EditRink(plan, null);
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("rinkmaker-edit");
+                TestRink(plan, kb);
+                yield return new WaitForSecondsRealtime(3f);
+                yield return Shot("rinkmaker-test");
+                BackToMaker();
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("rinkmaker-back");
+                // saved (only with ULTRAPUCK_RINK_DIR set: a screenshot run doesn't touch the real folder), and an unfinished one
+                if (!string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("ULTRAPUCK_RINK_DIR")))
+                {
+                    CustomRinks.Save(plan, null);
+                    var half = RinkPlan.Starter();
+                    half.Name = "Half Done";
+                    half.Nets[1].Placed = false;
+                    CustomRinks.Save(half, null);
+                }
+                MakerClosed();
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("rinkmaker-saved");
+                _maker.CloseLibrary();
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                GoLocalLobby();
+                _play.Open(PlayScreens.Page.Map);
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("rinkmaker-rinkscreen");
+                OpenCustomPick();
+                _play.Open(PlayScreens.Page.Custom);
+                yield return new WaitForSecondsRealtime(0.8f);
+                yield return Shot("rinkmaker-pick");
+                _maker.CloseLibrary();
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
             }
 
             if (want("editor"))
@@ -1615,11 +1677,27 @@ namespace UltraPuck.Game
             if (Updater.Busy) { AttractUpdate(); UpdateCamera(false); return; } // updating: the bots play on behind, nothing else
             var playing = _mode == Mode.Match || (_mode == Mode.Online && OnlinePlaying);
             WireMouseAim(playing);
+            if (_mode == Mode.Editor)
+            {
+                // the rink maker: it runs the screen (and the camera) itself
+                _maker.Tick();
+                if (_mode == Mode.Editor)
+                {
+                    _maker.Frame(_cam);
+                    _hud.enabled = false;
+                    Cursor.visible = true;
+                    Sound.Music(false, "");
+                    _cardScreen.Frame(null);
+                    return;
+                }
+            }
+            _hud.enabled = true;
             if (_mode == Mode.Online) OnlineUpdate();
             else if (_menus.IsOpen) _menus.Tick(_local.Menu());
             else if (_mode == Mode.Menu)
             {
-                _mainMenu.Tick();
+                if (_maker.Current == RinkMaker.State.Library) _maker.Tick(); // the Custom Rinks screen
+                else _mainMenu.Tick();
                 // only if the menu is still up: a button may just have started free play, and running the menu's
                 // match now would put its bots (and its card-less rules) back in place of the new game
                 if (_mode == Mode.Menu) AttractUpdate();
@@ -1823,8 +1901,8 @@ namespace UltraPuck.Game
 
         private Simulation MakeOnlineSim()
         {
-            // the host's choice of rink (everyone has the same list: the fingerprint check makes sure)
-            if (_session != null && _session.Map != _mapIndex && _session.Map < _maps.Count) UseMap(_session.Map);
+            // the host's choice of rink (everyone has the same list: the fingerprint check makes sure; custom rinks aren't on it)
+            if (_session != null && _session.Map != _mapIndex && _session.Map < _builtinMaps) UseMap(_session.Map);
             return new Simulation(_map, RulesTuning(_session != null ? _session.Rules : null, false), _cards);
         }
 
@@ -1865,7 +1943,7 @@ namespace UltraPuck.Game
         public List<int> Rinks()
         {
             var list = new List<int>();
-            for (var k = 0; k < _maps.Count; k++) if (string.IsNullOrEmpty(_maps[k].Variant)) list.Add(k);
+            for (var k = 0; k < _builtinMaps; k++) if (string.IsNullOrEmpty(_maps[k].Variant)) list.Add(k); // (the game's own: custom rinks have their own screen)
             return list;
         }
 
@@ -1947,6 +2025,156 @@ namespace UltraPuck.Game
             if (k < looks.Count) return LookName(looks[k]);
             var arenas = ArenasFor(_mapIndex);
             return k - looks.Count < arenas.Count ? arenas[k - looks.Count].Name : "?";
+        }
+
+        // ------------------------------------------------------------------ custom rinks (the rink maker)
+
+        private RinkMaker _maker;
+        /// <summary>How many maps came with the game: the custom rinks (and a rink being tested, last) come after them.</summary>
+        private int _builtinMaps;
+        /// <summary>The last map is a rink from the maker being tested.</summary>
+        private bool _testMapLoaded;
+        /// <summary>Playing a rink from the maker to test it (the menu button goes back to the maker).</summary>
+        private bool _testing;
+        /// <summary>The main menu's rink before the maker opened, to go back to.</summary>
+        private int _beforeMaker = -1;
+        private const string CustomPrefix = "custom:", TestMapFile = "rink-maker-test";
+
+        public float WallThickness { get { return _matchSim.T.WallThickness.ToFloat(); } }
+        private int PlayableMaps { get { return _maps.Count - (_testMapLoaded ? 1 : 0); } }
+        /// <summary>The rink chosen is one from the maker.</summary>
+        public bool MapIsCustom { get { return _mapIndex >= _builtinMaps; } }
+
+        /// <summary>The finished rinks in Custom_Rinks as maps, after the game's own (any there before, and a test map, dropped).</summary>
+        private void LoadCustomMaps()
+        {
+            while (_maps.Count > _builtinMaps)
+            {
+                var k = _maps.Count - 1;
+                _maps.RemoveAt(k); _mapFiles.RemoveAt(k); _mapBase.RemoveAt(k);
+                Texture2D old;
+                if (_previews.TryGetValue(k, out old)) { if (old != null) Destroy(old); _previews.Remove(k); }
+            }
+            _testMapLoaded = false;
+            foreach (var e in CustomRinks.Load())
+            {
+                if (e.Map == null) continue;
+                _maps.Add(e.Map); _mapFiles.Add(CustomPrefix + e.File); _mapBase.Add(CustomPrefix + e.File);
+            }
+        }
+
+        /// <summary>The custom rinks read again (one was saved or deleted), and the rink on now rebuilt.</summary>
+        private void ReloadCustomRinks(int show)
+        {
+            var file = show >= 0 && show < _mapFiles.Count ? _mapFiles[show] : null;
+            LoadCustomMaps();
+            var at = file != null ? _mapFiles.IndexOf(file) : -1;
+            ForceMap(at >= 0 ? at : 0);
+        }
+
+        /// <summary>UseMap, even if it's the same index (the map there may have changed).</summary>
+        private void ForceMap(int index)
+        {
+            if (_rink != null) { Destroy(_rink.Root); _rink = null; }
+            UseMap(index, false);
+        }
+
+        /// <summary>The rink, the players and the arena on or off (the maker draws its own rink).</summary>
+        private void ShowWorld(bool on)
+        {
+            if (_rink != null) _rink.Root.SetActive(on);
+            if (_entities != null) _entities.gameObject.SetActive(on);
+            if (_arenaView != null) _arenaView.Root.SetActive(on);
+        }
+
+        /// <summary>The main menu's Custom Rinks: the grid of rinks made so far, + to make a new one.</summary>
+        public void OpenCustomRinks()
+        {
+            _mainMenu.Show(MainMenu.Page.None);
+            _mainMenu.Message = null;
+            _maker.OpenLibrary(false);
+        }
+
+        /// <summary>The rink screen's Custom Rinks (LB / RB): pick one of them to play on.</summary>
+        public void OpenCustomPick() { _maker.OpenLibrary(true); }
+        public void TickMaker() { _maker.Tick(); }
+
+        /// <summary>Out of the Custom Rinks screen: back to the rink screen, or the main menu.</summary>
+        public void LibraryClosed(bool pick)
+        {
+            if (pick) _play.Open(PlayScreens.Page.Map);
+            else _mainMenu.Show(MainMenu.Page.Main);
+        }
+
+        /// <summary>A custom rink picked on the rink screen: on to the rules.</summary>
+        public void CustomRinkPicked(string file)
+        {
+            var at = _mapFiles.IndexOf(CustomPrefix + file);
+            if (at < 0) { Sound.Deny(); _maker.OpenLibrary(true); return; }
+            UseMap(at);
+            _play.Open(PlayScreens.Page.Rules);
+        }
+
+        /// <summary>A rink was deleted (or saved) from the Custom Rinks screen.</summary>
+        public void CustomRinksChanged() { ReloadCustomRinks(_mapIndex); }
+
+        /// <summary>Into the maker, with a rink (a new one: <paramref name="file"/> null).</summary>
+        public void EditRink(RinkPlan plan, string file)
+        {
+            if (_beforeMaker < 0) _beforeMaker = _mapIndex;
+            _mainMenu.Show(MainMenu.Page.None);
+            _mode = Mode.Editor;
+            ShowWorld(false);
+            _maker.OpenEditor(plan, file);
+        }
+
+        /// <summary>Out of the maker: back to the Custom Rinks screen, the main menu's rink behind it again.</summary>
+        public void MakerClosed()
+        {
+            _testing = false;
+            _local.Slots.Clear();
+            _mode = Mode.Menu;
+            var back = _beforeMaker >= 0 && _beforeMaker < _builtinMaps ? _beforeMaker : 0;
+            _beforeMaker = -1;
+            LoadCustomMaps();
+            ForceMap(back);
+            ShowWorld(true);
+            _sim = _attractSim;
+            UpdateCamera(false, true);
+            _maker.OpenLibrary(false);
+        }
+
+        /// <summary>The maker's Test: free play on the rink against a bot; the menu button comes back.</summary>
+        public void TestRink(RinkPlan plan, UnityEngine.InputSystem.InputDevice device)
+        {
+            MapDef map;
+            try { map = MapDef.FromJson(plan.ToJson()); }
+            catch (System.Exception ex) { Debug.LogWarning("Ultra Puck: the rink to test couldn't be loaded: " + ex.Message); Toasts.Show("Couldn't test it: " + ex.Message, 5f); return; }
+            LoadCustomMaps(); // (drops an older test map)
+            _maps.Add(map); _mapFiles.Add(TestMapFile); _mapBase.Add(TestMapFile);
+            _testMapLoaded = true;
+            ForceMap(_maps.Count - 1);
+            _maker.StartTesting();
+            ShowWorld(true);
+            _local.Slots.Clear();
+            _local.Slots.Add(new LocalPlayers.Slot { Device = device ?? UnityEngine.InputSystem.Keyboard.current, Team = 0, Colour = 0 });
+            _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true, Name = "Bot" });
+            _testing = true;
+            StartMatch(true);
+            UpdateCamera(false, true);
+        }
+
+        private void BackToMaker()
+        {
+            Sound.Back();
+            DropRecording();
+            _testing = false;
+            _local.Slots.Clear();
+            _free = false;
+            _menus.FreePlay = false;
+            _mode = Mode.Editor;
+            ShowWorld(false);
+            _maker.ResumeEditing();
         }
 
         // ------------------------------------------------------------------ custom arenas
@@ -2213,7 +2441,7 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Next / previous rink.</summary>
-        public void StepMap(int d) { UseMap(_mapIndex + d); }
+        public void StepMap(int d) { UseMap(((Mathf.Min(_mapIndex, _builtinMaps - 1) + d) % _builtinMaps + _builtinMaps) % _builtinMaps); } // (online: the game's own rinks)
 
         /// <summary>A hash of the map and card files: everyone in an online game must have the same ones.</summary>
         /// <summary>
@@ -2249,7 +2477,7 @@ namespace UltraPuck.Game
         {
             var h = 2166136261u;
             var files = new List<string>();
-            foreach (var m in _mapFiles) files.Add(Path.Combine(MapsFolder, m));
+            for (var k = 0; k < _builtinMaps; k++) files.Add(Path.Combine(MapsFolder, _mapFiles[k])); // (not the custom rinks: they stay on this PC)
             if (Directory.Exists(CardsFolder)) { var c = Directory.GetFiles(CardsFolder, "*.json"); System.Array.Sort(c, System.StringComparer.Ordinal); files.AddRange(c); }
             foreach (var f in files)
                 foreach (var b in File.ReadAllBytes(f)) { h ^= b; h *= 16777619u; }
@@ -2286,6 +2514,7 @@ namespace UltraPuck.Game
             if (_session != null) _session.Dispose();
             PlayersRink();
             _session = session;
+            if (_mapIndex >= _builtinMaps) UseMap(Mathf.Max(0, _mapFiles.IndexOf("hockey-rink.json"))); // custom rinks are for this PC only
             if (session.IsHost) session.Map = _mapIndex;
             _mainMenu.Session = session;
             _mainMenu.Message = null;
@@ -2955,6 +3184,7 @@ namespace UltraPuck.Game
                 if (_local.StartPressed()) { Sound.Select(); StartMatch(false); return; }
                 if (_local.BackPressed()) { Sound.Back(); BackToLobby(); return; }
             }
+            else if (_testing && _local.MenuPressed() && !_cardScreen.Showing) { BackToMaker(); return; } // testing a rink: straight back to the maker
             else if (_local.MenuPressed() && !_cardScreen.Showing)
             {
                 Sound.Select();

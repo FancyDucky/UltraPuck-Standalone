@@ -87,6 +87,25 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 27 Nov 2026): **rink maker, Custom Rinks.** Main menu "Custom rinks" opens a grid
+  (`Game/RinkMaker.cs`, state Library): + makes a new rink, a rink opens in the maker, X / Del deletes (press twice).
+  The rink screen's LB / RB (Q / E) opens the same grid to pick one to play (`PlayScreens.Page.Custom`, finished rinks
+  only). The maker (GameRunner `Mode.Editor`, camera framed by `RinkMaker.Frame`) paints ice on a 100 x 56 grid of
+  1-unit squares, places the red / blue nets (mouth on a grid corner, faces the middle; again on the same spot turns
+  it) and the puck spot, mirror on by default, undo / redo, works with a controller cursor and with mouse + keyboard;
+  Test plays the rink in free play vs a bot (`TestRink`, a temporary last map; the menu button comes back).
+  `Core/RinkPlan.cs` turns the grid into an ordinary map file: only the biggest 4-connected patch of ice counts (the rest
+  shown red), the outline is traced round it, staircases straightened (`Unstep`), corners rounded (radius 2.5), holes
+  become pillars (closed walls after the outline; `RinkView` fills them with the background colour), spawns placed like
+  the Hockey Rink's, a bot route on bent rinks, and the grid kept in an "editor" block to open it again. Unfinished rinks
+  save as just the editor block. Files live in `Custom_Rinks` next to the exe (`ULTRAPUCK_RINK_DIR` overrides it, for
+  screenshots). Custom maps sit after the game's own in `_maps` (`_builtinMaps`): left out of the fingerprint, `Rinks()`,
+  online rink stepping and the host's map (hosting switches to the Hockey Rink). Screenshot scene `rinkmaker`, tests
+  `RinkPlanTests`. Protocol unchanged.
+  Wall part: thin wall lines on grid edges (`RinkPlan.SetWall`, across / up), drawn by dragging corner to corner;
+  only where there's ice both sides and no net; saved as "across" / "up" run lengths in the editor block, written as
+  straight open walls (`WallRuns`); spawns keep off them, the bots' route goes round them, and a rink whose walls cut
+  one net off from the other isn't ready to play.
 - 0.1.76 (Claude, 26 Nov 2026): **card pick changes, protocol 92.** Others' picks no longer dealt
   to watch: `CardScreen.Minis` shows each card someone on another PC (or a bot) has chosen as a mini card at the side
   (your team left, the other team right, names over them), a click shows it full size (`_bigMini`); with nobody here

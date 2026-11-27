@@ -93,6 +93,15 @@ namespace UltraPuck.Game
                 }
             }
 
+            // pillars (closed walls inside the outline, from the rink maker): no floor inside them
+            for (var w = 1; w < map.WallLines.Count; w++)
+            {
+                if (!map.WallClosed[w] || map.WallLines[w].Length < 3) continue;
+                var hole = new List<Vector2>();
+                foreach (var p in map.WallLines[w]) hole.Add(V.Of(p));
+                Draw.Make("Pillar" + w, Root.transform, Draw.Polygon(hole, Palette.Background), 1);
+            }
+
             // goals in a dark shade of the colour of the team that defends them
             foreach (var g in map.Goals)
                 Draw.Make("Goal" + g.Team, Root.transform, Draw.Rect(V.Of(g.Min), V.Of(g.Max), Palette.Goal(g.Team)), 3);
