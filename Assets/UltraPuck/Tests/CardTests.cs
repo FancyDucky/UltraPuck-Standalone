@@ -25,7 +25,7 @@ namespace UltraPuck.Tests
         private static int Card(CardLibrary lib, string id) { return lib.ById(id).Index; }
 
         /// <summary>Cards with no picture yet (take an id out once its art is in Cards/Art).</summary>
-        private static readonly string[] AwaitingArt = { "ultrapuck.choose", "ultrapuck.newhand", "ultrapuck.doublecard" };
+        private static readonly string[] AwaitingArt = { "ultrapuck.choose", "ultrapuck.newhand", "ultrapuck.doublecard", "ultrapuck.widenets" };
 
         /// <summary>Plain one-card picks: Choose (a second pick) and Double Card (two more cards) switched off.</summary>
         private static Tuning OneCardPicks(CardLibrary lib) { return new Tuning { CardsOff = lib.CardGivers() }; }

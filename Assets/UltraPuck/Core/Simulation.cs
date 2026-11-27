@@ -9,7 +9,27 @@ namespace UltraPuck.Core
     /// </summary>
     public sealed class Simulation
     {
-        public readonly MapDef Map;
+        /// <summary>
+        /// The map as it plays in the state last handed to this simulation (every public call that takes a state
+        /// switches to it first): <see cref="BaseMap"/>, or its wide-net copy while anyone holds 2x Goal Size.
+        /// </summary>
+        public MapDef Map { get { return _wide ? WideMap : BaseMap; } }
+        /// <summary>The map as loaded.</summary>
+        public readonly MapDef BaseMap;
+        private MapDef _wideMap;
+        private bool _wide;
+        /// <summary>The map with every net twice as wide (made the first time it's needed; the same on every PC).</summary>
+        public MapDef WideMap { get { return _wideMap ?? (_wideMap = BaseMap.WithWideNets(2)); } }
+        /// <summary>Does anyone in <paramref name="s"/> hold 2x Goal Size (the nets are twice as wide)?</summary>
+        public static bool WideNets(GameState s)
+        {
+            if (s == null || s.Players == null) return false;
+            foreach (var p in s.Players) if (p != null && p.Stats != null && p.Stats.WideNets > 0) return true;
+            return false;
+        }
+        /// <summary>The map as it plays in <paramref name="s"/> (what to draw for it).</summary>
+        public MapDef MapFor(GameState s) { return WideNets(s) ? WideMap : BaseMap; }
+        private void Use(GameState s) { _wide = WideNets(s); }
         public readonly Tuning T;
         /// <summary>The cards in play, or null for no cards (then no picks happen after goals).</summary>
         public readonly CardLibrary Cards;
@@ -17,7 +37,7 @@ namespace UltraPuck.Core
         public Simulation(MapDef map, Tuning tuning = null, CardLibrary cards = null)
         {
             if (map == null) throw new ArgumentNullException("map");
-            Map = map;
+            BaseMap = map;
             T = tuning ?? new Tuning();
             Cards = cards;
         }
@@ -36,6 +56,7 @@ namespace UltraPuck.Core
         /// </summary>
         public void StartPicking(GameState s, System.Collections.Generic.IList<int> pickers)
         {
+            Use(s);
             if (Cards == null || Cards.Cards.Count == 0) return;
             var any = false;
             foreach (var q in s.Players) q.Gifts = new int[0]; // last pick's Double Card cards are old news
@@ -578,6 +599,7 @@ namespace UltraPuck.Core
         /// </summary>
         public void FaceOff(GameState s)
         {
+            Use(s);
             // Each side's group: its own players (not Double Agents) and the other team's Double Agents. Every face-off
             // the agents move one spot further round the group (the kick-off spot too), and the own players take turns
             // at the front of the spots that are left.
@@ -780,6 +802,7 @@ namespace UltraPuck.Core
         /// </summary>
         public void GiveCard(GameState s, PlayerState p, int card)
         {
+            Use(s);
             if (Cards == null || card < 0 || card >= Cards.Cards.Count) return;
             if (!T.MultiUtility && Cards.IsUtilityIndex(card))
                 p.Cards = CardLibrary.WithoutOtherUtilities(Cards, p.Cards, card);
@@ -835,6 +858,7 @@ namespace UltraPuck.Core
         /// </summary>
         public void PlacePylons(GameState s)
         {
+            Use(s);
             var list = new System.Collections.Generic.List<Pylon>();
             for (var team = 0; team < 2; team++)
             {
@@ -987,6 +1011,7 @@ namespace UltraPuck.Core
         /// <summary>The puck back to its spot, loose and still; nobody else moves.</summary>
         public void ResetPuck(GameState s)
         {
+            Use(s);
             s.PuckPos = Map.PuckSpot;
             s.PuckVel = FixVec2.Zero;
             s.Carrier = -1;
@@ -1018,6 +1043,7 @@ namespace UltraPuck.Core
 
         public int AddPlayer(GameState s, int team, bool bot = false)
         {
+            Use(s);
             team &= 1;
             var n = 0;
             foreach (var q in s.Players) if (q.Team == team) n++;
@@ -1036,6 +1062,7 @@ namespace UltraPuck.Core
         /// </summary>
         public void ChangeTeam(GameState s, int index, int team)
         {
+            Use(s);
             if (index < 0 || index >= s.Players.Length) return;
             team &= 1;
             var p = s.Players[index];
@@ -1064,6 +1091,7 @@ namespace UltraPuck.Core
         /// <summary>Someone leaves mid-game (free play). Everyone after them moves down one place.</summary>
         public void RemovePlayer(GameState s, int index)
         {
+            Use(s);
             if (index < 0 || index >= s.Players.Length) return;
             var players = new PlayerState[s.Players.Length - 1];
             for (int i = 0, j = 0; i < s.Players.Length; i++) if (i != index) players[j++] = s.Players[i];
@@ -1140,6 +1168,7 @@ namespace UltraPuck.Core
 
         public void Step(GameState s, PlayerInput[] inputs)
         {
+            Use(s);
             var dt = T.Dt;
             s.Tick++;
             for (var i = 0; i < s.Players.Length; i++) s.Players[i].GoalPull = (InputOf(inputs, i).Look & PlayerInput.LookPull) != 0;
@@ -1312,6 +1341,7 @@ namespace UltraPuck.Core
         /// <summary>A match-settings command from the host (see <see cref="PlayerInput.AddBotRed"/> and the rest); anything else is ignored.</summary>
         public void HostCommand(GameState s, byte cmd)
         {
+            Use(s);
             if (cmd == PlayerInput.CarryOff) { s.CarryOn = false; return; }
             if (cmd == PlayerInput.CarryOn) { s.CarryOn = true; return; }
             if (cmd >= PlayerInput.CarryStrength && cmd <= PlayerInput.CarryStrength + 20) { s.CarryPercent = (cmd - PlayerInput.CarryStrength) * 5; return; }
@@ -1357,6 +1387,7 @@ namespace UltraPuck.Core
         /// </summary>
         public PlayerInput[] Route(GameState s, PlayerInput[] raw)
         {
+            Use(s);
             var n = s.Players.Length;
             var pilots = 0L; // who steered whom before (to notice a swap)
             for (var h = 0; h < n; h++) pilots = pilots * 9 + (s.Players[h].Pilot + 1);
@@ -1883,6 +1914,7 @@ namespace UltraPuck.Core
         public bool PuckClippedInCarrier(GameState s)
         {
             if (s == null || s.Carrier < 0 || s.Carrier >= s.Players.Length) return false;
+            Use(s);
             var c = s.Players[s.Carrier];
             var min = RadiusOf(c); // centre of puck inside the player disc → under the body
             return (s.PuckPos - c.Pos).SqrLength < min * min;
@@ -2863,6 +2895,7 @@ namespace UltraPuck.Core
         /// <summary>Player <paramref name="i"/> is out of the rink at <paramref name="at"/>, going <paramref name="dir"/>: off the ice until they respawn.</summary>
         public void KnockOut(GameState s, int i, FixVec2 at, FixVec2 dir)
         {
+            Use(s);
             var p = s.Players[i];
             if (p.OutTime > Fix.Zero) return;
             if (s.Carrier == i) KnockLoose(s, i, dir, -1);

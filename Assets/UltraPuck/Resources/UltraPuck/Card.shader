@@ -40,6 +40,7 @@ Shader "UltraPuck/Card"
         _FxSat ("Animated finish saturation", Float) = 1
         _FxFoil ("Animated finish foil (grating)", Range(0,2)) = 1
         _FxPhase ("Animated finish phase (seconds)", Float) = 0
+        _GlitchSeed ("Glitch seed (chaos cards: in step with their glitch)", Float) = 0
         _Glare ("Glare", Range(0,1)) = 0.35
         _Sparkle ("Sparkle", Range(0,1)) = 0
         _Tilt ("Tilt (x, y)", Vector) = (0,0,0,0)
@@ -69,7 +70,7 @@ Shader "UltraPuck/Card"
             fixed4 _Color, _Color2, _BorderColor;
             float4 _Size, _Tilt;
             float _Border, _Foil, _Pearl, _Metal, _Poly, _Special, _SpecialAmt, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
-            float _FxSpeed, _FxBright, _FxSat, _FxFoil, _FxPhase;
+            float _FxSpeed, _FxBright, _FxSat, _FxFoil, _FxPhase, _GlitchSeed;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
 
@@ -216,7 +217,7 @@ Shader "UltraPuck/Card"
                 float gSlice = 0.0, gBurst = 0.0, gSplit = 0.0;
                 if (gAmt > 0.001)
                 {
-                    gSlice = floor(_Time.y * 15.0);
+                    gSlice = floor(_Time.y * 15.0) + _GlitchSeed * 101.0;
                     gBurst = step(0.82, Hash(float2(gSlice, 1.7)));
                     float small = step(0.6, Hash(float2(gSlice, 4.2))) * 0.25;
                     float band = floor(uv.y * lerp(10.0, 34.0, Hash(float2(gSlice, 8.8))));

@@ -174,7 +174,7 @@ namespace UltraPuck.Game
             _hud.PlayerName = NameOf;
             _hud.SeatName = SeatName;
 
-            _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat());
+            _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat()); _rinkDrawn = _map;
             _entities = new GameObject("Entities").transform;
             _puck = new PuckView(_sim.T.PuckRadius.ToFloat(), _entities);
             _effects = new Effects(_entities);
@@ -831,6 +831,58 @@ namespace UltraPuck.Game
                 if (outlineCard != null) outlineCard.TextOutline = hadOutline;
                 GoMainMenu();
                 yield return new WaitForSecondsRealtime(0.5f);
+            if (want("chaos"))
+            {
+                // chaos cards: 2x Goal Size glitching in a pick (three moments, to catch a burst), in free play's card
+                // editor grid, then held, with both nets twice as wide
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                _sim.T.CardsOffered = 3;
+                yield return new WaitForSecondsRealtime(0.8f);
+                PickACard();
+                var wide = _cards != null ? _cards.ById("ultrapuck.widenets") : null;
+                // (no picture of its own yet: borrow one for this run, so the glitch has something to tear)
+                var wideArt = wide != null ? wide.Art : null;
+                if (wide != null && !File.Exists(Path.Combine(Application.streamingAssetsPath, "Cards/Art/" + wide.Art + ".jpg"))) wide.Art = "ultrapuck.portalgun";
+                if (wide != null && _state.Players.Length > 0)
+                {
+                    var offer = new List<int>();
+                    foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.widenets", "ultrapuck.loyal" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                    _state.Players[0].Offer = offer.ToArray();
+                }
+                yield return new WaitForSecondsRealtime(2.2f);
+                yield return Shot("chaos-pick-1");
+                yield return new WaitForSecondsRealtime(0.37f);
+                yield return Shot("chaos-pick-2");
+                yield return new WaitForSecondsRealtime(0.61f);
+                yield return Shot("chaos-pick-3");
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(0.8f);
+                EditCards();
+                yield return new WaitForSecondsRealtime(1.2f);
+                _cardScreen.ShotGrid(3, 999);
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("chaos-editor");
+                if (wide != null) wide.Art = wideArt;
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(2f);
+                yield return Shot("chaos-nets-before");
+                if (wide != null && _state.Players.Length > 0) { _sim.GiveCard(_state, _state.Players[0], wide.Index); _cards.Recompute(_state); }
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("chaos-nets");
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
             }
 
             if (want("samedraw"))
@@ -2441,7 +2493,7 @@ namespace UltraPuck.Game
             BuildSims(index);
             if (remember) PlayerPrefs.SetString("map_file", _mapFiles[_mapIndex]);
             if (_rink != null) Destroy(_rink.Root);
-            _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat());
+            _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat()); _rinkDrawn = _map;
             if (_session != null && _session.IsHost) _session.Map = _mapIndex;
             if (_cam != null) UpdateCamera(false, true);
         }
@@ -3628,7 +3680,22 @@ namespace UltraPuck.Game
             if (_rinkColours == Palette.Version || _map == null) return;
             _rinkColours = Palette.Version;
             if (_rink != null) Destroy(_rink.Root);
-            _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat());
+            _rink = new RinkView(_map, _matchSim.T.WallThickness.ToFloat()); _rinkDrawn = _map;
+        }
+
+        /// <summary>The map the rink on screen was drawn from (the loaded one, or its wide-net copy).</summary>
+        private MapDef _rinkDrawn;
+
+        /// <summary>2x Goal Size (a chaos card): draw the rink again when the nets on screen change size.</summary>
+        private void RinkNets(GameState b)
+        {
+            if (_rink == null || _sim == null || b == null) return;
+            var want = _sim.MapFor(b);
+            if (_rinkDrawn == null) _rinkDrawn = _map;
+            if (want == _rinkDrawn) return;
+            Destroy(_rink.Root);
+            _rink = new RinkView(want, _sim.T.WallThickness.ToFloat());
+            _rinkDrawn = want;
         }
 
         /// <summary>The name over player <paramref name="i"/>: their online name, yours (then P2, P3...) on this PC, or Bot.</summary>
@@ -3929,3 +3996,4 @@ namespace UltraPuck.Game
         }
     }
 }
+            RinkNets(b);

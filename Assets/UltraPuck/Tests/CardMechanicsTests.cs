@@ -3315,5 +3315,42 @@ namespace UltraPuck.Tests
             }
             Assert.AreEqual(Run(), Run());
         }
+
+        [Test]
+        public void TwoTimesGoalSizeMakesEveryNetTwiceAsWide()
+        {
+            var card = _lib.ById("ultrapuck.widenets");
+            Assert.IsNotNull(card);
+            Assert.IsTrue(card.Chaos, "2x Goal Size is a chaos card");
+            foreach (var file in new[] { "test-rink.json", "hockey-rink.json", "s-rink.json", "u-rink.json" })
+            {
+                var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));
+                var sim = new Simulation(map, null, _lib);
+                var s = sim.NewGame(new[] { 0, 1 }, 1u);
+                sim.Step(s, new PlayerInput[2]);
+                Assert.AreSame(map, sim.Map, file + ": the plain map to start with");
+                sim.GiveCard(s, s.Players[1], card.Index);
+                _lib.Recompute(s);
+                sim.Step(s, new PlayerInput[2]);
+                Assert.AreSame(sim.WideMap, sim.Map, file + ": wide nets while someone holds it");
+                for (var g = 0; g < map.Goals.Count; g++)
+                {
+                    GoalDef a = map.Goals[g], b = sim.WideMap.Goals[g];
+                    var across = a.HasFacing ? Fix.Abs(a.Facing.X) >= Fix.Abs(a.Facing.Y) : (a.Max.Y - a.Min.Y) >= (a.Max.X - a.Min.X);
+                    Fix wa = across ? a.Max.Y - a.Min.Y : a.Max.X - a.Min.X, wb = across ? b.Max.Y - b.Min.Y : b.Max.X - b.Min.X;
+                    Assert.LessOrEqual(System.Math.Abs((wa * 2 - wb).Raw), 1L, file + ": net " + g + " twice as wide");
+                    Assert.IsTrue(a.Min + a.Max == b.Min + b.Max, file + ": net " + g + " in the same place");
+                    // a shot just past the old post goes in now
+                    var past = across ? new FixVec2((a.Min.X + a.Max.X) / 2, a.Max.Y + wa / 4) : new FixVec2(a.Max.X + wa / 4, (a.Min.Y + a.Max.Y) / 2);
+                    Assert.IsFalse(a.Contains(past));
+                    Assert.IsTrue(b.Contains(past), file + ": net " + g + " reaches past its old post");
+                }
+                Assert.AreEqual(map.Segments.Count, sim.WideMap.Segments.Count, file + ": the same walls, moved");
+                s.Players[1].Cards = new int[0];
+                _lib.Recompute(s);
+                sim.Step(s, new PlayerInput[2]);
+                Assert.AreSame(map, sim.Map, file + ": back to normal once nobody holds it");
+            }
+        }
     }
 }

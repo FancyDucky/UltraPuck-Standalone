@@ -1,0 +1,161 @@
+// Ultra Puck chaos cards: a glitch drawn over the card, on a quad bigger than the card so it spills past the border.
+// Like a broken digital picture: horizontal slices of the card (frame and picture) jump sideways with the red and
+// blue split apart, red / cyan ghost edges stick out of the frame, blocks of digital noise pop up, scan lines and
+// static, and every couple of seconds a big burst. It never draws over _TextRect (the name, flavour line, rows and
+// note stay clean), so the text is always easy to read.
+//   _MainTex   the card's picture; _ArtRect its centre (x, y) and half size (z, w) in card units
+//   _Card      the card's width, height, corner radius and border width
+//   _BorderColor / _BodyColor  the frame's and the card stock's colours (for the torn slices)
+//   _TextRect  where the text is (min x, min y, max x, max y): nothing drawn there
+//   _Size      this quad's width and height; _Amt strength (0 = off); _Seed so cards don't glitch in step
+Shader "UltraPuck/ChaosGlitch"
+{
+    Properties
+    {
+        _MainTex ("Picture", 2D) = "gray" {}
+        _ArtRect ("Picture centre, half size", Vector) = (0, 0.6, 1.01, 1.01)
+        _Card ("Card width, height, radius, border", Vector) = (2.5, 3.5, 0.17, 0.075)
+        _BorderColor ("Frame colour", Color) = (1, 0.24, 0.66, 1)
+        _BodyColor ("Card colour", Color) = (0.12, 0.12, 0.13, 1)
+        _TextRect ("Text area (min x, min y, max x, max y)", Vector) = (-1.15, -1.68, 1.15, -0.43)
+        _Size ("Quad width, height", Vector) = (3.6, 3.9, 0, 0)
+        _Amt ("Strength", Range(0, 1)) = 1
+        _Seed ("Seed", Float) = 0
+    }
+    SubShader
+    {
+        Tags { "Queue"="Transparent" "RenderType"="Transparent" "IgnoreProjector"="True" }
+        Blend SrcAlpha OneMinusSrcAlpha
+        ZWrite Off
+        Cull Back
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 3.0
+            #include "UnityCG.cginc"
+
+            sampler2D _MainTex;
+            float4 _ArtRect, _Card, _TextRect, _Size;
+            fixed4 _BorderColor, _BodyColor;
+            float _Amt, _Seed;
+
+            struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+            v2f vert(appdata_base v)
+            {
+                v2f o;
+                o.pos = UnityObjectToClipPos(v.vertex);
+                o.uv = v.texcoord.xy;
+                return o;
+            }
+
+            float Hash(float2 p) { return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
+
+            float RoundedBox(float2 p, float2 b, float r)
+            {
+                float2 q = abs(p) - b + r;
+                return length(max(q, 0)) + min(max(q.x, q.y), 0) - r;
+            }
+
+            // the card at q (card units, centre 0): its colour, and how much of it is there (0 off the card)
+            float4 CardAt(float2 q, float aa)
+            {
+                float d = RoundedBox(q, _Card.xy * 0.5, _Card.z);
+                float cov = saturate(0.5 - d / aa);
+                float inner = saturate(0.5 - (d + _Card.w) / aa);
+                float3 col = lerp(_BorderColor.rgb, _BodyColor.rgb, inner);
+                float2 a = (q - _ArtRect.xy) / (_ArtRect.zw * 2.0) + 0.5;
+                float inArt = step(0.0, a.x) * step(a.x, 1.0) * step(0.0, a.y) * step(a.y, 1.0);
+                col = lerp(col, tex2D(_MainTex, saturate(a)).rgb, inArt * inner);
+                return float4(col, cov);
+            }
+
+            fixed4 frag(v2f i) : SV_Target
+            {
+                if (_Amt <= 0.001) return 0;
+                float2 p = (i.uv - 0.5) * _Size.xy; // card units, the card's centre at 0
+                float aa = max(fwidth(p.x), 1e-4);
+                float2 hb = _Card.xy * 0.5;
+
+                // the clock: 15 glitch frames a second; some frames burst, and every ~2.7 s a big burst
+                float slice = floor(_Time.y * 15.0) + _Seed * 101.0;
+                float burst = step(0.78, Hash(float2(slice, 1.7)));
+                float cyc = frac(_Time.y / 2.7 + _Seed * 0.37);
+                float big = step(cyc, 0.1);
+                float k = saturate(0.2 + burst * 0.55 + big) * _Amt;
+
+                // horizontal bands: some of them torn sideways this frame
+                float bands = lerp(9.0, 30.0, Hash(float2(slice, 8.8)));
+                float band = floor((p.y / _Card.y + 0.5) * bands);
+                float torn = step(0.62 - 0.3 * k, Hash(float2(band, slice + 3.0)));
+                float shift = (Hash(float2(band, slice)) - 0.5) * 2.0 * (0.08 + 0.42 * k) * torn;
+                float split = (0.025 + 0.06 * k);
+
+                float4 here = CardAt(p, aa);
+                float4 r = CardAt(p - float2(shift - split, 0), aa);
+                float4 g = CardAt(p - float2(shift, 0), aa);
+                float4 b = CardAt(p - float2(shift + split, 0), aa);
+
+                float3 col = 0;
+                float alpha = 0;
+                if (torn > 0.5)
+                {
+                    // a torn slice: the card shifted along, red and blue pulled apart
+                    col = float3(r.r * r.a, g.g * g.a, b.b * b.a);
+                    alpha = max(max(r.a, g.a), b.a) * (0.75 + 0.25 * k);
+                    // where only one colour reaches, show it bright (the coloured fringe)
+                    col += float3(1.0, 0.15, 0.45) * saturate(r.a - g.a) * 0.6 + float3(0.1, 0.9, 1.0) * saturate(b.a - g.a) * 0.6;
+                }
+                else
+                {
+                    // the rest: red and cyan ghosts of the frame sticking out on either side
+                    float gr = CardAt(p + float2(split * 1.6, 0), aa).a, gb = CardAt(p - float2(split * 1.6, 0), aa).a;
+                    float outR = saturate(gr - here.a), outB = saturate(gb - here.a);
+                    col = float3(1.0, 0.1, 0.4) * outR + float3(0.1, 0.95, 1.0) * outB;
+                    alpha = max(outR, outB) * (0.55 + 0.4 * k);
+                }
+
+                // blocks of digital noise, near the card (in it and just round it), more in a burst
+                float2 cellSize = float2(lerp(0.14, 0.38, Hash(float2(slice, 5.1))), lerp(0.05, 0.14, Hash(float2(slice, 6.3))));
+                float2 cell = floor((p + float2(Hash(float2(slice, 2.2)), 0)) / cellSize);
+                float near = saturate(1.0 - max(0.0, RoundedBox(p, hb, _Card.z)) / 0.35);
+                float on = step(0.975 - 0.07 * k, Hash(cell + slice * 0.13)) * near;
+                float pick = Hash(cell * 1.7 + slice);
+                float3 bc = pick < 0.3 ? float3(1.0, 0.1, 0.55) : pick < 0.55 ? float3(0.1, 0.95, 1.0) : pick < 0.7 ? float3(0.6, 1.0, 0.2)
+                          : pick < 0.85 ? float3(0.95, 0.95, 1.0) : float3(0.02, 0.02, 0.03);
+                float fine = Hash(floor(p * float2(90.0, 120.0)) + slice);
+                bc = lerp(bc, bc * (0.5 + fine), step(0.5, Hash(cell + 4.4)));
+                col = lerp(col, bc, on);
+                alpha = max(alpha, on * 0.85);
+
+                // the picture keeps a faint scan-line tint even when nothing is torn
+                float2 a = (p - _ArtRect.xy) / _ArtRect.zw;
+                float inArt = step(abs(a.x), 1.0) * step(abs(a.y), 1.0);
+                float lines = 0.5 + 0.5 * sin(p.y * 260.0 + _Time.y * 9.0);
+                float tint = inArt * (1.0 - step(0.5, alpha)) * (0.1 + 0.12 * k) * lines;
+                col = lerp(col, float3(0.0, 0.0, 0.0), tint / max(alpha + tint, 1e-4));
+                alpha = max(alpha, tint);
+
+                // a flicker now and then: the whole card blinks brighter
+                float flick = step(0.94, Hash(float2(slice, 9.9))) * here.a * 0.18 * _Amt;
+                col = lerp(col, float3(1.0, 1.0, 1.0), flick / max(alpha + flick, 1e-4));
+                alpha = max(alpha, flick);
+
+                // scan lines and static over everything drawn
+                col *= 0.82 + 0.18 * (0.5 + 0.5 * sin(p.y * 220.0 - _Time.y * 6.0));
+                col += (Hash(floor(p * float2(160.0, 220.0)) + frac(_Time.y * 7.3) * 100.0) - 0.5) * 0.14;
+
+                // never over the text
+                float2 lo = p - _TextRect.xy, hi = _TextRect.zw - p;
+                float inText = saturate(min(min(lo.x, lo.y), min(hi.x, hi.y)) / 0.03 + 1.0);
+                alpha *= 1.0 - inText;
+
+                return fixed4(saturate(col), saturate(alpha) * _Amt);
+            }
+            ENDCG
+        }
+    }
+    Fallback Off
+}

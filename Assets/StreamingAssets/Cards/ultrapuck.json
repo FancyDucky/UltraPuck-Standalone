@@ -420,6 +420,18 @@
       "flavor": "You wouldn't shoot on your own net, right?",
       "text": "[note]Your shots can go in your own net without counting. Cannon Ball cards will still apply however.[/]",
       "stats": { "Loyal": "+1" }
+    },
+    {
+      "id": "ultrapuck.widenets",
+      "name": "2x Goal Size",
+      "tier": "B",
+      "chaos": true,
+      "max": 1,
+      "color": "#FF3DA8",
+      "flavor": "Something is wrong with the nets.",
+      "face": [ { "label": "Both nets", "value": "[gold]2x wide[/]" } ],
+      "text": "[note]Chaos card: changes the arena for everyone, both teams.[/]",
+      "stats": { "WideNets": "+1" }
     }
   ]
 }

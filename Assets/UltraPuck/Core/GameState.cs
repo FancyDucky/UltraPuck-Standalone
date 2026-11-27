@@ -161,6 +161,8 @@ namespace UltraPuck.Core
         public int Rage;
         /// <summary>Momentum: your shot doesn't slow below 33% of its speed (per card). Loyal: your shot into your own net bounces out (no own goal).</summary>
         public int Momentum, Loyal;
+        /// <summary>2x Goal Size (a chaos card): while anyone holds it, every net is twice as wide (Simulation.WideNets).</summary>
+        public int WideNets;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
@@ -174,7 +176,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
             GameState.Mix(ref h, Swap); GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
-            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine); GameState.Mix(ref h, Rage); GameState.Mix(ref h, Momentum); GameState.Mix(ref h, Loyal);
+            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine); GameState.Mix(ref h, Rage); GameState.Mix(ref h, Momentum); GameState.Mix(ref h, Loyal); GameState.Mix(ref h, WideNets);
         }
     }
 

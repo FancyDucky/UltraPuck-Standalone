@@ -331,6 +331,57 @@ namespace UltraPuck.Core
             return best;
         }
 
+        /// <summary>
+        /// A copy of this map with every net <paramref name="times"/> as wide (the 2x Goal Size chaos card): each goal
+        /// box grows across its mouth about its middle, and the wall points round it (the net's sides, or the notch in
+        /// the boards on a rink whose nets sit in the outline) move out with its sides, so the gap to the box stays.
+        /// </summary>
+        public MapDef WithWideNets(int times)
+        {
+            var m = new MapDef
+            {
+                Name = Name, Author = Author, Theme = Theme, Variant = Variant, Dressing = Dressing, Music = Music,
+                PuckSpot = PuckSpot,
+            };
+            var near = Fix.Ratio(3, 5); // how far from a goal box a wall point still belongs to its net
+            var grow = new Fix[Goals.Count];
+            var acrossY = new bool[Goals.Count];
+            for (var g = 0; g < Goals.Count; g++)
+            {
+                var o = Goals[g];
+                // across the mouth: from the way it faces, else the box's long side
+                acrossY[g] = o.HasFacing ? Fix.Abs(o.Facing.X) >= Fix.Abs(o.Facing.Y) : (o.Max.Y - o.Min.Y) >= (o.Max.X - o.Min.X);
+                var half = acrossY[g] ? (o.Max.Y - o.Min.Y) / 2 : (o.Max.X - o.Min.X) / 2;
+                grow[g] = half * (times - 1);
+                var n = new GoalDef { Team = o.Team, Min = o.Min, Max = o.Max, Facing = o.Facing, HasFacing = o.HasFacing, FaceOff = o.FaceOff, HasFaceOff = o.HasFaceOff };
+                if (acrossY[g]) { n.Min = new FixVec2(o.Min.X, o.Min.Y - grow[g]); n.Max = new FixVec2(o.Max.X, o.Max.Y + grow[g]); }
+                else { n.Min = new FixVec2(o.Min.X - grow[g], o.Min.Y); n.Max = new FixVec2(o.Max.X + grow[g], o.Max.Y); }
+                m.Goals.Add(n);
+            }
+            for (var w = 0; w < WallLines.Count; w++)
+            {
+                var src = WallLines[w];
+                var pts = new FixVec2[src.Length];
+                for (var k = 0; k < src.Length; k++)
+                {
+                    var p = src[k];
+                    for (var g = 0; g < Goals.Count; g++)
+                    {
+                        var o = Goals[g];
+                        if (p.X < o.Min.X - near || p.X > o.Max.X + near || p.Y < o.Min.Y - near || p.Y > o.Max.Y + near) continue;
+                        if (acrossY[g]) p = new FixVec2(p.X, p.Y + (p.Y * 2 >= o.Min.Y + o.Max.Y ? grow[g] : -grow[g]));
+                        else p = new FixVec2(p.X + (p.X * 2 >= o.Min.X + o.Max.X ? grow[g] : -grow[g]), p.Y);
+                        break;
+                    }
+                    pts[k] = p;
+                }
+                m.AddWall(pts, WallClosed[w]);
+            }
+            foreach (var s in Spawns) m.Spawns.Add(new SpawnDef { Team = s.Team, Pos = s.Pos, Facing = s.Facing });
+            m.Route.AddRange(Route);
+            return m;
+        }
+
         /// <summary>Where the <paramref name="index"/>-th player of a team starts (extra players line up behind the last spawn).</summary>
         public SpawnDef SpawnFor(int team, int index)
         {

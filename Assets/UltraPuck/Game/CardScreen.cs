@@ -2160,11 +2160,17 @@ namespace UltraPuck.Game
                 metal: metal ? 0.6f : 0f,
                 poly: poly ? 0.65f : 0f);
             Special(art, fx, def.Finish, false);
+            // a chaos card with no finish of its own: the picture tears inside too (the glitch finish), in step with
+            // the glitch over the card (same seed)
+            if (def.Chaos && def.Finish == null) Special(art, fx, "glitch", false);
+            if (def.Chaos) art.SetFloat("_GlitchSeed", v.Phase);
             v.Finishes.Add(art);
             art.SetFloat("_SweepStrength", 0f);
             v.ArtMat = art;
             v.ArtT = v.Tilt.Find("Art");
             v.ArtHome = v.ArtT.localPosition;
+
+            if (def.Chaos) ChaosGlitch(v, def, accent, fx);
 
             // title, flavour, coloured rule, then face rows (label left / value right) and optional footnote
             var hasFlavor = !string.IsNullOrEmpty(def.Flavor);
@@ -2253,6 +2259,38 @@ namespace UltraPuck.Game
             backText.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             return v;
         }
+
+        /// <summary>
+        /// Chaos cards: a glitch over the card on a quad bigger than it (ChaosGlitch.shader), so torn slices, colour
+        /// split ghosts and noise blocks spill past the border. Over the picture and frame, under the text, and it
+        /// leaves the text area alone. Off with Settings > Card effects.
+        /// </summary>
+        private void ChaosGlitch(CardView v, CardDef def, Color accent, bool fx)
+        {
+            var size = new Vector2(3.6f, 3.9f);
+            var go = Quad("Chaos", v.Tilt, size);
+            go.transform.localPosition = new Vector3(0f, 0f, -0.004f);
+            if (_chaosShader == null) _chaosShader = Resources.Load<Shader>("UltraPuck/ChaosGlitch");
+            if (_chaosShader == null) { Destroy(go); return; }
+            var m = new Material(_chaosShader);
+            m.SetTexture("_MainTex", Art(def.Art));
+            m.SetVector("_ArtRect", new Vector4(0f, 0.6f, 1.01f, 1.01f));
+            m.SetVector("_Card", new Vector4(2.5f, 3.5f, 0.17f, 0.075f));
+            m.SetColor("_BorderColor", accent);
+            m.SetColor("_BodyColor", new Color(0.12f, 0.12f, 0.13f));
+            // from just under the picture to the frame's inner edge: the name, flavour, rule, rows and note
+            m.SetVector("_TextRect", new Vector4(-1.145f, -1.675f, 1.145f, -0.425f));
+            m.SetVector("_Size", new Vector4(size.x, size.y, 0f, 0f));
+            m.SetFloat("_Amt", fx ? 1f : 0f);
+            m.SetFloat("_Seed", v.Phase);
+            var r = go.GetComponent<MeshRenderer>();
+            r.sharedMaterial = m;
+            r.sortingOrder = 2;
+            v.Front.Add(r);
+            v.FrontOrder.Add(2);
+        }
+
+        private Shader _chaosShader;
 
         // the shader's special finishes (_Special 1..11, see Card.shader) and how strong each is on the body / the
         // picture (borealis and rainbow are animated fills behind the picture: never on it)

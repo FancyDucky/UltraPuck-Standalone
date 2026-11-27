@@ -44,6 +44,11 @@ namespace UltraPuck.Core
         public bool TextBoxes;
         /// <summary>A thin dark outline round each piece of the card's text (easier to read), display only: "textOutline": true.</summary>
         public bool TextOutline;
+        /// <summary>
+        /// A chaos card: it changes the arena for everyone (both teams), not just its holder. Its face glitches out
+        /// (CardScreen.ChaosGlitch, display only): "chaos": true.
+        /// </summary>
+        public bool Chaos;
         /// <summary>Every "finish" a card file may use (see Card.shader for what each looks like).</summary>
         public static readonly string[] FinishNames =
             { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass", "borealis", "rainbow" };
@@ -86,7 +91,7 @@ namespace UltraPuck.Core
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
             "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "Swap", "PassRefresh", "PassRefreshTeam", "IceTrail",
             "QuickShotFull", "GhostShot", "CannonBall", "PassSpeed", "StoneWall", "PortalGun", "SlotMachine",
-            "Choose", "DoubleCard", "NewHand", "Rage", "Momentum", "Loyal",
+            "Choose", "DoubleCard", "NewHand", "Rage", "Momentum", "Loyal", "WideNets",
         };
 
         /// <summary>Stats that need the utility button (Triangle / Y). Used to offer only one utility at a time.</summary>
@@ -119,6 +124,7 @@ namespace UltraPuck.Core
                     Glare = !(Json.Get(o, "glare") is bool) || (bool)Json.Get(o, "glare"),
                     TextBoxes = Json.Get(o, "textBoxes") is bool && (bool)Json.Get(o, "textBoxes"),
                     TextOutline = Json.Get(o, "textOutline") is bool && (bool)Json.Get(o, "textOutline"),
+                    Chaos = Json.Get(o, "chaos") is bool && (bool)Json.Get(o, "chaos"),
                 };
                 if (string.IsNullOrEmpty(c.Id)) throw new FormatException(what + ": needs an id");
                 if (_byId.ContainsKey(c.Id)) throw new FormatException(what + ": a card with the id \"" + c.Id + "\" already exists");
@@ -261,6 +267,7 @@ namespace UltraPuck.Core
                 case "Rage": st.Rage = Count(st.Rage, m); break;
                 case "Momentum": st.Momentum = Count(st.Momentum, m); break;
                 case "Loyal": st.Loyal = Count(st.Loyal, m); break;
+                case "WideNets": st.WideNets = Count(st.WideNets, m); break;
                 case "IceTrail": st.IceTrail = Count(st.IceTrail, m); break;
                 case "QuickShotFull": st.QuickShotFull = Count(st.QuickShotFull, m); break;
                 case "GhostShot": st.GhostShot = Count(st.GhostShot, m); break;
