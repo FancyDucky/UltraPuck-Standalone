@@ -181,7 +181,7 @@ const S = {
   N: 0, M: 0, layers: {}, canv: {},
   active: 'back', visible: { back: true, floor: true, shade: true, front: true },
   tool: 'brush', stamp: { w: 1, h: 1, ids: [0], pal: true }, random: false, stamps: [],
-  zoom: 8, panX: 0, panY: 0, game: false, guides: true, grid: true, dim: true,
+  zoom: 8, panX: 0, panY: 0, game: false, guides: true, grid: true, dim: true, all: false,
   shadeAlpha: 0.6, scale: 0,
 };
 let G = null; // the rink's grid: { rink, cx, cy, tw, N, M, view169 }
@@ -454,7 +454,7 @@ function paint() {
   c.fillStyle = '#20232a';
   for (let y = 0; y < S.M; y++) for (let x = (y & 1); x < S.N; x += 2) c.fillRect(ox + x * ck, oy + y * ck, ck, ck);
   const layer = (k, a = 1) => {
-    if (!S.visible[k]) return;
+    if (!S.visible[k] && !S.all) return;
     c.globalAlpha = a * (k === 'shade' ? S.shadeAlpha : 1);
     c.drawImage(S.canv[k], ox, oy, AW, AH);
     c.globalAlpha = 1;
@@ -467,6 +467,11 @@ function paint() {
     c.lineJoin = 'round'; c.lineCap = 'round';
     for (const w of G.rink.walls) { wallPath(c, w); c.strokeStyle = '#d9dde6'; c.lineWidth = Math.max(1.5, Z / G.tw * 0.25); c.stroke(); }
     for (const g of G.rink.goals) goalRect(c, g, true);
+    layer('shade'); layer('front');
+  } else if (S.all) {
+    // the finished picture: every layer at full strength, the floor only inside the rink, as the game shows it
+    layer('back');
+    c.save(); wallPath(c, outer); c.clip(); layer('floor'); c.restore();
     layer('shade'); layer('front');
   } else {
     for (const L of LAYERS) layer(L.key, S.dim && L.key !== S.active ? 0.3 : 1);
@@ -687,6 +692,13 @@ for (const L of LAYERS) {
   eye.onclick = () => { S.visible[L.key] = !S.visible[L.key]; eye.classList.toggle('off', !S.visible[L.key]); render(); };
   d.append(b, eye); $('layers').appendChild(d);
 }
+{
+  // every layer at full strength, hidden or faded ones too: the finished picture
+  const b = document.createElement('button'); b.id = 'all'; b.innerHTML = 'Show all<kbd>A</kbd>';
+  b.title = 'The finished picture: every layer at full strength (hidden ones too), the floor only inside the rink (A)';
+  b.onclick = () => toggle('all', 'all');
+  $('layers').appendChild(b);
+}
 for (const k in RINKS) { const o = document.createElement('option'); o.value = k; o.textContent = RINKS[k].name; $('rink').appendChild(o); }
 document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
 $('rink').onchange = e => { setRink(e.target.value); fit(); save(); };
@@ -744,6 +756,7 @@ window.addEventListener('keydown', e => {
   else if (k >= '1' && k <= '4') setLayer(LAYERS[+k - 1].key);
   else if (k === 'g') toggle('game', 'game');
   else if (k === 'h') toggle('guides', 'guides');
+  else if (k === 'a') toggle('all', 'all');
   else if (k === 'x') flipStamp(true);
   else if (k === 'y') flipStamp(false);
   else if (k === 'z') rotateStamp(!e.shiftKey);
