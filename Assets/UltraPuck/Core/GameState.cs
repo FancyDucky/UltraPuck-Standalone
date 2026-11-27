@@ -32,6 +32,11 @@ namespace UltraPuck.Core
         /// <summary>The host takes a bot out mid-match: <c>RemoveBot + its player number</c> (208..215).</summary>
         public const byte RemoveBot = 208;
         /// <summary>
+        /// On the card screen: <c>EndPick</c> is the host ending the card pick now (anyone still choosing gets a random
+        /// card, Choose's deck too); <c>Reroll</c> is New Hand's re-roll, sent until the new cards arrive.
+        /// </summary>
+        public const byte EndPick = 249, Reroll = 250;
+        /// <summary>
         /// Free play's puck drills (the d-pad), as a <see cref="Pick"/> from that player: the puck to you, the puck sent at
         /// you, shot at the other team's net, shot at your own.
         /// </summary>

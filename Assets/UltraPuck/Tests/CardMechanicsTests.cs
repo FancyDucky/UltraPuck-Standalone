@@ -950,6 +950,24 @@ namespace UltraPuck.Tests
 
         // ------------------------------------------------------------------ swapping onto bots (Simulation.Route)
 
+        /// <summary>Swapping onto a bot while raging: the rage stays with your body (the bot runs it), not with you.</summary>
+        [Test]
+        public void SwappingWhileRagingLeavesTheRageOnYourBody()
+        {
+            var s = _sim.NewGame(new[] { 0, 0, 1 }, 1u, new[] { false, true, true });
+            Give(s, 0, "ultrapuck.rage");
+            Play(s);
+            s.Players[0].RageTime = _sim.T.RageTime;
+            _lib.Recompute(s);
+            var raging = s.Players[0].Stats.Size.ToDouble();
+            _sim.Step(s, _sim.Route(s, new[] { new PlayerInput { Buttons = PlayerInput.Swap }, default(PlayerInput), default(PlayerInput) }));
+            Assert.AreEqual(1, Simulation.Steers(s, 0), "on the bot teammate");
+            Assert.Greater(s.Players[0].RageTime.ToDouble(), 0.0, "their own body still rages, run by the bot");
+            Assert.AreEqual(raging, s.Players[0].Stats.Size.ToDouble(), 0.001, "still raging-size");
+            Assert.AreEqual(0.0, s.Players[1].RageTime.ToDouble(), "the body they took over doesn't rage");
+            Assert.Less(s.Players[1].Stats.Size.ToDouble(), raging, "nor grow");
+        }
+
         [Test]
         public void SwapTakesOverTheNextBotTeammateAndBack()
         {
@@ -1639,6 +1657,21 @@ namespace UltraPuck.Tests
             Assert.Greater(s.Players[1].Vel.Y.ToDouble(), 5.0, "thrown the way the carrier faces");
             for (var t = 0; t < 20; t++) _sim.Step(s, new PlayerInput[3]);
             Assert.AreEqual(1, s.Carrier, "they kept the puck while flying");
+        }
+
+        /// <summary>Thrown by a teammate (Friendly Fire): a boost they can steer, not a flight they ride out.</summary>
+        [Test]
+        public void AThrownTeammateCanSteer()
+        {
+            var s = Grab();
+            for (var t = 0; t < 30; t++) _sim.Step(s, new[] { new PlayerInput { AimY = 127, Buttons = PlayerInput.ChargeBrake }, default(PlayerInput), default(PlayerInput) });
+            _sim.Step(s, new[] { new PlayerInput { AimY = 127, Buttons = PlayerInput.ShootCheck | PlayerInput.ChargeBrake }, default(PlayerInput), default(PlayerInput) });
+            Assert.AreEqual(-1, s.Players[1].HeldBy, "thrown");
+            var up = s.Players[1].Vel.Y.ToDouble();
+            for (var t = 0; t < 30; t++) _sim.Step(s, new[] { default(PlayerInput), new PlayerInput { MoveX = 127 }, default(PlayerInput) });
+            Assert.Greater(s.Players[1].Vel.X.ToDouble(), 3.0, "steered sideways");
+            Assert.Greater(s.Players[1].Vel.Y.ToDouble(), up * 0.4, "still carried along by the throw");
+            Assert.Greater(s.Players[1].TossTime.ToDouble(), 0.0, "still boosted");
         }
 
         [Test]
@@ -3059,6 +3092,73 @@ namespace UltraPuck.Tests
             Assert.Contains(Id("ultrapuck.doubledash"), s.Players[1].Cards, "not outvoted: each picks their own from the deck");
         }
 
+        /// <summary>Two teammates both taking Choose in one pick: Swap (one a team) is in only one of their decks.</summary>
+        [Test]
+        public void TeammatesBothChoosingOnlyOneCanTakeSwap([Values(1u, 2u, 3u, 4u, 5u, 6u)] uint seed)
+        {
+            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3 }, _lib);
+            var s = sim.NewGame(new[] { 0, 0, 1 }, seed, new[] { false, false, true });
+            sim.StartPicking(s, new[] { 0, 1 });
+            s.Players[0].Offer = new[] { Id("ultrapuck.choose") };
+            s.Players[1].Offer = new[] { Id("ultrapuck.choose") };
+            sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 }, default(PlayerInput) });
+            Assert.AreEqual(1, s.Players[0].PickKind);
+            Assert.AreEqual(1, s.Players[1].PickKind);
+            var swap = Id("ultrapuck.swap");
+            var with = 0;
+            foreach (var i in new[] { 0, 1 }) if (System.Array.IndexOf(s.Players[i].Offer, swap) >= 0) with++;
+            Assert.AreEqual(1, with, "Swap in one deck, not both");
+            // and taking it from there works
+            var who = System.Array.IndexOf(s.Players[0].Offer, swap) >= 0 ? 0 : 1;
+            var inputs = new PlayerInput[3];
+            sim.Step(s, inputs); // the Choose picks let go
+            inputs[who].Pick = (byte)(System.Array.IndexOf(s.Players[who].Offer, swap) + 1);
+            inputs[1 - who].Pick = 1;
+            sim.Step(s, inputs);
+            Assert.AreNotEqual(Phase.Picking, s.Phase);
+            Assert.Contains(swap, s.Players[who].Cards);
+            Assert.IsFalse(System.Array.IndexOf(s.Players[1 - who].Cards, swap) >= 0);
+        }
+
+        /// <summary>
+        /// One teammate takes Choose and the other Double Card in the same pick (an online game froze around this):
+        /// if Double Card hands out Swap, it's gone from the Choose deck; either way the pick finishes and the match
+        /// goes on.
+        /// </summary>
+        [Test]
+        public void ChooseAndDoubleCardTogether([Values(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u)] uint seed)
+        {
+            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 5 }, _lib);
+            var s = sim.NewGame(new[] { 0, 1, 0, 1 }, seed);
+            sim.StartPicking(s, new[] { 1, 3 });
+            s.Players[1].Offer = new[] { Id("ultrapuck.choose"), Id("ultrapuck.speedup") };
+            s.Players[3].Offer = new[] { Id("ultrapuck.speedup"), Id("ultrapuck.doublecard") };
+            var inputs = new PlayerInput[4];
+            inputs[1].Pick = 1; inputs[3].Pick = 2;
+            sim.Step(s, inputs);
+            var swap = Id("ultrapuck.swap");
+            Assert.AreEqual(Phase.Picking, s.Phase, "the Choose deck is next");
+            Assert.AreEqual(1, s.Players[1].PickKind);
+            Assert.AreEqual(2, s.Players[3].Gifts.Length, "Double Card's two cards");
+            if (System.Array.IndexOf(s.Players[3].Cards, swap) >= 0)
+                Assert.IsFalse(System.Array.IndexOf(s.Players[1].Offer, swap) >= 0, "Double Card gave Swap: not in the teammate's deck");
+            // the deck pick (the Choose pick let go first), then on to the face-off and play
+            inputs = new PlayerInput[4];
+            sim.Step(s, inputs);
+            inputs[1].Pick = (byte)s.Players[1].Offer.Length;
+            sim.Step(s, inputs);
+            Assert.AreEqual(Phase.Countdown, s.Phase);
+            Assert.AreEqual(3, s.Players[3].Cards.Length);
+            Assert.AreEqual(2, s.Players[1].Cards.Length);
+            var holders = 0;
+            foreach (var i in new[] { 1, 3 }) if (System.Array.IndexOf(s.Players[i].Cards, swap) >= 0) holders++;
+            Assert.LessOrEqual(holders, 1, "one Swap a team");
+            var ticks = 0;
+            for (; ticks < 120 * 30 && s.Phase != Phase.Play; ticks++) sim.Step(s, new PlayerInput[4]);
+            Assert.AreEqual(Phase.Play, s.Phase, "the match goes on (" + ticks + " ticks, " + s.PhaseTime.ToDouble() + " s left)");
+            Assert.Less(ticks, 120 * 10, "within 10 s");
+        }
+
         [Test]
         public void DoubleCardGivesTwoOtherCards([Values(1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u)] uint seed)
         {
@@ -3108,9 +3208,9 @@ namespace UltraPuck.Tests
             sim.StartPicking(s, new[] { 0 });
             var before = (int[])s.Players[0].Offer.Clone();
             var press = new PlayerInput[2];
-            press[0].Buttons = PlayerInput.Utility;
+            press[0].Pick = PlayerInput.Reroll;
             sim.Step(s, press);
-            Assert.AreEqual(before, s.Players[0].Offer, "no New Hand: the button does nothing");
+            Assert.AreEqual(before, s.Players[0].Offer, "no New Hand: a re-roll does nothing");
 
             Give(s, 0, "ultrapuck.newhand");
             sim.StartPicking(s, new[] { 0 });
@@ -3134,6 +3234,48 @@ namespace UltraPuck.Tests
             Assert.AreEqual(0, s.Players[0].Rerolls, "a new pick: the re-roll is back");
         }
 
+        /// <summary>
+        /// The re-roll is asked for while the utility button was already held when the pick started (Shockwave is
+        /// charged by holding it): it still re-rolls (it used not to, as no fresh press was seen).
+        /// </summary>
+        [Test]
+        public void NewHandRerollsWhateverTheUtilityButtonWasDoing()
+        {
+            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3 }, _lib);
+            var s = sim.NewGame(new[] { 0, 1 }, 9u);
+            Give(s, 0, "ultrapuck.newhand");
+            s.Players[0].PrevButtons = PlayerInput.Utility;
+            sim.StartPicking(s, new[] { 0 });
+            var before = (int[])s.Players[0].Offer.Clone();
+            sim.Step(s, new[] { new PlayerInput { Buttons = PlayerInput.Utility, Pick = PlayerInput.Reroll }, default(PlayerInput) });
+            Assert.AreEqual(1, s.Players[0].Rerolls);
+            Assert.AreNotEqual(before, s.Players[0].Offer);
+            // the request still being sent (it takes a moment to stop) doesn't use up anything more
+            for (var t = 0; t < 5; t++) sim.Step(s, new[] { new PlayerInput { Pick = PlayerInput.Reroll }, default(PlayerInput) });
+            Assert.AreEqual(1, s.Players[0].Rerolls);
+            Assert.AreEqual(Phase.Picking, s.Phase, "still choosing");
+        }
+
+        /// <summary>The host ends a card pick that's stuck (no time limit here): everyone still choosing gets a random card, Choose's deck too.</summary>
+        [Test]
+        public void TheHostCanEndTheCardPick()
+        {
+            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3, PickTime = Fix.Zero }, _lib);
+            var s = sim.NewGame(new[] { 0, 1, 1 }, 5u);
+            sim.StartPicking(s, new[] { 1, 2 });
+            s.Players[1].Offer = new[] { Id("ultrapuck.choose") };
+            for (var t = 0; t < 600; t++) sim.Step(s, new PlayerInput[3]);
+            Assert.AreEqual(Phase.Picking, s.Phase, "nobody chooses, no time limit: waits");
+            sim.Step(s, new[] { new PlayerInput { Pick = PlayerInput.EndPick }, default(PlayerInput), default(PlayerInput) });
+            Assert.AreNotEqual(Phase.Picking, s.Phase, "ended");
+            Assert.AreEqual(2, s.Players[1].Cards.Length, "Choose, and a random card from its deck");
+            Assert.AreEqual(1, s.Players[2].Cards.Length);
+            // offline: the host's command straight away
+            sim.StartPicking(s, new[] { 1, 2 });
+            sim.HostCommand(s, PlayerInput.EndPick);
+            Assert.AreNotEqual(Phase.Picking, s.Phase);
+        }
+
         [Test]
         public void NewHandInATeamVoteRerollsTheTeamsHand()
         {
@@ -3144,7 +3286,7 @@ namespace UltraPuck.Tests
             var before = (int[])s.Players[0].Offer.Clone();
             sim.Step(s, new[] { new PlayerInput(), new PlayerInput { Pick = 1 } }); // the teammate locks a vote
             Assert.AreEqual(before[0], s.Players[1].Picked);
-            sim.Step(s, new[] { new PlayerInput { Buttons = PlayerInput.Utility }, new PlayerInput { Pick = 1 } });
+            sim.Step(s, new[] { new PlayerInput { Pick = PlayerInput.Reroll }, new PlayerInput { Pick = 1 } });
             Assert.AreEqual(s.Players[0].Offer, s.Players[1].Offer, "the team still shares one hand");
             foreach (var c in s.Players[0].Offer) Assert.IsFalse(System.Array.IndexOf(before, c) >= 0, "a fresh hand");
             Assert.AreEqual(-1, s.Players[1].Picked, "everyone on the team chooses again");
@@ -3161,11 +3303,11 @@ namespace UltraPuck.Tests
                 _lib.Recompute(s);
                 sim.StartPicking(s, new[] { 0, 1 });
                 var inputs = new PlayerInput[4];
-                inputs[0].Buttons = PlayerInput.Utility;
+                inputs[0].Pick = PlayerInput.Reroll;
                 sim.Step(s, sim.Route(s, inputs));
                 s.Players[0].Offer = new[] { Id("ultrapuck.choose") };
                 s.Players[1].Offer = new[] { Id("ultrapuck.doublecard") };
-                inputs[0].Buttons = 0; inputs[0].Pick = 1;
+                inputs[0].Pick = 1;
                 for (var t = 0; t < 30; t++) sim.Step(s, sim.Route(s, inputs));
                 var c = s.Clone();
                 Assert.AreEqual(s.Checksum(), c.Checksum());

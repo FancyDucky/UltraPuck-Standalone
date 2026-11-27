@@ -671,6 +671,37 @@ namespace UltraPuck.Game
                 }
             }
 
+            if (want("minis"))
+            {
+                // others' picks at the side: you choosing while bots on both teams pick (theirs come in small, your
+                // teammates' on the left, the other team's on the right), one clicked up to full size, and the other
+                // team picking on its own (nothing dealt to watch, just who's choosing and their picks)
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Name = "FancyDuck" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Demo = true, Name = "Bot" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Demo = true, Name = "Bot" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Demo = true, Name = "Bot" });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                _sim.T.CardsOffered = 3;
+                yield return new WaitForSecondsRealtime(0.8f);
+                _sim.StartPicking(_state, new[] { 0, 1, 2, 3 });
+                yield return new WaitForSecondsRealtime(3.5f);
+                yield return Shot("minis-choosing");
+                _cardScreen.ShotBigMini();
+                yield return new WaitForSecondsRealtime(1f);
+                yield return Shot("minis-big");
+                _cardScreen.ShotBigMini();
+                _cardScreen.ShotConfirm = true;
+                yield return new WaitForSecondsRealtime(3f);
+                _sim.StartPicking(_state, new[] { 2, 3 });
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("minis-watching");
+                yield return new WaitForSecondsRealtime(2.5f);
+                yield return Shot("minis-watching-2");
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
             if (want("cardfx"))
             {
                 // the animated finishes (borealis, rainbow), put on two cards for this run only (not saved), at two moments
@@ -1456,6 +1487,9 @@ namespace UltraPuck.Game
             {
                 // ease onto the scorer (not a hard cut, not a close-up) and keep following them
                 var at = V.Of3(_players[_state.LastGoalPlayer].Root.transform.position);
+                // swallowed by their own Black Hole: watch the hole they went into, not where their body was
+                var scorer = _state.Players[_state.LastGoalPlayer];
+                if (scorer.Swallowed && scorer.OutTime > Fix.Zero) at = V.Of(scorer.OutFrom);
                 var pad = 5.5f;
                 lo = at - Vector2.one * pad;
                 hi = at + Vector2.one * pad;
@@ -1592,6 +1626,7 @@ namespace UltraPuck.Game
             // free play: the d-pad runs the puck drills (not with a menu or the cards up)
             LocalPlayers.PuckDrills = _free && _state != null && !_menus.IsOpen && !_cardScreen.Showing;
             _cardScreen.Sim = _sim;
+            HostEndPick(playing);
             _cardScreen.Frame(playing ? _state : null);
             // the theme plays through the menus and lobbies; a match plays its own songs, one after another (see Sound)
             // (a rink's own song: first in a match there, and the theme while it's the main menu's rink)
@@ -2371,7 +2406,8 @@ namespace UltraPuck.Game
                 var cmdSlot = -1;
                 for (var k = 0; k < inputs.Length && cmdSlot < 0; k++) if (s.PlayerOf(k) >= 0) cmdSlot = k;
                 if (s.IsHost && _menus.IsOpen && cmdSlot >= 0) inputs[cmdSlot].Buttons |= PlayerInput.Pause; // the host's menu pauses everyone
-                var sendCmd = _pendingCmds.Count > 0 && cmdSlot >= 0 && _state.Phase != Phase.Picking;
+                // (during a card pick only the host's End the pick: the rest wait for play)
+                var sendCmd = _pendingCmds.Count > 0 && cmdSlot >= 0 && (_state.Phase != Phase.Picking || _pendingCmds.Peek() == PlayerInput.EndPick);
                 var leaving = -1; // a bot being taken out: which player (worked out now, as the game stands)
                 if (sendCmd)
                 {
@@ -2649,6 +2685,31 @@ namespace UltraPuck.Game
         private bool _shotBoard; // screenshots: the scoreboard as if View were held
 
         /// <summary>Match settings (the host): kick-off or a score fix. Online it goes with the host's controls, one a tick.</summary>
+        // the host holding the menu button through a card pick ends it (someone stuck, or no time limit)
+        private const float EndPickHold = 1.5f;
+        private float _endPickHeld;
+        private bool _endPickSent;
+
+        private void HostEndPick(bool playing)
+        {
+            var can = playing && _state != null && _state.Phase == Phase.Picking && !_free && !_menus.IsOpen
+                && (_mode == Mode.Match || (_mode == Mode.Online && _session != null && _session.IsHost));
+            if (!can) { _endPickHeld = 0f; _endPickSent = false; _cardScreen.HostEnd = -1f; return; }
+            if (!_local.MenuHeld()) { _endPickHeld = 0f; _endPickSent = false; }
+            else if (!_endPickSent)
+            {
+                _endPickHeld += Time.unscaledDeltaTime;
+                if (_endPickHeld >= EndPickHold)
+                {
+                    _endPickSent = true;
+                    Sound.Select();
+                    Debug.Log("Ultra Puck cards: the host ended the pick");
+                    HostCommand(PlayerInput.EndPick);
+                }
+            }
+            _cardScreen.HostEnd = _endPickSent ? 1f : Mathf.Clamp01(_endPickHeld / EndPickHold);
+        }
+
         private void HostCommand(byte cmd)
         {
             if (_state == null) return;

@@ -527,6 +527,15 @@ namespace UltraPuck.Game
             return false;
         }
 
+        /// <summary>Is a joined person holding Start / Options (Esc)? (The host holds it to end a card pick.)</summary>
+        public bool MenuHeld()
+        {
+            if (Blocked) return false;
+            foreach (var s in Slots)
+                if (Any(s, g => g.startButton.isPressed, k => k.escapeKey.isPressed)) return true;
+            return false;
+        }
+
         /// <summary>LB / RB or Q / E on any controller or the keyboard: -1, +1, or 0.</summary>
         public int TabPressed()
         {
@@ -902,6 +911,13 @@ namespace UltraPuck.Game
             var x = (Controls.KeyHeld(kb, Controls.Act.AimRight) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.AimLeft) ? 1f : 0f);
             var y = (Controls.KeyHeld(kb, Controls.Act.AimUp) ? 1f : 0f) - (Controls.KeyHeld(kb, Controls.Act.AimDown) ? 1f : 0f);
             return Vector2.ClampMagnitude(new Vector2(x, y), 1f);
+        }
+
+        /// <summary>Did slot <paramref name="slot"/>'s person press the utility button this frame (New Hand's re-roll)?</summary>
+        public bool UtilityPressed(int slot)
+        {
+            if (slot < 0 || slot >= Slots.Count || Slots[slot].Demo || Blocked) return false;
+            return ((Buttons(Slots[slot].Device, true) | Buttons(Slots[slot].Extra, true)) & PlayerInput.Utility) != 0;
         }
 
         /// <summary>Aim for menu nav: pad stick or keyboard aim keys (same as the old Aim helper).</summary>

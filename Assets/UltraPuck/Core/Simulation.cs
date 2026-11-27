@@ -236,17 +236,18 @@ namespace UltraPuck.Core
             StartPicking(s, pickers);
         }
 
-        private void StepPicking(GameState s, PlayerInput[] inputs, Fix dt)
+        private void StepPicking(GameState s, PlayerInput[] inputs, Fix dt, bool end = false)
         {
             var waiting = false;
             var redrawn = new bool[s.Players.Length];
-            // New Hand: a press of the utility button while still choosing re-rolls the offer (once a pick per copy held)
-            for (var i = 0; i < s.Players.Length; i++)
+            // New Hand: the card screen sends a re-roll (once a pick per copy held) while still choosing
+            // (a request, not the utility button's press: a button already held when the pick started, or a press
+            // between two ticks, was missed)
+            for (var i = 0; i < s.Players.Length && !end; i++)
             {
                 var p = s.Players[i];
                 var input = InputOf(inputs, i);
-                var press = (input.Buttons & PlayerInput.Utility) != 0 && (p.PrevButtons & PlayerInput.Utility) == 0;
-                if (!press || p.Offer.Length == 0 || p.Picked >= 0 || p.PickKind != 0 || p.Rerolls >= Cards.NewHands(p)) continue;
+                if (input.Pick != PlayerInput.Reroll || p.PickHeld || p.Offer.Length == 0 || p.Picked >= 0 || p.PickKind != 0 || p.Rerolls >= Cards.NewHands(p)) continue;
                 Reroll(s, i);
                 for (var j = 0; j < s.Players.Length; j++)
                     if (j == i || ((T.TeamVote || T.SameDraw) && s.Players[j].Team == p.Team)) redrawn[j] = true;
@@ -256,7 +257,7 @@ namespace UltraPuck.Core
                 var p = s.Players[i];
                 var input = InputOf(inputs, i);
                 p.PrevButtons = input.Buttons;
-                if (p.Offer.Length == 0 || p.Picked >= 0) continue;
+                if (p.Offer.Length == 0 || p.Picked >= 0 || end) continue;
                 // the tick a hand was re-rolled: a pick this tick was for the old hand, so it waits for the new one
                 if (redrawn[i]) { waiting = true; continue; }
                 // new cards: the pick still being sent is for the old ones, so wait until it's let go
@@ -266,7 +267,7 @@ namespace UltraPuck.Core
                 else waiting = true;
             }
             s.PhaseTime -= dt;
-            if (waiting && (T.PickTime <= Fix.Zero || s.PhaseTime > Fix.Zero)) return; // a pick time of 0: no limit
+            if (waiting && !end && (T.PickTime <= Fix.Zero || s.PhaseTime > Fix.Zero)) return; // a pick time of 0: no limit
 
             // Team Vote: each team's most-voted card (a tie, or nobody voting, is settled at random) goes to everyone on it
             // (not when choosing from the deck after a Choose: everyone picks their own there)
@@ -282,9 +283,21 @@ namespace UltraPuck.Core
                 if (p.Picked < 0) p.Picked = p.Offer[(int)(s.NextRandom() % (uint)p.Offer.Length)];
                 again |= TakePicked(s, p);
             }
+            // the host ended the pick: Choose's deck too gets a random card, straight away
+            if (again && end)
+            {
+                foreach (var p in s.Players)
+                {
+                    if (p.Offer.Length == 0) continue;
+                    p.Picked = p.Offer[(int)(s.NextRandom() % (uint)p.Offer.Length)];
+                    TakePicked(s, p);
+                }
+                again = false;
+            }
             Cards.Recompute(s);
             if (again)
             {
+                OneATeamInDecks(s);
                 s.PhaseTime = T.PickTime; // a fresh clock for the deck pick
                 return;
             }
@@ -300,6 +313,56 @@ namespace UltraPuck.Core
                 foreach (var q in s.Players) gifted |= q.Gifts.Length > 0;
                 if (gifted) s.PhaseTime += T.GiftRevealTime;
             }
+        }
+
+        /// <summary>
+        /// Choose's deck, once everyone has taken this round's card: a one-a-team card (Swap, Portal Gun: "maxTeam") is only
+        /// left where a teammate may still take it. Each deck was made as its player took Choose, so a teammate taking
+        /// Choose (both decks would have it) or Double Card (it may have handed it out) in the same pick isn't in it yet:
+        /// gone from the deck of anyone whose team now has enough, and with more decks than places left, kept in just
+        /// that many (people before bots, at random).
+        /// </summary>
+        private void OneATeamInDecks(GameState s)
+        {
+            foreach (var c in Cards.Cards)
+            {
+                if (c.MaxPerTeam <= 0) continue;
+                for (var team = 0; team < 2; team++)
+                {
+                    var people = new System.Collections.Generic.List<int>();
+                    var bots = new System.Collections.Generic.List<int>();
+                    for (var i = 0; i < s.Players.Length; i++)
+                    {
+                        var p = s.Players[i];
+                        if ((p.Team & 1) != team || p.PickKind != 1 || Array.IndexOf(p.Offer, c.Index) < 0) continue;
+                        if (Cards.TeamFull(s, p, c.Index)) { DropFromDeck(p, c.Index); continue; }
+                        (p.Bot ? bots : people).Add(i);
+                    }
+                    var holders = 0;
+                    foreach (var q in s.Players) if ((q.Team & 1) == team && Array.IndexOf(q.Cards, c.Index) >= 0) holders++;
+                    var places = Math.Max(0, c.MaxPerTeam - holders);
+                    var keep = new System.Collections.Generic.List<int>();
+                    foreach (var from in new[] { people, bots })
+                        while (keep.Count < places && from.Count > 0)
+                        {
+                            var k = (int)(s.NextRandom() % (uint)from.Count);
+                            keep.Add(from[k]);
+                            from.RemoveAt(k);
+                        }
+                    foreach (var from in new[] { people, bots })
+                        foreach (var i in from) DropFromDeck(s.Players[i], c.Index);
+                }
+            }
+        }
+
+        /// <summary>Take <paramref name="card"/> out of <paramref name="p"/>'s deck (never its last card).</summary>
+        private static void DropFromDeck(PlayerState p, int card)
+        {
+            if (p.Offer.Length <= 1) return;
+            var list = new System.Collections.Generic.List<int>(p.Offer);
+            list.Remove(card);
+            p.Offer = list.ToArray();
+            p.Hover = 0;
         }
 
         /// <summary>
@@ -1098,7 +1161,13 @@ namespace UltraPuck.Core
                 return;
             }
 
-            if (s.Phase == Phase.Picking) { StepPicking(s, inputs, dt); return; }
+            if (s.Phase == Phase.Picking)
+            {
+                var end = false;
+                for (var i = 0; i < s.Players.Length; i++) end |= InputOf(inputs, i).Pick == PlayerInput.EndPick;
+                StepPicking(s, inputs, dt, end);
+                return;
+            }
             if (s.Phase != Phase.GameOver) inputs = CatchUp(s, inputs);
             if (s.Phase == Phase.Countdown || s.Phase == Phase.GameOver)
             {
@@ -1255,6 +1324,9 @@ namespace UltraPuck.Core
                     AddPlayer(s, cmd == PlayerInput.AddBotBlue ? 1 : 0, true);
                     if (Cards != null) Cards.Recompute(s);
                     return;
+                case PlayerInput.EndPick:
+                    if (s.Phase == Phase.Picking) StepPicking(s, new PlayerInput[s.Players.Length], Fix.Zero, true);
+                    break;
                 case PlayerInput.KickOff:
                     if (s.Phase == Phase.GameOver || s.Phase == Phase.Picking) return;
                     FaceOff(s);
@@ -1450,8 +1522,9 @@ namespace UltraPuck.Core
             }
             var holdingMate = mate >= 0;
             var holding = carrying || carryingRock || holdingMate;
-            // carried by a teammate, or flying after being thrown: no skating (you can still shoot the puck)
-            var flying = p.HeldBy >= 0 || p.TossTime > Fix.Zero;
+            // carried by a teammate: no skating (you can still shoot the puck). Thrown (Friendly Fire): a boost, like a
+            // booster pad - the throw's speed and a long glide, and you steer, brake and play as usual
+            var flying = p.HeldBy >= 0;
             p.Shoved = Fix.Max(Fix.Zero, p.Shoved - dt);
             if (p.Shoved <= Fix.Zero) p.ShovedBy = -1;
             var control = p.Stun > Fix.Zero || p.Shoved > Fix.Zero ? T.StunControl : Fix.One;
@@ -1474,7 +1547,7 @@ namespace UltraPuck.Core
             var braking = !holding && input.Has(PlayerInput.ChargeBrake);
             p.DashCoast = Fix.Max(Fix.Zero, p.DashCoast - dt);
             // after a dash, lighter drag for a bit so you keep more speed when you chain them
-            var drag = p.TossTime > Fix.Zero ? T.MateTossDrag : p.Shoved > Fix.Zero ? T.TossDrag : braking ? T.BrakeDrag
+            var drag = braking ? T.BrakeDrag : p.TossTime > Fix.Zero ? T.MateTossDrag : p.Shoved > Fix.Zero ? T.TossDrag
                 : (p.DashCoast > Fix.Zero ? (p.RageTime > Fix.Zero ? T.DashCoastDrag * T.RageDashDrag : T.DashCoastDrag) : T.Drag);
             p.Vel -= p.Vel * Fix.Min(Fix.One, drag * dt);
 

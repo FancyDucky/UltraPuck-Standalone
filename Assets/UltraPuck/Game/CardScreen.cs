@@ -60,7 +60,30 @@ namespace UltraPuck.Game
         public static readonly bool TestMode = System.Environment.GetEnvironmentVariable("ULTRAPUCK_CARDTEST") == "1";
 
         /// <summary>The pick a local player confirmed (1-based) for the game to read, or 0 while they're still choosing.</summary>
-        public byte PickFor(int player) { byte b; return _ready.TryGetValue(player, out b) ? b : (byte)0; }
+        public byte PickFor(int player)
+        {
+            // New Hand: the re-roll goes until the new cards are in (the game counts the re-roll)
+            int at;
+            if (_reroll.TryGetValue(player, out at))
+            {
+                if (_state != null && player < _state.Players.Length && _state.Phase == Phase.Picking && _state.Players[player].Rerolls == at && _state.Players[player].Picked < 0)
+                    return PlayerInput.Reroll;
+                _reroll.Remove(player);
+            }
+            byte b; return _ready.TryGetValue(player, out b) ? b : (byte)0;
+        }
+
+        /// <summary>A re-roll asked for (New Hand), by player: how many re-rolls they'd had when they asked.</summary>
+        private readonly Dictionary<int, int> _reroll = new Dictionary<int, int>();
+
+        /// <summary>The utility button on the card screen: re-roll, if the chooser can (New Hand).</summary>
+        private void RerollPresses()
+        {
+            var roller = Roller();
+            if (roller < 0 || _reroll.ContainsKey(roller)) return;
+            var slot = SlotOf(roller);
+            if (Local.UtilityPressed(slot)) _reroll[roller] = _state.Players[roller].Rerolls;
+        }
 
         /// <summary>The card a local player is looking at right now (1-based), sent along so the other team can watch.</summary>
         public byte HoverFor(int player)
@@ -187,8 +210,10 @@ namespace UltraPuck.Game
                     {
                         var next = NextPicker(s);
                         if (next >= 0) { _watching = false; _teamVote = false; Deal(next, s.Players[next].Offer); }
-                        else
+                        else if (_watched.Count == 0)
                         {
+                            // nobody here choosing: watch one of the others choose (just one: the rest's picks come
+                            // in small at the side, see Minis)
                             var w = NextWatched(s);
                             if (w >= 0) { _watching = true; _teamVote = false; _watchOffer = (int[])s.Players[w].Offer.Clone(); _watched.Add(w); Deal(w, _watchOffer); }
                         }
@@ -201,10 +226,13 @@ namespace UltraPuck.Game
             var want = _stage != Stage.Idle && !diving ? 0.68f : 0f;
             _dim = Mathf.MoveTowards(_dim, want, Time.unscaledDeltaTime * 2.5f);
             _dimMat.SetFloat("_Alpha", _dim);
-            _root.gameObject.SetActive(_dim > 0.001f || _cards.Count > 0);
+            Minis(s, picking);
+            _root.gameObject.SetActive(_dim > 0.001f || _cards.Count > 0 || _minis.Count > 0);
 
-            if (_stage == Stage.Choosing) { if (_teamVote) ChooseTeamVote(); else Choose(); }
+            if (_stage == Stage.Choosing) { RerollPresses(); if (_teamVote) ChooseTeamVote(); else Choose(); }
+            if (!picking) _reroll.Clear();
             Animate();
+            AnimateMinis();
             Motes();
             if (_stage == Stage.Leaving && (Time.unscaledTime - _stageAt > (_editing ? 1.1f : _chosen >= 0 ? 1.25f : 0.85f) || (_absorbed && Time.unscaledTime - _absorbedAt > 0.1f)))
             {
@@ -403,7 +431,8 @@ namespace UltraPuck.Game
                 FollowTeammates();
                 return;
             }
-            // nobody here: watch someone else (same offer for the whole team, so one deal is enough)
+            // nobody here: nothing dealt (their votes show at the side, see Minis)
+            if (!WatchVotes) return;
             var w = NextWatched(s);
             if (w < 0) return;
             _watching = true;
@@ -687,7 +716,7 @@ namespace UltraPuck.Game
                         if (_deck && (row < 0 || row >= EditRows)) continue; // off-screen rows of the deck
                         if (ScreenRect(_cards[k]).Contains(mp)) { SetFocus(k); _lastHover = Time.unscaledTime; break; }
                     }
-                if (mouse.leftButton.wasPressedThisFrame && ScreenRect(_cards[_focus]).Contains(mp)) m.Confirm = true;
+                if (mouse.leftButton.wasPressedThisFrame && !_miniClick && _bigMini < 0 && ScreenRect(_cards[_focus]).Contains(mp)) m.Confirm = true;
                 var wheel = _deck ? mouse.scroll.ReadValue().y : 0f;
                 // the wheel scrolls the grid (the focus stays where it is)
                 if (wheel != 0f) { _editTop = Mathf.Clamp(_editTop + (wheel < 0f ? 1 : -1), 0, EditMaxTop); EditHomes(); }
@@ -950,8 +979,197 @@ namespace UltraPuck.Game
 
         // ------------------------------------------------------------------ header text
 
+        // ------------------------------------------------------------------ others' picks, at the side
+
+        /// <summary>Screenshots: click the first mini card up to full size (or back).</summary>
+        public void ShotBigMini() { _bigMini = _bigMini >= 0 || _minis.Count == 0 ? -1 : _minis[0].Player; }
+
+        /// <summary>The other team's vote dealt out to watch (off: only their votes at the side).</summary>
+        public bool WatchVotes = true;
+
+        /// <summary>A card someone else has chosen, small at the side of the screen (your teammates' on the left, the other team's on the right).</summary>
+        private sealed class Mini { public int Player, Card; public CardView V; }
+        private readonly List<Mini> _minis = new List<Mini>();
+        /// <summary>The mini card clicked up to full size (by player), or -1.</summary>
+        private int _bigMini = -1;
+        /// <summary>A click this frame went to the mini cards (so it doesn't pick a card too).</summary>
+        private bool _miniClick;
+        private const float MiniScale = 0.34f, MiniGap = 1.62f;
+
+        /// <summary>The team of this PC's first person playing (their teammates go on the left), or 0.</summary>
+        private int MyTeam(GameState s)
+        {
+            for (var i = 0; i < s.Players.Length; i++) if (OnThisPc(i)) return s.Players[i].Team & 1;
+            return 0;
+        }
+
+        private bool OnThisPc(int i)
+        {
+            var slot = SlotOf(i);
+            return slot >= 0 && slot < Local.Slots.Count && !Local.Slots[slot].Demo;
+        }
+
+        /// <summary>
+        /// During a pick: a mini card for everyone else who has chosen (people on other PCs and bots, not this PC's own
+        /// choosers, who see theirs dive into them); a click on one shows it full size, another click puts it back.
+        /// </summary>
+        private void Minis(GameState s, bool picking)
+        {
+            _miniClick = false;
+            var want = new List<Mini>();
+            if (picking && s != null && s.Phase == Phase.Picking && Sim != null && Sim.Cards != null)
+                for (var i = 0; i < s.Players.Length; i++)
+                {
+                    var p = s.Players[i];
+                    if (p.Offer.Length == 0 || p.Picked < 0 || p.Picked >= Sim.Cards.Cards.Count || OnThisPc(i)) continue;
+                    if (_watching && _stage != Stage.Idle && (i == _slot || (_teamVote && _watched.Contains(i)))) continue; // shown big, being watched
+                    want.Add(new Mini { Player = i, Card = p.Picked });
+                }
+            // gone, or a different card now (Choose's deck after Choose): put away
+            for (var k = _minis.Count - 1; k >= 0; k--)
+            {
+                var m = _minis[k];
+                if (want.Exists(x => x.Player == m.Player && x.Card == m.Card)) continue;
+                Destroy(m.V.Root.gameObject); Destroy(m.V.Shadow.gameObject);
+                _minis.RemoveAt(k);
+                if (_bigMini == m.Player) _bigMini = -1;
+            }
+            foreach (var w in want)
+            {
+                if (_minis.Exists(x => x.Player == w.Player)) continue;
+                w.V = Build(Sim.Cards.Cards[w.Card], 100 + w.Player);
+                var left = (s.Players[w.Player].Team & 1) == MyTeam(s);
+                w.V.Pos = new Vector3(left ? -10f : 10f, 1.5f, 0f);
+                w.V.Rot = new Vector3(0f, 180f, left ? -20f : 20f); // turns over as it slides in
+                w.V.Scale = MiniScale;
+                _minis.Add(w);
+                Sound.Play(Sfx.CardDeal, 0.25f);
+            }
+            if (_minis.Count == 0) { _bigMini = -1; return; }
+            // the bumpers (LB / RB, Q / E) go through the side cards full size, and off the end puts them back
+            // (not on Choose's deck, where they size its grid)
+            var tab = _deck || _editing ? 0 : Local.TabPressed();
+            if (tab != 0)
+            {
+                var order = new List<int>();
+                foreach (var m in _minis) order.Add(m.Player);
+                order.Sort();
+                var at = order.IndexOf(_bigMini);
+                var to = at < 0 ? (tab > 0 ? 0 : order.Count - 1) : at + tab;
+                _bigMini = to >= 0 && to < order.Count ? order[to] : -1;
+                Sound.Move();
+            }
+            // click a mini to read it; click again (anywhere) to put it back
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse != null && mouse.leftButton.wasPressedThisFrame)
+            {
+                var mp = mouse.position.ReadValue();
+                var hit = -1;
+                foreach (var m in _minis) if (MiniRect(m.V).Contains(mp)) hit = m.Player;
+                if (hit >= 0 || _bigMini >= 0)
+                {
+                    _bigMini = hit >= 0 && hit != _bigMini ? hit : -1;
+                    _miniClick = true;
+                    Sound.Move();
+                }
+            }
+        }
+
+        private void AnimateMinis()
+        {
+            if (_minis.Count == 0 || _state == null) return;
+            var dt = Mathf.Min(Time.unscaledDeltaTime, 1f / 30f);
+            var t = Time.unscaledTime;
+            var mine = MyTeam(_state);
+            int nLeft = 0, nRight = 0;
+            // the side columns sit just inside the screen's edges, whatever its shape
+            var half = 14f * Mathf.Tan(15f * Mathf.Deg2Rad) * _cam.aspect;
+            _minis.Sort((a, b) => a.Player.CompareTo(b.Player));
+            foreach (var m in _minis)
+            {
+                var left = (_state.Players[m.Player].Team & 1) == mine;
+                var row = left ? nLeft++ : nRight++;
+                Vector3 tp, tr;
+                float ts;
+                if (m.Player == _bigMini) { tp = new Vector3(0f, 0.1f, -2.5f); tr = Vector3.zero; ts = 1.05f; }
+                else
+                {
+                    tp = new Vector3((left ? -1f : 1f) * (half - 0.75f), 2.25f - row * MiniGap, 0f);
+                    tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.1f + m.Player) * 1.5f);
+                    ts = MiniScale;
+                }
+                m.V.Step(tp, tr, ts, dt);
+                m.V.GlowTarget = 0f;
+                m.V.Apply(m.Player == _bigMini ? 3000 : 2000 + m.Player * 10, _cam);
+            }
+        }
+
+        /// <summary>A mini card's area on screen (pixels, bottom-left origin), at its real size.</summary>
+        private Rect MiniRect(CardView c)
+        {
+            var a = _cam.WorldToScreenPoint(c.Root.position + new Vector3(-1.25f * c.Scale, -1.75f * c.Scale, 0f));
+            var b = _cam.WorldToScreenPoint(c.Root.position + new Vector3(1.25f * c.Scale, 1.75f * c.Scale, 0f));
+            return Rect.MinMaxRect(Mathf.Min(a.x, b.x), Mathf.Min(a.y, b.y), Mathf.Max(a.x, b.x), Mathf.Max(a.y, b.y));
+        }
+
+        /// <summary>Names over the mini cards, and who's still choosing when nobody here is.</summary>
+        private void MinisGUI()
+        {
+            var scale = Screen.height / 720f * Settings.UiScale;
+            foreach (var m in _minis)
+            {
+                if (m.Player == _bigMini) continue;
+                var r = MiniRect(m.V);
+                var cx = r.center.x / scale;
+                var top = (Screen.height - r.yMax) / scale;
+                var n = NameOf != null ? NameOf(m.Player) : "";
+                if (string.IsNullOrEmpty(n)) n = "P" + (m.Player + 1);
+                var tw = Mathf.Max(70f, n.Length * 8f + 28f);
+                Ui.Box(new Rect(cx - tw / 2f, top - 24f, tw, 20f), new Color(0f, 0f, 0f, 0.6f), 4f);
+                Ui.Swatch(new Rect(cx - tw / 2f + 3f, top - 22f, 16f, 16f), _state.Players[m.Player].Team);
+                Ui.Label(new Rect(cx - tw / 2f + 22f, top - 24f, tw - 24f, 20f), n, Ui.Font(13, true), new Color(1f, 1f, 1f, 0.92f));
+            }
+            var dev = Local != null && Local.Slots.Count > 0 ? Local.Slots[0].Device : null;
+            if (_minis.Count > 0 && !_deck)
+                Glyphs.Hint(new Rect(0f, Ui.H - 118f, Ui.W, 30f), _bigMini >= 0 ? "{tabs} Next card      (or click to put it back)" : "{tabs} Read the cards at the side  (or click one)",
+                    16, new Color(1f, 1f, 1f, 0.7f), TextAnchor.MiddleCenter, dev, true);
+            // nobody on this PC choosing: say who is (their picks come in at the side)
+            if (_stage != Stage.Idle) return;
+            var teams = 0;
+            for (var i = 0; i < _state.Players.Length; i++)
+            {
+                var p = _state.Players[i];
+                if (p.Offer.Length > 0 && p.Picked < 0 && !OnThisPc(i)) teams |= 1 << (p.Team & 1);
+            }
+            if (teams == 0) return;
+            var line = teams == 3 ? "Everyone else is choosing cards..." : Palette.TeamName(teams == 1 ? 0 : 1) + " is choosing cards...";
+            Ui.Box(new Rect(Ui.W / 2f - 220f, 104f, 440f, 40f), new Color(0f, 0f, 0f, 0.5f), 8f);
+            if (teams != 3) Ui.Swatch(new Rect(Ui.W / 2f - 206f, 116f, 16f, 16f), teams == 1 ? 0 : 1);
+            Ui.Label(new Rect(Ui.W / 2f - 220f, 104f, 440f, 40f), line, Ui.Font(18, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.9f));
+
+        }
+
+        /// <summary>The host can end the pick (hold the menu button): how far through the hold (0..1), or -1 (not the host).</summary>
+        public float HostEnd = -1f;
+
         private void OnGUI()
         {
+            if (_state != null && _state.Phase == Phase.Picking && !_editing)
+            {
+                GUI.depth = 5;
+                Ui.Begin();
+                MinisGUI();
+            }
+            if (HostEnd >= 0f && _state != null && _state.Phase == Phase.Picking)
+            {
+                GUI.depth = 5;
+                Ui.Begin();
+                var r = new Rect(Ui.W - 330f, 14f, 316f, 34f);
+                Ui.Box(r, new Color(0f, 0f, 0f, 0.45f), 6f);
+                if (HostEnd > 0f) Ui.Box(new Rect(r.x, r.y, r.width * HostEnd, r.height), new Color(0.9f, 0.35f, 0.3f, 0.6f), 6f);
+                var dev = Local != null && Local.Slots.Count > 0 ? Local.Slots[0].Device : null;
+                Glyphs.Hint(r, "Hold {menu} to end the card pick", 15, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleCenter, dev, true);
+            }
             if (_stage == Stage.Idle) return;
             if (!_browse && (_state == null || _slot < 0 || _slot >= _state.Players.Length)) return; // (the card list needs no game)
             GUI.depth = 5;

@@ -85,7 +85,20 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- After 0.1.75, not released (Claude, 26 Nov 2026): **Forest Hockey look, switched off** (the user wants more work on it
+- 0.1.76 (Claude, 26 Nov 2026): **card pick changes, protocol 92.** Others' picks no longer dealt
+  to watch: `CardScreen.Minis` shows each card someone on another PC (or a bot) has chosen as a mini card at the side
+  (your team left, the other team right, names over them), a click shows it full size (`_bigMini`); with nobody here
+  choosing, a "<team> is choosing cards" line (`MinisGUI`). (`WatchVotes` brings back dealing the other team's vote.)
+  New Hand's re-roll is a request now (`PlayerInput.Reroll` = Pick 250, sent by `CardScreen.PickFor` until the
+  re-roll is counted; a utility press already held at the pick's start used to be missed). The host holds the menu
+  button through a pick to end it (`PlayerInput.EndPick` = Pick 249, `GameRunner.HostEndPick`; everyone left gets a
+  random card, Choose's deck too). Choose decks keep a one-a-team card (Swap) for one teammate only, never after
+  Double Card gave it (`Simulation.OneATeamInDecks`). Friendly Fire: a thrown teammate steers / brakes / uses cards
+  (only being carried stops them; the throw is a glide boost). Loyal shows as "Loyalty" (id unchanged). Screenshot
+  scene "minis". Watching: with nobody here choosing, one other player's hand is dealt to watch (`_watched` empty), the
+  rest come in as minis; LB / RB (Q / E) step through the minis full size. A scorer swallowed by their own Black Hole:
+  the celebration camera frames the hole (`GoalZoomHero` + `OutFrom`).
+- 0.1.76 (Claude, 26 Nov 2026): **Forest Hockey look, switched off** (the user wants more work on it
   first). Built like Underwater: `ThemeBuilder.BuildForestHockey` (menu Ultra Puck > Forest) makes
   `Resources/UltraPuck/Themes/Forest Hockey.prefab` (an `UnderwaterTheme` with Floor = Grass.shader, Caustics slot =
   Dapple.shader (leaf shadows, multiply-blended), Rays in warm colours, trees / undergrowth sprites from Art/Forest

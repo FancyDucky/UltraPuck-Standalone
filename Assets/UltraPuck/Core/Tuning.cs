@@ -174,8 +174,8 @@ namespace UltraPuck.Core
         public bool WedgePickup = true;
         /// <summary>
         /// Friendly Fire: a teammate touching your wedge while you hold charge/brake is picked up; they're thrown exactly
-        /// like a shot (as fast as the puck would go). A thrown teammate flies with <see cref="MateTossDrag"/> (the puck's)
-        /// and no skating, checking whoever they hit, until they're down to <see cref="TossEndSpeed"/> (or
+        /// like a shot (as fast as the puck would go). A thrown teammate glides with <see cref="MateTossDrag"/> (the puck's),
+        /// a boost they can steer and brake out of, checking whoever they hit, until they're down to <see cref="TossEndSpeed"/> (or
         /// <see cref="TossTime"/> at most); then they're <see cref="MateBoost"/> faster for <see cref="MateBoostTime"/>.
         /// Held longer than <see cref="MateHoldMax"/>: they're thrown anyway. (<see cref="TossDrag"/> is Cannon Ball's glide.)
         /// </summary>
