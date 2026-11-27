@@ -51,10 +51,11 @@ namespace UltraPuck.Game
             var outline = new List<Vector2>();
             foreach (var p in map.WallLines[0]) outline.Add(V.Of(p));
             var floor = Draw.Make("Floor", Root.transform, Draw.Polygon(outline, Palette.Floor), 0);
-            // a themed look: under the sea (sand with moving light, water and sea life all round)
+            // a themed look: under the sea (sand with moving light, water and sea life all round), in the forest (grass
+            // with leaf shadows, trees all round)...
             // (the scenery and these settings come from the dressing prefab, made and edited in Unity)
-            var wet = map.Theme == Underwater.Theme;
-            var dress = dressWith != null ? dressWith : wet ? Underwater.Dress(Root, map) : null;
+            var themed = map.Theme == Underwater.Theme || !string.IsNullOrEmpty(map.Dressing);
+            var dress = dressWith != null ? dressWith : themed ? Underwater.Dress(Root, map) : null;
             Dress = dress;
             if (dress != null && dress.Floor != null) floor.GetComponent<MeshRenderer>().sharedMaterial = dress.Floor;
             // over the players but under the puck (order 30 up), so it stays bright white and easy to see: the light

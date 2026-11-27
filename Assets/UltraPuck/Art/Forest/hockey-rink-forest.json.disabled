@@ -1,0 +1,8 @@
+// A look for the Hockey Rink: the same rink (walls, nets and spawns from its "base" map), on a grassy field in the
+// forest. Only the look changes ("theme"), so it plays exactly like the Hockey Rink.
+{
+  "base": "hockey-rink.json",
+  "variant": "Forest",
+  "theme": "forest",
+  "dressing": "Forest Hockey"
+}

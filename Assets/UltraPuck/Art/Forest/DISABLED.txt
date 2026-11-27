@@ -1,0 +1,4 @@
+Forest Hockey is switched off for now (more work to do). To turn it back on, move
+hockey-rink-forest.json.disabled to Assets/StreamingAssets/Maps/hockey-rink-forest.json and rebuild.
+The prefab (Resources/UltraPuck/Themes/Forest Hockey.prefab), art and materials stay; the menu
+Ultra Puck > Forest > Open Forest Hockey still opens it for editing.

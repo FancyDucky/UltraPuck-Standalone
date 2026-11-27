@@ -324,6 +324,32 @@ namespace UltraPuck.Game
                 Debug.Log("Ultra Puck video: " + _videoFrame + " frames in " + dir);
             }
 
+            if (want("forest"))
+            {
+                // the Forest look of the Hockey Rink, with bots playing on it
+                var startMap = _mapIndex;
+                var forest = _mapFiles.IndexOf("hockey-rink-forest.json");
+                if (forest >= 0)
+                {
+                    UseMap(forest);
+                    GoLocalLobby();
+                    _play.Open(PlayScreens.Page.None);
+                    _local.Slots.Clear();
+                    for (var b = 0; b < 4; b++) _local.Slots.Add(new LocalPlayers.Slot { Team = b & 1, Colour = b & 1, Demo = true, Name = "Bot" });
+                    _local.AssignTeams();
+                    _mainMenu.Show(MainMenu.Page.None);
+                    _shotWholeRink = true;
+                    StartMatch(true);
+                    yield return new WaitForSecondsRealtime(4f);
+                    yield return Shot("forest-1");
+                    yield return new WaitForSecondsRealtime(1.5f);
+                    yield return Shot("forest-2");
+                    _shotWholeRink = false;
+                    GoMainMenu();
+                }
+                UseMap(startMap);
+            }
+
             if (want("rinkpick"))
             {
                 // the rink screen with a rink that has looks (the Hockey Rink: Classic and Underwater), on each look
@@ -383,6 +409,37 @@ namespace UltraPuck.Game
                 GoMainMenu();
                 _arenas.Remove(_shotArena);
                 _shotArena = null;
+                UseMap(startMap);
+            }
+
+            // arena designs: every zip in the folder ULTRAPUCK_ARENA_DIR names, on its rink with bots playing
+            // ("arena-<zip name>.png"), to look at a design exactly as the game draws it
+            var designs = System.Environment.GetEnvironmentVariable("ULTRAPUCK_ARENA_DIR");
+            if (want("arena-files") && !string.IsNullOrEmpty(designs) && System.IO.Directory.Exists(designs))
+            {
+                var startMap = _mapIndex;
+                foreach (var zip in System.IO.Directory.GetFiles(designs, "*.zip"))
+                {
+                    var a = ArenaSkin.FromZip(System.IO.File.ReadAllBytes(zip), System.IO.Path.GetFileName(zip), PlainMapFiles(), RinkNameOf);
+                    if (a == null || a.Rink == null) { Debug.LogWarning("Ultra Puck: no arena in " + zip); continue; }
+                    var rink = _mapFiles.IndexOf(a.Rink);
+                    if (rink >= 0) UseMap(rink);
+                    _shotArena = a;
+                    GoLocalLobby();
+                    _play.Open(PlayScreens.Page.None);
+                    _local.Slots.Clear();
+                    for (var b = 0; b < 4; b++) _local.Slots.Add(new LocalPlayers.Slot { Team = b & 1, Colour = b & 1, Demo = true, Name = "Bot" });
+                    _local.AssignTeams();
+                    _mainMenu.Show(MainMenu.Page.None);
+                    _shotWholeRink = true;
+                    StartMatch(true);
+                    yield return new WaitForSecondsRealtime(3f);
+                    yield return Shot("arena-" + System.IO.Path.GetFileNameWithoutExtension(zip));
+                    _shotWholeRink = false;
+                    GoMainMenu();
+                    _shotArena = null;
+                    a.Unload();
+                }
                 UseMap(startMap);
             }
 
@@ -2448,7 +2505,17 @@ namespace UltraPuck.Game
             var px = new Color32[W * H];
             Color32 floor = Palette.Floor, wall = new Color(0.62f, 0.62f, 0.64f);
             var wet = map.Theme == Underwater.Theme;
-            if (wet)
+            if (map.Theme == Underwater.ForestTheme)
+            {
+                // in the forest: grass, wooden boards, darker forest floor all round
+                floor = Underwater.Grass; wall = Underwater.Wood;
+                for (var y = 0; y < H; y++)
+                {
+                    Color32 c = Color.Lerp(Underwater.ForestDark, Underwater.ForestLight, (float)y / H);
+                    for (var x = 0; x < W; x++) px[y * W + x] = c;
+                }
+            }
+            else if (wet)
             {
                 // under the sea: sand, blue-grey boards, deep water all round (lighter towards the top)
                 floor = Underwater.Sand; wall = Underwater.Wall;

@@ -85,6 +85,14 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- After 0.1.75, not released (Claude, 26 Nov 2026): **Forest Hockey look, switched off** (the user wants more work on it
+  first). Built like Underwater: `ThemeBuilder.BuildForestHockey` (menu Ultra Puck > Forest) makes
+  `Resources/UltraPuck/Themes/Forest Hockey.prefab` (an `UnderwaterTheme` with Floor = Grass.shader, Caustics slot =
+  Dapple.shader (leaf shadows, multiply-blended), Rays in warm colours, trees / undergrowth sprites from Art/Forest
+  (painted by a script, 100 px a unit), `Leaves` falling). `RinkView` now dresses any map with a "dressing", not just
+  underwater; the rink picture has forest colours (`Underwater.ForestTheme`). Switched off by moving its map file to
+  `Art/Forest/hockey-rink-forest.json.disabled` (see DISABLED.txt there): move it back to StreamingAssets/Maps to turn it
+  on. Screenshot scenes: "forest" (needs the map file) and "arena-files" (every zip in ULTRAPUCK_ARENA_DIR).
 - 0.1.75 (Claude, 26 Nov 2026): **custom arenas.** Zips in `Custom_Arenas` next to the exe
   (`ArenaSkin.Folder`, made with a README and `sample arena.json` on start; the project folder in the editor) hold
   Background / Arena Floor / Foreground / Shadows pictures (any png/jpg whose name says so; "guide" ignored) and an optional arena.json {name, rink}; rink =
