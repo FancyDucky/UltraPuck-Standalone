@@ -49,6 +49,8 @@ namespace UltraPuck.Core
         /// (CardScreen.ChaosGlitch, display only): "chaos": true.
         /// </summary>
         public bool Chaos;
+        /// <summary>The card's body (everything but the picture, frame and text) pure black, for OLED screens, display only: "pureBlack": true.</summary>
+        public bool PureBlack;
         /// <summary>Every "finish" a card file may use (see Card.shader for what each looks like).</summary>
         public static readonly string[] FinishNames =
             { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass", "borealis", "rainbow" };
@@ -125,6 +127,7 @@ namespace UltraPuck.Core
                     TextBoxes = Json.Get(o, "textBoxes") is bool && (bool)Json.Get(o, "textBoxes"),
                     TextOutline = Json.Get(o, "textOutline") is bool && (bool)Json.Get(o, "textOutline"),
                     Chaos = Json.Get(o, "chaos") is bool && (bool)Json.Get(o, "chaos"),
+                    PureBlack = Json.Get(o, "pureBlack") is bool && (bool)Json.Get(o, "pureBlack"),
                 };
                 if (string.IsNullOrEmpty(c.Id)) throw new FormatException(what + ": needs an id");
                 if (_byId.ContainsKey(c.Id)) throw new FormatException(what + ": a card with the id \"" + c.Id + "\" already exists");

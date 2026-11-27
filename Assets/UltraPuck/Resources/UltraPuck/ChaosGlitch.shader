@@ -1,8 +1,9 @@
 // Ultra Puck chaos cards: a glitch drawn over the card, on a quad bigger than the card so it spills past the border.
 // Always a strong chromatic aberration (red / blue split, ghosts past the border). Then, like a broken digital picture: horizontal slices of the card (frame and picture) jump sideways with the red and
 // blue split apart, red / cyan ghost edges stick out of the frame, blocks of digital noise pop up, scan lines and
-// static. Not all the time: a twitch of 0.5 to 2 seconds now and then (Twitch), calm in between. It never draws over _TextRect (the name, flavour line, rows and
-// note stay clean), so the text is always easy to read.
+// static. Not all the time: a twitch of 0.5 to 2 seconds now and then (Twitch), calm in between; some twitch frames
+// the picture slips down. This layer is drawn OVER the text, but in _TextRect (the name, flavour line, rows and
+// note) it only ever draws pieces of the picture (slipped or torn there), never blocks, ghosts, frame or card stock.
 //   _MainTex   the card's picture; _ArtRect its centre (x, y) and half size (z, w) in card units
 //   _Card      the card's width, height, corner radius and border width
 //   _BorderColor / _BodyColor  the frame's and the card stock's colours (for the torn slices)
@@ -87,12 +88,23 @@ Shader "UltraPuck/ChaosGlitch"
                 return float4(col, cov);
             }
 
+            // only the picture at q: its colour, and 1 where the picture is (0 anywhere else)
+            float4 ArtAt(float2 q)
+            {
+                float2 a = (q - _ArtRect.xy) / (_ArtRect.zw * 2.0) + 0.5;
+                float inArt = step(0.0, a.x) * step(a.x, 1.0) * step(0.0, a.y) * step(a.y, 1.0);
+                return float4(tex2D(_MainTex, saturate(a)).rgb, inArt);
+            }
+
             fixed4 frag(v2f i) : SV_Target
             {
                 if (_Amt <= 0.001) return 0;
                 float2 p = (i.uv - 0.5) * _Size.xy; // card units, the card's centre at 0
                 float aa = max(fwidth(p.x), 1e-4);
                 float2 hb = _Card.xy * 0.5;
+                // the text area: only bits of the picture are ever drawn there (this layer is over the text)
+                float2 lo = p - _TextRect.xy, hi = _TextRect.zw - p;
+                float inText = step(0.0, min(min(lo.x, lo.y), min(hi.x, hi.y)));
 
                 // ALWAYS: chromatic aberration. Red pulled one way and blue the other: red / blue ghosts of the frame
                 // past the border, coloured fringes on every edge, the picture split into its colours. Steady (it
@@ -102,9 +114,10 @@ Shader "UltraPuck/ChaosGlitch"
                 float4 cr = CardAt(p + float2(ab, 0), aa), cb = CardAt(p - float2(ab, 0), aa);
                 float3 col = float3(cr.r * cr.a, here.g * here.a, cb.b * cb.a);
                 float dif = max(max(abs(cr.r * cr.a - here.r * here.a), abs(cb.b * cb.a - here.b * here.a)), max(abs(cr.a - here.a), abs(cb.a - here.a)));
-                float2 a = (p - _ArtRect.xy) / _ArtRect.zw;
-                float inArt = step(abs(a.x), 1.0) * step(abs(a.y), 1.0) * here.a;
-                float alpha = max(inArt, saturate(dif * 3.0));
+                float inArt = ArtAt(p).a * here.a;
+                // (in the text area only right by the frame, where no text goes, so the fringe runs all the way round)
+                float byFrame = step(-ab * 2.5, RoundedBox(p, hb, _Card.z) + _Card.w);
+                float alpha = max(inArt, saturate(dif * 3.0)) * (1.0 - inText * (1.0 - byFrame));
 
                 // NOW AND THEN: a twitch of 0.5 to 2 s (15 glitch frames a second, some of them bursts, a few held still)
                 float slice = floor(_Time.y * 15.0) + _Seed * 101.0;
@@ -112,6 +125,9 @@ Shader "UltraPuck/ChaosGlitch"
                 {
                     float burst = step(0.78, Hash(float2(slice, 1.7)));
                     float k = saturate(0.35 + burst * 0.55) * _Amt;
+                    // some frames the picture slips down, over the top of the title
+                    float drop = step(0.5, Hash(float2(slice, 12.1))) * (0.05 + 0.17 * Hash(float2(slice, 13.3))) * k;
+                    float2 q = p + float2(0, drop);
 
                     // horizontal bands: some of them torn sideways this frame, their colours pulled far apart
                     float bands = lerp(9.0, 30.0, Hash(float2(slice, 8.8)));
@@ -119,13 +135,19 @@ Shader "UltraPuck/ChaosGlitch"
                     float torn = step(0.62 - 0.3 * k, Hash(float2(band, slice + 3.0)));
                     float shift = (Hash(float2(band, slice)) - 0.5) * 2.0 * (0.08 + 0.42 * k) * torn;
                     float split = ab * 1.5 + 0.1 * k;
+
+                    // the picture, slipped and torn, with its colours split
+                    float4 ar = ArtAt(q - float2(shift - split, 0)), ag = ArtAt(q - float2(shift, 0)), abl = ArtAt(q - float2(shift + split, 0));
+                    float3 acol = float3(ar.r * ar.a, ag.g * ag.a, abl.b * abl.a);
+                    float aalpha = max(max(ar.a, ag.a), abl.a) * step(0.0001, drop + torn);
+
                     float3 gcol = 0;
                     float galpha = 0;
                     if (torn > 0.5)
                     {
-                        float4 r = CardAt(p - float2(shift - split, 0), aa);
-                        float4 g = CardAt(p - float2(shift, 0), aa);
-                        float4 b = CardAt(p - float2(shift + split, 0), aa);
+                        float4 r = CardAt(q - float2(shift - split, 0), aa);
+                        float4 g = CardAt(q - float2(shift, 0), aa);
+                        float4 b = CardAt(q - float2(shift + split, 0), aa);
                         gcol = float3(r.r * r.a, g.g * g.a, b.b * b.a);
                         galpha = max(max(r.a, g.a), b.a) * (0.75 + 0.25 * k);
                         gcol += float3(1.0, 0.15, 0.45) * saturate(r.a - g.a) * 0.6 + float3(0.1, 0.9, 1.0) * saturate(b.a - g.a) * 0.6;
@@ -138,6 +160,9 @@ Shader "UltraPuck/ChaosGlitch"
                         gcol = float3(1.0, 0.1, 0.4) * outR + float3(0.1, 0.95, 1.0) * outB;
                         galpha = max(outR, outB) * (0.55 + 0.4 * k);
                     }
+                    // the slipped picture over the rest
+                    gcol = lerp(gcol, acol, aalpha);
+                    galpha = max(galpha, aalpha);
 
                     // blocks of digital noise, near the card (in it and just round it), more in a burst
                     float2 cellSize = float2(lerp(0.14, 0.38, Hash(float2(slice, 5.1))), lerp(0.05, 0.14, Hash(float2(slice, 6.3))));
@@ -157,17 +182,16 @@ Shader "UltraPuck/ChaosGlitch"
                     gcol = lerp(gcol, float3(1.0, 1.0, 1.0), flick / max(galpha + flick, 1e-4));
                     galpha = max(galpha, flick);
 
+                    // in the text area: only the picture's own pixels (no blocks, ghosts, frame or card stock)
+                    gcol = lerp(gcol, acol, inText);
+                    galpha = lerp(galpha, aalpha, inText);
+
                     // over the steady aberration, then scan lines and static over everything drawn
                     col = lerp(col, gcol, galpha);
                     alpha = max(alpha, galpha);
                     col *= 0.82 + 0.18 * (0.5 + 0.5 * sin(p.y * 220.0 - _Time.y * 6.0));
                     col += (Hash(floor(p * float2(160.0, 220.0)) + frac(_Time.y * 7.3) * 100.0) - 0.5) * 0.14;
                 }
-
-                // never over the text
-                float2 lo = p - _TextRect.xy, hi = _TextRect.zw - p;
-                float inText = saturate(min(min(lo.x, lo.y), min(hi.x, hi.y)) / 0.03 + 1.0);
-                alpha *= 1.0 - inText;
 
                 return fixed4(saturate(col), saturate(alpha) * _Amt);
             }

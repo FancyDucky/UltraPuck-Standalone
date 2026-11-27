@@ -2142,6 +2142,15 @@ namespace UltraPuck.Game
                 metal: metal ? 0.85f : 0f,
                 poly: poly ? 0.8f : 0f);
             Special(body, fx, def.Finish, true);
+            if (def.PureBlack)
+            {
+                // "pureBlack": the body pure black (OLED), with no light streaks or glints on it
+                body.SetColor("_Color", Color.black);
+                body.SetColor("_Color2", Color.black);
+                body.SetFloat("_Glare", 0f);
+                body.SetFloat("_Sparkle", 0f);
+                body.SetFloat("_Foil", 0f); body.SetFloat("_Pearl", 0f); body.SetFloat("_Metal", 0f); body.SetFloat("_Poly", 0f); // (the tier's sheen would grey it; a card's own "finish" still shows)
+            }
             v.Finishes.Add(body);
             body.SetFloat("_Rim", fx ? (tier <= 1 ? 0.7f : 0.4f) : 0f);
             body.SetFloat("_SweepStrength", 0f); // no timed shine sweep (the owner preferred without it)
@@ -2262,8 +2271,8 @@ namespace UltraPuck.Game
 
         /// <summary>
         /// Chaos cards: a glitch over the card on a quad bigger than it (ChaosGlitch.shader), so torn slices, colour
-        /// split ghosts and noise blocks spill past the border. Over the picture and frame, under the text, and it
-        /// leaves the text area alone. Off with Settings > Card effects.
+        /// split ghosts and noise blocks spill past the border. Over everything, the text too, but in the text area it
+        /// only draws bits of the picture (slipped or torn into it). Off with Settings > Card effects.
         /// </summary>
         private void ChaosGlitch(CardView v, CardDef def, Color accent, bool fx)
         {
@@ -2277,7 +2286,7 @@ namespace UltraPuck.Game
             m.SetVector("_ArtRect", new Vector4(0f, 0.6f, 1.01f, 1.01f));
             m.SetVector("_Card", new Vector4(2.5f, 3.5f, 0.17f, 0.075f));
             m.SetColor("_BorderColor", accent);
-            m.SetColor("_BodyColor", new Color(0.12f, 0.12f, 0.13f));
+            m.SetColor("_BodyColor", def.PureBlack ? Color.black : new Color(0.12f, 0.12f, 0.13f));
             // from just under the picture to the frame's inner edge: the name, flavour, rule, rows and note
             m.SetVector("_TextRect", new Vector4(-1.145f, -1.675f, 1.145f, -0.425f));
             m.SetVector("_Size", new Vector4(size.x, size.y, 0f, 0f));
@@ -2285,9 +2294,9 @@ namespace UltraPuck.Game
             m.SetFloat("_Seed", v.Phase);
             var r = go.GetComponent<MeshRenderer>();
             r.sharedMaterial = m;
-            r.sortingOrder = 2;
+            r.sortingOrder = 6; // over the text (5): pieces of the picture may glitch over the title
             v.Front.Add(r);
-            v.FrontOrder.Add(2);
+            v.FrontOrder.Add(6);
         }
 
         private Shader _chaosShader;

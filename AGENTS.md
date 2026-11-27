@@ -87,6 +87,14 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 27 Nov 2026): **chaos glitch over the text (picture only); pure black card setting.** The
+  chaos overlay is now drawn over the text (order 6). In the text area it only draws the picture's own pixels: some
+  twitch frames the picture slips down 0.05-0.22 (`drop`) over the top of the title, and torn bands of the picture
+  can land there; blocks, ghosts, frame and card-stock slices still never cover text. The steady aberration also
+  shows in the text area right by the frame (`byFrame`), so the fringe runs all the way round (it was cut off by the
+  text area). New card key `"pureBlack": true` (`CardDef.PureBlack`, card editor checkbox "Pure black (OLED)"): the
+  body is #000 with no glare, sparkle or tier sheen on it (a card's own "finish" still shows); chaos cards' torn
+  slices use black too. Screenshot scene `chaos` turns it on for More Pucks for that run only. No rules change.
 - unreleased (Claude, 27 Nov 2026): **More Pucks chaos card, protocol 94.** `ultrapuck.morepucks` (B, max 1, white,
   owner's art), stat `ExtraPucks`: one extra puck per copy anyone holds (at most 4), placed still beside the kick-off
   spot at every face-off (across the ice, alternating sides: `Simulation.SyncExtraPucks`; free play re-syncs after a

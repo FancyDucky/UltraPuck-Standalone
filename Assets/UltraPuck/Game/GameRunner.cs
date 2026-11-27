@@ -812,6 +812,10 @@ namespace UltraPuck.Game
                 yield return new WaitForSecondsRealtime(0.8f);
                 PickACard();
                 var wide = _cards != null ? _cards.ById("ultrapuck.widenets") : null;
+                // "pureBlack" on More Pucks for this run only (beside Giant Nets without it, to compare)
+                var oled = _cards != null ? _cards.ById("ultrapuck.morepucks") : null;
+                var wasBlack = oled != null && oled.PureBlack;
+                if (oled != null) oled.PureBlack = true;
                 if (wide != null && _state.Players.Length > 0)
                 {
                     var offer = new List<int>();
@@ -836,6 +840,7 @@ namespace UltraPuck.Game
                 _cardScreen.ShotGrid(3, 999);
                 yield return new WaitForSecondsRealtime(1.2f);
                 yield return Shot("chaos-editor");
+                if (oled != null) oled.PureBlack = wasBlack;
                 GoMainMenu();
                 yield return new WaitForSecondsRealtime(0.5f);
                 _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
