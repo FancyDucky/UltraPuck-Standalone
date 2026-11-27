@@ -117,6 +117,7 @@ input[type=range]{flex:1}
     <div class="sec">
       <h2>Export</h2>
       <label class="row"><span>Pixel scale</span><select id="scale"><option value="0">Auto</option><option>1</option><option>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></label>
+      <label class="row" style="margin-top:4px" title="Soft shadows drifting over the whole arena in the game, as on the forest rink"><input type="checkbox" id="clouds"> Clouds drifting over it</label>
       <p class="note" id="expinfo"></p>
       <button class="big" id="export">Export arena .zip</button>
       <p class="note">Drop the zip in the <b>Custom_Arenas</b> folder next to UltraPuck.exe. In the game, press up / down on the rink screen to pick it.</p>
@@ -711,6 +712,7 @@ for (const id of ['ts', 'spacing', 'margin']) $(id).onchange = e => {
 };
 $('pz').onchange = e => { S.pz = +e.target.value; drawPalette(); };
 $('random').onchange = e => { S.random = e.target.checked; render(); };
+$('clouds').onchange = e => { S.clouds = e.target.checked; save(); };
 $('shadeAlpha').oninput = e => { S.shadeAlpha = +e.target.value; $('shadeVal').textContent = Math.round(S.shadeAlpha * 100) + '%'; render(); save(); };
 $('game').onclick = () => toggle('game', 'game');
 $('guides').onclick = () => toggle('guides', 'guides');
@@ -775,7 +777,7 @@ function projectData() {
   const layers = {};
   for (const L of LAYERS) layers[L.key] = Array.from(S.layers[L.key]);
   return { format: 'ultrapuck-arena-maker', version: 1, name: S.name, rink: S.rink, ts: S.ts, spacing: S.spacing, margin: S.margin,
-    shadeAlpha: S.shadeAlpha, N: S.N, M: S.M, tileset: S.tilesetURL, layers, stamps: S.stamps };
+    shadeAlpha: S.shadeAlpha, clouds: S.clouds, N: S.N, M: S.M, tileset: S.tilesetURL, layers, stamps: S.stamps };
 }
 function openProject(p) {
   if (!p || p.format !== 'ultrapuck-arena-maker') throw new Error('not a project');
@@ -783,6 +785,7 @@ function openProject(p) {
   S.ts = p.ts || 16; S.spacing = p.spacing || 0; S.margin = p.margin || 0;
   $('ts').value = S.ts; $('spacing').value = S.spacing; $('margin').value = S.margin;
   S.stamps = Array.isArray(p.stamps) ? p.stamps.filter(s => s && s.w > 0 && s.h > 0 && Array.isArray(s.ids) && s.ids.length === s.w * s.h) : [];
+  S.clouds = !!p.clouds; $('clouds').checked = S.clouds;
   S.shadeAlpha = p.shadeAlpha || 0.6; $('shadeAlpha').value = S.shadeAlpha; $('shadeVal').textContent = Math.round(S.shadeAlpha * 100) + '%';
   // its layers at the size they were saved, then onto its rink's grid (the same size, unless the rink changed)
   S.N = p.N; S.M = p.M;
@@ -848,7 +851,7 @@ async function exportZip() {
   try {
     const scale = exportScale(), files = [];
     for (const L of used) files.push({ name: L.file, data: await layerPng(L.key, scale) });
-    files.push({ name: 'arena.json', data: new TextEncoder().encode(JSON.stringify({ name: S.name || 'My Arena', rink: S.rink }, null, 2) + '\n') });
+    files.push({ name: 'arena.json', data: new TextEncoder().encode(JSON.stringify(Object.assign({ name: S.name || 'My Arena', rink: S.rink }, S.clouds ? { clouds: true } : {}), null, 2) + '\n') });
     download(makeZip(files), safeName(S.name) + '.zip');
     toast('Exported ' + used.map(l => l.name).join(', '));
   } catch (e) { toast('Export failed: ' + e.message); }

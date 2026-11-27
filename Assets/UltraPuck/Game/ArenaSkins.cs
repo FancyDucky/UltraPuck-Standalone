@@ -21,6 +21,8 @@ namespace UltraPuck.Game
         public string Rink;
         /// <summary>The zip's file name, and its bytes (sent as they are to players who join a game hosted with it).</summary>
         public string File;
+        /// <summary>arena.json's "clouds": true: soft shadows drifting over the whole arena, as on the forest rink.</summary>
+        public bool Clouds;
         public byte[] Bytes;
         public ulong Hash;
         private Texture2D _back, _front, _shade, _floor;
@@ -100,6 +102,7 @@ namespace UltraPuck.Game
         public static ArenaSkin FromZip(byte[] bytes, string file, IList<string> mapFiles, Func<string, string> rinkName)
         {
             string name = null, rink = null;
+            var clouds = false;
             var pictures = 0;
             using (var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read))
                 foreach (var e in zip.Entries)
@@ -109,7 +112,7 @@ namespace UltraPuck.Game
                     {
                         var text = System.Text.Encoding.UTF8.GetString(ReadAll(e));
                         var o = Json.Parse(text) as Dictionary<string, object>;
-                        if (o != null) { name = Json.Str(Json.Get(o, "name"), null); rink = Json.Str(Json.Get(o, "rink"), null); }
+                        if (o != null) { name = Json.Str(Json.Get(o, "name"), null); rink = Json.Str(Json.Get(o, "rink"), null); clouds = Json.Get(o, "clouds") is bool && (bool)Json.Get(o, "clouds"); }
                     }
                 }
             if (pictures == 0) return null;
@@ -119,6 +122,7 @@ namespace UltraPuck.Game
                 Name = string.IsNullOrEmpty(name) ? stem : name,
                 Rink = MatchRink(rink, mapFiles, rinkName) ?? MatchRink(stem, mapFiles, rinkName, true) ?? (mapFiles.Contains("hockey-rink.json") ? "hockey-rink.json" : null),
                 File = file,
+                Clouds = clouds,
                 Bytes = bytes,
                 Hash = NetSession.HashBytes(bytes),
             };
@@ -193,6 +197,7 @@ namespace UltraPuck.Game
             "  Shadows.png     soft shadows on the ice under the players (transparent elsewhere)\r\n" +
             "and, if you like, arena.json saying its name and which rink it's for:\r\n" +
             "  { \"name\": \"Backyard\", \"rink\": \"hockey-rink\" }\r\n" +
+            "(add \"clouds\": true for soft shadows drifting over it, as on the forest rink)\r\n" +
             "(rink: hockey-rink, big-rink, s-rink, u-rink, backwards-rink... or the rink's name. Without it: a rink named in\r\n" +
             "the zip's file name, else the Hockey Rink.) Make the pictures from the rink templates so they line up.\r\n\r\n" +
             "In the game: on the rink screen, up / down picks the rink's look, custom arenas included. Online, the host's\r\n" +
@@ -273,8 +278,8 @@ namespace UltraPuck.Game
     internal sealed class ArenaView
     {
         // the rink's floor is order 0, its lines 2, nets 3, walls 4, players and the puck up to about 43 (the dash preview is 60)
-        public const int BackOrder = -50, FloorOrder = 1, ShadeOrder = 5, FrontOrder = 45;
-        private Material _floorMat;
+        public const int BackOrder = -50, FloorOrder = 1, ShadeOrder = 5, CloudOrder = 28, FrontOrder = 45;
+        private Material _floorMat, _cloudMat;
 
         public readonly GameObject Root;
 
@@ -297,6 +302,18 @@ namespace UltraPuck.Game
                 Draw.Make("Floor", Root.transform, mesh, FloorOrder).GetComponent<MeshRenderer>().sharedMaterial = _floorMat;
             }
             Layer(skin.Shade, at, ShadeOrder);
+            if (skin.Clouds)
+            {
+                // the forest rink's drifting shadows (shader UltraPuck/Dapple) over the whole canvas: the ground, the
+                // ice and the players; the puck and the foreground stay above them
+                var shader = Resources.Load<Shader>("UltraPuck/Dapple");
+                if (shader != null)
+                {
+                    _cloudMat = new Material(shader);
+                    var box = new List<Vector2> { new Vector2(at.xMin, at.yMin), new Vector2(at.xMax, at.yMin), new Vector2(at.xMax, at.yMax), new Vector2(at.xMin, at.yMax) };
+                    Draw.Make("Clouds", Root.transform, Draw.Polygon(box, Color.white), CloudOrder).GetComponent<MeshRenderer>().sharedMaterial = _cloudMat;
+                }
+            }
             Layer(skin.Front, at, FrontOrder);
         }
 
@@ -317,6 +334,7 @@ namespace UltraPuck.Game
             foreach (var sr in Root.GetComponentsInChildren<SpriteRenderer>(true)) if (sr.sprite != null) ArenaSkin.Kill(sr.sprite);
             foreach (var mf in Root.GetComponentsInChildren<MeshFilter>(true)) if (mf.sharedMesh != null) ArenaSkin.Kill(mf.sharedMesh);
             if (_floorMat != null) ArenaSkin.Kill(_floorMat);
+            if (_cloudMat != null) ArenaSkin.Kill(_cloudMat);
             ArenaSkin.Kill(Root);
         }
     }
