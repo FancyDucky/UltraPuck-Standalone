@@ -1499,7 +1499,10 @@ namespace UltraPuck.Game
         }
     }
 
-    /// <summary>Swap rocks: the thrower's symbol on a darker shade of their colour, so you can tell whose it is.</summary>
+    /// <summary>
+    /// Swap rocks: the thrower's symbol on a darker shade of their colour, so you can tell whose it is. Extra pucks
+    /// (More Pucks, also rocks in the state) are drawn as pucks.
+    /// </summary>
     internal sealed class RockViews
     {
         private readonly Transform _parent;
@@ -1534,11 +1537,34 @@ namespace UltraPuck.Game
         /// <summary>What's drawn for rock <paramref name="k"/> (as last shown), or null.</summary>
         public GameObject At(int k) { return k >= 0 && k < _pool.Count ? _pool[k] : null; }
 
-        public void Show(GameState s, float radius, System.Func<int, int> symbolOf, System.Func<int, Color> colourOf, System.Func<int, bool> mine = null, float flashFrom = 3f)
+        public void Show(GameState s, float radius, System.Func<int, int> symbolOf, System.Func<int, Color> colourOf, System.Func<int, bool> mine = null, float flashFrom = 3f, float puckRadius = 0.3375f)
         {
             for (var k = 0; k < s.Rocks.Length; k++)
             {
                 var rk = s.Rocks[k];
+                if (rk.Puck)
+                {
+                    // an extra puck: the puck's look (edge, fill, soft glow), a shadow under it
+                    var pkey = "Puck_" + Mathf.RoundToInt(puckRadius * 1000f);
+                    while (_pool.Count <= k) { _pool.Add(null); _keys.Add(""); }
+                    if (_pool[k] == null || _keys[k] != pkey)
+                    {
+                        if (_pool[k] != null) Object.Destroy(_pool[k]);
+                        var pgo = new GameObject(pkey);
+                        pgo.transform.SetParent(_parent, false);
+                        Draw.Make("Shadow", pgo.transform, Draw.Disc(puckRadius * 1.05f, Palette.Shadow), 7).transform.localPosition = new Vector3(puckRadius * 0.15f, -puckRadius * 0.28f, 0f);
+                        Draw.Make("Glow", pgo.transform, Draw.SoftDisc(puckRadius * 1.6f, new Color(1f, 1f, 1f, 0.3f), Palette.Clear(Color.white)), 31);
+                        Draw.Make("Edge", pgo.transform, Draw.Disc(puckRadius, Palette.PuckEdge), 32);
+                        Draw.Make("Fill", pgo.transform, Draw.Disc(puckRadius * 0.68f, Palette.Puck), 33);
+                        while (_dims.Count <= k) _dims.Add(null);
+                        _dims[k] = null;
+                        _pool[k] = pgo;
+                        _keys[k] = pkey;
+                    }
+                    _pool[k].SetActive(true);
+                    _pool[k].transform.localPosition = new Vector3(rk.Pos.X.ToFloat(), rk.Pos.Y.ToFloat(), 0f);
+                    continue;
+                }
                 var owner = rk.Owner;
                 var symbol = owner >= 0 ? symbolOf(owner) : 0;
                 var col = owner >= 0 && owner < s.Players.Length ? colourOf(owner) : new Color(0.35f, 0.35f, 0.4f);

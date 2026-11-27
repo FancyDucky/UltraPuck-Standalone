@@ -87,6 +87,16 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 27 Nov 2026): **More Pucks chaos card, protocol 94.** `ultrapuck.morepucks` (B, max 1, white,
+  owner's art), stat `ExtraPucks`: one extra puck per copy anyone holds (at most 4), placed still beside the kick-off
+  spot at every face-off (across the ice, alternating sides: `Simulation.SyncExtraPucks`; free play re-syncs after a
+  pick and on Reset puck). An extra puck is a `Rock` with `Puck` set, so it reuses the rocks' carrying, shooting,
+  pick-up, walls, portals, Shockwave and puck bumps, with the puck's radius / weight / drag (`RockR` / `RockW` /
+  `RockDragOf`), Owner -1, no running out. In a net it's a goal (safe in a defender's wedge like the puck); it and the
+  puck trade places first, so the blast, sound, camera and replay happen where it went in; the goal is `Rock.Touch`'s
+  (last carrier) if on the scoring team, else nobody's. Bots only go for it when it lands in their wedge (then they
+  shoot it at the net, like a rock). Drawn as a puck (`RockViews`). Test `MorePucksPutsAnExtraPuckOnTheIceThatScores`;
+  screenshot `chaos-pucks`. Checked: 298 tests, Windows build.
 - unreleased (Claude, 27 Nov 2026): **Giant Nets: white accent, strong chromatic aberration.** Card colour `#FFFFFF`.
   `ChaosGlitch.shader` now always draws a steady colour split (`_Aberration`, 0.05 card units: red from one side,
   blue from the other): red / blue ghosts of the frame past the border, coloured fringes on its edges, the picture

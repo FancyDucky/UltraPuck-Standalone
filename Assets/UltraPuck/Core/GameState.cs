@@ -163,6 +163,8 @@ namespace UltraPuck.Core
         public int Momentum, Loyal;
         /// <summary>Giant Nets (a chaos card): while anyone holds it, every net is twice as wide (Simulation.WideNets).</summary>
         public int WideNets;
+        /// <summary>More Pucks (a chaos card): an extra puck at every kick-off, one per copy anyone holds (Simulation.ExtraPucks).</summary>
+        public int ExtraPucks;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
@@ -176,7 +178,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
             GameState.Mix(ref h, Swap); GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
-            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine); GameState.Mix(ref h, Rage); GameState.Mix(ref h, Momentum); GameState.Mix(ref h, Loyal); GameState.Mix(ref h, WideNets);
+            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine); GameState.Mix(ref h, Rage); GameState.Mix(ref h, Momentum); GameState.Mix(ref h, Loyal); GameState.Mix(ref h, WideNets); GameState.Mix(ref h, ExtraPucks);
         }
     }
 
@@ -436,6 +438,13 @@ namespace UltraPuck.Core
         public Fix Life;
         /// <summary>Going through a portal: the Id of the portal it's in (0 = none).</summary>
         public int PortalVia;
+        /// <summary>
+        /// An extra puck (More Pucks chaos card) instead of a Swap rock: the puck's size, weight and glide, nobody's
+        /// (Owner -1), never runs out, and scores in a net like the puck. Back to the kick-off at every face-off.
+        /// </summary>
+        public bool Puck;
+        /// <summary>An extra puck: the last player who carried it (its goal is theirs if they're on the scoring team), or -1.</summary>
+        public int Touch;
     }
 
     public enum Phase : byte
@@ -586,7 +595,7 @@ namespace UltraPuck.Core
             Mix(ref h, PuckPos); Mix(ref h, PuckVel); Mix(ref h, PassFrom); Mix(ref h, KickOffTurn);
             foreach (var sh in Shots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); }
             foreach (var py in Pylons) { Mix(ref h, py.Pos); Mix(ref h, py.Vel); Mix(ref h, py.Team); Mix(ref h, py.Radius); }
-            foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); Mix(ref h, rk.Life); Mix(ref h, rk.PortalVia); }
+            foreach (var rk in Rocks) { Mix(ref h, rk.Pos); Mix(ref h, rk.Vel); Mix(ref h, rk.Owner); Mix(ref h, rk.Carrier); Mix(ref h, rk.Life); Mix(ref h, rk.PortalVia); Mix(ref h, rk.Puck ? 1 : 0); Mix(ref h, rk.Touch); }
             foreach (var po in Portals) { Mix(ref h, po.Pos); Mix(ref h, po.Normal); Mix(ref h, po.Owner); Mix(ref h, po.Colour); Mix(ref h, po.Wall); Mix(ref h, po.At); Mix(ref h, po.Uses); Mix(ref h, po.Id); }
             foreach (var sh in PortalShots) { Mix(ref h, sh.Pos); Mix(ref h, sh.Vel); Mix(ref h, sh.Owner); Mix(ref h, sh.Life); Mix(ref h, sh.Kind); }
             Mix(ref h, PortalsMade); Mix(ref h, PuckPortal); Mix(ref h, CarryOn ? 1 : 0); Mix(ref h, CarryPercent); Mix(ref h, KnockPercent); Mix(ref h, ShotSpeed); Mix(ref h, PuckKnocks); Mix(ref h, PuckKnockSpeed); Mix(ref h, HoleAt); Mix(ref h, HoleTime);

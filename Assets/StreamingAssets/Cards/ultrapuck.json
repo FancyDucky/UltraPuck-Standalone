@@ -432,6 +432,17 @@
       "face": [ { "label": "Both nets", "value": "[gold]2x wide[/]" } ],
       "text": "[note]Chaos card: changes the arena for everyone, both teams.[/]",
       "stats": { "WideNets": "+1" }
+    },
+    {
+      "id": "ultrapuck.morepucks",
+      "name": "More Pucks",
+      "tier": "B",
+      "chaos": true,
+      "max": 1,
+      "color": "#FFFFFF",
+      "flavor": "This is getting confusing.",
+      "face": [ { "label": "Additional pucks", "value": "[gold]+1[/]" } ],
+      "stats": { "ExtraPucks": "+1" }
     }
   ]
 }

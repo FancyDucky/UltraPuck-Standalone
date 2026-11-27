@@ -30,6 +30,57 @@ namespace UltraPuck.Core
         /// <summary>The map as it plays in <paramref name="s"/> (what to draw for it).</summary>
         public MapDef MapFor(GameState s) { return WideNets(s) ? WideMap : BaseMap; }
         private void Use(GameState s) { _wide = WideNets(s); }
+
+        // ------------------------------------------------------------------ More Pucks (extra pucks are rocks with Puck set)
+
+        /// <summary>How many extra pucks More Pucks puts on the ice: one per copy anyone holds (at most 4).</summary>
+        public static int ExtraPucks(GameState s)
+        {
+            var n = 0;
+            if (s != null && s.Players != null) foreach (var p in s.Players) if (p != null && p.Stats != null) n += Math.Max(0, p.Stats.ExtraPucks);
+            return Math.Min(4, n);
+        }
+
+        private Fix RockR(Rock rk) { return rk.Puck ? T.PuckRadius : T.RockRadius; }
+        private Fix RockW(Rock rk) { return rk.Puck ? Fix.One : T.RockWeight; }
+        private Fix RockDragOf(Rock rk) { return rk.Puck ? T.PuckDrag : T.RockDrag; }
+
+        /// <summary>
+        /// The extra pucks: <paramref name="reset"/> (a kick-off) takes them all away and puts the right number back,
+        /// still, beside the kick-off spot (across the ice from it, alternating sides); otherwise only adds missing ones
+        /// and takes away any too many (cards changed in free play).
+        /// </summary>
+        private void SyncExtraPucks(GameState s, bool reset)
+        {
+            var want = ExtraPucks(s);
+            var list = new System.Collections.Generic.List<Rock>();
+            var have = 0;
+            foreach (var rk in s.Rocks)
+            {
+                if (!rk.Puck) { list.Add(rk); continue; }
+                if (reset || have >= want) continue;
+                list.Add(rk);
+                have++;
+            }
+            // across the ice: square to the line from one net to the other
+            FixVec2 g0 = FixVec2.Zero, g1 = FixVec2.Right;
+            foreach (var g in Map.Goals) { var c = (g.Min + g.Max) / Fix.Two; if (g.Team == 0) g0 = c; else g1 = c; }
+            var along = (g1 - g0).Normalized;
+            if (along.SqrLength.Raw == 0) along = FixVec2.Right;
+            var across = new FixVec2(-along.Y, along.X);
+            for (var k = have; k < want; k++)
+            {
+                var side = (k & 1) == 0 ? Fix.One : -Fix.One;
+                var at = Map.PuckSpot;
+                foreach (var far in new[] { Fix.FromInt(3 + 2 * (k / 2)), Fix.FromInt(2), Fix.Ratio(6, 5) })
+                {
+                    var tryAt = Map.PuckSpot + across * (far * side);
+                    if (Map.Inside(tryAt) && RockFits(Map.PuckSpot, tryAt, T.PuckRadius)) { at = tryAt; break; }
+                }
+                list.Add(new Rock { Pos = at, Vel = FixVec2.Zero, Owner = -1, Carrier = -1, Life = Fix.One, Puck = true, Touch = -1 });
+            }
+            if (reset || list.Count != s.Rocks.Length) s.Rocks = list.ToArray();
+        }
         public readonly Tuning T;
         /// <summary>The cards in play, or null for no cards (then no picks happen after goals).</summary>
         public readonly CardLibrary Cards;
@@ -324,6 +375,7 @@ namespace UltraPuck.Core
             }
             PlacePylons(s);
             PruneRocks(s);
+            SyncExtraPucks(s, false); // More Pucks picked (or let go) in free play, which carries on without a face-off
             if (T.FreePlay) s.Phase = Phase.Play; // free play: carry on where everyone stands
             else
             {
@@ -670,6 +722,7 @@ namespace UltraPuck.Core
             s.PhaseTime = T.CountdownTime;
             PlacePylons(s);
             s.Rocks = new Rock[0];
+            SyncExtraPucks(s, true); // More Pucks
             s.Portals = new Portal[0];
             s.PortalShots = new Shot[0];
             s.PuckPortal = 0;
@@ -840,7 +893,7 @@ namespace UltraPuck.Core
             if (s.Rocks.Length == 0) return;
             var keep = new System.Collections.Generic.List<Rock>();
             foreach (var rk in s.Rocks)
-                if (rk.Owner >= 0 && rk.Owner < s.Players.Length && s.Players[rk.Owner].Stats.Swap > 0) keep.Add(rk);
+                if (rk.Puck || (rk.Owner >= 0 && rk.Owner < s.Players.Length && s.Players[rk.Owner].Stats.Swap > 0)) keep.Add(rk); // (extra pucks stay)
             if (keep.Count != s.Rocks.Length) s.Rocks = keep.ToArray();
         }
 
@@ -1017,6 +1070,7 @@ namespace UltraPuck.Core
             s.Carrier = -1;
             s.PuckTeam = -1;
             s.PassFrom = -1;
+            SyncExtraPucks(s, true);
             StopLaying(s, false);
             s.HoleTime = Fix.Zero;
             foreach (var p in s.Players) { p.Charge = Fix.Zero; p.NoPickup = Fix.Zero; }
@@ -1125,6 +1179,7 @@ namespace UltraPuck.Core
                 var r = rk;
                 r.Owner = Shift(r.Owner, index);
                 r.Carrier = Shift(r.Carrier, index);
+                r.Touch = Shift(r.Touch, index);
                 rocks.Add(r);
             }
             s.Rocks = rocks.ToArray();
@@ -2346,23 +2401,51 @@ namespace UltraPuck.Core
                 Goal(s, 1 - g.Team, -1);
                 return;
             }
+            // MORE PUCKS: an extra puck in a net is a goal too (safe in a defender's wedge, like the puck). It's the
+            // goal of whoever last carried it if they're on the scoring team, else an own goal (nobody's).
+            for (var k = 0; k < s.Rocks.Length; k++)
+            {
+                var rk = s.Rocks[k];
+                if (!rk.Puck || rk.PortalVia != 0) continue;
+                foreach (var g in Map.Goals)
+                {
+                    if (!g.Touches(rk.Pos, T.PuckRadius)) continue;
+                    if (rk.Carrier >= 0 && rk.Carrier < s.Players.Length && s.Players[rk.Carrier].Team == g.Team) continue;
+                    var by = rk.Touch >= 0 && rk.Touch < s.Players.Length && s.Players[rk.Touch].Team != g.Team ? rk.Touch : -1;
+                    // it and the puck trade places, so everything after a goal (the blast, the sound, the replay) happens
+                    // where it went in: the puck sits in the net, the extra puck carries on where the puck was
+                    var was = s.PuckPos;
+                    s.PuckPos = rk.Pos;
+                    rk.Pos = was;
+                    rk.Vel = s.PuckVel;
+                    rk.Carrier = s.Carrier;
+                    rk.Touch = s.Carrier;
+                    rk.PortalVia = s.PuckPortal;
+                    s.PuckPortal = 0;
+                    s.Carrier = -1;
+                    s.Rocks[k] = rk;
+                    Goal(s, 1 - g.Team, by, true);
+                    return;
+                }
+            }
         }
 
         /// <summary>A goal for <paramref name="scorer"/>: by <paramref name="by"/> if known (a Cannon Ball), else worked out.</summary>
-        private void Goal(GameState s, int scorer, int by)
+        private void Goal(GameState s, int scorer, int by, bool extra = false)
         {
             {
                 s.Score[scorer]++;
                 s.LastScorer = scorer;
-                s.LastGoalPlayer = by >= 0 ? by : WhoScored(s, scorer);
+                // (an extra puck: nothing to work out from the puck's touches, so by or nobody)
+                s.LastGoalPlayer = by >= 0 ? by : extra ? -1 : WhoScored(s, scorer);
                 // stats: the goal is the shooter's (or carrier's) on the scoring team; an own goal is nobody's. The
                 // assist is the teammate who had it just before them.
                 NoteTouch(s);
-                var credit = by >= 0 ? by : Shooter(s, scorer);
+                var credit = by >= 0 ? by : extra ? -1 : Shooter(s, scorer);
                 // nobody on the scoring team shot or carried it in, but one of them touched it since the face-off:
                 // theirs (the last to touch it). Only an own goal when none of them did.
                 var touched = scorer == 0 ? s.TeamTouch0 : s.TeamTouch1;
-                if (credit < 0 && touched >= 0 && touched < s.Players.Length && s.Players[touched].Team == scorer) credit = touched;
+                if (credit < 0 && !extra && touched >= 0 && touched < s.Players.Length && s.Players[touched].Team == scorer) credit = touched;
                 s.LastAssist = -1;
                 s.LastGoalBy = -1;
                 if (credit >= 0)
@@ -2533,7 +2616,7 @@ namespace UltraPuck.Core
                 if (rk.Carrier >= 0) continue; // carried rocks ride with their player
                 var d = rk.Pos - at;
                 var dist = d.Length;
-                if (dist > radius + T.RockRadius) continue;
+                if (dist > radius + RockR(rk)) continue;
                 FixVec2 n;
                 if (dist.Raw > 0) n = d / dist;
                 else
@@ -3418,7 +3501,7 @@ namespace UltraPuck.Core
                 rk.Pos = from;
                 rk.Carrier = -1;
                 CollideWalls(ref a.Pos, ref a.Vel, RadiusOf(a), T.WallBounce);
-                CollideWalls(ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
+                CollideWalls(ref rk.Pos, ref rk.Vel, RockR(rk), T.WallBounce);
                 s.Rocks[k] = rk;
                 a.Swaps++; // clap + particle burst (throw does not count)
                 a.SwapFrom = from;
@@ -3449,8 +3532,8 @@ namespace UltraPuck.Core
                 : T.ChargedShotMax * p.Charge;
             var quick = QuickShotSpeed(p);
             var speed = (released ? charged : Fix.Max(quick, p.Charge > Fix.Zero ? charged : Fix.Zero)) * p.Stats.ShotPower;
-            var reach = RadiusOf(p) + T.RockRadius + T.CarrySlack;
-            if ((rk.Pos - p.Pos).SqrLength > reach * reach) rk.Pos = RockCarrySpot(p);
+            var reach = RadiusOf(p) + RockR(rk) + T.CarrySlack;
+            if ((rk.Pos - p.Pos).SqrLength > reach * reach) rk.Pos = RockCarrySpot(p, RockR(rk));
             rk.Vel = p.Facing * speed + p.Vel * Fix.Half;
             rk.Carrier = -1;
             s.Rocks[rockIndex] = rk;
@@ -3460,23 +3543,23 @@ namespace UltraPuck.Core
             p.NoPickup = T.ShotPickupDelay;
         }
 
-        private FixVec2 RockCarrySpot(PlayerState p)
+        private FixVec2 RockCarrySpot(PlayerState p, Fix rr)
         {
-            var reach = RadiusOf(p) + T.RockRadius + Fix.Ratio(1, 50);
-            if (RockFits(p.Pos, p.Pos + p.Facing * reach)) return p.Pos + p.Facing * reach;
+            var reach = RadiusOf(p) + rr + Fix.Ratio(1, 50);
+            if (RockFits(p.Pos, p.Pos + p.Facing * reach, rr)) return p.Pos + p.Facing * reach;
             Fix lo = Fix.Zero, hi = reach;
             for (var k = 0; k < 12; k++)
             {
                 var mid = (lo + hi) / 2;
-                if (RockFits(p.Pos, p.Pos + p.Facing * mid)) lo = mid; else hi = mid;
+                if (RockFits(p.Pos, p.Pos + p.Facing * mid, rr)) lo = mid; else hi = mid;
             }
             return p.Pos + p.Facing * lo;
         }
 
-        private bool RockFits(FixVec2 from, FixVec2 at)
+        private bool RockFits(FixVec2 from, FixVec2 at, Fix rr)
         {
             if (FirstWallHit(from, at) < Fix.One) return false;
-            var r = T.RockRadius + WallHalf;
+            var r = rr + WallHalf;
             var r2 = r * r;
             foreach (var seg in Map.Segments) if (!seg.FarFrom(at, r) && (at - Closest(seg, at)).SqrLength < r2) return false;
             return true;
@@ -3498,7 +3581,7 @@ namespace UltraPuck.Core
                     else
                     {
                         var c = s.Players[rk.Carrier];
-                        rk.Pos = RockCarrySpot(c);
+                        rk.Pos = RockCarrySpot(c, RockR(rk));
                         rk.Vel = c.Vel;
                         s.Rocks[k] = rk;
                         continue;
@@ -3508,15 +3591,15 @@ namespace UltraPuck.Core
                 else
                 {
                     rk.Pos += rk.Vel * sub;
-                    rk.Vel -= rk.Vel * Fix.Min(Fix.One, T.RockDrag * sub);
+                    rk.Vel -= rk.Vel * Fix.Min(Fix.One, RockDragOf(rk) * sub);
                     if (rk.Vel.SqrLength < Fix.Ratio(1, 400)) rk.Vel = FixVec2.Zero;
                     bool jumpedR;
                     var rockWas = rk.Pos - rk.Vel * sub;
                     var rockWasIn = rk.PortalVia != 0;
-                    var inPortal = PortalPass(s, ref rk.Pos, ref rk.Vel, T.RockRadius, ref rk.PortalVia, out jumpedR);
-                    CollideWalls(ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce, s, inPortal);
+                    var inPortal = PortalPass(s, ref rk.Pos, ref rk.Vel, RockR(rk), ref rk.PortalVia, out jumpedR);
+                    CollideWalls(ref rk.Pos, ref rk.Vel, RockR(rk), T.WallBounce, s, inPortal);
                     if ((inPortal >= 0 || rockWasIn) && !jumpedR && Escaped(rockWas, rk.Pos)) { rk.Pos = rockWas; rk.Vel = FixVec2.Zero; rk.PortalVia = 0; }
-                    if (s.Stones.Length > 0) CollideStones(s, ref rk.Pos, ref rk.Vel, T.RockRadius, T.WallBounce);
+                    if (s.Stones.Length > 0) CollideStones(s, ref rk.Pos, ref rk.Vel, RockR(rk), T.WallBounce);
                     s.Rocks[k] = rk;
                 }
             }
@@ -3532,15 +3615,16 @@ namespace UltraPuck.Core
                 {
                     if (s.Carrier == i || RockCarriedBy(s, i) >= 0 || MateHeldBy(s, i) >= 0) continue;
                     var p = s.Players[i];
-                    var r = RadiusOf(p) + T.RockRadius;
+                    var r = RadiusOf(p) + RockR(rk);
                     var d2 = (rk.Pos - p.Pos).SqrLength;
-                    if (p.NoPickup > Fix.Zero || (d2 >= r * r && !(T.WedgePickup && OnWedgeRock(p, rk.Pos)))) continue;
+                    if (p.NoPickup > Fix.Zero || (d2 >= r * r && !(T.WedgePickup && OnWedgeRock(p, rk.Pos, RockR(rk))))) continue;
                     if (best < 0 || d2 < bestD) { best = i; bestD = d2; ties = 1; }
                     else if (d2 == bestD && s.NextRandom() % (uint)(++ties) == 0) best = i;
                 }
                 if (best < 0) continue;
                 rk.Carrier = best;
-                rk.Pos = RockCarrySpot(s.Players[best]);
+                if (rk.Puck) rk.Touch = best;
+                rk.Pos = RockCarrySpot(s.Players[best], RockR(rk));
                 rk.Vel = s.Players[best].Vel;
                 s.Rocks[k] = rk;
             }
@@ -3550,7 +3634,7 @@ namespace UltraPuck.Core
             for (var k = 0; k < s.Rocks.Length; k++)
             {
                 var rk = s.Rocks[k];
-                rk.Life -= sub;
+                if (!rk.Puck) rk.Life -= sub; // extra pucks never run out
                 s.Rocks[k] = rk;
                 if (rk.Life <= Fix.Zero) gone++;
             }
@@ -3564,10 +3648,9 @@ namespace UltraPuck.Core
         }
 
         /// <summary>Same as <see cref="OnWedge"/> but sized for a Swap rock.</summary>
-        private bool OnWedgeRock(PlayerState p, FixVec2 rock)
+        private bool OnWedgeRock(PlayerState p, FixVec2 rock, Fix pr)
         {
             var R = RadiusOf(p);
-            var pr = T.RockRadius;
             var d = rock - p.Pos;
             var x = FixVec2.Dot(d, p.Facing);
             var tipX = R * T.WedgeTip;
@@ -3597,11 +3680,11 @@ namespace UltraPuck.Core
                 var rk = s.Rocks[k];
                 if (rk.Carrier >= 0) continue; // carried rocks sit in the wedge
                 var d = p.Pos - rk.Pos;
-                var min = r + T.RockRadius;
+                var min = r + RockR(rk);
                 if (d.SqrLength >= min * min) continue;
                 var dist = d.Length;
                 var n = dist.Raw > 0 ? d / dist : FixVec2.Right;
-                Fix wp = WeightOf(p), wy = T.RockWeight, sum = wp + wy;
+                Fix wp = WeightOf(p), wy = RockW(rk), sum = wp + wy;
                 var overlap = min - dist;
                 p.Pos += n * (overlap * wy / sum);
                 rk.Pos -= n * (overlap * wp / sum);
@@ -3613,7 +3696,7 @@ namespace UltraPuck.Core
                     rk.Vel -= n * (impulse / wy);
                 }
                 var v = rk.Vel;
-                CollideWalls(ref rk.Pos, ref v, T.RockRadius, T.WallBounce);
+                CollideWalls(ref rk.Pos, ref v, RockR(rk), T.WallBounce);
                 rk.Vel = v;
                 s.Rocks[k] = rk;
             }
@@ -3630,7 +3713,7 @@ namespace UltraPuck.Core
             {
                 var rk = s.Rocks[k];
                 if (rk.Carrier >= 0) continue;
-                var min = T.PuckRadius + T.RockRadius;
+                var min = T.PuckRadius + RockR(rk);
                 var d = s.PuckPos - rk.Pos;
                 if (d.SqrLength >= min * min) continue;
                 var dist = d.Length;
@@ -3647,13 +3730,13 @@ namespace UltraPuck.Core
                     if (into > Fix.Zero) rk.Vel -= n * (into * (Fix.One + T.PuckWallBounce));
                     rk.Pos = s.PuckPos - n * min;
                     var v = rk.Vel;
-                    CollideWalls(ref rk.Pos, ref v, T.RockRadius, T.WallBounce);
+                    CollideWalls(ref rk.Pos, ref v, RockR(rk), T.WallBounce);
                     rk.Vel = v;
                 }
                 else
                 {
                     // both loose: share the bounce (puck weighs 1, rock is lighter)
-                    Fix wp = Fix.One, wy = T.RockWeight, sum = wp + wy;
+                    Fix wp = Fix.One, wy = RockW(rk), sum = wp + wy;
                     var overlap = min - dist;
                     s.PuckPos += n * (overlap * wy / sum);
                     rk.Pos -= n * (overlap * wp / sum);
@@ -3666,7 +3749,7 @@ namespace UltraPuck.Core
                     }
                     CollideWalls(ref s.PuckPos, ref s.PuckVel, T.PuckRadius, T.PuckWallBounce);
                     var v = rk.Vel;
-                    CollideWalls(ref rk.Pos, ref v, T.RockRadius, T.WallBounce);
+                    CollideWalls(ref rk.Pos, ref v, RockR(rk), T.WallBounce);
                     rk.Vel = v;
                 }
                 s.Rocks[k] = rk;
@@ -3680,7 +3763,7 @@ namespace UltraPuck.Core
             {
                 if (rk.Carrier >= 0) continue;
                 var d = pos - rk.Pos;
-                var min = r + T.RockRadius;
+                var min = r + RockR(rk);
                 if (d.SqrLength >= min * min) continue;
                 var dist = d.Length;
                 var n = dist.Raw > 0 ? d / dist : FixVec2.Right;

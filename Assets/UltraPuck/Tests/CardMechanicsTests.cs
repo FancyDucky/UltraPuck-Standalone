@@ -3352,5 +3352,48 @@ namespace UltraPuck.Tests
                 Assert.AreSame(map, sim.Map, file + ": back to normal once nobody holds it");
             }
         }
+
+        [Test]
+        public void MorePucksPutsAnExtraPuckOnTheIceThatScores()
+        {
+            var card = _lib.ById("ultrapuck.morepucks");
+            Assert.IsNotNull(card);
+            Assert.IsTrue(card.Chaos, "More Pucks is a chaos card");
+            var s = Game(0, 1);
+            Assert.AreEqual(0, s.Rocks.Length, "one puck to start with");
+            _sim.GiveCard(s, s.Players[1], card.Index);
+            _lib.Recompute(s);
+            _sim.FaceOff(s);
+            Assert.AreEqual(1, s.Rocks.Length, "an extra puck at the kick-off");
+            var x = s.Rocks[0];
+            Assert.IsTrue(x.Puck);
+            Assert.AreEqual(-1, x.Owner, "nobody's");
+            Assert.IsTrue(_sim.Map.Inside(x.Pos));
+            Assert.Greater((x.Pos - _sim.Map.PuckSpot).Length.ToDouble(), 1.0, "beside the puck, not on it");
+
+            // it doesn't run out, and it goes in a net like the puck: red scores in blue's net
+            s.Phase = Phase.Play;
+            GoalDef blue = null;
+            foreach (var g in _sim.Map.Goals) if (g.Team == 1) blue = g;
+            var mouth = new FixVec2(blue.Min.X - Fix.FromInt(2), (blue.Min.Y + blue.Max.Y) / 2);
+            s.Rocks[0].Pos = mouth;
+            s.Rocks[0].Vel = new FixVec2(Fix.FromInt(12), Fix.Zero);
+            s.Rocks[0].Touch = 0;
+            for (var k = 0; k < 120 && s.Phase == Phase.Play; k++) _sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(Phase.Scored, s.Phase, "the extra puck scored");
+            Assert.AreEqual(1, s.Score[0]);
+            Assert.AreEqual(0, s.Score[1]);
+            Assert.AreEqual(1, s.Players[0].Goals, "the goal is red's, who last had it");
+            Assert.IsTrue(blue.Touches(s.PuckPos, _sim.T.PuckRadius), "the puck sits in the net it went into (they trade places)");
+
+            // back beside the kick-off spot at the next face-off; gone once nobody holds the card
+            _sim.FaceOff(s);
+            Assert.AreEqual(1, s.Rocks.Length);
+            Assert.AreEqual(x.Pos, s.Rocks[0].Pos);
+            s.Players[1].Cards = new int[0];
+            _lib.Recompute(s);
+            _sim.FaceOff(s);
+            Assert.AreEqual(0, s.Rocks.Length, "no extra puck without the card");
+        }
     }
 }

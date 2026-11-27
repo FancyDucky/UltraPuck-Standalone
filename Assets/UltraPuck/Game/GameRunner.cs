@@ -815,7 +815,7 @@ namespace UltraPuck.Game
                 if (wide != null && _state.Players.Length > 0)
                 {
                     var offer = new List<int>();
-                    foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.widenets", "ultrapuck.loyal" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                    foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.widenets", "ultrapuck.morepucks" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                     _state.Players[0].Offer = offer.ToArray();
                 }
                 yield return new WaitForSecondsRealtime(2.2f);
@@ -846,6 +846,11 @@ namespace UltraPuck.Game
                 if (wide != null && _state.Players.Length > 0) { _sim.GiveCard(_state, _state.Players[0], wide.Index); _cards.Recompute(_state); }
                 yield return new WaitForSecondsRealtime(1.2f);
                 yield return Shot("chaos-nets");
+                // More Pucks: an extra puck beside the kick-off spot
+                var more = _cards != null ? _cards.ById("ultrapuck.morepucks") : null;
+                if (more != null && _state.Players.Length > 0) { _sim.GiveCard(_state, _state.Players[0], more.Index); _cards.Recompute(_state); _sim.ResetPuck(_state); }
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("chaos-pucks");
                 GoMainMenu();
                 yield return new WaitForSecondsRealtime(0.5f);
             }
@@ -3925,7 +3930,7 @@ namespace UltraPuck.Game
             }
             _shots.Show(b, _sim.T.ShotRadius.ToFloat());
             _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
-            _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team), IsLocalPerson, _sim.T.RockFlash.ToFloat());
+            _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team), IsLocalPerson, _sim.T.RockFlash.ToFloat(), _sim.T.PuckRadius.ToFloat());
             _ice.Show(b, _sim.T.IceRadius.ToFloat());
             _stones.Show(b, _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.StoneLife.ToFloat());
             _portals.Show(b, _sim.Map, _sim.T.PortalLength.ToFloat(), _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.PortalShotRadius.ToFloat());
