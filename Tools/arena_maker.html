@@ -51,6 +51,9 @@ kbd{font:11px ui-monospace,Consolas,monospace;color:var(--dim);margin-left:4px}
 #toast{position:fixed;left:50%;bottom:44px;transform:translateX(-50%);background:#0b2a4a;border:1px solid var(--acc);padding:8px 14px;border-radius:8px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:10}
 #toast.show{opacity:1}
 input[type=range]{flex:1}
+#stamps{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+#stamps canvas{background:#0c0d10;border:1px solid var(--line);border-radius:4px;cursor:pointer;image-rendering:pixelated;padding:3px}
+#stamps canvas:hover{border-color:var(--acc)}
 </style>
 </head>
 <body>
@@ -81,6 +84,20 @@ input[type=range]{flex:1}
     </div>
 
     <div class="sec">
+      <h2>Stamp</h2>
+      <div class="btns">
+        <button id="rotL" title="Rotate the stamp left (Shift+Z)">Rotate left</button>
+        <button id="rotR" title="Rotate the stamp right (Z)">Rotate right<kbd>Z</kbd></button>
+        <button id="flipX" title="Mirror the stamp left-right (X)">Flip<kbd>X</kbd></button>
+        <button id="flipY" title="Mirror the stamp top-bottom (Y)">Flip<kbd>Y</kbd></button>
+      </div>
+      <p class="note">Right-drag on the map with the Stamp tool to copy an area of the layer you're on as the stamp.</p>
+      <div class="btns" style="margin-top:8px"><button id="saveStamp">Save stamp</button></div>
+      <div id="stamps"></div>
+      <p class="note" id="stampsNote">Saved stamps show here: click one to use it, right-click to delete it.</p>
+    </div>
+
+    <div class="sec">
       <h2>Shadows layer</h2>
       <label class="row"><span>Strength</span><input type="range" id="shadeAlpha" min="0.1" max="1" step="0.05" value="0.6"><b id="shadeVal">60%</b></label>
       <p class="note">How dark the Shadows tiles show (and how they're exported).</p>
@@ -108,7 +125,7 @@ input[type=range]{flex:1}
 
   <div id="top">
     <div class="grp"><span class="lab">Tool</span>
-      <button data-tool="brush" title="Brush (B)">Brush<kbd>B</kbd></button>
+      <button data-tool="brush" title="Stamp (B): paints the selected tiles. Right-drag copies an area as the stamp; X / Y flip it, Z rotates it">Stamp<kbd>B</kbd></button>
       <button data-tool="rect" title="Rectangle (R)">Rect<kbd>R</kbd></button>
       <button data-tool="fill" title="Fill (F)">Fill<kbd>F</kbd></button>
       <button data-tool="erase" title="Eraser (E)">Erase<kbd>E</kbd></button>
@@ -132,7 +149,7 @@ input[type=range]{flex:1}
     <canvas id="view"></canvas>
     <div id="hint"></div>
   </div>
-  <div id="bar"><span id="pos">&nbsp;</span><span id="mapsize"></span><span>Right-click erases &middot; scroll to zoom &middot; Space or middle-drag to pan &middot; Ctrl+Z undo</span></div>
+  <div id="bar"><span id="pos">&nbsp;</span><span id="mapsize"></span><span>Stamp: right-drag copies, X / Y flip, Z rotates &middot; other tools: right-click erases &middot; scroll to zoom &middot; Space or middle-drag to pan &middot; Ctrl+Z undo</span></div>
 </div>
 <div id="drop">Drop a tileset PNG or a saved project</div>
 <div id="toast"></div>
@@ -163,7 +180,7 @@ const S = {
   tileset: null, tilesetURL: null, cols: 0, rows: 0,
   N: 0, M: 0, layers: {}, canv: {},
   active: 'back', visible: { back: true, floor: true, shade: true, front: true },
-  tool: 'brush', stamp: { w: 1, h: 1, ids: [0] }, random: false,
+  tool: 'brush', stamp: { w: 1, h: 1, ids: [0], pal: true }, random: false, stamps: [],
   zoom: 8, panX: 0, panY: 0, game: false, guides: true, grid: true, dim: true,
   shadeAlpha: 0.6, scale: 0,
 };
@@ -225,15 +242,58 @@ function rebuildCanvases() {
 
 // ------------------------------------------------------------------ tiles
 
+// a cell holds a tile number plus how it's turned (Stamp: X / Y flip, Z rotate): tile + turn * ORI, -1 for empty.
+// turn 0..7 = quarter turns clockwise (0..3), +4 when mirrored left-right first
+const ORI = 1 << 20;
+const tileOf = id => id % ORI, turnOf = id => (id / ORI) | 0;
 function tileSrc(id) {
-  if (!S.tileset || id < 0 || id >= S.cols * S.rows) return null;
-  return [S.margin + (id % S.cols) * (S.ts + S.spacing), S.margin + Math.floor(id / S.cols) * (S.ts + S.spacing)];
+  if (!S.tileset || id < 0) return null;
+  const t = tileOf(id);
+  if (t >= S.cols * S.rows) return null;
+  return [S.margin + (t % S.cols) * (S.ts + S.spacing), S.margin + Math.floor(t / S.cols) * (S.ts + S.spacing)];
+}
+/** One tile, turned as the cell says, into the box at (x, y) of size z. */
+function drawTile(c, id, x, y, z) {
+  const src = tileSrc(id);
+  if (!src) return;
+  const o = turnOf(id);
+  if (o === 0) { c.drawImage(S.tileset, src[0], src[1], S.ts, S.ts, x, y, z, z); return; }
+  c.save();
+  c.translate(x + z / 2, y + z / 2);
+  c.rotate((o & 3) * Math.PI / 2);
+  if (o & 4) c.scale(-1, 1);
+  c.drawImage(S.tileset, src[0], src[1], S.ts, S.ts, -z / 2, -z / 2, z, z);
+  c.restore();
 }
 function drawCell(k, i) {
   const c = S.canv[k].getContext('2d'), x = (i % S.N) * S.ts, y = Math.floor(i / S.N) * S.ts;
   c.clearRect(x, y, S.ts, S.ts);
-  const src = tileSrc(S.layers[k][i]);
-  if (src) c.drawImage(S.tileset, src[0], src[1], S.ts, S.ts, x, y, S.ts, S.ts);
+  drawTile(c, S.layers[k][i], x, y, S.ts);
+}
+// turning the whole stamp: each tile moves and turns with it
+const turned = (id, f) => id < 0 ? id : tileOf(id) + f(turnOf(id)) * ORI;
+function rotateStamp(cw) {
+  const s = S.stamp, ids = new Array(s.ids.length);
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
+    const nx = cw ? s.h - 1 - y : y, ny = cw ? x : s.w - 1 - x;
+    ids[ny * s.h + nx] = turned(s.ids[y * s.w + x], o => (((o & 3) + (cw ? 1 : 3)) % 4) | (o & 4));
+  }
+  S.stamp = { w: s.h, h: s.w, ids };
+  afterStampChange();
+}
+function flipStamp(across) {
+  // across: mirror left-right (X); else top-bottom (Y)
+  const s = S.stamp, ids = new Array(s.ids.length);
+  for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
+    const nx = across ? s.w - 1 - x : x, ny = across ? y : s.h - 1 - y;
+    ids[ny * s.w + nx] = turned(s.ids[y * s.w + x], o => (((across ? 4 : 6) - (o & 3)) % 4) | ((o & 4) ^ 4));
+  }
+  S.stamp = { w: s.w, h: s.h, ids };
+  afterStampChange();
+}
+function afterStampChange() {
+  if (S.tool !== 'brush' && S.tool !== 'rect' && S.tool !== 'fill') setTool('brush');
+  drawPalette(); info(); render();
 }
 function redrawLayer(k) {
   const c = S.canv[k].getContext('2d');
@@ -250,9 +310,11 @@ function setCell(x, y, id, k = S.active) {
 const mod = (a, n) => ((a % n) + n) % n;
 function stampAt(x, y, ax, ay) {
   const s = S.stamp;
-  if (S.random) return s.ids[Math.floor(Math.random() * s.ids.length)];
+  if (S.random) { const some = s.ids.filter(id => id >= 0); return some.length ? some[Math.floor(Math.random() * some.length)] : -1; }
   return s.ids[mod(y - ay, s.h) * s.w + mod(x - ax, s.w)];
 }
+/** Paint a stamp's tile (a stamp's empty cells leave what's there). */
+function put(x, y, id) { if (id >= 0) setCell(x, y, id); }
 
 function measureTileset() {
   if (!S.tileset) { S.cols = S.rows = 0; return; }
@@ -265,7 +327,7 @@ function loadTileset(url, then) {
   img.onload = () => {
     S.tileset = img; S.tilesetURL = url;
     measureTileset();
-    if (S.stamp.ids.some(id => id >= S.cols * S.rows)) S.stamp = { w: 1, h: 1, ids: [0] };
+    if (S.stamp.ids.some(id => tileOf(id) >= S.cols * S.rows)) S.stamp = { w: 1, h: 1, ids: [0], pal: true };
     rebuildCanvases(); drawPalette(); info(); save();
     if (then) then();
   };
@@ -291,6 +353,7 @@ function palZoom() {
 }
 function drawPalette() {
   const wrap = $('pal-wrap');
+  drawStamps();
   if (!S.tileset) { wrap.className = 'empty'; wrap.textContent = 'Load your tileset (or drop the PNG on this page)'; return; }
   if (wrap.className) { wrap.className = ''; wrap.textContent = ''; wrap.appendChild(pal); }
   const z = palZoom(), step = S.ts + S.spacing;
@@ -311,9 +374,25 @@ function drawPalette() {
     pctx.strokeStyle = '#ffd34f'; pctx.lineWidth = 2; pctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
   }
 }
+/** The saved stamps, as little pictures. */
+function drawStamps() {
+  const box = $('stamps');
+  box.textContent = '';
+  $('stampsNote').style.display = S.stamps.length ? 'none' : '';
+  S.stamps.forEach((s, n) => {
+    const z = Math.max(4, Math.min(16, Math.floor(64 / Math.max(s.w, s.h))));
+    const c = document.createElement('canvas'); c.width = s.w * z; c.height = s.h * z;
+    const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+    if (S.tileset) s.ids.forEach((id, i) => drawTile(x, id, (i % s.w) * z, Math.floor(i / s.w) * z, z));
+    c.title = s.w + ' x ' + s.h + ' (click to use, right-click to delete)';
+    c.onclick = () => { S.stamp = { w: s.w, h: s.h, ids: s.ids.slice() }; afterStampChange(); };
+    c.oncontextmenu = e => { e.preventDefault(); S.stamps.splice(n, 1); drawStamps(); save(); };
+    box.appendChild(c);
+  });
+}
 function selOfStamp() {
   const s = S.stamp, id = s.ids[0];
-  if (!S.cols || id < 0) return null;
+  if (!S.cols || id < 0 || !s.pal) return null; // only a plain block picked from the tileset shows on it
   const c0 = id % S.cols, r0 = Math.floor(id / S.cols);
   return { c0, r0, c1: c0 + s.w - 1, r1: r0 + s.h - 1 };
 }
@@ -340,7 +419,7 @@ pal.addEventListener('pointerup', () => {
   if (!palFrom) return;
   const s = palSel, ids = [];
   for (let r = s.r0; r <= s.r1; r++) for (let c = s.c0; c <= s.c1; c++) ids.push(r * S.cols + c);
-  S.stamp = { w: s.c1 - s.c0 + 1, h: s.r1 - s.r0 + 1, ids };
+  S.stamp = { w: s.c1 - s.c0 + 1, h: s.r1 - s.r0 + 1, ids, pal: true };
   palFrom = palSel = null;
   if (S.tool === 'erase' || S.tool === 'pick') setTool('brush');
   drawPalette(); info();
@@ -428,13 +507,12 @@ function paint() {
     if (S.tileset && (S.tool === 'brush' || (S.tool === 'rect' && !(drag && drag.erase))) && !S.random && !(drag && S.tool === 'brush')) {
       c.globalAlpha = .65;
       const ax = drag ? drag.x : x0, ay = drag ? drag.y : y0;
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const src = tileSrc(S.stamp.ids[mod(y0 + y - ay, S.stamp.h) * S.stamp.w + mod(x0 + x - ax, S.stamp.w)]);
-        if (src) c.drawImage(S.tileset, src[0], src[1], S.ts, S.ts, ox + (x0 + x) * Z, oy + (y0 + y) * Z, Z, Z);
-      }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++)
+        drawTile(c, S.stamp.ids[mod(y0 + y - ay, S.stamp.h) * S.stamp.w + mod(x0 + x - ax, S.stamp.w)], ox + (x0 + x) * Z, oy + (y0 + y) * Z, Z);
       c.globalAlpha = 1;
     }
-    c.strokeStyle = (drag && drag.erase) || S.tool === 'erase' ? '#ff6b5a' : '#ffd34f'; c.lineWidth = 2;
+    if (drag && drag.capture) { x0 = Math.min(drag.x, hx); y0 = Math.min(drag.y, hy); w = Math.abs(hx - drag.x) + 1; h = Math.abs(hy - drag.y) + 1; }
+    c.strokeStyle = drag && drag.capture ? '#5fe3ff' : (drag && drag.erase) || S.tool === 'erase' ? '#ff6b5a' : '#ffd34f'; c.lineWidth = 2;
     c.strokeRect(ox + x0 * Z, oy + y0 * Z, w * Z, h * Z);
   }
 }
@@ -465,7 +543,18 @@ function brushAt(x, y, erase) {
   if (erase) { setCell(x, y, -1); return; }
   if (S.random) { setCell(x, y, stampAt(x, y, x, y)); return; }
   const s = S.stamp;
-  for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) setCell(x + i, y + j, s.ids[j * s.w + i]);
+  for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) put(x + i, y + j, s.ids[j * s.w + i]);
+}
+/** Right-drag with the Stamp: the tiles under the box (on the layer you're on) become the stamp, as in Tiled. */
+function captureStamp(x0, y0, x1, y1) {
+  [x0, x1] = [Math.max(0, Math.min(x0, x1)), Math.min(S.N - 1, Math.max(x0, x1))];
+  [y0, y1] = [Math.max(0, Math.min(y0, y1)), Math.min(S.M - 1, Math.max(y0, y1))];
+  const ids = [];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) ids.push(S.layers[S.active][y * S.N + x]);
+  if (!ids.some(id => id >= 0)) { toast('Nothing on this layer there to copy'); return; }
+  S.stamp = { w: x1 - x0 + 1, h: y1 - y0 + 1, ids };
+  drawPalette(); info();
+  toast('Copied ' + S.stamp.w + ' x ' + S.stamp.h + ' as the stamp (Save stamp keeps it)');
 }
 function fillAt(x, y, erase) {
   if (x < 0 || y < 0 || x >= S.N || y >= S.M) return;
@@ -473,7 +562,7 @@ function fillAt(x, y, erase) {
   seen[todo[0]] = 1;
   while (todo.length) {
     const i = todo.pop(), cx = i % S.N, cy = (i / S.N) | 0;
-    setCell(cx, cy, erase ? -1 : stampAt(cx, cy, x, y));
+    if (erase) setCell(cx, cy, -1); else put(cx, cy, stampAt(cx, cy, x, y));
     for (const [nx, ny] of [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]) {
       if (nx < 0 || ny < 0 || nx >= S.N || ny >= S.M) continue;
       const n = ny * S.N + nx;
@@ -487,7 +576,7 @@ function pickAt(x, y) {
   const order = [S.active].concat(LAYERS.map(l => l.key).reverse().filter(k => k !== S.active));
   for (const k of order) {
     const id = S.layers[k][y * S.N + x];
-    if (id >= 0 && S.visible[k]) { S.stamp = { w: 1, h: 1, ids: [id] }; if (k !== S.active) setLayer(k); drawPalette(); info(); return; }
+    if (id >= 0 && S.visible[k]) { S.stamp = { w: 1, h: 1, ids: [id], pal: turnOf(id) === 0 }; if (k !== S.active) setLayer(k); drawPalette(); info(); return; }
   }
 }
 
@@ -498,6 +587,7 @@ view.addEventListener('pointerdown', e => {
   if (e.button !== 0 && e.button !== 2) return;
   const [x, y] = cellAt(e), erase = e.button === 2;
   if (S.tool === 'pick' || (e.altKey && !erase)) { pickAt(x, y); return; }
+  if (S.tool === 'brush' && erase) { drag = { x, y, lx: x, ly: y, capture: true }; render(); return; }
   if (!S.tileset && !erase && S.tool !== 'erase') { toast('Load your tileset first'); return; }
   pushUndo(); changed = false;
   drag = { x, y, lx: x, ly: y, erase: erase || S.tool === 'erase' };
@@ -510,7 +600,7 @@ view.addEventListener('pointermove', e => {
   const [x, y] = cellAt(e);
   hover = x >= 0 && y >= 0 && x < S.N && y < S.M ? [x, y] : null;
   showPos(x, y);
-  if (drag && (S.tool === 'brush' || S.tool === 'erase') && (x !== drag.lx || y !== drag.ly)) {
+  if (drag && !drag.capture && (S.tool === 'brush' || S.tool === 'erase') && (x !== drag.lx || y !== drag.ly)) {
     // along the line from the last cell, so a fast stroke has no gaps; a big stamp steps by its own size
     const w = drag.erase || S.random ? 1 : S.stamp.w, h = drag.erase || S.random ? 1 : S.stamp.h;
     const n = Math.max(Math.abs(x - drag.lx), Math.abs(y - drag.ly));
@@ -529,8 +619,11 @@ view.addEventListener('pointerup', e => {
     const [x, y] = cellAt(e);
     const x0 = Math.max(0, Math.min(drag.x, x)), x1 = Math.min(S.N - 1, Math.max(drag.x, x));
     const y0 = Math.max(0, Math.min(drag.y, y)), y1 = Math.min(S.M - 1, Math.max(drag.y, y));
-    for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) setCell(cx, cy, drag.erase ? -1 : stampAt(cx, cy, Math.min(drag.x, x), Math.min(drag.y, y)));
+    for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+      if (drag.erase) setCell(cx, cy, -1); else put(cx, cy, stampAt(cx, cy, Math.min(drag.x, x), Math.min(drag.y, y)));
+    }
   }
+  if (drag.capture) { const [x, y] = cellAt(e); captureStamp(drag.x, drag.y, x, y); drag = null; render(); return; }
   finish();
 });
 view.addEventListener('pointerleave', () => { hover = null; render(); });
@@ -582,7 +675,7 @@ function info() {
   $('expinfo').textContent = 'Pictures export at ' + (S.N * S.ts * k) + ' x ' + (S.M * S.ts * k) + ' px (' + S.ts + ' px tiles x ' + k + ', kept crisp).';
   $('mapsize').textContent = RINKS[S.rink].name + ': ' + S.N + ' x ' + S.M + ' tiles';
   const s = S.stamp;
-  $('selinfo').textContent = S.tileset ? 'Selected: ' + (s.w * s.h > 1 ? s.w + ' x ' + s.h + ' tiles' : 'tile ' + s.ids[0]) + '. Drag across the tileset to pick several.' : 'Drag across the tileset to pick several tiles at once.';
+  $('selinfo').textContent = S.tileset ? 'Selected: ' + (s.w * s.h > 1 ? s.w + ' x ' + s.h + ' tiles' : 'tile ' + tileOf(s.ids[0])) + (s.pal ? '' : ' (copied / turned)') + '. Drag across the tileset to pick several.' : 'Drag across the tileset to pick several tiles at once.';
 }
 
 for (const L of LAYERS) {
@@ -624,9 +717,20 @@ $('save').onclick = () => download(new Blob([JSON.stringify(projectData())], { t
 $('open').onclick = () => $('openFile').click();
 $('openFile').onchange = e => { if (e.target.files[0]) readFile(e.target.files[0]); e.target.value = ''; };
 $('export').onclick = exportZip;
+$('rotL').onclick = () => rotateStamp(false);
+$('rotR').onclick = () => rotateStamp(true);
+$('flipX').onclick = () => flipStamp(true);
+$('flipY').onclick = () => flipStamp(false);
+$('saveStamp').onclick = () => {
+  const s = S.stamp;
+  if (!S.tileset || !s.ids.some(id => id >= 0)) { toast('Pick some tiles first'); return; }
+  if (S.stamps.some(t => t.w === s.w && t.h === s.h && t.ids.join() === s.ids.join())) { toast('That stamp is saved already'); return; }
+  S.stamps.push({ w: s.w, h: s.h, ids: s.ids.slice() });
+  drawStamps(); save(); toast('Stamp saved');
+};
 
 window.addEventListener('keydown', e => {
-  if (e.target.matches('input,select,textarea')) return;
+  if (e.target.matches && e.target.matches('input,select,textarea')) return;
   if (e.code === 'Space') { space = true; view.style.cursor = 'grab'; e.preventDefault(); return; }
   if (e.ctrlKey || e.metaKey) {
     if (e.key === 'z' && !e.shiftKey) { step(undo, redo); e.preventDefault(); }
@@ -640,6 +744,9 @@ window.addEventListener('keydown', e => {
   else if (k >= '1' && k <= '4') setLayer(LAYERS[+k - 1].key);
   else if (k === 'g') toggle('game', 'game');
   else if (k === 'h') toggle('guides', 'guides');
+  else if (k === 'x') flipStamp(true);
+  else if (k === 'y') flipStamp(false);
+  else if (k === 'z') rotateStamp(!e.shiftKey);
 });
 window.addEventListener('keyup', e => { if (e.code === 'Space') { space = false; view.style.cursor = ''; } });
 window.addEventListener('resize', render);
@@ -655,13 +762,14 @@ function projectData() {
   const layers = {};
   for (const L of LAYERS) layers[L.key] = Array.from(S.layers[L.key]);
   return { format: 'ultrapuck-arena-maker', version: 1, name: S.name, rink: S.rink, ts: S.ts, spacing: S.spacing, margin: S.margin,
-    shadeAlpha: S.shadeAlpha, N: S.N, M: S.M, tileset: S.tilesetURL, layers };
+    shadeAlpha: S.shadeAlpha, N: S.N, M: S.M, tileset: S.tilesetURL, layers, stamps: S.stamps };
 }
 function openProject(p) {
   if (!p || p.format !== 'ultrapuck-arena-maker') throw new Error('not a project');
   S.name = p.name || 'My Arena'; $('name').value = S.name;
   S.ts = p.ts || 16; S.spacing = p.spacing || 0; S.margin = p.margin || 0;
   $('ts').value = S.ts; $('spacing').value = S.spacing; $('margin').value = S.margin;
+  S.stamps = Array.isArray(p.stamps) ? p.stamps.filter(s => s && s.w > 0 && s.h > 0 && Array.isArray(s.ids) && s.ids.length === s.w * s.h) : [];
   S.shadeAlpha = p.shadeAlpha || 0.6; $('shadeAlpha').value = S.shadeAlpha; $('shadeVal').textContent = Math.round(S.shadeAlpha * 100) + '%';
   // its layers at the size they were saved, then onto its rink's grid (the same size, unless the rink changed)
   S.N = p.N; S.M = p.M;
