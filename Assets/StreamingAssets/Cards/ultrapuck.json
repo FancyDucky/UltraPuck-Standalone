@@ -427,7 +427,7 @@
       "tier": "B",
       "chaos": true,
       "max": 1,
-      "color": "#FF3DA8",
+      "color": "#FFFFFF",
       "flavor": "Something is wrong with the nets.",
       "face": [ { "label": "Both nets", "value": "[gold]2x wide[/]" } ],
       "text": "[note]Chaos card: changes the arena for everyone, both teams.[/]",

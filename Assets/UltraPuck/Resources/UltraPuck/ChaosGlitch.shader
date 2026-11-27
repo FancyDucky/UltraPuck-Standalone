@@ -1,5 +1,5 @@
 // Ultra Puck chaos cards: a glitch drawn over the card, on a quad bigger than the card so it spills past the border.
-// Like a broken digital picture: horizontal slices of the card (frame and picture) jump sideways with the red and
+// Always a strong chromatic aberration (red / blue split, ghosts past the border). Then, like a broken digital picture: horizontal slices of the card (frame and picture) jump sideways with the red and
 // blue split apart, red / cyan ghost edges stick out of the frame, blocks of digital noise pop up, scan lines and
 // static. Not all the time: a twitch of 0.5 to 2 seconds now and then (Twitch), calm in between. It never draws over _TextRect (the name, flavour line, rows and
 // note stay clean), so the text is always easy to read.
@@ -21,6 +21,7 @@ Shader "UltraPuck/ChaosGlitch"
         _Size ("Quad width, height", Vector) = (3.6, 3.9, 0, 0)
         _Amt ("Strength", Range(0, 1)) = 1
         _Seed ("Seed", Float) = 0
+        _Aberration ("Steady colour split (card units)", Float) = 0.05
     }
     SubShader
     {
@@ -39,7 +40,7 @@ Shader "UltraPuck/ChaosGlitch"
             sampler2D _MainTex;
             float4 _ArtRect, _Card, _TextRect, _Size;
             fixed4 _BorderColor, _BodyColor;
-            float _Amt, _Seed;
+            float _Amt, _Seed, _Aberration;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
 
@@ -88,78 +89,80 @@ Shader "UltraPuck/ChaosGlitch"
 
             fixed4 frag(v2f i) : SV_Target
             {
-                if (_Amt <= 0.001 || Twitch(_Time.y, _Seed) < 0.5) return 0; // calm between twitches
+                if (_Amt <= 0.001) return 0;
                 float2 p = (i.uv - 0.5) * _Size.xy; // card units, the card's centre at 0
                 float aa = max(fwidth(p.x), 1e-4);
                 float2 hb = _Card.xy * 0.5;
 
-                // during a twitch: 15 glitch frames a second, some of them bursts
-                float slice = floor(_Time.y * 15.0) + _Seed * 101.0;
-                float burst = step(0.78, Hash(float2(slice, 1.7)));
-                // a twitch stutters: a few of its frames hold still
-                if (Hash(float2(slice, 7.7)) < 0.22) return 0;
-                float k = saturate(0.35 + burst * 0.55) * _Amt;
-
-                // horizontal bands: some of them torn sideways this frame
-                float bands = lerp(9.0, 30.0, Hash(float2(slice, 8.8)));
-                float band = floor((p.y / _Card.y + 0.5) * bands);
-                float torn = step(0.62 - 0.3 * k, Hash(float2(band, slice + 3.0)));
-                float shift = (Hash(float2(band, slice)) - 0.5) * 2.0 * (0.08 + 0.42 * k) * torn;
-                float split = (0.025 + 0.06 * k);
-
+                // ALWAYS: chromatic aberration. Red pulled one way and blue the other: red / blue ghosts of the frame
+                // past the border, coloured fringes on every edge, the picture split into its colours. Steady (it
+                // doesn't flicker), so the card is calm between twitches.
+                float ab = _Aberration;
                 float4 here = CardAt(p, aa);
-                float4 r = CardAt(p - float2(shift - split, 0), aa);
-                float4 g = CardAt(p - float2(shift, 0), aa);
-                float4 b = CardAt(p - float2(shift + split, 0), aa);
-
-                float3 col = 0;
-                float alpha = 0;
-                if (torn > 0.5)
-                {
-                    // a torn slice: the card shifted along, red and blue pulled apart
-                    col = float3(r.r * r.a, g.g * g.a, b.b * b.a);
-                    alpha = max(max(r.a, g.a), b.a) * (0.75 + 0.25 * k);
-                    // where only one colour reaches, show it bright (the coloured fringe)
-                    col += float3(1.0, 0.15, 0.45) * saturate(r.a - g.a) * 0.6 + float3(0.1, 0.9, 1.0) * saturate(b.a - g.a) * 0.6;
-                }
-                else
-                {
-                    // the rest: red and cyan ghosts of the frame sticking out on either side
-                    float gr = CardAt(p + float2(split * 1.6, 0), aa).a, gb = CardAt(p - float2(split * 1.6, 0), aa).a;
-                    float outR = saturate(gr - here.a), outB = saturate(gb - here.a);
-                    col = float3(1.0, 0.1, 0.4) * outR + float3(0.1, 0.95, 1.0) * outB;
-                    alpha = max(outR, outB) * (0.55 + 0.4 * k);
-                }
-
-                // blocks of digital noise, near the card (in it and just round it), more in a burst
-                float2 cellSize = float2(lerp(0.14, 0.38, Hash(float2(slice, 5.1))), lerp(0.05, 0.14, Hash(float2(slice, 6.3))));
-                float2 cell = floor((p + float2(Hash(float2(slice, 2.2)), 0)) / cellSize);
-                float near = saturate(1.0 - max(0.0, RoundedBox(p, hb, _Card.z)) / 0.35);
-                float on = step(0.975 - 0.07 * k, Hash(cell + slice * 0.13)) * near;
-                float pick = Hash(cell * 1.7 + slice);
-                float3 bc = pick < 0.3 ? float3(1.0, 0.1, 0.55) : pick < 0.55 ? float3(0.1, 0.95, 1.0) : pick < 0.7 ? float3(0.6, 1.0, 0.2)
-                          : pick < 0.85 ? float3(0.95, 0.95, 1.0) : float3(0.02, 0.02, 0.03);
-                float fine = Hash(floor(p * float2(90.0, 120.0)) + slice);
-                bc = lerp(bc, bc * (0.5 + fine), step(0.5, Hash(cell + 4.4)));
-                col = lerp(col, bc, on);
-                alpha = max(alpha, on * 0.85);
-
-                // the picture keeps a faint scan-line tint even when nothing is torn
+                float4 cr = CardAt(p + float2(ab, 0), aa), cb = CardAt(p - float2(ab, 0), aa);
+                float3 col = float3(cr.r * cr.a, here.g * here.a, cb.b * cb.a);
+                float dif = max(max(abs(cr.r * cr.a - here.r * here.a), abs(cb.b * cb.a - here.b * here.a)), max(abs(cr.a - here.a), abs(cb.a - here.a)));
                 float2 a = (p - _ArtRect.xy) / _ArtRect.zw;
-                float inArt = step(abs(a.x), 1.0) * step(abs(a.y), 1.0);
-                float lines = 0.5 + 0.5 * sin(p.y * 260.0 + _Time.y * 9.0);
-                float tint = inArt * (1.0 - step(0.5, alpha)) * (0.1 + 0.12 * k) * lines;
-                col = lerp(col, float3(0.0, 0.0, 0.0), tint / max(alpha + tint, 1e-4));
-                alpha = max(alpha, tint);
+                float inArt = step(abs(a.x), 1.0) * step(abs(a.y), 1.0) * here.a;
+                float alpha = max(inArt, saturate(dif * 3.0));
 
-                // a flicker now and then: the whole card blinks brighter
-                float flick = step(0.94, Hash(float2(slice, 9.9))) * here.a * 0.18 * _Amt;
-                col = lerp(col, float3(1.0, 1.0, 1.0), flick / max(alpha + flick, 1e-4));
-                alpha = max(alpha, flick);
+                // NOW AND THEN: a twitch of 0.5 to 2 s (15 glitch frames a second, some of them bursts, a few held still)
+                float slice = floor(_Time.y * 15.0) + _Seed * 101.0;
+                if (Twitch(_Time.y, _Seed) > 0.5 && Hash(float2(slice, 7.7)) >= 0.22)
+                {
+                    float burst = step(0.78, Hash(float2(slice, 1.7)));
+                    float k = saturate(0.35 + burst * 0.55) * _Amt;
 
-                // scan lines and static over everything drawn
-                col *= 0.82 + 0.18 * (0.5 + 0.5 * sin(p.y * 220.0 - _Time.y * 6.0));
-                col += (Hash(floor(p * float2(160.0, 220.0)) + frac(_Time.y * 7.3) * 100.0) - 0.5) * 0.14;
+                    // horizontal bands: some of them torn sideways this frame, their colours pulled far apart
+                    float bands = lerp(9.0, 30.0, Hash(float2(slice, 8.8)));
+                    float band = floor((p.y / _Card.y + 0.5) * bands);
+                    float torn = step(0.62 - 0.3 * k, Hash(float2(band, slice + 3.0)));
+                    float shift = (Hash(float2(band, slice)) - 0.5) * 2.0 * (0.08 + 0.42 * k) * torn;
+                    float split = ab * 1.5 + 0.1 * k;
+                    float3 gcol = 0;
+                    float galpha = 0;
+                    if (torn > 0.5)
+                    {
+                        float4 r = CardAt(p - float2(shift - split, 0), aa);
+                        float4 g = CardAt(p - float2(shift, 0), aa);
+                        float4 b = CardAt(p - float2(shift + split, 0), aa);
+                        gcol = float3(r.r * r.a, g.g * g.a, b.b * b.a);
+                        galpha = max(max(r.a, g.a), b.a) * (0.75 + 0.25 * k);
+                        gcol += float3(1.0, 0.15, 0.45) * saturate(r.a - g.a) * 0.6 + float3(0.1, 0.9, 1.0) * saturate(b.a - g.a) * 0.6;
+                    }
+                    else
+                    {
+                        // wider red and cyan ghosts of the frame on either side
+                        float gr = CardAt(p + float2(split * 1.6, 0), aa).a, gb = CardAt(p - float2(split * 1.6, 0), aa).a;
+                        float outR = saturate(gr - here.a), outB = saturate(gb - here.a);
+                        gcol = float3(1.0, 0.1, 0.4) * outR + float3(0.1, 0.95, 1.0) * outB;
+                        galpha = max(outR, outB) * (0.55 + 0.4 * k);
+                    }
+
+                    // blocks of digital noise, near the card (in it and just round it), more in a burst
+                    float2 cellSize = float2(lerp(0.14, 0.38, Hash(float2(slice, 5.1))), lerp(0.05, 0.14, Hash(float2(slice, 6.3))));
+                    float2 cell = floor((p + float2(Hash(float2(slice, 2.2)), 0)) / cellSize);
+                    float near = saturate(1.0 - max(0.0, RoundedBox(p, hb, _Card.z)) / 0.35);
+                    float on = step(0.975 - 0.07 * k, Hash(cell + slice * 0.13)) * near;
+                    float pick = Hash(cell * 1.7 + slice);
+                    float3 bc = pick < 0.3 ? float3(1.0, 0.1, 0.55) : pick < 0.55 ? float3(0.1, 0.95, 1.0) : pick < 0.7 ? float3(0.6, 1.0, 0.2)
+                              : pick < 0.85 ? float3(0.95, 0.95, 1.0) : float3(0.02, 0.02, 0.03);
+                    float fine = Hash(floor(p * float2(90.0, 120.0)) + slice);
+                    bc = lerp(bc, bc * (0.5 + fine), step(0.5, Hash(cell + 4.4)));
+                    gcol = lerp(gcol, bc, on);
+                    galpha = max(galpha, on * 0.85);
+
+                    // a flicker now and then: the whole card blinks brighter
+                    float flick = step(0.94, Hash(float2(slice, 9.9))) * here.a * 0.18 * _Amt;
+                    gcol = lerp(gcol, float3(1.0, 1.0, 1.0), flick / max(galpha + flick, 1e-4));
+                    galpha = max(galpha, flick);
+
+                    // over the steady aberration, then scan lines and static over everything drawn
+                    col = lerp(col, gcol, galpha);
+                    alpha = max(alpha, galpha);
+                    col *= 0.82 + 0.18 * (0.5 + 0.5 * sin(p.y * 220.0 - _Time.y * 6.0));
+                    col += (Hash(floor(p * float2(160.0, 220.0)) + frac(_Time.y * 7.3) * 100.0) - 0.5) * 0.14;
+                }
 
                 // never over the text
                 float2 lo = p - _TextRect.xy, hi = _TextRect.zw - p;

@@ -87,6 +87,12 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 27 Nov 2026): **Giant Nets: white accent, strong chromatic aberration.** Card colour `#FFFFFF`.
+  `ChaosGlitch.shader` now always draws a steady colour split (`_Aberration`, 0.05 card units: red from one side,
+  blue from the other): red / blue ghosts of the frame past the border, coloured fringes on its edges, the picture
+  split into its colours (drawn over the picture, so it doesn't slide with the tilt). Steady, no flicker; the text
+  area is still left alone. Twitches go on top with a wider split (1.5x + up to 0.1). Card editor preview: red / blue
+  box-shadows on the frame and picture.
 - unreleased (Claude, 27 Nov 2026): **chaos glitch is an occasional twitch; 2x Goal Size renamed Giant Nets.**
   The glitch (overlay and the picture's tear) now only plays in twitches of 0.5-2 s, about every 4.5 s with some
   skipped and at least 0.8 s calm between (`Twitch(t, seed)`, the same in `ChaosGlitch.shader` and `Card.shader`;
