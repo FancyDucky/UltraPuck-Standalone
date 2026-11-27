@@ -842,6 +842,13 @@ namespace UltraPuck.Game
                     ts = (focused ? (grid ? 1.3f : 1.12f) : 0.95f) * size;
                     // in the editor, cards you don't have sit back a little
                     if (_editing && !_browse && !focused && _counts[_who][k] == 0) ts *= 0.92f;
+                    if (focused && grid)
+                    {
+                        // the raised card stays wholly on screen (big cards on the bottom row, two a row, hung off the bottom)
+                        var halfV = (-_cam.transform.position.z + tp.z) * Mathf.Tan(_cam.fieldOfView * 0.5f * Mathf.Deg2Rad) * 0.97f;
+                        var hh = 1.75f * ts;
+                        tp.y = Mathf.Clamp(tp.y, -halfV + hh, Mathf.Max(-halfV + hh, halfV - hh));
+                    }
                 }
                 if (live)
                 {
@@ -856,7 +863,8 @@ namespace UltraPuck.Game
                         if (c.MoteTimer <= 0f) { c.MoteTimer = 0.12f + Random.value * 0.1f; Spark(c); }
                     }
                 }
-                c.Step(tp, tr, ts, dt);
+                // a grid's cards glide when it scrolls or resizes, with barely any bounce (dealt hands keep theirs)
+                c.Step(tp, tr, ts, dt, grid && live && since >= c.Delay + 0.3f);
                 c.Apply(_stage == Stage.Leaving ? (k == _chosen ? 1000 : k * 10) : k == _focus ? 1000 : k * 10, _cam);
                 RefreshPrompt(c);
             }
@@ -982,6 +990,15 @@ namespace UltraPuck.Game
         // ------------------------------------------------------------------ others' picks, at the side
 
         /// <summary>Screenshots: click the first mini card up to full size (or back).</summary>
+        /// <summary>Screenshots: the grid at <paramref name="cols"/> a row (not remembered), focused on card <paramref name="focus"/>.</summary>
+        public void ShotGrid(int cols, int focus)
+        {
+            _cols = Mathf.Clamp(cols, MinCols, MaxCols);
+            if (_cards.Count == 0) return;
+            _focus = Mathf.Clamp(focus, 0, _cards.Count - 1);
+            _editFollow = -1;
+            EditHomes();
+        }
         public void ShotBigMini() { _bigMini = _bigMini >= 0 || _minis.Count == 0 ? -1 : _minis[0].Player; }
 
         /// <summary>The other team's vote dealt out to watch (off: only their votes at the side).</summary>
@@ -1130,9 +1147,8 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(cx - tw / 2f + 22f, top - 24f, tw - 24f, 20f), n, Ui.Font(13, true), new Color(1f, 1f, 1f, 0.92f));
             }
             var dev = Local != null && Local.Slots.Count > 0 ? Local.Slots[0].Device : null;
-            if (_minis.Count > 0 && !_deck)
-                Glyphs.Hint(new Rect(0f, Ui.H - 118f, Ui.W, 30f), _bigMini >= 0 ? "{tabs} Next card      (or click to put it back)" : "{tabs} Read the cards at the side  (or click one)",
-                    16, new Color(1f, 1f, 1f, 0.7f), TextAnchor.MiddleCenter, dev, true);
+            // (while cards are dealt here, this line joins the pick's own controls at the side)
+            if (_stage == Stage.Idle && MiniHint != null) SideHints(dev, 1f, (MiniHint, HintColor));
             // nobody on this PC choosing: say who is (their picks come in at the side)
             if (_stage != Stage.Idle) return;
             var teams = 0;
@@ -1147,6 +1163,16 @@ namespace UltraPuck.Game
             if (teams != 3) Ui.Swatch(new Rect(Ui.W / 2f - 206f, 116f, 16f, 16f), teams == 1 ? 0 : 1);
             Ui.Label(new Rect(Ui.W / 2f - 220f, 104f, 440f, 40f), line, Ui.Font(18, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.9f));
 
+        }
+
+        /// <summary>How to read the others' cards at the side (null: none there, or on Choose's deck, where the bumpers size the grid).</summary>
+        private string MiniHint
+        {
+            get
+            {
+                if (_minis.Count == 0 || _deck) return null;
+                return _bigMini >= 0 ? "{tabs}   Next card  (click: put it back)" : "{tabs}   Read the cards at the side";
+            }
         }
 
         /// <summary>The host can end the pick (hold the menu button): how far through the hold (0..1), or -1 (not the host).</summary>
@@ -1215,25 +1241,31 @@ namespace UltraPuck.Game
 
             if (_teamVote && _stage == Stage.Choosing) DrawVoteCursors(a);
 
-            if (_watching) { Ui.Label(new Rect(0f, Ui.H - 46f, Ui.W, 30f), _teamVote && Sim.T.TeamVote ? "Watching the other team vote" : "Watching the other team pick", Ui.Font(17, false, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.6f * a)); return; }
+            var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
+            var dim = new Color(1f, 1f, 1f, 0.65f);
+            if (_watching)
+            {
+                var mdev = Local.Slots.Count > 0 ? Local.Slots[0].Device : null;
+                SideHints(mdev, a, (_teamVote && Sim.T.TeamVote ? "Watching the other team vote" : "Watching the other team pick", dim), (MiniHint, HintColor));
+                return;
+            }
 
             // hovering a different utility while you already have one: say it clearly replaces yours
             var replace = UtilityReplaceHint();
             if (replace != null)
                 Ui.Label(new Rect(0f, y + 110f, Ui.W, 26f), replace, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 0.85f, 0.45f, 0.95f * a)); // above the cards, under the timer line
 
-            var device = Slot >= 0 && Slot < Local.Slots.Count ? Local.Slots[Slot].Device : null;
-            var hint = device is UnityEngine.InputSystem.Keyboard ? (_deck ? "{look} {nav} Look      {tabs} Size      {join} Take it  (or click)" : "{look} Look      {join} Take it  (or click)")
-                : _deck ? "{side} {nav} Look      {tabs} Size      {confirm} Take it" : "{side} Look      {aim} Tilt      {confirm} Take it";
-            // New Hand: under the cards, how to re-roll them (while a re-roll is left this pick)
-            var roller = Roller();
-            if (roller >= 0 && _stage == Stage.Choosing)
-            {
-                var rs = SlotOf(roller);
-                var rdev = rs >= 0 && rs < Local.Slots.Count ? Local.Slots[rs].Device : device;
-                Glyphs.Hint(new Rect(0f, Ui.H - 84f, Ui.W, 30f), "{utility} to re-roll", 19, new Color(0.55f, 0.95f, 0.9f, 0.95f * a), TextAnchor.MiddleCenter, rdev, true);
-            }
-            Glyphs.Hint(new Rect(0f, Ui.H - 46f, Ui.W, 30f), hint, 17, new Color(1f, 1f, 1f, 0.6f * a), TextAnchor.MiddleCenter, device);
+            // the controls, down the left side (along the bottom they sat on the raised card)
+            var kbm = device is UnityEngine.InputSystem.Keyboard;
+            // New Hand: how to re-roll them (while a re-roll is left this pick)
+            var reroll = Roller() >= 0 && _stage == Stage.Choosing ? "{utility}   Re-roll" : null;
+            var cyan = new Color(0.55f, 0.95f, 0.9f, 0.95f);
+            if (kbm)
+                SideHints(device, a, (reroll, cyan), (_deck ? "{look} {nav}   Look" : "{look}   Look", HintColor), (_deck ? "{tabs}   Card size" : null, HintColor),
+                    ("Left click or {join}   Take it", HintColor), (MiniHint, HintColor));
+            else
+                SideHints(device, a, (reroll, cyan), (_deck ? "{side} {nav}   Look" : "{side}   Look", HintColor), (_deck ? "{tabs}   Card size" : "{aim}   Tilt", HintColor),
+                    ("{confirm}   Take it", HintColor), (MiniHint, HintColor));
         }
 
         /// <summary>Double Card's reveal: who got which cards.</summary>
@@ -1472,6 +1504,9 @@ namespace UltraPuck.Game
             // Start (or Enter) applies, first: in the menus it also counts as Back (or Confirm), which here would
             // take a card away (or add one) just before saving
             if (ready && Local.StartPressed()) { EditClose(true); return; }
+            // Escape: straight back to the game, the changes dropped (on a keyboard, the right click takes a card away)
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null && kb.escapeKey.wasPressedThisFrame) { EditClose(false); return; }
             if (m.Tab != 0) ResizeGrid(m.Tab);
             // Y / Triangle (Tab on a keyboard): another person on this PC
             var next = false;
@@ -1508,12 +1543,12 @@ namespace UltraPuck.Game
             if (ready && m.Confirm) EditAdd(_focus, 1);
             if (ready && m.Back) EditAdd(_focus, -1);
 
-            // hold B (or Escape) to cancel: the bar only starts after a moment, so taking cards away doesn't trip it
+            // hold B (or Backspace) to cancel: the bar only starts after a moment, so taking cards away doesn't trip it
             var held = false;
             foreach (var s in Local.Slots)
             {
                 if (s.Demo) continue;
-                if (Local.AnyHeld(s, g => g.buttonEast.isPressed, k => k.escapeKey.isPressed || k.backspaceKey.isPressed)) held = true;
+                if (Local.AnyHeld(s, g => g.buttonEast.isPressed, k => k.backspaceKey.isPressed)) held = true;
             }
             _cancelHeld = held ? _cancelHeld + Time.unscaledDeltaTime : 0f;
             if (CancelProgress >= 1f) EditClose(false);
@@ -1667,11 +1702,48 @@ namespace UltraPuck.Game
             // what the focused card is at, and the controls
             var focusDef = _editSim.Cards.Cards[_focus];
             var max = focusDef.MaxPerPlayer > 0 ? " of " + focusDef.MaxPerPlayer : "";
-            Ui.Label(new Rect(0f, h - 70f, w, 24f), focusDef.Name + ":  " + _counts[_who][_focus] + max, Ui.Font(16, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.8f));
-            Glyphs.Hint(new Rect(0f, h - 44f, w, 30f), "{nav} Card      {tabs} Size      {confirm} Add      {back} Remove      {start} Apply      Hold {back} Cancel", 16, new Color(1f, 1f, 1f, 0.7f));
+            // down the left side, clear of the cards
+            var head = (focusDef.Name + ":  " + _counts[_who][_focus] + max, new Color(1f, 0.92f, 0.6f, 0.95f));
+            if (Kbm(null))
+                SideHints(null, 1f, head, ("Left click   Add a copy", HintColor), ("Right click   Take one away", HintColor),
+                    ("Scroll  {nav}   More cards", HintColor), ("{tabs}   Card size", HintColor), ("Enter   Apply", HintColor), ("Esc   Cancel", HintColor));
+            else
+                SideHints(null, 1f, head, ("{nav}   Card", HintColor), ("{confirm}   Add a copy", HintColor), ("{back}   Take one away", HintColor),
+                    ("{tabs}   Card size", HintColor), ("{start}   Apply", HintColor), ("Hold {back}   Cancel", HintColor));
             var cancel = CancelProgress;
-            if (cancel > 0f) Hud.LeavingBar(new Rect(w / 2f - 150f, h - 104f, 300f, 24f), cancel, "Cancel the changes");
+            if (cancel > 0f) Hud.LeavingBar(new Rect(16f, h - 250f, 290f, 24f), cancel, "Cancel the changes");
         }
+
+        /// <summary>A keyboard and mouse (else a controller) for these hints: the device's, else the last one used.</summary>
+        private static bool Kbm(UnityEngine.InputSystem.InputDevice device)
+        {
+            InputMode.Update();
+            return (device != null ? InputMode.FamilyOf(device) : InputMode.Current) == InputMode.Family.Keyboard;
+        }
+
+        /// <summary>
+        /// The controls, one to a line, at the left side near the bottom (clear of the cards, which used to sit under
+        /// a line of hints along the bottom). A line with a colour of its own: (text, colour).
+        /// </summary>
+        private static void SideHints(UnityEngine.InputSystem.InputDevice device, float alpha, params (string text, Color color)[] lines)
+        {
+            const int size = 16;
+            const float lh = 27f, x = 30f;
+            var n = 0;
+            var w = 0f;
+            foreach (var l in lines) if (!string.IsNullOrEmpty(l.text)) { n++; w = Mathf.Max(w, Glyphs.Width(l.text, size)); }
+            if (n == 0) return;
+            var y = Ui.H - 36f - n * lh;
+            Ui.Box(new Rect(x - 14f, y - 10f, w + 30f, n * lh + 20f), new Color(0f, 0f, 0f, 0.38f * alpha), 8f);
+            foreach (var l in lines)
+            {
+                if (string.IsNullOrEmpty(l.text)) continue;
+                var c = l.color; c.a *= alpha;
+                Glyphs.Hint(new Rect(x, y, w + 8f, lh), l.text, size, c, TextAnchor.MiddleLeft, device);
+                y += lh;
+            }
+        }
+        private static readonly Color HintColor = new Color(1f, 1f, 1f, 0.8f);
 
         // ------------------------------------------------------------------ the main menu's card list (pick stats)
 
@@ -1851,19 +1923,19 @@ namespace UltraPuck.Game
                 var pw = Mathf.Min(r.width / k2 - 6f, 170f);
                 var line = new Rect(r.center.x / k2 - pw / 2f, (Screen.height - r.yMin) / k2 - 30f, pw, 22f);
                 var showLine = BadgeShow(p, 1, line);
-                if (p == _focus || showLine <= 0.01f) continue; // (the focused one is described at the bottom)
+                if (p == _focus || showLine <= 0.01f) continue; // (the focused one is described at the side)
                 Ui.Box(line, new Color(0.06f, 0.06f, 0.07f, 0.88f * showLine), 11f);
                 Ui.Label(line, "You " + mine + "  ·  All " + all + " (" + share + ")", Ui.Font(12, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.9f * showLine), false);
             }
-            // the focused card, in words, on a dark strip along the bottom (with the controls)
-            Ui.Box(new Rect(0f, h - 84f, w, 84f), new Color(0.03f, 0.03f, 0.04f, 0.9f), 0f);
+            // the focused card, in words, with the controls down the left side (clear of the cards)
+            string focusName = null, focusPicks = null;
             if (stats && _focus >= 0 && _focus < _order.Count)
             {
                 var def = _browseLib.Cards[_order[_focus]];
                 int mine = CardStats.Personal(def.Id), all = CardStats.Global(def.Id);
-                var share = _globalTotal > 0 ? "  (" + Mathf.RoundToInt(100f * all / _globalTotal) + "% of all picks)" : "";
-                Ui.Label(new Rect(0f, h - 74f, w, 26f), "#" + (_focus + 1) + "  " + def.Name + ":  you picked it " + mine + (mine == 1 ? " time" : " times")
-                         + "  ·  everyone " + all + share, Ui.Font(17, true, TextAnchor.MiddleCenter), new Color(1f, 1f, 1f, 0.85f));
+                var share = _globalTotal > 0 ? " (" + Mathf.RoundToInt(100f * all / _globalTotal) + "%)" : "";
+                focusName = "#" + (_focus + 1) + "  " + def.Name;
+                focusPicks = "You " + mine + "  ·  everyone " + all + share;
             }
             if (EditRowCount > EditRows)
             {
@@ -1873,7 +1945,8 @@ namespace UltraPuck.Game
                 var at = (float)_editTop / Mathf.Max(1, EditMaxTop);
                 Ui.Box(new Rect(track.x, track.y + (track.height - thumbH) * at, track.width, thumbH), new Color(1f, 1f, 1f, 0.6f), 3f);
             }
-            Glyphs.Hint(new Rect(0f, h - 44f, w, 30f), "{nav} Card      {tabs} Sort      {back} Back", 16, new Color(1f, 1f, 1f, 0.7f));
+            var gold = new Color(1f, 0.92f, 0.6f, 0.95f);
+            SideHints(null, 1f, (focusName, gold), (focusPicks, gold), ("{nav}   Card", HintColor), ("{tabs}   Sort", HintColor), ("{back}   Back", HintColor));
         }
 
         // ------------------------------------------------------------------ building a card
@@ -1966,10 +2039,11 @@ namespace UltraPuck.Game
             public int Order;
 
             /// <summary>Springs towards the targets, overshooting a little, so every move has some bounce.</summary>
-            public void Step(Vector3 tp, Vector3 tr, float ts, float dt)
+            public void Step(Vector3 tp, Vector3 tr, float ts, float dt, bool calm = false)
             {
+                // calm (a grid scrolling): nearly critically damped, so it settles without swinging past
                 PosVel += (tp - Pos) * (150f * dt);
-                PosVel *= Mathf.Exp(-14f * dt);
+                PosVel *= Mathf.Exp((calm ? -22f : -14f) * dt);
                 Pos += PosVel * dt;
                 RotVel += (tr - Rot) * (210f * dt);
                 RotVel *= Mathf.Exp(-16f * dt);

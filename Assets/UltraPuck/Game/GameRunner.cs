@@ -671,6 +671,26 @@ namespace UltraPuck.Game
                 }
             }
 
+            if (want("editor"))
+            {
+                // free play's card editor, two a row, on the bottom row (the raised card stays on screen) and
+                // three a row; the controls down the left side
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                yield return new WaitForSecondsRealtime(0.8f);
+                EditCards();
+                yield return new WaitForSecondsRealtime(1.2f);
+                _cardScreen.ShotGrid(2, 3);
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("editor-2");
+                _cardScreen.ShotGrid(3, 4);
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("editor-3");
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
             if (want("minis"))
             {
                 // others' picks at the side: you choosing while bots on both teams pick (theirs come in small, your
