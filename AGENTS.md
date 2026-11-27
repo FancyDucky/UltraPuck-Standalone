@@ -87,6 +87,11 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 27 Nov 2026): **rink maker kept out of releases** (the user wants to finish it first).
+  `GameRunner.RinkMakerOn`: on in the Unity editor, screenshot runs, `-rinkmaker` / `ULTRAPUCK_RINKMAKER=1`; off,
+  no Custom rinks on the main menu, no LB / RB on the rink screen, no custom rinks loaded. Desktop shortcut
+  "Ultra Puck (rink maker)" passes `-rinkmaker`. `release.ps1` leaves `Custom_Rinks` out of the zip. Don't turn it
+  on for everyone until the user says so.
 - unreleased (Claude, 27 Nov 2026): **rink maker, Custom Rinks.** Main menu "Custom rinks" opens a grid
   (`Game/RinkMaker.cs`, state Library): + makes a new rink, a rink opens in the maker, X / Del deletes (press twice).
   The rink screen's LB / RB (Q / E) opens the same grid to pick one to play (`PlayScreens.Page.Custom`, finished rinks

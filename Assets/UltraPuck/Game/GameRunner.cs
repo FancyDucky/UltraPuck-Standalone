@@ -225,6 +225,23 @@ namespace UltraPuck.Game
 
         /// <summary>ULTRAPUCK_SHOTS=folder: set up each screen worth checking, save a picture of it there, then quit.</summary>
         private static readonly string ShotDir = System.Environment.GetEnvironmentVariable("ULTRAPUCK_SHOTS");
+
+        private static int _rinkMaker = -1;
+        /// <summary>
+        /// The rink maker (Custom rinks) is still being finished, so it's off in releases: on in the Unity editor, in
+        /// screenshot runs, and with -rinkmaker on the command line (or ULTRAPUCK_RINKMAKER=1). Off, the main menu has no
+        /// Custom rinks, the rink screen no LB / RB to them, and no custom rinks are loaded.
+        /// </summary>
+        public static bool RinkMakerOn
+        {
+            get
+            {
+                if (_rinkMaker < 0)
+                    _rinkMaker = Application.isEditor || ShotDir != null || System.Environment.GetEnvironmentVariable("ULTRAPUCK_RINKMAKER") == "1"
+                                 || System.Array.IndexOf(System.Environment.GetCommandLineArgs(), "-rinkmaker") >= 0 ? 1 : 0;
+                return _rinkMaker == 1;
+            }
+        }
         /// <summary>
         /// Screenshots are silent, unless ULTRAPUCK_SHOTS_VOLUME says how loud to play them (0..1; 0.3 is the game's
         /// normal volume). The player's saved volume is left alone either way.
@@ -2056,6 +2073,7 @@ namespace UltraPuck.Game
                 if (_previews.TryGetValue(k, out old)) { if (old != null) Destroy(old); _previews.Remove(k); }
             }
             _testMapLoaded = false;
+            if (!RinkMakerOn) return; // (not in releases yet)
             foreach (var e in CustomRinks.Load())
             {
                 if (e.Map == null) continue;

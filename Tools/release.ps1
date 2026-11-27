@@ -37,6 +37,8 @@ $folder = Join-Path $dist 'UltraPuck'
 New-Item -ItemType Directory $folder | Out-Null
 Copy-Item -Path (Join-Path $root 'Builds\Windows\*') -Destination $folder -Recurse
 Get-ChildItem $folder -Directory | Where-Object { $_.Name -like '*DoNotShip*' } | Remove-Item -Recurse -Force
+# rinks made on this PC with the rink maker (not in releases yet) stay here
+Get-ChildItem $folder -Directory | Where-Object { $_.Name -eq 'Custom_Rinks' } | Remove-Item -Recurse -Force
 [IO.File]::WriteAllText((Join-Path $folder 'Read me.txt'), @"
 Ultra Puck $version
 

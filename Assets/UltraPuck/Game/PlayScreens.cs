@@ -79,7 +79,7 @@ namespace UltraPuck.Game
             var m = Local.MenuJoined();
             if (m.Back) { Sound.Back(); Open(Page.Join); return; }
             // LB / RB (Q / E): your own rinks, from the rink maker
-            if (m.Tab != 0) { Sound.Select(); Runner.OpenCustomPick(); Open(Page.Custom); return; }
+            if (m.Tab != 0 && GameRunner.RinkMakerOn) { Sound.Select(); Runner.OpenCustomPick(); Open(Page.Custom); return; }
             if (m.X != 0) { Runner.StepRink(m.X); Sound.Step(m.X); _lookSlide = 0f; }
             // up / down: the rink's looks (Classic, Underwater...)
             if (m.Y != 0 && Runner.LookCount() > 1) { Runner.StepLook(-m.Y); Sound.Step(-m.Y); _lookSlide = m.Y; }
@@ -530,7 +530,7 @@ namespace UltraPuck.Game
                 Ui.Label(new Rect(w / 2 - 380, h / 2 - 40 + dy, 40, 60), "‹", Ui.Font(54, true, TextAnchor.MiddleCenter), Color.white);
                 Ui.Label(new Rect(w / 2 + 340, h / 2 - 40 + dy, 40, 60), "›", Ui.Font(54, true, TextAnchor.MiddleCenter), Color.white);
             }
-            Glyphs.Hint(new Rect(0, h - 52, w, 30), (lookCount > 1 ? "{updown} Look      " : "") + "{side} Rink      {tabs} Custom rinks      {confirm} Choose      {back} Back", 17, new Color(1f, 1f, 1f, 0.8f));
+            Glyphs.Hint(new Rect(0, h - 52, w, 30), (lookCount > 1 ? "{updown} Look      " : "") + "{side} Rink      " + (GameRunner.RinkMakerOn ? "{tabs} Custom rinks      " : "") + "{confirm} Choose      {back} Back", 17, new Color(1f, 1f, 1f, 0.8f));
         }
 
         /// <summary>The rink's looks (custom arenas too), stacked: the chosen one in the middle (bright, between up and down arrows), the ones before and after it faint above and below.</summary>
