@@ -427,11 +427,13 @@
       "tier": "B",
       "chaos": true,
       "pureBlack": true,
+      "glare": false,
       "max": 1,
       "color": "#FFFFFF",
-      "flavor": "Something is wrong with the nets.",
-      "face": [ { "label": "Both nets", "value": "[gold]2x wide[/]" } ],
-      "text": "[note]Chaos card: changes the arena for everyone, both teams.[/]",
+      "flavor": "This should make things interesting.",
+      "face": [
+        { "label": "Both nets", "value": "[gold]2x wide[/]" }
+      ],
       "stats": { "WideNets": "+1" }
     },
     {
