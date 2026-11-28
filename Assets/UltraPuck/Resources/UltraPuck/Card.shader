@@ -102,18 +102,18 @@ Shader "UltraPuck/Card"
             }
             float Hash(float2 p) { return frac(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
 
-            // chaos cards' twitch: calm most of the time, then now and then (every ~4.5 s, some skipped) a twitch of
+            // chaos cards' twitch: calm most of the time, then now and then (every ~3.5 s, a few skipped) a twitch of
             // 0.5 to 2 seconds; 1 during a twitch, else 0. The same in ChaosGlitch.shader and Card.shader, so the
             // picture tears in step with the glitch over the card.
             float Twitch(float t, float seed)
             {
-                const float L = 4.5;
+                const float L = 3.5;
                 float tt = t + seed * 3.1;
                 float c = floor(tt / L);
                 float at = tt - c * L;
                 float dur = 0.5 + 1.5 * Hash(float2(c, 11.3 + seed));
                 float start = 0.8 + Hash(float2(c, 5.7 + seed)) * (L - 0.8 - dur); // at least 0.8 s calm between
-                return step(start, at) * step(at, start + dur) * step(0.3, Hash(float2(c, 2.9 + seed)));
+                return step(start, at) * step(at, start + dur) * step(0.2, Hash(float2(c, 2.9 + seed)));
             }
 
             float Noise(float2 q)
