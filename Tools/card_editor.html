@@ -75,7 +75,7 @@
 
 <script>
 const TIER = { S:'#F5C442', A:'#BA8CFF', B:'#5CA8F5', C:'#6BD68A', D:'#A1A1A1', F:'#C27A59' };
-const ORDER = ['id','name','tier','chaos','finish','glare','pureBlack','textBoxes','textOutline','max','maxTeam','minTeam','requires','noBots','art','color','flavor','face','text','stats'];
+const ORDER = ['id','name','tier','odds','chaos','finish','glare','pureBlack','textBoxes','textOutline','max','maxTeam','minTeam','requires','noBots','art','color','flavor','face','text','stats'];
 let cards = [], stats = [], finishes = [], art = [], version = '', sel = -1, dirty = false;
 
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -155,7 +155,7 @@ function form() {
     <select onchange="setField('tier', this.value)">${Object.keys(TIER).map(t => `<option${t === (c.tier || 'C') ? ' selected' : ''}>${t}</option>`).join('')}</select>
     <label class="f">Finish (replaces the tier's look; holo = S tier's, pearl = A tier's; neon lights the frame in the accent colour)</label>
     <select onchange="setField('finish', this.value)">${['', ...finishes].map(f => `<option value="${f}"${f === (c.finish || '').toLowerCase() ? ' selected' : ''}>${f ? f[0].toUpperCase() + f.slice(1) : 'None'}</option>`).join('')}</select>
-    <div class="nums">${num('max', 'Max each')}${num('maxTeam', 'Max a team')}${num('minTeam', 'Team size')}
+    <div class="nums">${num('max', 'Max each')}${num('maxTeam', 'Max a team')}${num('minTeam', 'Team size')}${num('odds', 'Odds % (100 = normal)')}
       <div><label class="f">Glare</label><input type="checkbox" style="width:auto" ${c.glare === false ? '' : 'checked'} onchange="setField('glare', this.checked ? '' : false)"></div>
       <div><label class="f">Text boxes</label><input type="checkbox" style="width:auto" ${c.textBoxes ? 'checked' : ''} onchange="setField('textBoxes', this.checked)"></div>
       <div><label class="f">Pure black (OLED)</label><input type="checkbox" style="width:auto" ${c.pureBlack ? 'checked' : ''} onchange="setField('pureBlack', this.checked)"></div>

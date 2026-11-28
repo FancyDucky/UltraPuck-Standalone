@@ -87,6 +87,22 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **picks are taken the moment they're made, protocol 98.** `Simulation.StepPicking`
+  (not Team Vote): each pick is taken on its tick (same-tick picks in a random order); `OneATeamTaken` swaps a
+  one-a-team card (Swap, Portal Gun) a teammate just took for a fresh card in the others' hands (a switched-off stand-in
+  if nothing is left; out of Choose's deck), and a teammate who picked it on that tick chooses again. New Hand: taking it
+  deals a fresh hand straight away (`PickKind` 2, not another card round) as well as later re-rolls. Card `"odds"`
+  (`CardDef.Odds`, weighted `DrawOffer`; card editor field): Choose 70. Momentum `"max": 3`. Match setting "Chaos cards
+  stack" (`Settings.ChaosStack` / `Tuning.ChaosStack`, rules byte after Knock-away; lobby options and pause match
+  settings). The face-off after a card pick keeps the same turn round the spots (`FaceOff(s, true)`: nobody swaps just
+  before the countdown, Head Start included). `PickOutroTime` 2.5 s. Card screen: confirming sends the pick at once
+  and the cards stay (the one taken lit, the rest under a veil: `CardView.Veil`), "Waiting for your team...", until
+  nobody on the team is choosing, then a second's look and the leave (`_held`, `HeldFrame` / `HeldDone`; not with
+  someone else on this PC still to pick, or in a Team Vote). Choose's deck / New Hand's hand come straight up; Double
+  Card's two are dealt like a hand at once (`ShowGifts`, held 2 s; the countdown reveal skips them). Side previews
+  show what each player took this pick (`Taken`: Choose until its deck pick lands, Double Card's two stacked, the lower
+  tilted) and stay while the cards do. Corner chaos card smaller (0.56); Choose / Double Card left out of the corner
+  card list. Screenshot scene `held`. 301 tests.
 - unreleased (Claude, 28 Nov 2026): **no watching your own team pick; your own pick first; chaos corner on the free side.**
   `CardScreen.NextWatched` skips the team of this PC's people (their picks show small at the side, see Minis); someone
   with nobody playing here may still watch either team. While watching, as soon as one of this PC's people has cards

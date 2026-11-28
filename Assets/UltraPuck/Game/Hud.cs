@@ -453,7 +453,12 @@ namespace UltraPuck.Game
         {
             if ((!Settings.CornerCards && !always) || _sim == null || _sim.Cards == null) return;
             var lines = new System.Collections.Generic.List<int>();
-            for (var i = 0; i < _state.Players.Length; i++) if (_state.Players[i].Cards.Length > 0) lines.Add(i);
+            for (var i = 0; i < _state.Players.Length; i++)
+            {
+                var any = false;
+                foreach (var c in _state.Players[i].Cards) any |= !_sim.Cards.IsChoose(c) && !_sim.Cards.IsDouble(c);
+                if (any) lines.Add(i);
+            }
             if (lines.Count == 0) return;
             var style = Ui.Font(13);
             var y = h - 46f - lines.Count * 20f;
@@ -467,6 +472,7 @@ namespace UltraPuck.Game
                 {
                     if (seen.Contains(c)) continue;
                     seen.Add(c);
+                    if (_sim.Cards.IsChoose(c) || _sim.Cards.IsDouble(c)) continue; // (they only lead to the cards they gave)
                     var n = 0;
                     foreach (var d in p.Cards) if (d == c) n++;
                     if (names.Length > 0) names.Append(",  ");

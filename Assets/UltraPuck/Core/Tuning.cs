@@ -279,10 +279,12 @@ namespace UltraPuck.Core
         public Fix BotPickDelay = Fix.Ratio(9, 5);
         /// <summary>One card pick in this many also offers a chaos card, flying in from a corner (0 = never).</summary>
         public int ChaosOdds = 6;
+        /// <summary>Chaos cards stack: a chaos card someone holds can be offered again (two More Pucks: two extra pucks).</summary>
+        public bool ChaosStack;
         /// <summary>The count before a face-off: 3, 2, 1, go.</summary>
         public Fix CountdownTime = Fix.FromInt(3);
         /// <summary>After a card pick: this long before the countdown starts, so the cards finish flying off first.</summary>
-        public Fix PickOutroTime = Fix.Ratio(3, 2);
+        public Fix PickOutroTime = Fix.Ratio(5, 2); // (a second's look at everyone's picks, then the cards leave)
         /// <summary>After a pick where someone took Double Card: this much longer, so everyone sees the two cards it gave.</summary>
         public Fix GiftRevealTime = Fix.Ratio(5, 2);
         public Fix CelebrateTime = Fix.FromInt(2);

@@ -283,6 +283,7 @@ namespace UltraPuck.Game
                         for (var k = 0; k < times.Length; k++) times[k] = Settings.PickTimes[k] == 0 ? "No limit" : Settings.PickTimes[k] + " s";
                         _rows.Add(Cycle("Pick time", times, () => Mathf.Max(0, Array.IndexOf(Settings.PickTimes, Settings.PickTime)), v => Settings.PickTime = Settings.PickTimes[v]));
                         _rows.Add(Cycle("Multiple utilities", new[] { "Off", "On" }, () => Settings.MultiUtility ? 1 : 0, v => Settings.MultiUtility = v == 1));
+                        _rows.Add(Cycle("Chaos cards stack", new[] { "Off", "On" }, () => Settings.ChaosStack ? 1 : 0, v => Settings.ChaosStack = v == 1));
                         _rows.Add(Cycle("Carry-through", new[] { "Off", "On" }, () => Settings.CarryThrough ? 1 : 0, v => Settings.CarryThrough = v == 1));
                         var carry = new Row
                         {
@@ -316,6 +317,7 @@ namespace UltraPuck.Game
                             _rows.Add(Shown("Cards offered", () => r.CardsOffered.ToString()));
                             _rows.Add(Shown("Pick time", () => r.PickTime == 0 ? "No limit" : r.PickTime + " s"));
                             _rows.Add(Shown("Multiple utilities", () => r.MultiUtility ? "On" : "Off"));
+                            _rows.Add(Shown("Chaos cards stack", () => r.ChaosStack ? "On" : "Off"));
                             if (r.CardsOff > 0) _rows.Add(Shown("Cards switched off", () => r.CardsOff.ToString()));
                             _rows.Add(Shown("Carry-through", () => r.Carry ? "On, " + r.CarryPercent + "%" : "Off"));
                             _rows.Add(Shown("Knock-away", () => r.KnockPercent + "%"));

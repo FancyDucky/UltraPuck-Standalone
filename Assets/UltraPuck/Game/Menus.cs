@@ -484,6 +484,7 @@ namespace UltraPuck.Game
             _rows.Add(new Row { Label = "Cards offered", Value = () => r.CardsOffered.ToString(), Hint = hint });
             _rows.Add(new Row { Label = "Pick time", Value = () => r.PickTime == 0 ? "No limit" : r.PickTime + " s", Hint = hint });
             _rows.Add(new Row { Label = "Multiple utilities", Value = () => OnOff(r.MultiUtility), Hint = hint });
+            _rows.Add(new Row { Label = "Chaos cards stack", Value = () => OnOff(r.ChaosStack), Hint = hint });
             if (Cards != null) _rows.Add(new Row { Label = "Cards", Value = () => Mathf.Max(0, Cards.Cards.Count - r.CardsOff) + " of " + Cards.Cards.Count + " on", Hint = hint });
             // Carry-through can change mid-match: the match's own when there is one
             _rows.Add(new Row { Label = "Carry-through", Value = () => { var s = Live(); return OnOff(s != null ? s.CarryOn : r.Carry); }, Hint = hint });
@@ -533,6 +534,8 @@ namespace UltraPuck.Game
                 "How long players have to pick. Anyone who hasn't picked in time gets a random card."));
             _rows.Add(Switch("Multiple utilities", () => Settings.MultiUtility, v => Settings.MultiUtility = v,
                 "Off: you can only hold one utility card (Puck Gun, Invisibility, Shockwave, Swap). Taking another replaces the one you have. On: you can hold several."));
+            _rows.Add(Switch("Chaos cards stack", () => Settings.ChaosStack, v => Settings.ChaosStack = v,
+                "Off: each chaos card comes once a match (once someone has it, it isn't offered again). On: they can come again and add up (two More Pucks: two extra pucks). Changes when the match restarts."));
             _rows.Add(new Row { Label = "Toggle cards", Value = CardsOnText, Press = () => { _cardsFrom = Current; Current = Page.Cards; _focus = 0; _first = 0; _focusY = -1f; },
                 Hint = "Choose which cards can be offered. Online, the host's choices apply." });
             _rows.Add(Switch("Carry-through", () => Settings.CarryThrough, v => { Settings.CarryThrough = v; SendCarry(false); },

@@ -389,6 +389,13 @@ namespace UltraPuck.Game
         /// (like Cannon Ball, for every shot). <see cref="CarryPercent"/> is how much (5..100%, a temporary tuning slider).
         /// On at 40% unless changed (the "_v2" keys start everyone, older saves too, on those defaults).
         /// </summary>
+        /// <summary>Chaos cards stack: one somebody has can still be offered (and its effect adds up). Off by default.</summary>
+        public static bool ChaosStack
+        {
+            get { return PlayerPrefs.GetInt("chaos_stack", 0) != 0; }
+            set { PlayerPrefs.SetInt("chaos_stack", value ? 1 : 0); }
+        }
+
         public static bool CarryThrough
         {
             get { return PlayerPrefs.GetInt("carry_through_v2", 1) != 0; }
@@ -520,7 +527,7 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class RulesView
     {
-        public bool Rounds, Replays, MultiUtility, Carry;
+        public bool Rounds, Replays, MultiUtility, Carry, ChaosStack;
         public int PickMode, CardsOffered, PickTime, MatchMode, GoalsToWin, MatchMinutes, CardsOff, CarryPercent, KnockPercent = 100;
 
         /// <summary>Null when there's nothing (yet) to read.</summary>
@@ -537,6 +544,7 @@ namespace UltraPuck.Game
             v.CardsOff = n;
             if (r.Length > 7 + n && r[7 + n] > 0) { v.Carry = true; v.CarryPercent = r[7 + n]; }
             if (r.Length > 8 + n) v.KnockPercent = r[8 + n] * 5;
+            if (r.Length > 9 + n) v.ChaosStack = (r[9 + n] & 1) != 0;
             return v;
         }
 

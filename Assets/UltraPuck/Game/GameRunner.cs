@@ -802,6 +802,45 @@ namespace UltraPuck.Game
                 yield return new WaitForSecondsRealtime(0.5f);
             }
 
+            if (want("held"))
+            {
+                // picked before a teammate: your cards stay (the one taken lit, the rest dimmed) while a bot teammate
+                // takes Double Card (its two cards stacked at the side); then you take Double Card (its two cards
+                // dealt straight away)
+                var dbl = _cards != null ? _cards.ById("ultrapuck.doublecard") : null;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Name = "FancyDuck" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Demo = true, Name = "Bot" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Demo = true, Name = "Bot" });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                _sim.T.CardsOffered = 3;
+                yield return new WaitForSecondsRealtime(0.8f);
+                _sim.StartPicking(_state, new[] { 0, 1 });
+                if (dbl != null) _state.Players[1].Offer = new[] { dbl.Index };
+                yield return new WaitForSecondsRealtime(1.0f);
+                _cardScreen.ShotConfirm = true;
+                yield return new WaitForSecondsRealtime(0.6f);
+                yield return Shot("held-waiting");
+                yield return new WaitForSecondsRealtime(0.7f);
+                yield return Shot("held-teammate-double");
+                yield return new WaitForSecondsRealtime(3f);
+                if (dbl != null)
+                {
+                    _sim.T.ChaosOdds = 0; // (three cards, no chaos card on top)
+                    _sim.StartPicking(_state, new[] { 0 });
+                    var offer = new List<int>(_state.Players[0].Offer);
+                    if (!offer.Contains(dbl.Index)) offer[Mathf.Min(1, offer.Count - 1)] = dbl.Index; // in the middle, where the focus starts
+                    else { offer.Remove(dbl.Index); offer.Insert(Mathf.Min(1, offer.Count), dbl.Index); }
+                    _state.Players[0].Offer = offer.ToArray();
+                    yield return new WaitForSecondsRealtime(2.2f);
+                    _cardScreen.ShotConfirm = true;
+                    yield return new WaitForSecondsRealtime(1.0f);
+                    yield return Shot("held-double-gifts");
+                }
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
             if (want("chaos"))
             {
                 // chaos cards: Giant Nets flying into the corner of a pick (a hand of three and the chaos card last), in free play's card
@@ -2462,6 +2501,8 @@ namespace UltraPuck.Game
             b.Add((byte)(Settings.CarryThrough ? Settings.CarryPercent : 0));
             // then Knock-away, in 5% steps (0..100 = 0..500%)
             b.Add((byte)(Settings.KnockAwayPercent / 5));
+            // then the chaos cards' bits: 1 = they stack
+            b.Add((byte)(Settings.ChaosStack ? 1 : 0));
             return b.ToArray();
         }
 
@@ -2488,6 +2529,7 @@ namespace UltraPuck.Game
             for (var k = 0; k < n; k++) t.CardsOff[k] = rules[7 + k];
             if (rules.Length > 7 + n && rules[7 + n] > 0) { t.CarryThrough = true; t.CarryPercent = Mathf.Clamp(rules[7 + n], 1, 100); }
             if (rules.Length > 8 + n) t.KnockAwayPercent = Mathf.Clamp(rules[8 + n] * 5, 0, 500);
+            if (rules.Length > 9 + n) t.ChaosStack = (rules[9 + n] & 1) != 0;
             return t;
         }
 

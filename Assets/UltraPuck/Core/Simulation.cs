@@ -136,7 +136,7 @@ namespace UltraPuck.Core
                 // now and then a chaos card on top of the hand (last in the offer; a shared hand's is the whole team's)
                 if (p.Offer.Length > 0 && !(shared && teamOffer[p.Team & 1] != null))
                 {
-                    var chaos = Cards.ChaosRoll(s, i, T.ChaosOdds, T.CardsOff);
+                    var chaos = Cards.ChaosRoll(s, i, T.ChaosOdds, T.CardsOff, T.ChaosStack);
                     if (chaos >= 0)
                     {
                         var with = new int[p.Offer.Length + 1];
@@ -325,6 +325,7 @@ namespace UltraPuck.Core
         private void StepPicking(GameState s, PlayerInput[] inputs, Fix dt, bool end = false)
         {
             var waiting = false;
+            var picked = new System.Collections.Generic.List<int>();
             var redrawn = new bool[s.Players.Length];
             // New Hand: the card screen sends a re-roll (once a pick per copy held) while still choosing
             // (a request, not the utility button's press: a button already held when the pick started, or a press
@@ -349,17 +350,42 @@ namespace UltraPuck.Core
                 // new cards: the pick still being sent is for the old ones, so wait until it's let go
                 if (p.PickHeld) { if (input.Pick == 0) p.PickHeld = false; waiting = true; continue; }
                 p.Hover = input.Hover <= p.Offer.Length ? input.Hover : (byte)0;
-                if (input.Pick >= 1 && input.Pick <= p.Offer.Length) p.Picked = p.Offer[input.Pick - 1];
+                if (input.Pick >= 1 && input.Pick <= p.Offer.Length) { p.Picked = p.Offer[input.Pick - 1]; picked.Add(i); }
                 else waiting = true;
             }
             s.PhaseTime -= dt;
-            if (waiting && !end && (T.PickTime <= Fix.Zero || s.PhaseTime > Fix.Zero)) return; // a pick time of 0: no limit
 
             // Team Vote: each team's most-voted card (a tie, or nobody voting, is settled at random) goes to everyone on it
             // (not when choosing from the deck after a Choose: everyone picks their own there)
             var deckRound = false;
             foreach (var p in s.Players) if (p.Offer.Length > 0 && p.PickKind == 1) deckRound = true;
-            if (T.TeamVote && !deckRound) for (var team = 0; team < 2; team++) TeamVoteResult(s, team);
+            var vote = T.TeamVote && !deckRound;
+            if (!vote && !end)
+            {
+                // every other way of picking: a pick is taken the moment it's made (Choose's deck, New Hand's fresh hand and
+                // Double Card's cards straight away; a one-a-team card gone from teammates' hands). The ones made on the
+                // same tick go in a random order, so neither player slot is favoured.
+                for (var k = picked.Count - 1; k > 0; k--)
+                {
+                    var j = (int)(s.NextRandom() % (uint)(k + 1));
+                    var x = picked[k]; picked[k] = picked[j]; picked[j] = x;
+                }
+                var any = false;
+                foreach (var i in picked)
+                {
+                    var p = s.Players[i];
+                    if (p.Offer.Length == 0 || p.Picked < 0) continue;
+                    var more = TakePicked(s, p);
+                    any = true;
+                    if (p.Cards.Length > 0) OneATeamTaken(s, p, p.Cards[p.Cards.Length - 1]);
+                    if (more) { OneATeamInDecks(s); s.PhaseTime = Fix.Max(s.PhaseTime, T.PickTime); } // a fresh clock for their next pick
+                }
+                if (any) Cards.Recompute(s);
+                waiting = false;
+                foreach (var p in s.Players) waiting |= p.Offer.Length > 0;
+            }
+            if (waiting && !end && (T.PickTime <= Fix.Zero || s.PhaseTime > Fix.Zero)) return; // a pick time of 0: no limit
+            if (vote) for (var team = 0; team < 2; team++) TeamVoteResult(s, team);
 
             // everyone chose (or time's up: a random card for anyone who didn't)
             var again = false;
@@ -393,7 +419,7 @@ namespace UltraPuck.Core
             if (T.FreePlay) s.Phase = Phase.Play; // free play: carry on where everyone stands
             else
             {
-                FaceOff(s);
+                FaceOff(s, true); // (the spots everyone went to before the pick)
                 s.PhaseTime += T.PickOutroTime; // the countdown waits for the cards to leave the screen
                 // ...and for Double Card's two cards to be shown
                 var gifted = false;
@@ -442,6 +468,35 @@ namespace UltraPuck.Core
             }
         }
 
+        /// <summary>
+        /// <paramref name="p"/> just took <paramref name="card"/>: if it's one only so many a team may have (Swap, Portal Gun)
+        /// and their team now has enough, it's gone from their teammates' cards: in a hand, a fresh card takes its place
+        /// (none left: it just goes); in Choose's deck it just goes. A teammate who picked it on this same tick chooses again.
+        /// </summary>
+        private void OneATeamTaken(GameState s, PlayerState p, int card)
+        {
+            if (card < 0 || card >= Cards.Cards.Count || Cards.Cards[card].MaxPerTeam <= 0) return;
+            for (var qi = 0; qi < s.Players.Length; qi++)
+            {
+                var q = s.Players[qi];
+                if (q == p || q.Team != p.Team || q.Offer.Length == 0 || Array.IndexOf(q.Offer, card) < 0 || !Cards.TeamFull(s, q, card)) continue;
+                if (q.Picked == card) q.Picked = -1;
+                q.Hover = 0;
+                q.PickHeld = true; // (a pick on its way for the old cards waits until it's let go)
+                if (q.PickKind == 1) { DropFromDeck(q, card); continue; }
+                var off = new System.Collections.Generic.List<int>(q.Offer);
+                if (T.CardsOff != null) off.AddRange(T.CardsOff);
+                var fresh = Cards.DrawOffer(s, qi, 1, off.ToArray());
+                var hand = new System.Collections.Generic.List<int>(q.Offer);
+                var at = hand.IndexOf(card);
+                // nothing switched on left: a switched-off card stands in (as when a pick has nothing left at all)
+                var stand = fresh.Length > 0 ? fresh[0] : AnyOtherCard(s, qi, q.Offer);
+                if (stand >= 0) hand[at] = stand;
+                else if (hand.Count > 1) hand.RemoveAt(at);
+                q.Offer = hand.ToArray();
+            }
+        }
+
         /// <summary>Take <paramref name="card"/> out of <paramref name="p"/>'s deck (never its last card).</summary>
         private static void DropFromDeck(PlayerState p, int card)
         {
@@ -473,8 +528,10 @@ namespace UltraPuck.Core
                 p.Picked = other;
             }
             var took = p.Picked;
-            var wasDeck = p.PickKind == 1;
-            if (!wasDeck) p.PickRounds++;
+            var kind = p.PickKind;
+            var wasDeck = kind == 1;
+            var oldOffer = p.Offer;
+            if (kind == 0) p.PickRounds++; // (Choose's deck and New Hand's fresh hand are part of the same card round)
             if (took >= 0) GiveCard(s, p, took);
             p.Offer = new int[0];
             p.Picked = -1;
@@ -495,6 +552,16 @@ namespace UltraPuck.Core
                 var gifts = new System.Collections.Generic.List<int>();
                 for (var n = 0; n < 2; n++) { var g = GiveRandom(s, me); if (g >= 0) gifts.Add(g); }
                 if (gifts.Count > 0) { p.Gifts = gifts.ToArray(); p.Gifted++; }
+            }
+            // New Hand: a fresh hand to pick from straight away (none of the cards just shown, and not New Hand again),
+            // and the card stays for re-rolls in later picks (not in a Team Vote, where the team's hand is shared)
+            else if (Cards.IsNewHand(took) && !T.TeamVote)
+            {
+                var off = new System.Collections.Generic.List<int>(oldOffer);
+                if (T.CardsOff != null) off.AddRange(T.CardsOff);
+                foreach (var c in Cards.Cards) if (Cards.IsNewHand(c.Index)) off.Add(c.Index);
+                var hand = Cards.DrawOffer(s, me, Math.Max(1, Math.Min(5, T.CardsOffered)), off.ToArray());
+                if (hand.Length > 0) { p.Offer = hand; p.PickKind = 2; p.PickHeld = true; p.Rerolls = Cards.NewHands(p); return true; }
             }
             return false;
         }
@@ -663,7 +730,14 @@ namespace UltraPuck.Core
         /// Double Agents start on the other team's side, pylon goalies go up in front of the nets, and the team with
         /// the most Head Start cards starts with the puck.
         /// </summary>
-        public void FaceOff(GameState s)
+        public void FaceOff(GameState s) { FaceOff(s, false); }
+
+        /// <summary>
+        /// <see cref="FaceOff(GameState)"/>; <paramref name="again"/>: the face-off after a card pick (everyone already went
+        /// to their spots before it): the same turn round the spots, so nobody swaps places just before the countdown
+        /// (only cards just taken, a Double Agent or Head Start, change anything).
+        /// </summary>
+        public void FaceOff(GameState s, bool again)
         {
             Use(s);
             // Each side's group: its own players (not Double Agents) and the other team's Double Agents. Every face-off
@@ -674,8 +748,8 @@ namespace UltraPuck.Core
             foreach (var p in s.Players)
                 if (p.Stats.DoubleAgent > 0) agents[1 - (p.Team & 1)]++;
                 else own[p.Team & 1]++;
-            var turn = s.KickOffTurn;
-            s.KickOffTurn++;
+            var turn = again && s.KickOffTurn > 0 ? s.KickOffTurn - 1 : s.KickOffTurn;
+            if (!again || s.KickOffTurn == 0) s.KickOffTurn++;
             var taken = new bool[2][];
             for (var side = 0; side < 2; side++)
             {

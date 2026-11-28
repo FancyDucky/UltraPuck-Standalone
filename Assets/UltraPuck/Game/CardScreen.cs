@@ -48,6 +48,15 @@ namespace UltraPuck.Game
         private int _slot = -1, _focus, _chosen = -1;
         private float _stageAt, _lastHover;
         /// <summary>
+        /// Picked, waiting for the team: the pick has gone to the game, the cards stay up (the one taken lit, the rest
+        /// dimmed) until nobody on the team is still choosing, then a second later they leave (<see cref="_heldDoneAt"/>).
+        /// </summary>
+        private bool _held;
+        private float _heldDoneAt = -1f;
+        /// <summary>A card pick is on (to notice a new one starting: each player's cards then, for the side previews).</summary>
+        private bool _pickOn;
+        private readonly Dictionary<int, int> _cardsAtStart = new Dictionary<int, int>();
+        /// <summary>
         /// The mouse moved off the card it had raised (<see cref="_mouseCard"/>), on this screen (<see cref="_mouseOffStage"/>):
         /// that card goes back to its own size until the mouse comes back or the keyboard / a controller moves.
         /// The card stays the one a key or button acts on.
@@ -181,8 +190,11 @@ namespace UltraPuck.Game
             LogPicks(s, picking);
             if (!picking)
             {
-                // the picks are in: a shared draw still dives into this PC's first chooser
-                if (_stage == Stage.Choosing) { if (_teamVote && !_watching) LeaveTeamVote(); else Leave(_watching ? WatchedPick(s) : -1); }
+                _pickOn = false;
+                // the picks are in: a shared draw still dives into this PC's first chooser (picked and waiting: a
+                // second's look first)
+                if (_held) { if (s == null || !HeldGifts(s)) HeldDone(); }
+                else if (_stage == Stage.Choosing) { if (_teamVote && !_watching) LeaveTeamVote(); else Leave(_watching ? WatchedPick(s) : -1); }
                 _ready.Clear();
                 _readyOffer.Clear();
                 _wasDeckRound = false;
@@ -192,11 +204,20 @@ namespace UltraPuck.Game
                 if (_stage == Stage.Editing) { if (_browse) BrowseInput(); else EditInput(); }
                 // Double Card: once the picked cards have gone, show the two it gave (the countdown waits for it)
                 if (_stage == Stage.Idle && !_editing && s != null && s.Phase == Phase.Countdown && Sim != null && Sim.Cards != null) Reveal(s);
-                if (_stage == Stage.Revealing && Time.unscaledTime - _stageAt > RevealHold) Leave(-1);
+                if (_stage == Stage.Revealing && !_held && Time.unscaledTime - _stageAt > RevealHold) Leave(-1);
             }
             else
             {
-                _seenGifted.Clear(); // a new pick: its Double Card reveal hasn't been shown
+                if (!_pickOn)
+                {
+                    // a new pick: its Double Card reveal hasn't been shown; what everyone holds now (the side previews
+                    // show what each takes from here on)
+                    _pickOn = true;
+                    _seenGifted.Clear();
+                    _cardsAtStart.Clear();
+                    for (var i = 0; i < s.Players.Length; i++) _cardsAtStart[i] = s.Players[i].Cards.Length;
+                }
+                HeldFrame(s);
                 // forget confirmed picks once the game has taken them
                 var done = new List<int>();
                 foreach (var kv in _ready)
@@ -261,7 +282,8 @@ namespace UltraPuck.Game
             Motes();
             if (_stage == Stage.Leaving && (Time.unscaledTime - _stageAt > (_editing ? 1.1f : _chosen >= 0 ? 1.25f : 0.85f) || (_absorbed && Time.unscaledTime - _absorbedAt > 0.1f)))
             {
-                if (_chosen >= 0 && _slot >= 0 && !_watching && !_teamVote) { _ready[_slot] = (byte)(_chosen + 1); _readyOffer[_slot] = _dealt; }
+                if (_chosen >= 0 && _slot >= 0 && !_watching && !_teamVote && !_heldPick) { _ready[_slot] = (byte)(_chosen + 1); _readyOffer[_slot] = _dealt; }
+                _heldPick = false;
                 _watching = false;
                 _deck = false;
                 _revealShow = false;
@@ -355,6 +377,7 @@ namespace UltraPuck.Game
             _watching = false;
             _teamVote = false;
             _deck = false;
+            _held = false;
             _stage = Stage.Idle;
             _slot = -1;
             Sound.Play(Sfx.CardDeal, 0.6f);
@@ -727,7 +750,7 @@ namespace UltraPuck.Game
         }
 
         /// <summary>How big the corner chaos card is, next to a card in a row of three.</summary>
-        private const float CornerSize = 0.68f;
+        private const float CornerSize = 0.56f;
 
         /// <summary>Half the card screen's height and width, in card units, at the cards' depth.</summary>
         private void ScreenHalf(out float halfV, out float halfH)
@@ -736,10 +759,117 @@ namespace UltraPuck.Game
             halfH = halfV * _cam.aspect;
         }
 
+        /// <summary>
+        /// After a pick: stay on the cards until the team is done (a card pick, not a Team Vote, not catching up, and
+        /// nobody else on this PC still to pick, who'd be waiting for the screen)?
+        /// </summary>
+        private bool CanHold()
+        {
+            if (_state == null || _state.Phase != Phase.Picking || _watching || _teamVote || _editing || Sim == null || Sim.T.TeamVote) return false;
+            for (var i = 0; i < _state.Players.Length; i++)
+            {
+                if (i == _slot) continue;
+                var slot = SlotOf(i);
+                if (slot < 0 || slot >= Local.Slots.Count || Local.Slots[slot].Demo) continue;
+                if (_state.Players[i].Offer.Length > 0) return false;
+            }
+            return true;
+        }
+
+        /// <summary>Picked card <paramref name="k"/>: it goes to the game now; the cards stay (it lit, the rest dimmed).</summary>
+        private void Hold(int k)
+        {
+            _held = true;
+            _heldDoneAt = -1f;
+            _chosen = k;
+            _ready[_slot] = (byte)(k + 1);
+            _readyOffer[_slot] = _dealt;
+            Sound.Play(Sfx.CardPick, 0.55f);
+            if (k >= 0 && k < _cards.Count)
+            {
+                var c = _cards[k];
+                c.ScaleVel += 4f;
+                c.SweepAt = Time.unscaledTime;
+                Burst(c);
+            }
+        }
+
+        /// <summary>Is nobody on <paramref name="team"/> still choosing?</summary>
+        private static bool TeamDone(GameState s, int team)
+        {
+            foreach (var q in s.Players) if (q.Team == team && q.Offer.Length > 0) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// Picked and waiting: new cards for them come straight up (Choose's deck, New Hand's fresh hand, Double Card's
+        /// two), and once the team is done, a second's look and the cards leave.
+        /// </summary>
+        private void HeldFrame(GameState s)
+        {
+            if (!_held || _slot < 0 || _slot >= s.Players.Length) return;
+            var p = s.Players[_slot];
+            if (p.Offer.Length > 0 && p.Picked < 0 && !SameCards(p.Offer, _dealt))
+            {
+                // more to pick: theirs now (dealt on the next frame)
+                _held = false;
+                Redeal(s);
+                return;
+            }
+            if (HeldGifts(s)) return;
+            if (TeamDone(s, p.Team)) HeldDone();
+        }
+
+        /// <summary>Picked Double Card and waiting: its two cards, dealt now (true when they were).</summary>
+        private bool HeldGifts(GameState s)
+        {
+            if (!_held || _slot < 0 || _slot >= s.Players.Length || _stage == Stage.Revealing) return false;
+            var p = s.Players[_slot];
+            int seen;
+            _seenGifted.TryGetValue(_slot, out seen);
+            if (p.Gifted == seen || p.Gifts.Length == 0) return false;
+            _seenGifted[_slot] = p.Gifted;
+            ShowGifts(p);
+            return true;
+        }
+
+        /// <summary>The team is done (or the pick is over): a second's look, then the cards leave.</summary>
+        private void HeldDone()
+        {
+            if (_heldDoneAt < 0f) { _heldDoneAt = Time.unscaledTime; return; }
+            if (Time.unscaledTime - _heldDoneAt < 1f) return;
+            if (_stage == Stage.Revealing && Time.unscaledTime - _stageAt < RevealHold) return; // (Double Card's two: a proper look)
+            _held = false;
+            _heldDoneAt = -1f;
+            Leave(_stage == Stage.Revealing ? -1 : _chosen);
+        }
+
+        /// <summary>Double Card: the two cards it gave, dealt like a hand straight after the pick (nothing to choose).</summary>
+        private void ShowGifts(PlayerState p)
+        {
+            var slot = _slot;
+            foreach (var c in _cards) { Destroy(c.Root.gameObject); Destroy(c.Shadow.gameObject); }
+            _cards.Clear();
+            var gifts = new List<int>();
+            foreach (var g in p.Gifts) if (g >= 0 && g < Sim.Cards.Cards.Count) gifts.Add(g);
+            if (gifts.Count == 0) return;
+            Deal(slot, gifts.ToArray());
+            _stage = Stage.Revealing;
+            _focus = -1;
+            _chosen = -1;
+            _held = true;
+            _heldDoneAt = -1f;
+            _revealShow = true;
+            _revealOwner.Clear();
+            foreach (var g in gifts) _revealOwner.Add(slot);
+            Sound.Play(Sfx.CardPick, 0.4f);
+        }
+
         private void Choose()
         {
             if (_cards.Count == 0) return;
             if (_watching) { Watch(); return; }
+            if (_held) return; // picked: waiting for the team
             var m = Local.MenuFor(Slot);
             if (TestMode)
             {
@@ -786,7 +916,7 @@ namespace UltraPuck.Game
                 if (wheel != 0f) { _editTop = Mathf.Clamp(_editTop + (wheel < 0f ? 1 : -1), 0, EditMaxTop); EditHomes(); }
             }
             // dealt cards need a moment before they can be taken, so a held button doesn't pick by accident
-            if (m.Confirm && Time.unscaledTime - _stageAt > 0.55f) Leave(_focus);
+            if (m.Confirm && Time.unscaledTime - _stageAt > 0.55f) { if (CanHold()) Hold(_focus); else Leave(_focus); }
         }
 
         private void SetFocus(int k)
@@ -803,8 +933,13 @@ namespace UltraPuck.Game
             c.NextSweep = Time.unscaledTime + 2.6f;
         }
 
+        /// <summary>The cards leaving were a held pick: it has gone to the game already.</summary>
+        private bool _heldPick;
+
         private void Leave(int chosen)
         {
+            _heldPick = _stage == Stage.Revealing || (_stage == Stage.Choosing && _ready.ContainsKey(_slot) && !_watching && !_teamVote);
+            _held = false;
             _chosen = chosen;
             _absorbed = false;
             _stage = Stage.Leaving;
@@ -917,10 +1052,15 @@ namespace UltraPuck.Game
                         tp.y = Mathf.Clamp(tp.y, -halfV + hh, Mathf.Max(-halfV + hh, halfV - hh));
                     }
                 }
+                // picked and waiting: the one taken lit, the rest dimmed
+                var dimTo = _held && _chosen >= 0 && k != _chosen && _stage == Stage.Choosing ? 0.62f : 0f;
+                c.VeilA = Mathf.MoveTowards(c.VeilA, dimTo, dt * 3f);
+                if (c.Veil != null) c.Veil.SetFloat("_Alpha", c.VeilA);
                 if (live)
                 {
                     var focusedNow = k == _focus;
                     c.GlowTarget = (focusedNow ? 0.35f : 0f) + (_editing && !_browse && _counts[_who][k] > 0 ? 0.45f : 0f);
+                    if (_held && k == _chosen) c.GlowTarget = 0.9f;
                     if (!c.Landed && since > c.Delay + 0.32f) { c.Landed = true; c.SweepAt = t; c.NextSweep = t + 2.6f + c.Phase * 0.3f; }
                     if (c.Landed && t > c.NextSweep && (focusedNow || c.Rare)) { c.SweepAt = t; c.NextSweep = t + (focusedNow ? 2.6f : 4.5f); }
                     // the top-tier cards shed little sparks of light
@@ -1072,7 +1212,28 @@ namespace UltraPuck.Game
         public bool WatchVotes = true;
 
         /// <summary>A card someone else has chosen, small at the side of the screen (your teammates' on the left, the other team's on the right).</summary>
-        private sealed class Mini { public int Player, Card; public CardView V; }
+        /// <summary>A card someone else has taken, at the side; <see cref="Stack"/> of <see cref="Of"/> when they took several (Double Card's two).</summary>
+        private sealed class Mini { public int Player, Card, Stack, Of = 1; public CardView V; }
+
+        /// <summary>
+        /// The cards to show at the side for player <paramref name="i"/>: what they've taken in this pick (Choose and
+        /// Double Card only lead to cards: Choose shows until its pick lands, Double Card shows the two it gave), or in a
+        /// Team Vote the card they voted for.
+        /// </summary>
+        private List<int> Taken(GameState s, int i)
+        {
+            var p = s.Players[i];
+            var list = new List<int>();
+            int from;
+            if (!_cardsAtStart.TryGetValue(i, out from)) from = p.Cards.Length;
+            var gained = new List<int>();
+            for (var k = Mathf.Max(0, from); k < p.Cards.Length; k++) gained.Add(p.Cards[k]);
+            foreach (var c in gained) if (!Sim.Cards.IsChoose(c) && !Sim.Cards.IsDouble(c)) list.Add(c);
+            if (list.Count == 0 && gained.Count > 0) list.Add(gained[gained.Count - 1]); // (Choose, its deck pick still to come)
+            if (list.Count == 0 && p.Offer.Length > 0 && p.Picked >= 0 && p.Picked < Sim.Cards.Cards.Count) list.Add(p.Picked); // a vote
+            if (list.Count > 2) list.RemoveRange(0, list.Count - 2);
+            return list;
+        }
         private readonly List<Mini> _minis = new List<Mini>();
         /// <summary>The mini card clicked up to full size (by player), or -1.</summary>
         private int _bigMini = -1;
@@ -1101,26 +1262,29 @@ namespace UltraPuck.Game
         {
             _miniClick = false;
             var want = new List<Mini>();
-            if (picking && s != null && s.Phase == Phase.Picking && Sim != null && Sim.Cards != null)
+            // (kept up with the cards: picked and waiting, or leaving, after the last of the team has picked)
+            var keep = _held || (_stage == Stage.Leaving && _cardsAtStart.Count > 0);
+            if (s != null && Sim != null && Sim.Cards != null && ((picking && s.Phase == Phase.Picking) || keep))
                 for (var i = 0; i < s.Players.Length; i++)
                 {
-                    var p = s.Players[i];
-                    if (p.Offer.Length == 0 || p.Picked < 0 || p.Picked >= Sim.Cards.Cards.Count || OnThisPc(i)) continue;
+                    if (OnThisPc(i)) continue;
                     if (_watching && _stage != Stage.Idle && (i == _slot || (_teamVote && _watched.Contains(i)))) continue; // shown big, being watched
-                    want.Add(new Mini { Player = i, Card = p.Picked });
+                    var taken = Taken(s, i);
+                    for (var k = 0; k < taken.Count; k++) want.Add(new Mini { Player = i, Card = taken[k], Stack = k, Of = taken.Count });
                 }
             // gone, or a different card now (Choose's deck after Choose): put away
             for (var k = _minis.Count - 1; k >= 0; k--)
             {
                 var m = _minis[k];
-                if (want.Exists(x => x.Player == m.Player && x.Card == m.Card)) continue;
+                var same = want.Find(x => x.Player == m.Player && x.Card == m.Card && x.Stack == m.Stack);
+                if (same != null) { m.Of = same.Of; continue; }
                 Destroy(m.V.Root.gameObject); Destroy(m.V.Shadow.gameObject);
                 _minis.RemoveAt(k);
                 if (_bigMini == m.Player) _bigMini = -1;
             }
             foreach (var w in want)
             {
-                if (_minis.Exists(x => x.Player == w.Player)) continue;
+                if (_minis.Exists(x => x.Player == w.Player && x.Stack == w.Stack)) continue;
                 w.V = Build(Sim.Cards.Cards[w.Card], 100 + w.Player);
                 var left = (s.Players[w.Player].Team & 1) == MyTeam(s);
                 w.V.Pos = new Vector3(left ? -10f : 10f, 1.5f, 0f);
@@ -1168,23 +1332,28 @@ namespace UltraPuck.Game
             int nLeft = 0, nRight = 0;
             // the side columns sit just inside the screen's edges, whatever its shape
             var half = 14f * Mathf.Tan(15f * Mathf.Deg2Rad) * _cam.aspect;
-            _minis.Sort((a, b) => a.Player.CompareTo(b.Player));
+            _minis.Sort((a, b) => a.Player != b.Player ? a.Player.CompareTo(b.Player) : a.Stack.CompareTo(b.Stack));
+            var rowOf = new Dictionary<int, int>();
             foreach (var m in _minis)
             {
                 var left = (_state.Players[m.Player].Team & 1) == mine;
-                var row = left ? nLeft++ : nRight++;
+                int row;
+                if (!rowOf.TryGetValue(m.Player, out row)) { row = left ? nLeft++ : nRight++; rowOf[m.Player] = row; }
+                var top = m.Stack == m.Of - 1;
                 Vector3 tp, tr;
                 float ts;
-                if (m.Player == _bigMini) { tp = new Vector3(0f, 0.1f, -2.5f); tr = Vector3.zero; ts = 1.05f; }
+                if (m.Player == _bigMini && top) { tp = new Vector3(0f, 0.1f, -2.5f); tr = Vector3.zero; ts = 1.05f; }
                 else
                 {
                     tp = new Vector3((left ? -1f : 1f) * (half - 0.75f), 2.25f - row * MiniGap, 0f);
                     tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.1f + m.Player) * 1.5f);
                     ts = MiniScale;
+                    // the one under (Double Card's first): tipped over a little, peeking out
+                    if (!top) { tp += new Vector3(left ? 0.18f : -0.18f, -0.1f, 0.05f); tr += new Vector3(0f, 0f, left ? -16f : 16f); }
                 }
                 m.V.Step(tp, tr, ts, dt);
                 m.V.GlowTarget = 0f;
-                m.V.Apply(m.Player == _bigMini ? 3000 : 2000 + m.Player * 10, _cam);
+                m.V.Apply(m.Player == _bigMini && top ? 3000 : 2000 + m.Player * 40 + (top ? 20 : 0), _cam);
             }
         }
 
@@ -1202,7 +1371,7 @@ namespace UltraPuck.Game
             var scale = Screen.height / 720f * Settings.UiScale;
             foreach (var m in _minis)
             {
-                if (m.Player == _bigMini) continue;
+                if (m.Player == _bigMini || m.Stack != m.Of - 1) continue; // (a stack: one name, over the top card)
                 var r = MiniRect(m.V);
                 var cx = r.center.x / scale;
                 var top = (Screen.height - r.yMax) / scale;
@@ -1287,8 +1456,8 @@ namespace UltraPuck.Game
                 if (string.IsNullOrEmpty(name)) name = "P" + (_slot + 1);
                 var who = name + "  ·  " + Palette.TeamName(team);
                 // joined part-way: catching up on the team's card rounds (how many to go, this one included)
-                var choose = "Choose a card";
-                if (_state.Phase != Phase.Picking && !_watching && !_deck)
+                var choose = _held ? "Waiting for your team..." : "Choose a card";
+                if (_state.Phase != Phase.Picking && !_watching && !_deck && !_held)
                 {
                     var togo = Mathf.Max(1, _state.TeamRounds[team & 1] - _state.Players[_slot].PickRounds);
                     choose = "Catching up  ·  " + togo + (togo == 1 ? " card" : " cards") + " to go";
@@ -2093,6 +2262,9 @@ namespace UltraPuck.Game
             public Material ShadowMat;
             // effects
             public Material Glow, BodyMat, ArtMat;
+            /// <summary>A dark veil over the card (picked another one and waiting for the team: this one dimmed).</summary>
+            public Material Veil;
+            public float VeilA;
             /// <summary>How strong the border glow is (low on a glass card, where it would shine through).</summary>
             public float GlowScale = 1f;
             public Transform ArtT;
@@ -2330,6 +2502,14 @@ namespace UltraPuck.Game
                     ol.Sync();
                     v.Outlines.Add(ol);
                 }
+
+            // a veil to dim it (over everything on the front)
+            var veil = Part(v, "Veil", new Vector2(2.5f, 3.5f), new Vector3(0f, 0f, -0.012f), 8, 0.17f);
+            veil.SetColor("_Color", Color.black);
+            veil.SetColor("_Color2", Color.black);
+            veil.SetFloat("_Glare", 0f);
+            veil.SetFloat("_Alpha", 0f);
+            v.Veil = veil;
 
             // the back: dark with the game's name
             var back = Part(v, "Back", new Vector2(2.5f, 3.5f), Vector3.zero, 1, 0.17f, true);

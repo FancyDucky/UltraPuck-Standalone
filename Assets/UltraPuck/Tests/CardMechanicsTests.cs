@@ -52,6 +52,7 @@ namespace UltraPuck.Tests
         {
             var off = new System.Collections.Generic.List<int>(OneATeamOff());
             off.AddRange(_lib.CardGivers());
+            foreach (var c in _lib.Cards) if (_lib.IsNewHand(c.Index)) off.Add(c.Index); // (it deals a fresh hand straight away)
             return off.ToArray();
         }
 
@@ -2529,15 +2530,25 @@ namespace UltraPuck.Tests
             Give(s, 0, "ultrapuck.portalgun");
             CollectionAssert.DoesNotContain(_lib.DrawOffer(s, 1, 40), pg, "not offered to a teammate");
             CollectionAssert.Contains(_lib.DrawOffer(s, 2, 40), pg, "the other team can still get one");
-            // two teammates take it at the same pick: the first gets it, the other the next card offered
+            // two teammates take it on the same tick: one gets it (at random, neither slot favoured), and the other's hand
+            // has a fresh card in its place, to choose again from
             s.Players[0].Cards = new int[0];
             _lib.Recompute(s);
             s.Players[0].Offer = new[] { pg, sp }; s.Players[1].Offer = new[] { pg, sp };
             s.Phase = Phase.Picking; s.PhaseTime = Fix.FromInt(10);
             _sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 }, default(PlayerInput) });
-            CollectionAssert.Contains(s.Players[0].Cards, pg);
-            CollectionAssert.DoesNotContain(s.Players[1].Cards, pg);
-            CollectionAssert.Contains(s.Players[1].Cards, sp);
+            var got = System.Array.IndexOf(s.Players[0].Cards, pg) >= 0 ? 0 : 1;
+            var other = s.Players[1 - got];
+            CollectionAssert.Contains(s.Players[got].Cards, pg);
+            Assert.AreEqual(0, other.Cards.Length, "the other chooses again (not handed a card)");
+            CollectionAssert.DoesNotContain(other.Offer, pg, "the Portal Gun is gone from their hand");
+            Assert.AreEqual(2, other.Offer.Length, "a fresh card in its place");
+            CollectionAssert.Contains(other.Offer, sp);
+            _sim.Step(s, new PlayerInput[3]); // (they let go)
+            var mine = new PlayerInput[3];
+            mine[1 - got].Pick = (byte)(System.Array.IndexOf(other.Offer, sp) + 1);
+            _sim.Step(s, mine);
+            CollectionAssert.Contains(other.Cards, sp);
         }
     
 
@@ -2869,8 +2880,9 @@ namespace UltraPuck.Tests
             for (var round = 0; round < 3; round++)
             {
                 sim.StartPicking(s, new[] { 0, 1 });
+                // (a hand that changes under them waits for the button to be let go, as a person does)
                 for (var t = 0; t < 600 && s.Phase == Phase.Picking; t++)
-                    sim.Step(s, new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 } });
+                    sim.Step(s, t % 2 == 0 ? new[] { new PlayerInput { Pick = 1 }, new PlayerInput { Pick = 1 } } : new PlayerInput[2]);
                 Assert.AreNotEqual(Phase.Picking, s.Phase, "the pick finished (round " + round + ")");
                 foreach (var p in s.Players) Assert.AreEqual(round + 1, p.Cards.Length, "everyone got a card each round (a random one if the Portal Gun wasn't theirs to have)");
                 var holders = 0;
