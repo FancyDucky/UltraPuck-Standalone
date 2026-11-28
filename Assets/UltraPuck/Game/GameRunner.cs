@@ -875,6 +875,10 @@ namespace UltraPuck.Game
                 yield return Shot("held-waiting");
                 yield return new WaitForSecondsRealtime(0.7f);
                 yield return Shot("held-teammate-double");
+                _cardScreen.ShotBigMini(); // (their two cards side by side, full size)
+                yield return new WaitForSecondsRealtime(0.35f);
+                yield return Shot("held-double-big");
+                _cardScreen.ShotBigMini();
                 yield return new WaitForSecondsRealtime(3f);
                 if (dbl != null)
                 {

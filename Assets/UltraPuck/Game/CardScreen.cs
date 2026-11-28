@@ -1381,7 +1381,8 @@ namespace UltraPuck.Game
                 var top = m.Stack == m.Of - 1;
                 Vector3 tp, tr;
                 float ts;
-                if (m.Player == _bigMini && top) { tp = new Vector3(0f, 0.1f, -2.5f); tr = Vector3.zero; ts = 1.05f; }
+                // enlarged: all of that player's cards, side by side in the middle (Double Card's two)
+                if (m.Player == _bigMini) { tp = new Vector3((m.Stack - (m.Of - 1) * 0.5f) * 2.9f, 0.1f, -2.5f); tr = Vector3.zero; ts = 1.05f; }
                 else
                 {
                     tp = new Vector3((left ? -1f : 1f) * (half - 0.75f), 2.25f - row * MiniGap, 0f);
@@ -1392,7 +1393,7 @@ namespace UltraPuck.Game
                 }
                 m.V.Step(tp, tr, ts, dt);
                 m.V.GlowTarget = 0f;
-                m.V.Apply(m.Player == _bigMini && top ? 3000 : 2000 + m.Player * 40 + (top ? 20 : 0), _cam);
+                m.V.Apply(m.Player == _bigMini ? 3000 + m.Stack * 20 : 2000 + m.Player * 40 + (top ? 20 : 0), _cam);
                 // a stack: the top card casts no shadow (it would darken the one under it)
                 if (top && m.Of > 1 && m.Player != _bigMini) m.V.ShadowMat.SetFloat("_Alpha", 0f);
             }

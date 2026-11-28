@@ -87,6 +87,9 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **an enlarged side preview shows all of that player's cards.** Clicking a side
+  preview or stepping to it with the bumpers (`_bigMini`) brings every card of that player's stack to the middle,
+  side by side at full size (Double Card's two), not just the top one. Screenshot `held-double-big`.
 - unreleased (Claude, 28 Nov 2026): **portal control turn taken out again, protocol 100.** The owner found it more
   confusing (up on the stick no longer up on screen). Portals work as before (98): only your facing turns with you.
   Ideas left for later if it still feels rough: the exit portal a wall for that player for ~0.5 s, a short steering
