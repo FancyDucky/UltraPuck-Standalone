@@ -3415,6 +3415,25 @@ namespace UltraPuck.Tests
                 }
             }
             Assert.That(chaosOffers, Is.InRange(picks / 6 - 40, picks / 6 + 40), "about one pick in six");
+            // one copy a match: once anyone holds a chaos card, nobody is offered it again (only the others)
+            var held = new System.Collections.Generic.List<int>();
+            foreach (var c in _lib.Cards) if (c.Chaos) held.Add(c.Index);
+            Assert.Greater(held.Count, 1, "needs two chaos cards");
+            var always = new Simulation(_sim.Map, new Tuning { ChaosOdds = 1 }, _lib);
+            for (var k = 0; k < 60; k++)
+            {
+                var s = always.NewGame(new[] { 0, 1 }, (uint)(k + 1));
+                always.GiveCard(s, s.Players[1], held[0]); // the other team has it
+                _lib.Recompute(s);
+                always.StartPicking(s, new[] { 0 });
+                var offer = s.Players[0].Offer;
+                Assert.AreNotEqual(held[0], offer[offer.Length - 1], "not again");
+                Assert.IsTrue(_lib.IsChaosIndex(offer[offer.Length - 1]), "another chaos card instead");
+                foreach (var c in held) always.GiveCard(s, s.Players[1], c);
+                _lib.Recompute(s);
+                always.StartPicking(s, new[] { 0 });
+                foreach (var c in s.Players[0].Offer) Assert.IsFalse(_lib.IsChaosIndex(c), "every chaos card is taken: none offered");
+            }
             // switched off: never
             var never = new Simulation(_sim.Map, new Tuning { ChaosOdds = 0 }, _lib);
             for (var k = 0; k < 60; k++)

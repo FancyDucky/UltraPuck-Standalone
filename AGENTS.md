@@ -87,6 +87,10 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **a chaos card is once a match, protocol 96.** `CardLibrary.ChaosRoll` leaves out
+  every chaos card anyone in the match already holds (they change the arena for everyone, so a second copy did nothing
+  for Giant Nets and doubled More Pucks' puck): once taken, only the other chaos cards can still fly in; with all taken,
+  none. Checked in `ChaosCardsComeOnTopOfAHandAboutOneTimeInSix`.
 - unreleased (Claude, 28 Nov 2026): **anyone can hold Start to end a card pick; bots can go after someone joins; the host
   can remove people.** `GameRunner.HostEndPick`: online, everyone in the match (not just the host) can hold the menu
   button; a client sends `PlayerInput.EndPick` with its own controls (the sim already ends the pick on anyone's).
