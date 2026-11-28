@@ -82,6 +82,11 @@ namespace UltraPuck.Core
             if (reset || list.Count != s.Rocks.Length) s.Rocks = list.ToArray();
         }
         public readonly Tuning T;
+        /// <summary>
+        /// Which bot brain each team's bots use: 1 (the newer one: going where the puck will be, one chaser a team) or 0
+        /// (the one before). Always 1 in the game; the bot-vs-bot scoreboard (BotBench) sets one team to 0 to compare.
+        /// </summary>
+        public readonly int[] BotBrain = { 1, 1 };
         /// <summary>The cards in play, or null for no cards (then no picks happen after goals).</summary>
         public readonly CardLibrary Cards;
 
@@ -1359,7 +1364,22 @@ namespace UltraPuck.Core
             for (int i = 0, n = s.Players.Length; i < n; i++)
             {
                 if (s.Phase == Phase.Picking) break;
-                HostCommand(s, InputOf(inputs, i).Pick);
+                var cmd = InputOf(inputs, i).Pick;
+                var before = s.Players.Length;
+                HostCommand(s, cmd);
+                // a bot taken out: its controls go too, so everyone after it plays their own this tick
+                if (s.Players.Length < before && cmd >= PlayerInput.RemoveBot && cmd < PlayerInput.RemoveBot + 8 && inputs != null)
+                {
+                    var gone = cmd - PlayerInput.RemoveBot;
+                    if (gone < inputs.Length)
+                    {
+                        var kept = new PlayerInput[inputs.Length - 1];
+                        for (int k = 0, j = 0; k < inputs.Length; k++) if (k != gone) kept[j++] = inputs[k];
+                        inputs = kept;
+                    }
+                    n = s.Players.Length;
+                    if (gone <= i) i--;
+                }
             }
 
             // the host's pause: everything stands still (presses made meanwhile don't count afterwards)
@@ -1606,6 +1626,7 @@ namespace UltraPuck.Core
             var now = 0L;
             for (var h = 0; h < n; h++) now = now * 9 + (s.Players[h].Pilot + 1);
             if (now != pilots && Cards != null) { Cards.Recompute(s); RockOwners(s); }
+            Bot.AssignRoles(this, s); // who chases for each team, once a tick before any bot thinks
             var inputs = new PlayerInput[n];
             for (var i = 0; i < n; i++)
             {

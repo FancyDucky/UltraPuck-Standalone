@@ -15,6 +15,7 @@ namespace UltraPuck.Core
         {
             if (sim == null || s == null || i < 0 || i >= s.Players.Length) return default(PlayerInput);
             var me = s.Players[i];
+            var smart = sim.BotBrain[me.Team & 1] >= 1; // (the newer brain: see Simulation.BotBrain)
             // a person catching up after joining part-way picks their own cards (while they're away, nobody picks for them)
             if (s.Phase != Phase.Picking && me.Offer.Length > 0 && !me.BotCatchUp) return default(PlayerInput);
             if (s.Phase == Phase.Picking || me.Offer.Length > 0) // the card screen, or a bot catching up after being added part-way
@@ -149,9 +150,22 @@ namespace UltraPuck.Core
                 target = OpenSpot(sim, s, i, attack, dir, wobble);
                 if (sim.Map.Route.Count > 1) target = RoutePart(sim.Map, s.Players[s.Carrier].Pos, me.Team == 0 ? sim.Map.Route.Count - 1 : 0, Fix.Ratio(3, 5) + wobble * Fix.Ratio(1, 10));
             }
-            else if (NearestToPuck(s, i))
+            else if (Chases(sim, s, i))
             {
                 target = s.PuckPos;
+                // where the puck will be: a loose one, the first spot on its path we can get to in time; someone
+                // carrying it, where they're skating to
+                if (smart)
+                {
+                    Fix eta;
+                    if (s.Carrier < 0) target = Intercept(sim, s, me, out eta);
+                    else
+                    {
+                        var c = s.Players[s.Carrier];
+                        eta = Fix.Min(TimeTo(sim, me, c.Pos), Fix.Ratio(2, 5));
+                        target = c.Pos + c.Vel * eta;
+                    }
+                }
                 var gap = (s.PuckPos - pos).SqrLength;
                 var close = gap < Fix.FromInt(9);
                 if (s.Carrier >= 0 && close && me.DashCharge >= Fix.One) b |= PlayerInput.ShootCheck;
@@ -160,7 +174,7 @@ namespace UltraPuck.Core
                 var far = s.Carrier >= 0 ? Fix.FromInt(64) : Fix.FromInt(25);
                 if (gap > far && me.DashCharge >= Fix.One) b |= (byte)(PlayerInput.ShootCheck | PlayerInput.DashMove);
             }
-            else if (s.Carrier < 0 && SupportRank(s, i) == 0 && sim.Map.Route.Count <= 1
+            else if (s.Carrier < 0 && SupportRank(sim, s, i) == 0 && sim.Map.Route.Count <= 1
                      && FixVec2.Dot(s.PuckPos - (attack + defend) * Fix.Half, attack - defend) > Fix.Zero)
             {
                 // a loose puck up in their half and a teammate going for it: push up ready for the pass, not back
@@ -488,10 +502,10 @@ namespace UltraPuck.Core
         }
 
         /// <summary>0 for the first teammate of <paramref name="i"/> who isn't the one going for the puck, 1 for the next, …</summary>
-        private static int SupportRank(GameState s, int i)
+        private static int SupportRank(Simulation sim, GameState s, int i)
         {
             var r = 0;
-            for (var j = 0; j < i; j++) if (s.Players[j].Team == s.Players[i].Team && !NearestToPuck(s, j)) r++;
+            for (var j = 0; j < i; j++) if (s.Players[j].Team == s.Players[i].Team && !Chases(sim, s, j)) r++;
             return r;
         }
 
@@ -567,6 +581,95 @@ namespace UltraPuck.Core
         }
 
         /// <summary>Is <paramref name="i"/> the closest of their team to the puck? (Ties go to the lower slot.)</summary>
+        /// <summary>The chaser, by the brain in use (the newer one: the team's role, else simply the nearest).</summary>
+        private static bool Chases(Simulation sim, GameState s, int j)
+        {
+            var team = s.Players[j].Team & 1;
+            if (sim.BotBrain[team] < 1) return NearestToPuck(s, j);
+            // no roles handed out for this team (bots thinking without Simulation.Route, e.g. some tests): the nearest
+            foreach (var q in s.Players) if ((q.Team & 1) == team && q.BotChase) return s.Players[j].BotChase;
+            return NearestToPuck(s, j);
+        }
+
+        /// <summary>
+        /// Roles, once a tick for both teams (the newer brain): each team sends one player after the puck, the one who
+        /// can get to it first (going where it will be). Whoever's already chasing keeps it unless someone else would get
+        /// there clearly sooner (a quarter), so two don't keep swapping. A person on the team counts only when they'd
+        /// clearly get there first (their teammates' bots leave it to them); nobody chases while their team has it.
+        /// </summary>
+        public static void AssignRoles(Simulation sim, GameState s)
+        {
+            for (var team = 0; team < 2; team++)
+            {
+                var best = -1;
+                var bestT = Fix.Zero;
+                var person = -1;
+                var personT = Fix.Zero;
+                var keepChaser = s.Carrier < 0 || s.Players[s.Carrier].Team != team;
+                for (var i = 0; i < s.Players.Length; i++)
+                {
+                    var p = s.Players[i];
+                    if ((p.Team & 1) != team) continue;
+                    if (!keepChaser || p.OutTime > Fix.Zero || p.HeldBy >= 0) continue;
+                    Fix t;
+                    if (s.Carrier < 0) Intercept(sim, s, p, out t);
+                    else t = TimeTo(sim, p, s.Players[s.Carrier].Pos);
+                    if (p.BotChase) t = t * Fix.Ratio(3, 4); // (already on it)
+                    if (Simulation.DriverOf(s, i) >= 0)
+                    {
+                        if (person < 0 || t < personT) { person = i; personT = t; }
+                        continue;
+                    }
+                    if (best < 0 || t < bestT || (t == bestT && (s.NextRandom() & 1) == 0)) { best = i; bestT = t; }
+                }
+                // a person who'd clearly get there first has it
+                if (person >= 0 && (best < 0 || personT * Fix.Ratio(10, 7) < bestT)) best = person;
+                for (var i = 0; i < s.Players.Length; i++)
+                    if ((s.Players[i].Team & 1) == team) s.Players[i].BotChase = i == best && keepChaser;
+            }
+        }
+
+        /// <summary>About how long <paramref name="p"/> takes to get to <paramref name="at"/> (top speed, a moment to turn and get going).</summary>
+        private static Fix TimeTo(Simulation sim, PlayerState p, FixVec2 at)
+        {
+            var top = sim.T.MoveForce * Fix.Max(Fix.Ratio(1, 10), p.Stats.MoveSpeed) / sim.T.Drag;
+            var d = Fix.Max(Fix.Zero, (at - p.Pos).Length - sim.RadiusOf(p) - sim.T.PuckRadius);
+            // already going that way: less to get going
+            var way = at - p.Pos;
+            var along = way.SqrLength.Raw > 0 ? FixVec2.Dot(p.Vel, way.Normalized) : Fix.Zero;
+            var start = Fix.Ratio(1, 4) * (Fix.One - Fix.Clamp01(along / top));
+            return d / top + start;
+        }
+
+        /// <summary>
+        /// A loose puck: the first spot along its path (slowing as it does) we can get to by the time it's there, about
+        /// 1.5 s ahead at most; how long that is in <paramref name="eta"/>. Stops at the boards (it bounces off them).
+        /// </summary>
+        private static FixVec2 Intercept(Simulation sim, GameState s, PlayerState me, out Fix eta)
+        {
+            var T = sim.T;
+            var pos = s.PuckPos;
+            var vel = s.PuckVel;
+            var step = T.Dt * 6;
+            var t = Fix.Zero;
+            // right by it: straight there
+            var close = sim.RadiusOf(me) + T.PuckRadius + Fix.FromInt(2);
+            if ((pos - me.Pos).SqrLength < close * close) { eta = TimeTo(sim, me, pos); return pos; }
+            for (var k = 0; k < 30; k++)
+            {
+                var need = TimeTo(sim, me, pos);
+                if (need <= t) { eta = t; return pos; }
+                if (vel.SqrLength < Fix.Ratio(1, 4)) break; // (stopped: it stays there)
+                var next = pos + vel * step;
+                if (!sim.Map.Inside(next) || sim.Map.Blocked(pos, next)) break; // (the boards or a net: it bounces off)
+                pos = next;
+                vel -= vel * Fix.Min(Fix.One, T.PuckDrag * step);
+                t += step;
+            }
+            eta = Fix.Max(t, TimeTo(sim, me, pos));
+            return pos;
+        }
+
         private static bool NearestToPuck(GameState s, int i)
         {
             var mine = (s.Players[i].Pos - s.PuckPos).SqrLength;

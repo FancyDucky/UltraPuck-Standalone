@@ -315,6 +315,8 @@ namespace UltraPuck.Core
         public Fix PortalCooldown;
         /// <summary>Going through a portal: the Id of the portal it's in (0 = none).</summary>
         public int PortalVia;
+        /// <summary>Bots: this player is the one their team sends after the puck (see Bot.AssignRoles).</summary>
+        public bool BotChase;
         /// <summary>
         /// Slot Machine: time left of the spin going on (0 = none), what it'll land on (<see cref="SlotWin"/>: 0 = nothing,
         /// else the prize), the three symbols it shows (4 bits each, for the drawing side), how many spins so far (so the
@@ -623,7 +625,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.ShockRadius); Mix(ref h, p.Refreshes); Mix(ref h, p.Swaps); Mix(ref h, p.SwapFrom); Mix(ref h, p.SwapTo); Mix(ref h, p.SwapCooldown);
                 Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.GoalPull ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps); Mix(ref h, p.Shoved);
                 Mix(ref h, p.ShovedBy); Mix(ref h, p.FastTime); Mix(ref h, p.Fast); Mix(ref h, p.ShockHold);
-                Mix(ref h, p.PortalNext); Mix(ref h, p.PortalCooldown); Mix(ref h, p.PortalVia);
+                Mix(ref h, p.PortalNext); Mix(ref h, p.PortalCooldown); Mix(ref h, p.PortalVia); Mix(ref h, p.BotChase ? 1 : 0);
                 Mix(ref h, p.SlotSpin); Mix(ref h, p.SlotWin); Mix(ref h, p.SlotReels); Mix(ref h, p.SlotSpins); Mix(ref h, p.SlotPrize);
                 Mix(ref h, p.SlotPrizeTime); Mix(ref h, p.SlotWait);
                 Mix(ref h, p.RageFill); Mix(ref h, p.RageNeed); Mix(ref h, p.RageTime); Mix(ref h, p.RageCooldown);

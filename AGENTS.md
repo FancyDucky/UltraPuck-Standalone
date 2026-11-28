@@ -87,6 +87,18 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **smarter bots (step 1): intercepts and one chaser a team; the bot-vs-bot
+  scoreboard. Protocol 102.** `Tests/BotBench.cs` ([Explicit]; `-testFilter UltraPuck.Tests.BotBench`,
+  `ULTRAPUCK_BENCH_SEEDS` for more): all-bot matches to 5, no cards, the newer brain on one team and the one before on
+  the other (`Simulation.BotBrain`, per team, 1 in the game), both ways round, Test and Hockey Rink, 1v1 to 3v3.
+  New brain: `Bot.Intercept` (a loose puck's path, slowing by PuckDrag, up to 1.5 s, stopping at the boards or a net:
+  the first spot we can reach in time, `TimeTo`; right by it, straight there) and leading a carrier by their
+  velocity; `Bot.AssignRoles` once a tick in `Simulation.Route` (and the menu's attract match): one chaser per team,
+  whoever gets there first, the one already chasing keeps it unless someone is a quarter quicker, a person counts only
+  if clearly quicker (`PlayerState.BotChase`, hashed); bots thinking without Route fall back to the nearest. Result
+  (8 seeds, 96 matches): new won 62, lost 33, drew 1, goals 381 - 282 (Hockey Rink 1v1 about even). Also fixed: taking
+  a bot out mid-match dropped its controls without moving the rest down for that tick (the next player played the
+  removed bot's controls). Next ideas: goalie / defence, shot and pass scoring, card use by situation.
 - unreleased (Claude, 28 Nov 2026): **Choose's deck A to Z, protocol 101.** `CardLibrary.DeckOffer` sorts by name
   (ordinal on upper case, so every PC agrees whatever its language; ties by index), not by position in the card file.
 - unreleased (Claude, 28 Nov 2026): **an enlarged side preview shows all of that player's cards.** Clicking a side

@@ -1992,6 +1992,7 @@ namespace UltraPuck.Game
             while (_attractAcc >= dt)
             {
                 _attractPrev = _attract.Clone();
+                Bot.AssignRoles(_attractSim, _attract); // (who chases, as in a match)
                 for (var i = 0; i < inputs.Length; i++) inputs[i] = Bot.Think(_attractSim, _attract, i);
                 _attractSim.Step(_attract, inputs);
                 _attractAcc -= dt;
