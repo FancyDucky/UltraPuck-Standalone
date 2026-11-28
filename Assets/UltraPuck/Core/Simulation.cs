@@ -986,7 +986,10 @@ namespace UltraPuck.Core
             }
         }
 
-        /// <summary>Head Start: the team with the most copies starts holding the puck (a tie: it starts in the middle).</summary>
+        /// <summary>
+        /// Head Start: the team with the most copies starts holding the puck (a tie: it starts in the middle), and the
+        /// extra pucks (More Pucks) too.
+        /// </summary>
         private void HeadStart(GameState s)
         {
             int a = 0, b = 0;
@@ -1008,6 +1011,41 @@ namespace UltraPuck.Core
             s.Carrier = best;
             s.PuckTeam = team;
             s.PuckPos = CarrySpot(s.Players[best]);
+
+            // More Pucks: the extra pucks go to that team too, one each to the next nearest (same order: Double Agents
+            // last, nobody raging). Nobody left to hold one: it waits loose, still, just beside the one with the puck.
+            var taken = new System.Collections.Generic.List<int> { best };
+            for (var k = 0; k < s.Rocks.Length; k++)
+            {
+                var rk = s.Rocks[k];
+                if (!rk.Puck) continue;
+                var next = -1;
+                var nextD = Fix.Zero;
+                for (var agents = 0; agents < 2 && next < 0; agents++)
+                    for (var i = 0; i < s.Players.Length; i++)
+                    {
+                        if (taken.Contains(i) || s.Players[i].Team != team || (s.Players[i].Stats.DoubleAgent > 0) != (agents == 1) || s.Players[i].RageTime > Fix.Zero) continue;
+                        var d = (s.Players[i].Pos - Map.PuckSpot).SqrLength;
+                        if (next < 0 || d < nextD) { next = i; nextD = d; }
+                    }
+                rk.Vel = FixVec2.Zero;
+                if (next >= 0)
+                {
+                    taken.Add(next);
+                    rk.Carrier = next;
+                    rk.Touch = next;
+                    rk.Pos = RockCarrySpot(s.Players[next], T.PuckRadius);
+                }
+                else
+                {
+                    var c = s.Players[best];
+                    var side = new FixVec2(-c.Facing.Y, c.Facing.X);
+                    var gap = RadiusOf(c) + T.PuckRadius + Fix.Ratio(3, 10);
+                    foreach (var at in new[] { c.Pos + side * gap, c.Pos - side * gap })
+                        if (Map.Inside(at) && RockFits(c.Pos, at, T.PuckRadius)) { rk.Pos = at; break; }
+                }
+                s.Rocks[k] = rk;
+            }
         }
 
         /// <summary>

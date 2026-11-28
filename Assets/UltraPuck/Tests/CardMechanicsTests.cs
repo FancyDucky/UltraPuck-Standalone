@@ -3397,6 +3397,32 @@ namespace UltraPuck.Tests
         }
 
         [Test]
+        public void HeadStartGivesTheExtraPucksToo()
+        {
+            var more = _lib.ById("ultrapuck.morepucks");
+            var head = _lib.ById("ultrapuck.headstart");
+            Assert.IsNotNull(more); Assert.IsNotNull(head);
+            // two on red with Head Start: one starts with the puck, the other with the extra puck
+            var s = Game(0, 0, 1);
+            _sim.GiveCard(s, s.Players[0], head.Index);
+            _sim.GiveCard(s, s.Players[2], more.Index);
+            _lib.Recompute(s);
+            _sim.FaceOff(s);
+            Assert.AreEqual(1, s.Rocks.Length);
+            Assert.IsTrue(s.Carrier == 0 || s.Carrier == 1, "red has the puck");
+            Assert.AreEqual(1 - s.Carrier, s.Rocks[0].Carrier, "and the other red player the extra puck");
+            // alone on red: the extra puck waits right beside them
+            s = Game(0, 1);
+            _sim.GiveCard(s, s.Players[0], head.Index);
+            _sim.GiveCard(s, s.Players[1], more.Index);
+            _lib.Recompute(s);
+            _sim.FaceOff(s);
+            Assert.AreEqual(0, s.Carrier);
+            Assert.AreEqual(-1, s.Rocks[0].Carrier);
+            Assert.Less((s.Rocks[0].Pos - s.Players[0].Pos).Length.ToDouble(), 2.0, "beside red's player");
+        }
+
+        [Test]
         public void ChaosCardsComeOnTopOfAHandAboutOneTimeInSix()
         {
             var chaosOffers = 0;
