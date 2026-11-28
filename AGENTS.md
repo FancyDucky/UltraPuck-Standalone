@@ -87,6 +87,8 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **Choose's deck A to Z, protocol 101.** `CardLibrary.DeckOffer` sorts by name
+  (ordinal on upper case, so every PC agrees whatever its language; ties by index), not by position in the card file.
 - unreleased (Claude, 28 Nov 2026): **an enlarged side preview shows all of that player's cards.** Clicking a side
   preview or stepping to it with the bumpers (`_bigMini`) brings every card of that player's stack to the middle,
   side by side at full size (Double Card's two), not just the top one. Screenshot `held-double-big`.

@@ -337,14 +337,19 @@ namespace UltraPuck.Core
 
         /// <summary>
         /// Choose: every card player <paramref name="i"/> may take right now (the usual limits: max, maxTeam, minTeam,
-        /// noBots, requires), minus <paramref name="off"/> and the card givers, in deck order.
+        /// noBots, requires), minus <paramref name="off"/> and the card givers, A to Z by name.
         /// </summary>
         public int[] DeckOffer(GameState s, int i, int[] off)
         {
             var not = new List<int>(CardGivers());
             if (off != null) not.AddRange(off);
             var deck = DrawOffer(s, i, Cards.Count, not.ToArray());
-            Array.Sort(deck);
+            // A to Z by name (ordinal on upper case, the same on every PC whatever its language; then by id)
+            Array.Sort(deck, (a, b) =>
+            {
+                var c = string.CompareOrdinal((Cards[a].Name ?? "").ToUpperInvariant(), (Cards[b].Name ?? "").ToUpperInvariant());
+                return c != 0 ? c : a.CompareTo(b);
+            });
             return deck;
         }
 

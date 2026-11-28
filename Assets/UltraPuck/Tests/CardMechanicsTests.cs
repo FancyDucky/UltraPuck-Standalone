@@ -3052,7 +3052,8 @@ namespace UltraPuck.Tests
                 Assert.IsFalse(System.Array.IndexOf(p.Offer, Id(bad)) >= 0, bad + " isn't in the deck");
             Assert.Contains(Id("ultrapuck.speedup"), p.Offer);
             Assert.Greater(p.Offer.Length, 10, "most of the deck");
-            for (var k = 1; k < p.Offer.Length; k++) Assert.Less(p.Offer[k - 1], p.Offer[k], "in deck order");
+            for (var k = 1; k < p.Offer.Length; k++)
+                Assert.LessOrEqual(string.CompareOrdinal(_lib.Cards[p.Offer[k - 1]].Name.ToUpperInvariant(), _lib.Cards[p.Offer[k]].Name.ToUpperInvariant()), 0, "A to Z by name");
             var want = System.Array.IndexOf(p.Offer, Id("ultrapuck.speedup"));
             var inputs = new PlayerInput[3];
             sim.Step(s, inputs); // the Choose pick let go
