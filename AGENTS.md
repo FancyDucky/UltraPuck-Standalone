@@ -87,6 +87,10 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **two on one PC: Choose's deck before the teammate's hand.** `CardScreen.NextPicker`
+  waits while a pick made on this PC hasn't been taken by the game yet (`PickInFlight`; no watching meanwhile either),
+  and deals follow-up picks (Choose's deck, New Hand's fresh hand: `PickKind` != 0) before anyone else's hand. Double
+  Card side preview: the lower card tipped 30 degrees, no shadow from the top one. Screenshot scene `coopchoose`.
 - unreleased (Claude, 28 Nov 2026): **picks are taken the moment they're made, protocol 98.** `Simulation.StepPicking`
   (not Team Vote): each pick is taken on its tick (same-tick picks in a random order); `OneATeamTaken` swaps a
   one-a-team card (Swap, Portal Gun) a teammate just took for a fresh card in the others' hands (a switched-off stand-in

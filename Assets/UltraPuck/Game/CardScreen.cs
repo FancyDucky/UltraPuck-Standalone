@@ -256,7 +256,7 @@ namespace UltraPuck.Game
                     {
                         var next = NextPicker(s);
                         if (next >= 0) { _watching = false; _teamVote = false; Deal(next, s.Players[next].Offer); }
-                        else if (_watched.Count == 0)
+                        else if (_watched.Count == 0 && !PickInFlight(s))
                         {
                             // nobody here choosing: watch one of the others choose (just one: the rest's picks come
                             // in small at the side, see Minis)
@@ -396,15 +396,32 @@ namespace UltraPuck.Game
             return false;
         }
 
+        /// <summary>A pick made on this PC that the game hasn't taken yet?</summary>
+        private bool PickInFlight(GameState s)
+        {
+            foreach (var kv in _ready)
+            {
+                if (kv.Key < 0 || kv.Key >= s.Players.Length) continue;
+                var q = s.Players[kv.Key];
+                int[] sent;
+                if (q.Offer.Length > 0 && q.Picked < 0 && _readyOffer.TryGetValue(kv.Key, out sent) && SameCards(sent, q.Offer)) return true;
+            }
+            return false;
+        }
+
         private int NextPicker(GameState s)
         {
-            for (var i = 0; i < s.Players.Length; i++)
-            {
-                var slot = SlotOf(i);
-                if (slot < 0 || slot >= Local.Slots.Count || Local.Slots[slot].Demo || _ready.ContainsKey(i)) continue;
-                var p = s.Players[i];
-                if (p.Offer.Length > 0 && p.Picked < 0) return i;
-            }
+            // a pick from this PC still on its way to the game: wait for it (it may lead straight on to more cards for
+            // the same person, Choose's deck or New Hand's fresh hand, which come before anyone else's turn)
+            if (PickInFlight(s)) return -1;
+            for (var pass = 0; pass < 2; pass++)
+                for (var i = 0; i < s.Players.Length; i++)
+                {
+                    var slot = SlotOf(i);
+                    if (slot < 0 || slot >= Local.Slots.Count || Local.Slots[slot].Demo || _ready.ContainsKey(i)) continue;
+                    var p = s.Players[i];
+                    if (p.Offer.Length > 0 && p.Picked < 0 && (pass == 1 || p.PickKind != 0)) return i;
+                }
             return -1;
         }
 

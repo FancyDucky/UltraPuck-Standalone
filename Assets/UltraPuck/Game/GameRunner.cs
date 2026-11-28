@@ -802,6 +802,34 @@ namespace UltraPuck.Game
                 yield return new WaitForSecondsRealtime(0.5f);
             }
 
+            if (want("coopchoose"))
+            {
+                // two people on this PC on one team: the first takes Choose, and their deck comes up before the second's hand
+                var choose = _cards != null ? _cards.ById("ultrapuck.choose") : null;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Name = "One" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Name = "Two" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Demo = true, Name = "Bot" });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                _sim.T.CardsOffered = 3;
+                _sim.T.ChaosOdds = 0;
+                yield return new WaitForSecondsRealtime(0.8f);
+                _sim.StartPicking(_state, new[] { 0, 1 });
+                if (choose != null)
+                {
+                    var offer = new List<int>(_state.Players[0].Offer);
+                    offer.Remove(choose.Index);
+                    offer[Mathf.Min(1, offer.Count - 1)] = choose.Index;
+                    _state.Players[0].Offer = offer.ToArray();
+                }
+                yield return new WaitForSecondsRealtime(1.2f);
+                _cardScreen.ShotConfirm = true;
+                yield return new WaitForSecondsRealtime(2.5f);
+                yield return Shot("coopchoose-deck");
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
             if (want("held"))
             {
                 // picked before a teammate: your cards stay (the one taken lit, the rest dimmed) while a bot teammate
