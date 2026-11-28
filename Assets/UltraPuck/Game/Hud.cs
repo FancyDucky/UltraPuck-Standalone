@@ -408,11 +408,13 @@ namespace UltraPuck.Game
         private void Scoreboard(float w, float h)
         {
             var n = _state.Players.Length;
-            const float rowH = 44f;
+            // near the top (the score bar is hidden meanwhile), so the corner cards below stay clear of it; rows a
+            // little tighter with many players
+            var rowH = n > 6 ? 34f : n > 4 ? 38f : 44f;
             var pw = Mathf.Min(900f, w - 40f);
             var ph = 120f + n * rowH + 8f;
             var x = w / 2f - pw / 2f;
-            var y = Mathf.Max(76f, h / 2f - ph / 2f);
+            var y = 20f;
             Ui.Box(new Rect(x, y, pw, ph), new Color(0.07f, 0.075f, 0.09f, 0.94f), 18f);
             // the score, in the teams' colours
             var big = Ui.Font(34, true, TextAnchor.MiddleCenter);
@@ -485,7 +487,7 @@ namespace UltraPuck.Game
             }
         }
 
-        private const float MiniW = 32f, MiniH = 44f, MiniGap = 5f;
+        private const float MiniW = 42f, MiniH = 58f, MiniGap = 6f;
 
         /// <summary>One corner's rows, from the bottom up; <paramref name="mirror"/>: the right-hand corner (name at the edge, cards inwards).</summary>
         private void CornerSide(System.Collections.Generic.List<int> lines, float h, bool mirror, ref string hover)
