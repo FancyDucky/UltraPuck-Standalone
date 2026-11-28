@@ -1349,11 +1349,13 @@ namespace UltraPuck.Game
                     tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.1f + m.Player) * 1.5f);
                     ts = MiniScale;
                     // the one under (Double Card's first): tipped over a little, peeking out
-                    if (!top) { tp += new Vector3(left ? 0.18f : -0.18f, -0.1f, 0.05f); tr += new Vector3(0f, 0f, left ? -16f : 16f); }
+                    if (!top) { tp += new Vector3(left ? 0.42f : -0.42f, -0.12f, 0.05f); tr += new Vector3(0f, 0f, left ? -30f : 30f); }
                 }
                 m.V.Step(tp, tr, ts, dt);
                 m.V.GlowTarget = 0f;
                 m.V.Apply(m.Player == _bigMini && top ? 3000 : 2000 + m.Player * 40 + (top ? 20 : 0), _cam);
+                // a stack: the top card casts no shadow (it would darken the one under it)
+                if (top && m.Of > 1 && m.Player != _bigMini) m.V.ShadowMat.SetFloat("_Alpha", 0f);
             }
         }
 
