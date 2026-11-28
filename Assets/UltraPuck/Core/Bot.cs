@@ -76,6 +76,20 @@ namespace UltraPuck.Core
                 // a wall between us and the goal, or a teammate who's open further ahead: pass instead of forcing a shot
                 var pressured = OpponentNear(s, i, Fix.FromInt(4));
                 var mate = PassTo(sim, s, i, attack, defend, covered, pressured);
+                // the net covered: a bank shot off the boards, if one gets round them (a teammate open too: either)
+                var bankAim = FixVec2.Zero;
+                var bankLen = Fix.Zero;
+                var banked = sim.BotBrain[me.Team & 1] >= 2 && covered && !(sim.Map.Route.Count > 1 && sim.Map.Blocked(pos, spot))
+                             && BankShot(sim, s, i, attack + across0 * (wobble * Fix.Ratio(3, 4)), out bankAim, out bankLen)
+                             && (mate < 0 || (roll % 2u) == 0u);
+                if (banked)
+                {
+                    aim = bankAim; // (the aim stick lines it up; we keep skating at the net meanwhile)
+                    aimed = FixVec2.Dot(me.Facing, aim) > Fix.Ratio(98, 100);
+                    covered = false;
+                    mate = -1;
+                    toGoal = aim * bankLen; // (how far it has to go, for when to let go)
+                }
                 var blocked = sim.Map.Route.Count > 1 && sim.Map.Blocked(pos, spot);
                 // a teammate with a much better look at the net than ours: give it to them
                 var better = mate >= 0 && !covered && LaneClear(s, s.Players[mate].Pos, attack, me.Team, lane)
@@ -95,7 +109,7 @@ namespace UltraPuck.Core
                     target = s.Players[mate].Pos;
                 }
                 // a net out on the ice: from beside or behind it, skate round to the front first (and don't shoot into its side)
-                if (shooting && net != null && net.HasFacing)
+                if (shooting && !banked && net != null && net.HasFacing)
                 {
                     // the map says which way the net opens: go round to that side
                     var f = net.Facing;
@@ -109,7 +123,7 @@ namespace UltraPuck.Core
                         aimed = false;
                     }
                 }
-                else if (shooting && (dir > Fix.Zero ? pos.X > attack.X - Fix.FromInt(2) : pos.X < attack.X + Fix.FromInt(2)))
+                else if (shooting && !banked && (dir > Fix.Zero ? pos.X > attack.X - Fix.FromInt(2) : pos.X < attack.X + Fix.FromInt(2)))
                 {
                     target = new FixVec2(attack.X - dir * Fix.FromInt(5), pos.Y >= Fix.Zero ? Fix.FromInt(5) : Fix.FromInt(-5));
                     aim = FixVec2.Zero;
@@ -131,7 +145,8 @@ namespace UltraPuck.Core
                 if (quick && (s.Tick & 1) == 0) { b |= PlayerInput.ShootCheck; shooting = false; }
                 if (shooting)
                 {
-                    var ready = aimed && me.Charge > Fix.Ratio(3, 10) && (toGoal.Length < range || me.Charge >= Fix.One);
+                    // (a bank shot goes the long way round: well charged)
+                    var ready = aimed && me.Charge > (banked ? Fix.Ratio(1, 2) : Fix.Ratio(3, 10)) && (toGoal.Length < range || me.Charge >= Fix.One);
                     // charging starts on a press, so if it hasn't started, let go for a tick and press again
                     if (!ready && (me.Charge > Fix.Zero || (s.Tick & 1) == 0)) b |= PlayerInput.ChargeBrake;
                 }
@@ -451,6 +466,61 @@ namespace UltraPuck.Core
         /// No opponent (or opponent's pylon) within <paramref name="width"/> of the straight line from
         /// <paramref name="from"/> to <paramref name="to"/> — a shot or pass along it would get through.
         /// </summary>
+        /// <summary>
+        /// A bank shot for carrier <paramref name="i"/> at <paramref name="spot"/> (in the net): off a straight stretch of
+        /// wall, both legs clear of walls and of the other team. The puck bounces off a wall face (half its thickness out)
+        /// at its radius, keeping its speed along the wall and losing some across it (PuckWallBounce), so it's aimed at
+        /// the spot mirrored across that line, as far behind it as the spot is in front divided by the bounce. The
+        /// shortest that works: the way to aim and how far the puck goes.
+        /// </summary>
+        private static bool BankShot(Simulation sim, GameState s, int i, FixVec2 spot, out FixVec2 aim, out Fix length)
+        {
+            aim = FixVec2.Zero;
+            length = Fix.Zero;
+            var me = s.Players[i];
+            var pos = me.Pos;
+            var T = sim.T;
+            var off = T.WallThickness * Fix.Half + T.PuckRadius;
+            var bounce = Fix.Max(Fix.Ratio(1, 5), T.PuckWallBounce);
+            var lane = T.PlayerRadius + T.PuckRadius;
+            var found = false;
+            foreach (var seg in sim.Map.Segments)
+            {
+                var d = seg.B - seg.A;
+                var len = d.Length;
+                if (len < Fix.FromInt(3)) continue; // (short bits: corners and curves)
+                var tdir = d / len;
+                var n = new FixVec2(-tdir.Y, tdir.X);
+                // the normal that points at us; we and the spot both in front of the wall
+                var hp = FixVec2.Dot(pos - seg.A, n);
+                if (hp < Fix.Zero) { n = -n; hp = -hp; }
+                var hs = FixVec2.Dot(spot - seg.A, n);
+                if (hp <= off + Fix.Ratio(1, 2) || hs <= off) continue;
+                // the line the puck's middle bounces off, and the spot's image behind it
+                var a0 = seg.A + n * off;
+                var image = spot - n * (hs - off) - n * ((hs - off) / bounce);
+                // where the line from us to the image meets the bounce line
+                var dirv = image - pos;
+                var den = FixVec2.Dot(dirv, n);
+                if (den >= Fix.Zero) continue;
+                var u = FixVec2.Dot(a0 - pos, n) / den;
+                if (u <= Fix.Zero || u >= Fix.One) continue;
+                var hit = pos + dirv * u;
+                var along = FixVec2.Dot(hit - a0, tdir);
+                if (along < Fix.Ratio(1, 2) || along > len - Fix.Ratio(1, 2)) continue; // (on the straight, not its ends)
+                // both legs: no wall (or net) in the way, nobody from the other team on them
+                var way1 = (hit - pos).Normalized;
+                var back = hit - way1 * Fix.Ratio(3, 10);
+                if (sim.Map.Blocked(pos, back) || !LaneClear(s, pos, hit, me.Team, lane)) continue;
+                var out1 = hit + n * Fix.Ratio(3, 10);
+                if (sim.Map.Blocked(out1, spot) || !LaneClear(s, hit, spot, me.Team, lane)) continue;
+                var total = (hit - pos).Length + (spot - hit).Length;
+                if (total > Fix.FromInt(40)) continue; // (too long a way round)
+                if (!found || total < length) { found = true; length = total; aim = way1; }
+            }
+            return found;
+        }
+
         private static bool LaneClear(GameState s, FixVec2 from, FixVec2 to, int team, Fix width)
         {
             var d = to - from;

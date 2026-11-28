@@ -87,6 +87,16 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **bots bank shots off the boards (brain 2), protocol 103.** `Bot.BankShot`: when the
+  net is covered (a teammate open too: half the time), each straight stretch of wall (3+ long) is tried: the spot in the
+  net mirrored across the line the puck's middle bounces off (the wall face plus the puck's radius), pushed out by
+  1 / PuckWallBounce (the puck keeps its speed along the wall, loses some across it); the bounce on the stretch, both
+  legs clear of walls / nets (`Map.Blocked`) and of the other team (`LaneClear`), 40 at most; the shortest wins. The aim
+  stick lines it up while the bot keeps skating at the net; let go at half charge or more. `Simulation.BotBrain` now
+  2 (bank shots) / 1 (intercepts, roles) / 0 (first), `Simulation.NewestBrain`; BotBench plays the newest against the
+  one before (`ULTRAPUCK_BENCH_OLD` for another). 2 vs 1, 96 matches: won 61, lost 32, drew 3, goals 386 - 276 (Hockey
+  1v1 16-0; Test Rink 1v1 about even). Tried and dropped: standing still to line it up (lost Test Rink 1v1 3-13), only
+  when not pressured / 28 long (no gain), a quick bank under pressure (worse).
 - unreleased (Claude, 28 Nov 2026): **smarter bots (step 1): intercepts and one chaser a team; the bot-vs-bot
   scoreboard. Protocol 102.** `Tests/BotBench.cs` ([Explicit]; `-testFilter UltraPuck.Tests.BotBench`,
   `ULTRAPUCK_BENCH_SEEDS` for more): all-bot matches to 5, no cards, the newer brain on one team and the one before on

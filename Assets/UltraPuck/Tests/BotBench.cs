@@ -20,11 +20,11 @@ namespace UltraPuck.Tests
         }
 
         /// <summary>One match to 5 goals (8 minutes at most): the new brain's goals, the old brain's goals.</summary>
-        private static int[] Play(MapDef map, int perTeam, uint seed, int newTeam)
+        private static int[] Play(MapDef map, int perTeam, uint seed, int newTeam, int oldBrain)
         {
             var sim = new Simulation(map, new Tuning { GoalsToWin = 5, TimeLimit = Fix.Zero, CardsAfterGoals = false }, null);
-            sim.BotBrain[newTeam] = 1;
-            sim.BotBrain[1 - newTeam] = 0;
+            sim.BotBrain[newTeam] = Simulation.NewestBrain;
+            sim.BotBrain[1 - newTeam] = oldBrain;
             var teams = new int[perTeam * 2];
             var bots = new bool[perTeam * 2];
             for (var k = 0; k < teams.Length; k++) { teams[k] = k % 2; bots[k] = true; }
@@ -39,6 +39,9 @@ namespace UltraPuck.Tests
         {
             int seeds;
             if (!int.TryParse(System.Environment.GetEnvironmentVariable("ULTRAPUCK_BENCH_SEEDS"), out seeds) || seeds < 1) seeds = 4;
+            // the brain to beat: the one before the newest, unless ULTRAPUCK_BENCH_OLD says another
+            int oldBrain;
+            if (!int.TryParse(System.Environment.GetEnvironmentVariable("ULTRAPUCK_BENCH_OLD"), out oldBrain)) oldBrain = Simulation.NewestBrain - 1;
             int wins = 0, losses = 0, draws = 0, gf = 0, ga = 0;
             var clock = System.Diagnostics.Stopwatch.StartNew();
             foreach (var file in new[] { "test-rink.json", "hockey-rink.json" })
@@ -50,7 +53,7 @@ namespace UltraPuck.Tests
                     for (var seed = 1; seed <= seeds; seed++)
                         for (var side = 0; side < 2; side++)
                         {
-                            var r = Play(map, size, (uint)(seed * 7919 + size * 31), side);
+                            var r = Play(map, size, (uint)(seed * 7919 + size * 31), side, oldBrain);
                             f += r[0]; a += r[1];
                             if (r[0] > r[1]) w++; else if (r[0] < r[1]) l++; else d++;
                         }
@@ -58,7 +61,7 @@ namespace UltraPuck.Tests
                     wins += w; losses += l; draws += d; gf += f; ga += a;
                 }
             }
-            var line = "BOTBENCH new brain vs old: won " + wins + ", lost " + losses + ", drew " + draws + "; goals " + gf + " - " + ga
+            var line = "BOTBENCH brain " + Simulation.NewestBrain + " vs " + oldBrain + ": won " + wins + ", lost " + losses + ", drew " + draws + "; goals " + gf + " - " + ga
                 + " (" + clock.Elapsed.TotalSeconds.ToString("0") + " s)";
             TestContext.WriteLine(line);
             Debug.Log(line);

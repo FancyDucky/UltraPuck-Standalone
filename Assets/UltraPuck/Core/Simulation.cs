@@ -83,10 +83,12 @@ namespace UltraPuck.Core
         }
         public readonly Tuning T;
         /// <summary>
-        /// Which bot brain each team's bots use: 1 (the newer one: going where the puck will be, one chaser a team) or 0
-        /// (the one before). Always 1 in the game; the bot-vs-bot scoreboard (BotBench) sets one team to 0 to compare.
+        /// Which bot brain each team's bots use, newest highest: 2 bank shots off the boards, 1 going where the puck
+        /// will be and one chaser a team, 0 the first. Always the newest in the game (<see cref="NewestBrain"/>); the
+        /// bot-vs-bot scoreboard (BotBench) sets one team to an older one to compare.
         /// </summary>
-        public readonly int[] BotBrain = { 1, 1 };
+        public readonly int[] BotBrain = { NewestBrain, NewestBrain };
+        public const int NewestBrain = 2;
         /// <summary>The cards in play, or null for no cards (then no picks happen after goals).</summary>
         public readonly CardLibrary Cards;
 
