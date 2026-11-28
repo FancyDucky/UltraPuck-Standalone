@@ -56,6 +56,8 @@ namespace UltraPuck.Game
         public Func<int, int> TeamBots;
         public Func<int, int> TeamCount;
         public Func<int, string> TeamName;
+        /// <summary>Online host: the game, for the match settings' "Remove a player".</summary>
+        public Func<UltraPuck.Core.Net.NetSession> HostSession;
         /// <summary>Match settings: send a host command (kick-off, score fix), and the score as it stands.</summary>
         public Action<byte> HostCommand;
         public Func<int, int> Score;
@@ -246,6 +248,14 @@ namespace UltraPuck.Game
                             Hint = "Right adds a bot to this team, left takes one off. Straight away.",
                         });
                     }
+                var hosting = HostSession != null ? HostSession() : null;
+                if (hosting != null)
+                    _rows.Add(new Row
+                    {
+                        Label = "Remove a player", Value = () => MainMenu.KickRow.Value(hosting), Step = MainMenu.KickRow.Step,
+                        Press = () => MainMenu.KickRow.Press(hosting),
+                        Hint = "Left / right picks someone on another PC; press twice to remove them from the game. A bot plays for them for a moment, then their player goes.",
+                    });
                 MatchRows();
                 _rows.Add(Button("Back", ToPause));
                 return;

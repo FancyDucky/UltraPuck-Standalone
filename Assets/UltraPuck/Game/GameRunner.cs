@@ -157,6 +157,7 @@ namespace UltraPuck.Game
             _menus.Score = t => _state != null ? _state.Score[t & 1] + PendingScore(t) : 0;
             _menus.AddBotNow = AddBotNow;
             _menus.RemoveBotNow = RemoveBotNow;
+            _menus.HostSession = () => _mode == Mode.Online && _session != null && _session.IsHost ? _session : null;
             _menus.CanRemoveBot = CanRemoveBot;
             _menus.TeamBots = t => { var n = 0; if (_state != null) foreach (var p in _state.Players) if (p.Bot && (p.Team & 1) == (t & 1)) n++; return n; };
             _menus.TeamCount = t => { var n = 0; if (_state != null) foreach (var p in _state.Players) if (p.Team == t) n++; return n; };
@@ -3014,7 +3015,7 @@ namespace UltraPuck.Game
         private bool _shotBoard; // screenshots: the scoreboard as if View were held
 
         /// <summary>Match settings (the host): kick-off or a score fix. Online it goes with the host's controls, one a tick.</summary>
-        // the host holding the menu button through a card pick ends it (someone stuck, or no time limit)
+        // anyone holding the menu button through a card pick ends it (someone stuck, or no time limit)
         private const float EndPickHold = 1.5f;
         private float _endPickHeld;
         private bool _endPickSent;
@@ -3022,7 +3023,7 @@ namespace UltraPuck.Game
         private void HostEndPick(bool playing)
         {
             var can = playing && _state != null && _state.Phase == Phase.Picking && !_free && !_menus.IsOpen
-                && (_mode == Mode.Match || (_mode == Mode.Online && _session != null && _session.IsHost));
+                && (_mode == Mode.Match || (_mode == Mode.Online && _session != null));
             if (!can) { _endPickHeld = 0f; _endPickSent = false; _cardScreen.HostEnd = -1f; return; }
             if (!_local.MenuHeld()) { _endPickHeld = 0f; _endPickSent = false; }
             else if (!_endPickSent)
@@ -3032,8 +3033,10 @@ namespace UltraPuck.Game
                 {
                     _endPickSent = true;
                     Sound.Select();
-                    Debug.Log("Ultra Puck cards: the host ended the pick");
-                    HostCommand(PlayerInput.EndPick);
+                    Debug.Log("Ultra Puck cards: ended the pick (held the menu button)");
+                    // (any player's End the pick counts, so someone who isn't the host sends it with their own controls)
+                    if (_mode == Mode.Online && !_session.IsHost) _pendingCmds.Enqueue(PlayerInput.EndPick);
+                    else HostCommand(PlayerInput.EndPick);
                 }
             }
             _cardScreen.HostEnd = _endPickSent ? 1f : Mathf.Clamp01(_endPickHeld / EndPickHold);
@@ -3101,7 +3104,10 @@ namespace UltraPuck.Game
             if (_mode == Mode.Online)
             {
                 if (_session == null || !_session.IsHost) return;
-                _pendingCmds.Enqueue(team == 1 ? RemoveBlueSoon : RemoveRedSoon);
+                // a bot with only bots after it goes with the host's controls; one with a person after it (someone who
+                // joined part-way) at the next re-seat, which hands every PC the game with it gone
+                if (OnlineBotToRemove(team) >= 0) _pendingCmds.Enqueue(team == 1 ? RemoveBlueSoon : RemoveRedSoon);
+                else _session.BotLeavesAtReseat(team);
                 return;
             }
             for (var i = Mathf.Min(_local.Slots.Count, _state.Players.Length) - 1; i >= 0; i--)
@@ -3120,15 +3126,27 @@ namespace UltraPuck.Game
         private bool CanRemoveBot(int team)
         {
             if (_state == null || _state.Phase == Phase.Picking) return false;
-            if (_mode == Mode.Online) return _session != null && _session.IsHost && OnlineBotToRemove(team) >= 0;
+            if (_mode == Mode.Online) return _session != null && _session.IsHost && (OnlineBotToRemove(team) >= 0 || OnlineBots(team) > _session.BotsLeaving(team));
             for (var i = 0; i < _local.Slots.Count && i < _state.Players.Length; i++)
                 if (_local.Slots[i].Demo && (_state.Players[i].Team & 1) == (team & 1)) return true;
             return false;
         }
 
+        /// <summary>Online: how many bots are on <paramref name="team"/> (seated bots, not people the bot plays while they're away).</summary>
+        private int OnlineBots(int team)
+        {
+            if (_session == null || _state == null) return 0;
+            var seats = _session.Seats;
+            var n = 0;
+            for (var i = 0; i < _state.Players.Length; i++)
+                if ((i >= seats.Count || seats[i].Bot) && _state.Players[i].Bot && (_state.Players[i].Team & 1) == (team & 1)) n++;
+            return n;
+        }
+
         /// <summary>
         /// Online: the last bot on <paramref name="team"/> that can go, or -1. Only one with nothing but bots after it, so
-        /// no person's player number moves (every PC lines its people up by number).
+        /// no person's player number moves (every PC lines its people up by number). Any other bot goes at a re-seat
+        /// (<see cref="NetSession.BotLeavesAtReseat"/>).
         /// </summary>
         private int OnlineBotToRemove(int team)
         {

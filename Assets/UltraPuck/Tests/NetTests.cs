@@ -478,6 +478,82 @@ namespace UltraPuck.Tests
             foreach (var x in all) Assert.AreEqual(-1, x.DesyncTick, x.Problem);
         }
 
+        /// <summary>
+        /// Someone joins part-way, so the bot is no longer last: the host can still take the bot out (at a re-seat, every
+        /// PC handed the same game), and can remove the newcomer, who's told and can't come back on that account.
+        /// </summary>
+        [Test, Timeout(300000)]
+        public void TheHostTakesOutABotBeforeSomeoneWhoJoinedAndRemovesThem()
+        {
+            var map = Rink();
+            var cards = Cards();
+            System.Func<Simulation> make = () => new Simulation(map, null, cards);
+            var net = new FakeNetwork(53) { Latency = 0.03, Jitter = 0.02, Loss = 0.05 };
+            var host = NetSession.Host(net.Add(), make, 4u);
+            var a = NetSession.Join(net.Add(), make, 4u);
+            host.SetLocalPlayers(new[] { new KeyValuePair<string, int>("H", NetSession.Look(0, 0)) });
+            a.SetLocalPlayers(new[] { new KeyValuePair<string, int>("A", NetSession.Look(1, 1)) });
+            host.Bots = 1;
+            const double dt = 1.0 / 120.0;
+            var now = 0.0;
+            var all = new List<NetSession> { host, a };
+            System.Action tick = () =>
+            {
+                now += dt; net.Advance(dt);
+                foreach (var x in all) x.Update(now);
+                for (var i = 0; i < all.Count; i++)
+                    if (all[i].Current == NetSession.Stage.Playing && all[i].Match != null)
+                        all[i].Step(new[] { Person(40 + i, all[i].Match.LocalInputTick) });
+            };
+            for (var k = 0; k < 600 && a.Seats.Count != 3; k++) tick();
+            host.StartMatch(12u);
+            for (var k = 0; k < 600 && a.Current != NetSession.Stage.Playing; k++) tick();
+            for (var k = 0; k < 2 * 120; k++) tick();
+
+            // B joins part-way: their seat is after the bot's
+            var b = NetSession.Join(net.Add(), make, 4u);
+            all.Add(b);
+            b.SetLocalPlayers(new[] { new KeyValuePair<string, int>("B", NetSession.Look(1, 2, true)) });
+            for (var k = 0; k < 1200 && b.Current != NetSession.Stage.Playing; k++) tick();
+            Assert.AreEqual(NetSession.Stage.Playing, b.Current);
+            Assert.AreEqual(4, host.Match.State.Players.Length);
+            var botSeat = host.Seats.FindIndex(x => x.Bot);
+            Assert.Less(botSeat, b.PlayerOf(0), "the bot isn't last any more");
+            for (var k = 0; k < 2 * 120; k++) tick();
+
+            // the host takes the bot out
+            host.BotLeavesAtReseat(host.Seats[botSeat].Team);
+            for (var k = 0; k < 1200 && host.Match.State.Players.Length != 3; k++) tick();
+            Assert.AreEqual(3, host.Match.State.Players.Length, "the bot is gone");
+            Assert.IsFalse(host.Seats.Exists(x => x.Bot), "no bot seat left");
+            Assert.AreEqual(0, host.Bots, "nor in the lobby");
+            for (var k = 0; k < 2 * 120; k++) tick();
+            Assert.AreEqual(NetSession.Stage.Playing, b.Current, "B plays on");
+            Assert.GreaterOrEqual(b.PlayerOf(0), 0);
+
+            // the host removes B
+            var list = host.Kickable();
+            var bPeer = list.Find(x => x.Value == "B").Key;
+            Assert.Greater(bPeer, 0, "B is in the list");
+            host.Kick(bPeer);
+            for (var k = 0; k < 600 && b.Current != NetSession.Stage.Closed; k++) tick();
+            Assert.AreEqual(NetSession.Stage.Closed, b.Current, "B is out");
+            StringAssert.Contains("removed", b.Problem);
+            all.Remove(b);
+            for (var k = 0; k < 1200 && host.Match.State.Players.Length != 2; k++) tick();
+            Assert.AreEqual(2, host.Match.State.Players.Length, "B's player is gone");
+            Assert.IsFalse(host.Kickable().Exists(x => x.Value == "B"));
+
+            // the two left settle on the same game
+            var settle = host.Match.Tick;
+            for (var k = 0; k < 3000 && (host.Match.Confirmed < settle || a.Match.Confirmed < settle); k++) tick();
+            for (var k = 0; k <= Rollback.RewindEvery; k++) tick();
+            Assert.AreEqual(host.Layout, a.Layout);
+            Assert.AreEqual(host.Match.SavedAt(settle).Checksum(), a.Match.SavedAt(settle).Checksum(), "still the same game");
+            Assert.AreEqual(-1, host.DesyncTick, host.Problem);
+            Assert.AreEqual(-1, a.DesyncTick, a.Problem);
+        }
+
         /// <summary>A client asks for their side's colour to change: the host recolours the whole side (bots too) and tells everyone.</summary>
         [Test]
         public void AnyoneCanRecolourTheirSide()

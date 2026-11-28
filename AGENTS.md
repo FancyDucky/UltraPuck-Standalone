@@ -87,6 +87,18 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **anyone can hold Start to end a card pick; bots can go after someone joins; the host
+  can remove people.** `GameRunner.HostEndPick`: online, everyone in the match (not just the host) can hold the menu
+  button; a client sends `PlayerInput.EndPick` with its own controls (the sim already ends the pick on anyone's).
+  Removing a bot online: the quick way (`OnlineBotToRemove`, with the host's controls) only works for a bot with
+  nothing but bots after it; otherwise `NetSession.BotLeavesAtReseat(team)` takes the team's last bot out at the next
+  re-seat (handed to every PC, like a join), so "remove bot" works after someone joins part-way. Kicking:
+  `NetSession.Kickable()` / `Kick(peer)`: the PC is told ("The host removed you from the game.", via Refuse) and
+  dropped; mid-match a bot plays their players until the re-seat takes their seats out (`_kickedPeers`); their Steam
+  accounts are turned away for the rest of the session (`_kickedAccounts`; by IP they could rejoin). Menu row
+  "Remove a player" (press twice) in the lobby's host options and the pause menu's match settings
+  (`MainMenu.KickRow`). Test `TheHostTakesOutABotBeforeSomeoneWhoJoinedAndRemovesThem`. No rules or message changes,
+  protocol unchanged. 300 tests.
 - 0.1.77 (Claude, 28 Nov 2026): **released** (chaos cards, Giant Nets, More Pucks, corner drop, pure black,
   card mouse-leave, arena maker / custom arenas). Chaos card sound defaults to H, the short stinger
   (`Settings.ChaosSound` 8). Release.ps1's `gh release create` failed on the notes (Windows PowerShell 5.1 splits a

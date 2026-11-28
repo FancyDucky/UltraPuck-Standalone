@@ -29,6 +29,53 @@ namespace UltraPuck.Game
         private string _address;
         private bool _typing;
 
+        /// <summary>
+        /// The host's "Remove a player" row (lobby options, and the pause menu's match settings): left / right go through
+        /// the other PCs in the game, a press asks "press again", the second press removes them.
+        /// </summary>
+        internal static class KickRow
+        {
+            private static int _pick;
+            private static int _armedPeer = -1;
+            private static float _armedAt = -10f;
+
+            private static bool Pick(NetSession s, out KeyValuePair<int, string> who)
+            {
+                who = default(KeyValuePair<int, string>);
+                var list = s != null ? s.Kickable() : new List<KeyValuePair<int, string>>();
+                if (list.Count == 0) return false;
+                _pick = ((_pick % list.Count) + list.Count) % list.Count;
+                who = list[_pick];
+                return true;
+            }
+
+            public static string Value(NetSession s)
+            {
+                KeyValuePair<int, string> who;
+                if (!Pick(s, out who)) return "Nobody else here";
+                var armed = _armedPeer == who.Key && Time.unscaledTime - _armedAt < 3f;
+                return armed ? "Press again to remove " + who.Value : who.Value;
+            }
+
+            public static void Step(int d) { _pick += d; _armedPeer = -1; }
+
+            public static void Press(NetSession s)
+            {
+                KeyValuePair<int, string> who;
+                if (!Pick(s, out who)) { Sound.Deny(); return; }
+                if (_armedPeer == who.Key && Time.unscaledTime - _armedAt < 3f)
+                {
+                    Sound.Select();
+                    s.Kick(who.Key);
+                    _armedPeer = -1;
+                    return;
+                }
+                _armedPeer = who.Key;
+                _armedAt = Time.unscaledTime;
+                Sound.Move();
+            }
+        }
+
         private sealed class Row
         {
             public string Label, Detail;
@@ -213,6 +260,7 @@ namespace UltraPuck.Game
                     if (s.IsHost)
                     {
                         if (SteamNet.InLobby) _rows.Add(new Row { Label = "Invite Steam friends", Press = InviteFriends });
+                        _rows.Add(new Row { Label = "Remove a player", Value = () => KickRow.Value(s), Step = KickRow.Step, Press = () => KickRow.Press(s) });
                         _rows.Add(Cycle("Match mode", new[] { "Score", "Time" }, () => Settings.MatchMode, v => Settings.MatchMode = v));
                         _rows.Add(new Row
                         {

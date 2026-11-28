@@ -679,6 +679,8 @@ namespace UltraPuck.Core.Net
                     if (!IsHost || l == null || l.Peer <= 0) return;
                     _styles[l.Peer] = ReadStyles(r);
                     _accounts[l.Peer] = ReadAccounts(r);
+                    foreach (var a in _accounts[l.Peer])
+                        if (a != 0 && _kickedAccounts.Contains(a)) { Kick(l.Peer); return; } // the host removed them earlier
                     SendStyleTable();
                     break;
                 case Msg.StyleTable:
@@ -1128,6 +1130,72 @@ namespace UltraPuck.Core.Net
         /// <summary>Host: a bot was taken out on this tick or later; seats can't be moved about until then.</summary>
         private int _botLeftTick = -1;
 
+        /// <summary>Host: PCs the host removed (their seats go at the next re-seat), and their Steam accounts (kept out).</summary>
+        private readonly HashSet<int> _kickedPeers = new HashSet<int>();
+        private readonly HashSet<ulong> _kickedAccounts = new HashSet<ulong>();
+
+        /// <summary>Host: the other PCs in the game that can be removed (peer number, their players' names).</summary>
+        public List<KeyValuePair<int, string>> Kickable()
+        {
+            var list = new List<KeyValuePair<int, string>>();
+            if (!IsHost) return list;
+            var peers = new List<Link>();
+            foreach (var l in _links.Values) if (l.Peer > 0) peers.Add(l);
+            peers.Sort((a, b) => a.Peer.CompareTo(b.Peer));
+            foreach (var l in peers)
+            {
+                var names = new List<string>();
+                foreach (var p in l.Players) names.Add(string.IsNullOrEmpty(p.Key) ? "Player" : p.Key);
+                list.Add(new KeyValuePair<int, string>(l.Peer, names.Count > 0 ? string.Join(" & ", names.ToArray()) : "Someone joining"));
+            }
+            return list;
+        }
+
+        /// <summary>
+        /// Host: remove the PC <paramref name="peer"/> from the game. They're told and dropped; in a match a bot plays
+        /// their players until the next re-seat takes their seats out (handed to every PC, like someone going to watch).
+        /// Their Steam accounts can't come back into this game.
+        /// </summary>
+        public void Kick(int peer)
+        {
+            if (!IsHost || peer <= 0) return;
+            Link l = null;
+            foreach (var x in _links.Values) if (x.Peer == peer) l = x;
+            if (l == null) return;
+            ulong[] acc;
+            if (_accounts.TryGetValue(peer, out acc)) foreach (var a in acc) if (a != 0) _kickedAccounts.Add(a);
+            var names = new List<string>();
+            foreach (var p in l.Players) names.Add(p.Key);
+            _kickedPeers.Add(peer);
+            Send(l.Conn, new Writer(Msg.Refuse).Str("The host removed you from the game.").ToArray());
+            Lost(l, "was removed by the host");
+            Notice = (names.Count > 0 ? string.Join(" & ", names.ToArray()) : "A player") + (names.Count > 1 ? " were" : " was") + " removed from the game.";
+            if (Current == Stage.Playing && Match != null) _seatsDirty = true;
+        }
+
+        /// <summary>Host: bots to take out at the next re-seat, by team (one entry each).</summary>
+        private readonly List<int> _botsLeaving = new List<int>();
+
+        /// <summary>
+        /// Host, mid-match: take a bot off <paramref name="team"/> at the next re-seat (the last one on that team). For a
+        /// bot with a person after it (someone who joined part-way): taking it out moves their player number, so it's done
+        /// the way a join is, on a settled tick handed to every PC.
+        /// </summary>
+        public void BotLeavesAtReseat(int team)
+        {
+            if (!IsHost || Match == null) return;
+            _botsLeaving.Add(team & 1);
+            _seatsDirty = true;
+        }
+
+        /// <summary>Host: how many bots on <paramref name="team"/> are waiting to be taken out at the next re-seat.</summary>
+        public int BotsLeaving(int team)
+        {
+            var n = 0;
+            foreach (var t in _botsLeaving) if (t == (team & 1)) n++;
+            return n;
+        }
+
         /// <summary>
         /// Host, mid-match: give the match the seats everyone's players want now. Someone in the lobby who has readied up
         /// gets a new seat (joining the match part-way); someone whose colour is now the other side's changes team;
@@ -1160,10 +1228,34 @@ namespace UltraPuck.Core.Net
             for (var i = 0; i < seats.Count; i++) map.Add(i);
             var news = new List<string>();
 
-            // changing team, or going to watch
+            // bots the host took out (the last on their team each; bots added during the match have seats here too)
+            foreach (var team in _botsLeaving)
+                for (var i = seats.Count - 1; i >= 0; i--)
+                {
+                    if (!seats[i].Bot || !st.Players[i].Bot || (st.Players[i].Team & 1) != team) continue;
+                    var b = 0;
+                    for (var j = 0; j < i; j++) if (seats[j].Bot) b++;
+                    if (b < _bots.Count) _bots.RemoveAt(b); // (the lobby's bots are in the match's order)
+                    sim.RemovePlayer(st, i);
+                    seats.RemoveAt(i);
+                    map.RemoveAt(i);
+                    news.Add("A bot left the match.");
+                    break;
+                }
+            _botsLeaving.Clear();
+
+            // changing team, or going to watch (and the seats of PCs the host removed)
             for (var i = seats.Count - 1; i >= 0; i--)
             {
                 var seat = seats[i];
+                if (!seat.Bot && _kickedPeers.Contains(seat.Peer))
+                {
+                    news.Add(seat.Name + " was removed.");
+                    sim.RemovePlayer(st, i);
+                    seats.RemoveAt(i);
+                    map.RemoveAt(i);
+                    continue;
+                }
                 if (seat.Bot || seat.Away) continue;
                 var list = PlayersOf(seat.Peer);
                 if (list == null) continue; // (their PC is gone: Lost marks them away)
