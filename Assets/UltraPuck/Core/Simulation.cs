@@ -1432,17 +1432,7 @@ namespace UltraPuck.Core
                     {
                         inPortal = PortalPass(s, ref p.Pos, ref p.Vel, RadiusOf(p), ref p.PortalVia, out jumpedP, out nIn, out nOut);
                         // out the other side facing the way you went in (turned with the portals)
-                        if (jumpedP)
-                        {
-                            p.Facing = PortalTurn(p.Facing, nIn, nOut).Normalized; p.DashDir = PortalTurn(p.DashDir, nIn, nOut);
-                            // a person holding a direction: their controls turn with them (see Control)
-                            if (DriverOf(s, Array.IndexOf(s.Players, p)) >= 0 && p.LastMove.SqrLength > Fix.Ratio(1, 25))
-                            {
-                                p.PortalTurned = true;
-                                p.TurnIn = nIn; p.TurnOut = nOut;
-                                p.TurnHeld = p.LastMove;
-                            }
-                        }
+                        if (jumpedP) { p.Facing = PortalTurn(p.Facing, nIn, nOut).Normalized; p.DashDir = PortalTurn(p.DashDir, nIn, nOut); }
                     }
                     else p.PortalVia = 0;
                     CollideWalls(ref p.Pos, ref p.Vel, RadiusOf(p), T.WallBounce, s, inPortal);
@@ -1715,16 +1705,6 @@ namespace UltraPuck.Core
             var move = input.Move;
             var aim = input.Aim;
             var deadzone = Fix.Ratio(1, 5);
-            // out of a portal: still holding the way you went in (within ~35 degrees) carries on turned with the portal,
-            // away from it; let go, or push another way, and your controls are your own again
-            if (p.PortalTurned)
-            {
-                var still = DriverOf(s, i) >= 0 && move.SqrLength > deadzone * deadzone && p.TurnHeld.SqrLength.Raw > 0
-                    && FixVec2.Dot(move.Normalized, p.TurnHeld.Normalized) > Fix.Ratio(82, 100);
-                if (still) move = PortalTurn(move, p.TurnIn, p.TurnOut);
-                else p.PortalTurned = false;
-            }
-            p.LastMove = input.Move;
             if (aim.SqrLength > deadzone * deadzone) TurnTowards(p, aim.Normalized, T.AimTurnRate * dt);
             else if (move.SqrLength > deadzone * deadzone) TurnTowards(p, move.Normalized, T.TurnRate * dt);
 

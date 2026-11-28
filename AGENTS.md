@@ -87,6 +87,10 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **portal control turn taken out again, protocol 100.** The owner found it more
+  confusing (up on the stick no longer up on screen). Portals work as before (98): only your facing turns with you.
+  Ideas left for later if it still feels rough: the exit portal a wall for that player for ~0.5 s, a short steering
+  grace with an exit push, coming out a body length further, a flash at the exit, no side-by-side portals.
 - unreleased (Claude, 28 Nov 2026): **your name pulses at the kick-off.** `Hud.NameTags`: a tag with `Mine` (a person
   playing on this PC, `IsLocalPerson`) grows and shrinks twice in the first 1.6 s of the countdown (after a card pick,
   once the cards have left: `CountdownTime - PhaseTime`), up to 1.8x, always at full strength. Display only.
