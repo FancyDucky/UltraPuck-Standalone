@@ -454,6 +454,20 @@
       "stats": { "ExtraPucks": "+1" }
     },
     {
+      "id": "ultrapuck.doubledip",
+      "name": "Double Dip",
+      "tier": "B",
+      "chaos": true,
+      "pureBlack": true,
+      "max": 1,
+      "color": "#FFFFFF",
+      "flavor": "Seconds, anyone?",
+      "face": [
+        { "label": "After every goal", "value": "[gold]Both teams pick[/]" }
+      ],
+      "stats": { "DoubleDip": "+1" }
+    },
+    {
       "id": "ultrapuck.lasersight",
       "name": "Laser Sights",
       "tier": "C",
@@ -469,18 +483,18 @@
       "stats": { "LaserSight": "+1" }
     },
     {
-      "id": "ultrapuck.movementtech",
-      "name": "Movement Tech",
+      "id": "ultrapuck.wavedash",
+      "name": "Wavedash",
       "tier": "B",
       "glare": false,
       "max": 1,
       "color": "#33C7F2",
-      "flavor": "Wavedash this",
+      "flavor": "Movement tech!",
       "face": [
         { "label": "Pick up the puck", "value": "[good]Dashes refill[/]" }
       ],
       "text": "[note]Stealing it and extra pucks count too.[/]",
-      "stats": { "MovementTech": "+1" }
+      "stats": { "Wavedash": "+1" }
     }
   ]
 }

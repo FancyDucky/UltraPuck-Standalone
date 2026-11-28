@@ -98,7 +98,17 @@ namespace UltraPuck.Core
             BaseMap = map;
             T = tuning ?? new Tuning();
             Cards = cards;
+            // Wavedash for everyone: nobody needs the card, so it's never offered
+            var wave = T.WavedashForAll && cards != null ? cards.ById(WavedashId) : null;
+            if (wave != null && Array.IndexOf(T.CardsOff ?? new int[0], wave.Index) < 0)
+            {
+                var off = new System.Collections.Generic.List<int>(T.CardsOff ?? new int[0]) { wave.Index };
+                T.CardsOff = off.ToArray();
+            }
         }
+
+        /// <summary>The Wavedash card (the match rule <see cref="Tuning.WavedashForAll"/> keeps it out of every offer).</summary>
+        public const string WavedashId = "ultrapuck.wavedash";
 
         /// <summary>Stored checks a player can hold.</summary>
         public static Fix MaxDashes(PlayerState p) { return Fix.FromInt(1 + Math.Max(0, Math.Min(9, p.Stats.ExtraDashes))); }
@@ -321,11 +331,13 @@ namespace UltraPuck.Core
             return got[0];
         }
 
-        /// <summary>The team that just conceded picks (after every goal, as in ROUNDS).</summary>
+        /// <summary>The team that just conceded picks (after every goal, as in ROUNDS); both teams while anyone holds Double Dip.</summary>
         private void PickAfterGoal(GameState s)
         {
+            var both = false;
+            foreach (var q in s.Players) if (q.Stats != null && q.Stats.DoubleDip > 0) both = true;
             var pickers = new System.Collections.Generic.List<int>();
-            for (var i = 0; i < s.Players.Length; i++) if (s.Players[i].Team != s.LastScorer) pickers.Add(i);
+            for (var i = 0; i < s.Players.Length; i++) if (both || s.Players[i].Team != s.LastScorer) pickers.Add(i);
             StartPicking(s, pickers);
         }
 
@@ -3090,10 +3102,10 @@ namespace UltraPuck.Core
             if (by >= 0) s.Players[by].NoPickup = Fix.Max(s.Players[by].NoPickup, T.CheckerPickupDelay);
         }
 
-        /// <summary>Someone just got the puck (loose, stolen, or an extra puck). Movement Tech: their dashes are all back.</summary>
+        /// <summary>Someone just got the puck (loose, stolen, or an extra puck). Wavedash (or the match rule): their dashes are all back.</summary>
         private void PickedUp(PlayerState p)
         {
-            if (p.Stats.MovementTech > 0) p.DashCharge = Fix.Max(p.DashCharge, MaxDashes(p));
+            if (p.Stats.Wavedash > 0 || T.WavedashForAll) p.DashCharge = Fix.Max(p.DashCharge, MaxDashes(p));
         }
 
         /// <summary><paramref name="to"/> takes the puck off whoever has it.</summary>

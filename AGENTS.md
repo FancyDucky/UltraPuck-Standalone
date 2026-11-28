@@ -89,6 +89,18 @@ so whoever works next knows what changed.
 ## Handoff log (newest first; add an entry for every session)
 - unreleased (Claude, 28 Nov 2026): **Movement Tech card, no shadows on the side previews, free play's cards A to Z,
   Double Card gift fix; protocol 105.** Movement Tech (`ultrapuck.movementtech`, tier B, max 1, owner's art): stat
+- unreleased (Claude, 28 Nov 2026): **Wavedash (was Movement Tech), Wavedash for everyone rule, Double Dip, pause over
+  the cards, new pick defaults; protocol 106.** The card is now `ultrapuck.wavedash` ("Wavedash", flavour "Movement
+  tech!"), stat `Wavedash` (`MovementTech` still read, for old card files). Match setting "Wavedash for everyone"
+  (`Settings.WavedashForAll`, bit 2 of the rules byte after Knock-away, `Tuning.WavedashForAll`): `Simulation.PickedUp`
+  refills dashes for everyone, and the `Simulation` constructor adds the card to `T.CardsOff`. Double Dip
+  (`ultrapuck.doubledip`, chaos, owner's art): stat `DoubleDip`; while anyone holds it `PickAfterGoal` has both teams
+  pick. Start / Esc tapped on the card screen opens the pause menu (`GameRunner.CardMenuTapped`: on letting go within
+  0.4 s, since holding it still ends the pick). While the pause menu is open, or in the frame it closed,
+  `CardScreen.InputOff` keeps every press, click and hover away from the cards (clicking Resume took the card under it).
+  New defaults: 5 cards offered, no pick time limit (new keys `cards_offered_v2` / `pick_time_v2`, so everyone starts on
+  them once). Tests `WavedashForEveryoneRefillsDashesAndIsNeverOffered`, `DoubleDipLetsBothTeamsPickAfterAGoal`;
+  screenshot scene `dip` (the new cards in a hand, then the pause menu over them).
   `MovementTech`; `Simulation.PickedUp` refills the dashes (`MaxDashes`) on picking up the loose puck, stealing it
   (`TakePuck`) or picking up an extra puck. Test `MovementTechRefillsDashesOnPickingUpThePuck`. The team's picks at the
   side (minis, enlarged too) cast no drop shadow. Free play's card editor grid is A to Z by name (`_order` holds the

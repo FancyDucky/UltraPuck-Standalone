@@ -167,8 +167,10 @@ namespace UltraPuck.Core
         public int ExtraPucks;
         /// <summary>Laser Sights: while charging a shot, a green laser shows where it will go (Simulation.LaserPath; only drawn).</summary>
         public int LaserSight;
-        /// <summary>Movement Tech: picking up the puck (or an extra puck, or stealing it) refills your dashes (Simulation.PickedUp).</summary>
-        public int MovementTech;
+        /// <summary>Wavedash: picking up the puck (or an extra puck, or stealing it) refills your dashes (Simulation.PickedUp).</summary>
+        public int Wavedash;
+        /// <summary>Double Dip (a chaos card): while anyone holds it, both teams pick a card after every goal (Simulation.PickAfterGoal).</summary>
+        public int DoubleDip;
 
         public Stats Clone() { return (Stats)MemberwiseClone(); }
 
@@ -182,7 +184,7 @@ namespace UltraPuck.Core
             GameState.Mix(ref h, HeadStart); GameState.Mix(ref h, DoubleAgent); GameState.Mix(ref h, Pylons); GameState.Mix(ref h, PuckGun);
             GameState.Mix(ref h, Invisibility); GameState.Mix(ref h, FriendlyFire); GameState.Mix(ref h, Shockwave);
             GameState.Mix(ref h, Swap); GameState.Mix(ref h, PassRefresh); GameState.Mix(ref h, PassRefreshTeam); GameState.Mix(ref h, IceTrail);
-            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine); GameState.Mix(ref h, Rage); GameState.Mix(ref h, Momentum); GameState.Mix(ref h, Loyal); GameState.Mix(ref h, WideNets); GameState.Mix(ref h, ExtraPucks); GameState.Mix(ref h, LaserSight); GameState.Mix(ref h, MovementTech);
+            GameState.Mix(ref h, PassSpeed); GameState.Mix(ref h, StoneWall); GameState.Mix(ref h, PortalGun); GameState.Mix(ref h, SlotMachine); GameState.Mix(ref h, Rage); GameState.Mix(ref h, Momentum); GameState.Mix(ref h, Loyal); GameState.Mix(ref h, WideNets); GameState.Mix(ref h, ExtraPucks); GameState.Mix(ref h, LaserSight); GameState.Mix(ref h, Wavedash); GameState.Mix(ref h, DoubleDip);
         }
     }
 

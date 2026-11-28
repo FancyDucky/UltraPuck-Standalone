@@ -1034,7 +1034,7 @@ namespace UltraPuck.Game
                 if (_cards != null && _state.Players.Length > 0)
                 {
                     var offer = new List<int>();
-                    foreach (var id in new[] { "ultrapuck.lasersight", "ultrapuck.movementtech", "ultrapuck.portalgun" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                    foreach (var id in new[] { "ultrapuck.lasersight", "ultrapuck.wavedash", "ultrapuck.portalgun" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                     _state.Players[0].Offer = offer.ToArray();
                 }
                 yield return new WaitForSecondsRealtime(2.2f);
@@ -1080,6 +1080,33 @@ namespace UltraPuck.Game
                 _menus.OpenPause("Shot");
                 yield return new WaitForSecondsRealtime(0.5f);
                 yield return Shot("pause");
+            if (want("dip"))
+            {
+                // the new cards in a hand (Double Dip a chaos card), then the pause menu opened over the card screen
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Colour = 1, Demo = true });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                yield return new WaitForSecondsRealtime(0.8f);
+                _sim.StartPicking(_state, new List<int> { 0 });
+                if (_cards != null && _state.Players.Length > 0)
+                {
+                    var offer = new List<int>();
+                    foreach (var id in new[] { "ultrapuck.wavedash", "ultrapuck.lasersight", "ultrapuck.doubledip" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                    _state.Players[0].Offer = offer.ToArray();
+                }
+                yield return new WaitForSecondsRealtime(2.4f);
+                yield return Shot("dip-hand");
+                _menus.FreePlay = false;
+                _menus.OpenPause("Shot");
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("dip-pause");
+                _menus.Close();
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
                 _menus.ShowMatchSettings();
                 yield return new WaitForSecondsRealtime(0.5f);
                 yield return Shot("match-settings");
@@ -1956,6 +1983,7 @@ namespace UltraPuck.Game
             NotePicks();
             CardStats.Tick();
             // free play: the d-pad runs the puck drills (not with a menu or the cards up)
+            var menuWasOpen = _menus.IsOpen; // (a click on Resume closes it this frame: the cards mustn't take that click too)
             LocalPlayers.PuckDrills = _free && _state != null && !_menus.IsOpen && !_cardScreen.Showing;
             _cardScreen.Sim = _sim;
             HostEndPick(playing);
@@ -1989,6 +2017,8 @@ namespace UltraPuck.Game
                 var w = _cam.ScreenToWorldPoint(new Vector3(sp.x, sp.y, Mathf.Abs(_cam.transform.position.z)));
                 return new Vector2(w.x, w.y);
             };
+            _cardScreen.InputOff = menuWasOpen || _menus.IsOpen;
+            if (!_cardScreen.Showing) _cardMenuAt = -1f; // (a press from a pick that has ended doesn't open the menu on the next one)
             // local slot → match player (online seats aren't in the same order as this PC's slots)
             _local.PlayerWorld = i =>
             {
@@ -2617,8 +2647,8 @@ namespace UltraPuck.Game
             b.Add((byte)(Settings.CarryThrough ? Settings.CarryPercent : 0));
             // then Knock-away, in 5% steps (0..100 = 0..500%)
             b.Add((byte)(Settings.KnockAwayPercent / 5));
-            // then the chaos cards' bits: 1 = they stack
-            b.Add((byte)(Settings.ChaosStack ? 1 : 0));
+            // then a few more rules' bits: 1 = chaos cards stack, 2 = Wavedash for everyone
+            b.Add((byte)((Settings.ChaosStack ? 1 : 0) | (Settings.WavedashForAll ? 2 : 0)));
             return b.ToArray();
         }
 
@@ -2645,7 +2675,7 @@ namespace UltraPuck.Game
             for (var k = 0; k < n; k++) t.CardsOff[k] = rules[7 + k];
             if (rules.Length > 7 + n && rules[7 + n] > 0) { t.CarryThrough = true; t.CarryPercent = Mathf.Clamp(rules[7 + n], 1, 100); }
             if (rules.Length > 8 + n) t.KnockAwayPercent = Mathf.Clamp(rules[8 + n] * 5, 0, 500);
-            if (rules.Length > 9 + n) t.ChaosStack = (rules[9 + n] & 1) != 0;
+            if (rules.Length > 9 + n) { t.ChaosStack = (rules[9 + n] & 1) != 0; t.WavedashForAll = (rules[9 + n] & 2) != 0; }
             return t;
         }
 
@@ -2867,7 +2897,7 @@ namespace UltraPuck.Game
                 if (s.IsHost && _local.StartPressed()) { Sound.Select(); StartOnlineMatch(); return; }
                 if (_local.BackPressed()) { Sound.Back(); if (s.IsHost) s.BackToLobby(); else LeaveOnline(null); return; }
             }
-            else if (_local.MenuPressed() && !_cardScreen.Showing)
+            else if (_cardScreen.Showing ? CardMenuTapped() : _local.MenuPressed())
             {
                 // online: the host's pause stops the game for everyone; anyone else just stands still while theirs is open
                 Sound.Select();
@@ -3208,6 +3238,29 @@ namespace UltraPuck.Game
                 if (_session == null || !_session.IsHost) return;
                 var range = cmd >= PlayerInput.CarryStrength && cmd <= PlayerInput.CarryStrength + 20 ? PlayerInput.CarryStrength
                     : cmd >= PlayerInput.KnockAway && cmd <= PlayerInput.KnockAway + 20 ? PlayerInput.KnockAway : -1;
+        /// <summary>When Start / Esc went down while the cards were up (-1: not since).</summary>
+        private float _cardMenuAt = -1f;
+
+        /// <summary>
+        /// The pause menu over the card screen: Start / Esc tapped (let go within a moment), since holding it ends the
+        /// pick instead (HostEndPick). Not in free play's card editor, where Esc goes back.
+        /// </summary>
+        private bool CardMenuTapped()
+        {
+            if (_cardScreen.Editing) { _cardMenuAt = -1f; return false; }
+            if (_local.MenuPressed()) _cardMenuAt = Time.unscaledTime;
+            if (_cardMenuAt < 0f) return false;
+            if (_local.MenuHeld())
+            {
+                if (Time.unscaledTime - _cardMenuAt > CardMenuTap) _cardMenuAt = -1f; // held: that's ending the pick
+                return false;
+            }
+            _cardMenuAt = -1f;
+            return true;
+        }
+
+        private const float CardMenuTap = 0.4f;
+
                 if (range >= 0)
                 {
                     // dragging a slider: only its newest value needs to go
@@ -3441,7 +3494,7 @@ namespace UltraPuck.Game
                 if (_local.BackPressed()) { Sound.Back(); BackToLobby(); return; }
             }
             else if (_testing && _local.MenuPressed() && !_cardScreen.Showing) { BackToMaker(); return; } // testing a rink: straight back to the maker
-            else if (_local.MenuPressed() && !_cardScreen.Showing)
+            else if (_cardScreen.Showing ? CardMenuTapped() : _local.MenuPressed())
             {
                 Sound.Select();
                 _menus.FreePlay = _free;

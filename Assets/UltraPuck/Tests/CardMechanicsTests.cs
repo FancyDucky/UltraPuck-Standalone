@@ -3499,9 +3499,9 @@ namespace UltraPuck.Tests
         }
 
         [Test]
-        public void MovementTechRefillsDashesOnPickingUpThePuck()
+        public void WavedashRefillsDashesOnPickingUpThePuck()
         {
-            var tech = _lib.ById("ultrapuck.movementtech");
+            var tech = _lib.ById("ultrapuck.wavedash");
             Assert.IsNotNull(tech);
             foreach (var has in new[] { true, false })
             {
@@ -3519,6 +3519,58 @@ namespace UltraPuck.Tests
                 Assert.AreEqual(0, s.Carrier, "picked it up");
                 if (has) Assert.AreEqual(Simulation.MaxDashes(p), p.DashCharge, "dashes back");
                 else Assert.Less(p.DashCharge.ToDouble(), 0.5, "no card: still recharging");
+            }
+        }
+
+        /// <summary>The Wavedash for everyone rule: no card, yet a pickup refills the dashes; and the card is never offered.</summary>
+        [Test]
+        public void WavedashForEveryoneRefillsDashesAndIsNeverOffered()
+        {
+            var wave = _lib.ById(Simulation.WavedashId);
+            Assert.IsNotNull(wave);
+            var sim = new Simulation(Rink(), new Tuning { WavedashForAll = true }, _lib);
+            Assert.Contains(wave.Index, sim.T.CardsOff, "kept out of the offers");
+            var s = sim.NewGame(new[] { 0, 1 }, 1u);
+            s.Phase = Phase.Play;
+            var p = s.Players[0];
+            Assert.AreEqual(0, p.Stats.Wavedash, "nobody holds the card");
+            p.DashCharge = Fix.Zero;
+            p.NoPickup = Fix.Zero;
+            s.Players[1].Pos = -p.Pos;
+            s.Carrier = -1;
+            s.PuckVel = FixVec2.Zero;
+            s.PuckPos = p.Pos + p.Facing * Fix.Ratio(7, 10);
+            sim.Step(s, new PlayerInput[2]);
+            Assert.AreEqual(0, s.Carrier, "picked it up");
+            Assert.AreEqual(Simulation.MaxDashes(p), p.DashCharge, "dashes back");
+            for (var seed = 1u; seed <= 40u; seed++)
+            {
+                var g = sim.NewGame(new[] { 0, 1 }, seed);
+                sim.StartPicking(g, new[] { 0, 1 });
+                foreach (var q in g.Players) CollectionAssert.DoesNotContain(q.Offer, wave.Index, "never offered");
+            }
+        }
+
+        /// <summary>Double Dip: while anyone holds it, both teams pick after a goal (without it, only the team scored on).</summary>
+        [Test]
+        public void DoubleDipLetsBothTeamsPickAfterAGoal()
+        {
+            var dip = _lib.ById("ultrapuck.doubledip");
+            Assert.IsNotNull(dip);
+            Assert.IsTrue(dip.Chaos, "a chaos card");
+            foreach (var has in new[] { false, true })
+            {
+                var s = Game(0, 1);
+                if (has) Give(s, 1, "ultrapuck.doubledip");
+                s.Phase = Phase.Scored;
+                s.LastScorer = 0;
+                s.Score[0] = 1;
+                s.PhaseTime = Fix.Ratio(1, 10);
+                for (var t = 0; t < 60 && s.Phase != Phase.Picking; t++) _sim.Step(s, new PlayerInput[2]);
+                Assert.AreEqual(Phase.Picking, s.Phase, "a pick after the goal");
+                Assert.Greater(s.Players[1].Offer.Length, 0, "the team scored on picks");
+                if (has) Assert.Greater(s.Players[0].Offer.Length, 0, "Double Dip: the scorers pick too");
+                else Assert.AreEqual(0, s.Players[0].Offer.Length, "no Double Dip: the scorers don't");
             }
         }
 

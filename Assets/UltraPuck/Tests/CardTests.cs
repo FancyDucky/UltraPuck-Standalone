@@ -222,7 +222,9 @@ namespace UltraPuck.Tests
                 most = System.Math.Max(most, seen[c]);
             }
             TestContext.WriteLine(kinds + " cards on offer, seen between " + least + " and " + most + " times each");
-            Assert.GreaterOrEqual(kinds, lib.Cards.Count - 3, "nearly every card can be offered to a player with a teammate (not chaos cards, and Choose is counted apart)");
+            var chaos = 0;
+            foreach (var c in lib.Cards) if (c.Chaos) chaos++;
+            Assert.GreaterOrEqual(kinds, lib.Cards.Count - chaos - 1, "nearly every card can be offered to a player with a teammate (not chaos cards, and Choose is counted apart)");
             Assert.Greater(tiers.Count, 2, "cards of several tiers");
             var each = offers * 3.0 / kinds;
             // (0.9: a hand holds one utility card at most, so the utilities come a little less often than the rest)

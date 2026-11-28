@@ -283,6 +283,8 @@ namespace UltraPuck.Core
         public int ChaosOdds = 6;
         /// <summary>Chaos cards stack: a chaos card someone holds can be offered again (two More Pucks: two extra pucks).</summary>
         public bool ChaosStack;
+        /// <summary>Wavedash for everyone: every player has the Wavedash card's effect all match, and the card is never offered.</summary>
+        public bool WavedashForAll;
         /// <summary>The count before a face-off: 3, 2, 1, go.</summary>
         public Fix CountdownTime = Fix.FromInt(3);
         /// <summary>After a card pick: this long before the countdown starts, so the cards finish flying off first.</summary>

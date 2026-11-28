@@ -111,7 +111,7 @@ namespace UltraPuck.Game
             var roller = Roller();
             if (roller < 0 || _reroll.ContainsKey(roller)) return;
             var slot = SlotOf(roller);
-            if (Local.UtilityPressed(slot)) _reroll[roller] = _state.Players[roller].Rerolls;
+            if (!InputOff && Local.UtilityPressed(slot)) _reroll[roller] = _state.Players[roller].Rerolls;
         }
 
         /// <summary>The card a local player is looking at right now (1-based), sent along so the other team can watch.</summary>
@@ -151,6 +151,14 @@ namespace UltraPuck.Game
         private int Slot { get { return SlotOf(_slot); } }
 
         public bool Showing { get { return _stage != Stage.Idle; } }
+
+        /// <summary>
+        /// The pause menu is over the cards (or just closed this frame): no presses, clicks or hovering reach them, so
+        /// clicking Resume doesn't take the card under it. Set by the game every frame.
+        /// </summary>
+        public bool InputOff;
+        private UnityEngine.InputSystem.Mouse PickMouse { get { return InputOff ? null : UnityEngine.InputSystem.Mouse.current; } }
+        private LocalPlayers.MenuInput PickMenu(int slot) { return InputOff ? new LocalPlayers.MenuInput() : Local.MenuFor(slot); }
 
         /// <summary>Free play's card editor is open (the match waits).</summary>
         public bool Editing { get { return _stage == Stage.Editing; } }
@@ -537,7 +545,7 @@ namespace UltraPuck.Game
                 if (Voted(player)) continue;
                 var slot = SlotOf(player);
                 if (slot < 0 || slot >= Local.Slots.Count) continue;
-                var m = Local.MenuFor(slot);
+                var m = PickMenu(slot);
                 int focus;
                 if (!_cursors.TryGetValue(player, out focus)) focus = _cards.Count / 2;
                 if (m.X != 0)
@@ -549,7 +557,7 @@ namespace UltraPuck.Game
                 // mouse: the first local voter still choosing steers with it (keyboard players especially)
                 if (n == 0)
                 {
-                    var mouse = UnityEngine.InputSystem.Mouse.current;
+                    var mouse = PickMouse;
                     if (mouse != null && Ui.MouseMovedNow && Time.unscaledTime - _lastHover > 0.12f)
                     {
                         var mp = mouse.position.ReadValue();
@@ -909,7 +917,7 @@ namespace UltraPuck.Game
             if (_cards.Count == 0) return;
             if (_watching) { Watch(); return; }
             if (_held) return; // picked: waiting for the team
-            var m = Local.MenuFor(Slot);
+            var m = PickMenu(Slot);
             if (TestMode)
             {
                 // one scripted step at a time: right, left, left, then take it
@@ -935,7 +943,7 @@ namespace UltraPuck.Game
             }
 
             // mouse: hover to focus, click to pick (keyboard players especially)
-            var mouse = UnityEngine.InputSystem.Mouse.current;
+            var mouse = PickMouse;
             if (mouse != null)
             {
                 var mp = mouse.position.ReadValue();
@@ -1335,7 +1343,7 @@ namespace UltraPuck.Game
             if (_minis.Count == 0) { _bigMini = -1; return; }
             // the bumpers (LB / RB, Q / E) go through the side cards full size, and off the end puts them back
             // (not on Choose's deck, where they size its grid)
-            var tab = _deck || _editing ? 0 : Local.TabPressed();
+            var tab = _deck || _editing || InputOff ? 0 : Local.TabPressed();
             if (tab != 0)
             {
                 var order = new List<int>();
@@ -1347,7 +1355,7 @@ namespace UltraPuck.Game
                 Sound.Move();
             }
             // click a mini to read it; click again (anywhere) to put it back
-            var mouse = UnityEngine.InputSystem.Mouse.current;
+            var mouse = PickMouse;
             if (mouse != null && mouse.leftButton.wasPressedThisFrame)
             {
                 var mp = mouse.position.ReadValue();

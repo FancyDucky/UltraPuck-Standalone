@@ -396,6 +396,13 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("chaos_stack", value ? 1 : 0); }
         }
 
+        /// <summary>Wavedash for everyone: every player has the Wavedash card's effect all match, and the card is never offered. Off by default.</summary>
+        public static bool WavedashForAll
+        {
+            get { return PlayerPrefs.GetInt("wavedash_all", 0) != 0; }
+            set { PlayerPrefs.SetInt("wavedash_all", value ? 1 : 0); }
+        }
+
         public static bool CarryThrough
         {
             get { return PlayerPrefs.GetInt("carry_through_v2", 1) != 0; }
@@ -454,18 +461,19 @@ namespace UltraPuck.Game
         public static string MatchText { get { return MatchMode == 0 ? "First to " + GoalsToWin : MatchMinutes + (MatchMinutes == 1 ? " minute" : " minutes"); } }
 
         public static readonly int[] OfferCounts = { 3, 4, 5 };
+        /// <summary>Cards in each offer: 5 unless changed (the "_v2" key starts everyone, older saves too, on that default).</summary>
         public static int CardsOffered
         {
-            get { var v = PlayerPrefs.GetInt("cards_offered", 3); return System.Array.IndexOf(OfferCounts, v) >= 0 ? v : 3; }
-            set { PlayerPrefs.SetInt("cards_offered", value); }
+            get { var v = PlayerPrefs.GetInt("cards_offered_v2", 5); return System.Array.IndexOf(OfferCounts, v) >= 0 ? v : 5; }
+            set { PlayerPrefs.SetInt("cards_offered_v2", value); }
         }
 
         /// <summary>Seconds to pick a card (0 = no limit). Anyone who hasn't picked in time gets a random one.</summary>
         public static readonly int[] PickTimes = { 15, 30, 60, 0 };
         public static int PickTime
         {
-            get { var v = PlayerPrefs.GetInt("pick_time", 30); return System.Array.IndexOf(PickTimes, v) >= 0 ? v : 30; }
-            set { PlayerPrefs.SetInt("pick_time", value); }
+            get { var v = PlayerPrefs.GetInt("pick_time_v2", 0); return System.Array.IndexOf(PickTimes, v) >= 0 ? v : 0; } // (no limit unless changed)
+            set { PlayerPrefs.SetInt("pick_time_v2", value); }
         }
 
         /// <summary>Cards that are switched off (never offered), by id.</summary>
@@ -527,7 +535,7 @@ namespace UltraPuck.Game
     /// </summary>
     internal sealed class RulesView
     {
-        public bool Rounds, Replays, MultiUtility, Carry, ChaosStack;
+        public bool Rounds, Replays, MultiUtility, Carry, ChaosStack, WavedashForAll;
         public int PickMode, CardsOffered, PickTime, MatchMode, GoalsToWin, MatchMinutes, CardsOff, CarryPercent, KnockPercent = 100;
 
         /// <summary>Null when there's nothing (yet) to read.</summary>
@@ -544,7 +552,7 @@ namespace UltraPuck.Game
             v.CardsOff = n;
             if (r.Length > 7 + n && r[7 + n] > 0) { v.Carry = true; v.CarryPercent = r[7 + n]; }
             if (r.Length > 8 + n) v.KnockPercent = r[8 + n] * 5;
-            if (r.Length > 9 + n) v.ChaosStack = (r[9 + n] & 1) != 0;
+            if (r.Length > 9 + n) { v.ChaosStack = (r[9 + n] & 1) != 0; v.WavedashForAll = (r[9 + n] & 2) != 0; }
             return v;
         }
 
