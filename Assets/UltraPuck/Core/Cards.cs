@@ -95,7 +95,7 @@ namespace UltraPuck.Core
             "DashPower", "ExtraDashes", "Size", "Weight", "KnockbackGiven", "KnockbackTaken",
             "HeadStart", "DoubleAgent", "Pylons", "PuckGun", "Invisibility", "FriendlyFire", "Shockwave", "Swap", "PassRefresh", "PassRefreshTeam", "IceTrail",
             "QuickShotFull", "GhostShot", "CannonBall", "PassSpeed", "StoneWall", "PortalGun", "SlotMachine",
-            "Choose", "DoubleCard", "NewHand", "Rage", "Momentum", "Loyal", "WideNets", "ExtraPucks", "LaserSight",
+            "Choose", "DoubleCard", "NewHand", "Rage", "Momentum", "Loyal", "WideNets", "ExtraPucks", "LaserSight", "MovementTech",
         };
 
         /// <summary>Stats that need the utility button (Triangle / Y). Used to offer only one utility at a time.</summary>
@@ -276,6 +276,7 @@ namespace UltraPuck.Core
                 case "WideNets": st.WideNets = Count(st.WideNets, m); break;
                 case "ExtraPucks": st.ExtraPucks = Count(st.ExtraPucks, m); break;
                 case "LaserSight": st.LaserSight = Count(st.LaserSight, m); break;
+                case "MovementTech": st.MovementTech = Count(st.MovementTech, m); break;
                 case "IceTrail": st.IceTrail = Count(st.IceTrail, m); break;
                 case "QuickShotFull": st.QuickShotFull = Count(st.QuickShotFull, m); break;
                 case "GhostShot": st.GhostShot = Count(st.GhostShot, m); break;

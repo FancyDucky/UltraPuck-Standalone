@@ -1082,7 +1082,7 @@ namespace UltraPuck.Game
                     ts = (focused ? (grid ? 1.3f : 1.12f) : 0.95f) * size * c.Size;
                     if (c.Corner && focused) tp += new Vector3(c.Home.x > 0f ? -0.6f : 0.6f, -0.5f, 0f); // (lifted towards the middle, so it stays on screen)
                     // in the editor, cards you don't have sit back a little
-                    if (_editing && !_browse && !focused && _counts[_who][k] == 0) ts *= 0.92f;
+                    if (_editing && !_browse && !focused && _counts[_who][EdCard(k)] == 0) ts *= 0.92f;
                     if (focused && grid)
                     {
                         // the raised card stays wholly on screen (big cards on the bottom row, two a row, hung off the bottom)
@@ -1098,7 +1098,7 @@ namespace UltraPuck.Game
                 if (live)
                 {
                     var focusedNow = k == _focus;
-                    c.GlowTarget = (focusedNow ? 0.35f : 0f) + (_editing && !_browse && _counts[_who][k] > 0 ? 0.45f : 0f);
+                    c.GlowTarget = (focusedNow ? 0.35f : 0f) + (_editing && !_browse && _counts[_who][EdCard(k)] > 0 ? 0.45f : 0f);
                     if (_held && k == _chosen) c.GlowTarget = 0.9f;
                     if (!c.Landed && since > c.Delay + 0.32f) { c.Landed = true; c.SweepAt = t; c.NextSweep = t + 2.6f + c.Phase * 0.3f; }
                     if (c.Landed && t > c.NextSweep && (focusedNow || c.Rare)) { c.SweepAt = t; c.NextSweep = t + (focusedNow ? 2.6f : 4.5f); }
@@ -1394,8 +1394,8 @@ namespace UltraPuck.Game
                 m.V.Step(tp, tr, ts, dt);
                 m.V.GlowTarget = 0f;
                 m.V.Apply(m.Player == _bigMini ? 3000 + m.Stack * 20 : 2000 + m.Player * 40 + (top ? 20 : 0), _cam);
-                // a stack: the top card casts no shadow (it would darken the one under it)
-                if (top && m.Of > 1 && m.Player != _bigMini) m.V.ShadowMat.SetFloat("_Alpha", 0f);
+                // the team's picks at the side (and enlarged) cast no drop shadow
+                m.V.ShadowMat.SetFloat("_Alpha", 0f);
             }
         }
 
@@ -1718,10 +1718,19 @@ namespace UltraPuck.Game
             _cancelHeld = 0f;
             _stage = Stage.Editing;
             _stageAt = Time.unscaledTime;
-            // dealt from below, face down, the rows on screen one after another (the rest wait off screen)
-            for (var k = 0; k < sim.Cards.Cards.Count; k++)
+            // A to Z by name (the grid's places: EdCard turns a place back into the card)
+            _order.Clear();
+            for (var k = 0; k < sim.Cards.Cards.Count; k++) _order.Add(k);
+            var lib = sim.Cards.Cards;
+            _order.Sort((a, b) =>
             {
-                var v = Build(sim.Cards.Cards[k], k);
+                var d = string.Compare(lib[a].Name, lib[b].Name, System.StringComparison.OrdinalIgnoreCase);
+                return d != 0 ? d : a.CompareTo(b);
+            });
+            // dealt from below, face down, the rows on screen one after another (the rest wait off screen)
+            for (var k = 0; k < _order.Count; k++)
+            {
+                var v = Build(sim.Cards.Cards[_order[k]], k);
                 v.Home = EditHome(k);
                 v.Pos = new Vector3(v.Home.x * 0.3f, -7.5f, 1f);
                 v.Rot = new Vector3(0f, 180f, Random.Range(-28f, 28f));
@@ -1836,10 +1845,14 @@ namespace UltraPuck.Game
 
         private float CancelProgress { get { return Mathf.Clamp01((_cancelHeld - CancelWait) / CancelFill); } }
 
-        private void EditAdd(int card, int d)
+        /// <summary>The card (its index in the library) at place <paramref name="pos"/> in free play's editor grid (A to Z).</summary>
+        private int EdCard(int pos) { return pos >= 0 && pos < _order.Count ? _order[pos] : pos; }
+
+        private void EditAdd(int pos, int d)
         {
             var counts = _counts[_who];
-            var c = _cards[card];
+            var c = _cards[pos];
+            var card = EdCard(pos);
             var was = counts[card];
             counts[card] = Mathf.Clamp(was + d, 0, EditMax(card));
             if (counts[card] == was)
@@ -1960,7 +1973,7 @@ namespace UltraPuck.Game
                 for (var k = 0; k < _cards.Count; k++)
                 {
                     if ((k == _focus) != (pass == 1)) continue;
-                    var n = _counts[_who][k];
+                    var n = _counts[_who][EdCard(k)];
                     var row = k / EditCols - _editTop;
                     if (n == 0 || row < 0 || row >= EditRows) continue;
                     var r = ScreenRect(_cards[k]);
@@ -1980,10 +1993,10 @@ namespace UltraPuck.Game
                 Ui.Box(new Rect(track.x, track.y + (track.height - thumbH) * at, track.width, thumbH), new Color(1f, 1f, 1f, 0.6f), 3f);
             }
             // what the focused card is at, and the controls
-            var focusDef = _editSim.Cards.Cards[_focus];
+            var focusDef = _editSim.Cards.Cards[EdCard(_focus)];
             var max = focusDef.MaxPerPlayer > 0 ? " of " + focusDef.MaxPerPlayer : "";
             // down the left side, clear of the cards
-            var head = (focusDef.Name + ":  " + _counts[_who][_focus] + max, new Color(1f, 0.92f, 0.6f, 0.95f));
+            var head = (focusDef.Name + ":  " + _counts[_who][EdCard(_focus)] + max, new Color(1f, 0.92f, 0.6f, 0.95f));
             if (Kbm(null))
                 SideHints(null, 1f, head, ("Left click   Add a copy", HintColor), ("Right click   Take one away", HintColor),
                     ("Scroll  {nav}   More cards", HintColor), ("{tabs}   Card size", HintColor), ("Enter   Apply", HintColor), ("Esc   Cancel", HintColor));

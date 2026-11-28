@@ -382,9 +382,11 @@ namespace UltraPuck.Core
                 {
                     var p = s.Players[i];
                     if (p.Offer.Length == 0 || p.Picked < 0) continue;
+                    var had = p.Cards.Length;
                     var more = TakePicked(s, p);
                     any = true;
-                    if (p.Cards.Length > 0) OneATeamTaken(s, p, p.Cards[p.Cards.Length - 1]);
+                    // every card that came with it (Double Card's two as well, not just the last)
+                    for (var c = had; c < p.Cards.Length; c++) OneATeamTaken(s, p, p.Cards[c]);
                     if (more) { OneATeamInDecks(s); s.PhaseTime = Fix.Max(s.PhaseTime, T.PickTime); } // a fresh clock for their next pick
                 }
                 if (any) Cards.Recompute(s);
@@ -2311,6 +2313,7 @@ namespace UltraPuck.Core
                     s.PassFrom = -1;
                     s.Carrier = best;
                     s.PuckTeam = p.Team;
+                    PickedUp(p);
                     // Cannon Ball: catching the other team's full charge: it keeps going, and takes you with it along
                     // the shot (whatever way you were skating), gliding with little control for a moment. No hit pause.
                     if (s.CannonTeam >= 0 && s.CannonTeam != p.Team && s.PuckVel.SqrLength > T.ShotSpeed * T.ShotSpeed)
@@ -3087,9 +3090,16 @@ namespace UltraPuck.Core
             if (by >= 0) s.Players[by].NoPickup = Fix.Max(s.Players[by].NoPickup, T.CheckerPickupDelay);
         }
 
+        /// <summary>Someone just got the puck (loose, stolen, or an extra puck). Movement Tech: their dashes are all back.</summary>
+        private void PickedUp(PlayerState p)
+        {
+            if (p.Stats.MovementTech > 0) p.DashCharge = Fix.Max(p.DashCharge, MaxDashes(p));
+        }
+
         /// <summary><paramref name="to"/> takes the puck off whoever has it.</summary>
         private void TakePuck(GameState s, int to)
         {
+            PickedUp(s.Players[to]);
             if (s.Carrier >= 0)
             {
                 var old = s.Players[s.Carrier];
@@ -3846,7 +3856,7 @@ namespace UltraPuck.Core
                 }
                 if (best < 0) continue;
                 rk.Carrier = best;
-                if (rk.Puck) rk.Touch = best;
+                if (rk.Puck) { rk.Touch = best; PickedUp(s.Players[best]); }
                 rk.Pos = RockCarrySpot(s.Players[best], RockR(rk));
                 rk.Vel = s.Players[best].Vel;
                 s.Rocks[k] = rk;

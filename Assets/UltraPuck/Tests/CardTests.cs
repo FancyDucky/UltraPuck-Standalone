@@ -225,7 +225,8 @@ namespace UltraPuck.Tests
             Assert.GreaterOrEqual(kinds, lib.Cards.Count - 3, "nearly every card can be offered to a player with a teammate (not chaos cards, and Choose is counted apart)");
             Assert.Greater(tiers.Count, 2, "cards of several tiers");
             var each = offers * 3.0 / kinds;
-            Assert.Greater(least, each * 0.93, "the least seen card is close to an even share (" + each + ")");
+            // (0.9: a hand holds one utility card at most, so the utilities come a little less often than the rest)
+            Assert.Greater(least, each * 0.9, "the least seen card is close to an even share (" + each + ")");
             Assert.Less(most, each * 1.07, "and so is the most seen");
             // Choose ("odds": 70) comes about 30% less often than the rest
             var choose = lib.ById("ultrapuck.choose");

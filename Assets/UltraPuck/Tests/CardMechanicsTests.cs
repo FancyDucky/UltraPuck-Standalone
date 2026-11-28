@@ -3499,6 +3499,30 @@ namespace UltraPuck.Tests
         }
 
         [Test]
+        public void MovementTechRefillsDashesOnPickingUpThePuck()
+        {
+            var tech = _lib.ById("ultrapuck.movementtech");
+            Assert.IsNotNull(tech);
+            foreach (var has in new[] { true, false })
+            {
+                var s = Game(0, 1);
+                s.Phase = Phase.Play;
+                if (has) { _sim.GiveCard(s, s.Players[0], tech.Index); _lib.Recompute(s); }
+                var p = s.Players[0];
+                p.DashCharge = Fix.Zero;
+                p.NoPickup = Fix.Zero;
+                s.Players[1].Pos = -p.Pos; // (well away)
+                s.Carrier = -1;
+                s.PuckVel = FixVec2.Zero;
+                s.PuckPos = p.Pos + p.Facing * Fix.Ratio(7, 10);
+                _sim.Step(s, new PlayerInput[2]);
+                Assert.AreEqual(0, s.Carrier, "picked it up");
+                if (has) Assert.AreEqual(Simulation.MaxDashes(p), p.DashCharge, "dashes back");
+                else Assert.Less(p.DashCharge.ToDouble(), 0.5, "no card: still recharging");
+            }
+        }
+
+        [Test]
         public void HeadStartGivesTheExtraPucksToo()
         {
             var more = _lib.ById("ultrapuck.morepucks");

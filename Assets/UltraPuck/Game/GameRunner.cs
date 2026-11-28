@@ -1034,7 +1034,7 @@ namespace UltraPuck.Game
                 if (_cards != null && _state.Players.Length > 0)
                 {
                     var offer = new List<int>();
-                    foreach (var id in new[] { "ultrapuck.lasersight", "ultrapuck.momentum", "ultrapuck.portalgun" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                    foreach (var id in new[] { "ultrapuck.lasersight", "ultrapuck.movementtech", "ultrapuck.portalgun" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                     _state.Players[0].Offer = offer.ToArray();
                 }
                 yield return new WaitForSecondsRealtime(2.2f);

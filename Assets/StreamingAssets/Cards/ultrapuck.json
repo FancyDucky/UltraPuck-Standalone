@@ -467,6 +467,20 @@
       ],
       "text": "[note]Shows while you charge, bounces included. Only your team can see it.[/]",
       "stats": { "LaserSight": "+1" }
+    },
+    {
+      "id": "ultrapuck.movementtech",
+      "name": "Movement Tech",
+      "tier": "B",
+      "glare": false,
+      "max": 1,
+      "color": "#33C7F2",
+      "flavor": "Wavedash this",
+      "face": [
+        { "label": "Pick up the puck", "value": "[good]Dashes refill[/]" }
+      ],
+      "text": "[note]Stealing it and extra pucks count too.[/]",
+      "stats": { "MovementTech": "+1" }
     }
   ]
 }

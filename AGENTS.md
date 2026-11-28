@@ -87,6 +87,15 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **Movement Tech card, no shadows on the side previews, free play's cards A to Z,
+  Double Card gift fix; protocol 105.** Movement Tech (`ultrapuck.movementtech`, tier B, max 1, owner's art): stat
+  `MovementTech`; `Simulation.PickedUp` refills the dashes (`MaxDashes`) on picking up the loose puck, stealing it
+  (`TakePuck`) or picking up an extra puck. Test `MovementTechRefillsDashesOnPickingUpThePuck`. The team's picks at the
+  side (minis, enlarged too) cast no drop shadow. Free play's card editor grid is A to Z by name (`_order` holds the
+  card at each place, `CardScreen.EdCard`). Bug found by the new card shifting the deals: a one-a-team card (Swap,
+  Portal Gun) that came as Double Card's *first* gift stayed in a teammate's Choose deck; now every card a pick brings
+  goes through `OneATeamTaken`. `EveryCardIsOfferedAsOftenAsAnyOther` allows 0.9 of an even share (one utility a hand
+  makes the utilities a little rarer). 304 tests pass, build, screenshots (editor, side previews, new card).
 - unreleased (Claude, 28 Nov 2026): **Laser Sights for the team only, exact bounces, infinity mirror finish.** The laser
   shows only on a screen with someone of the holder's team on it (`GameRunner.TeamHere`; replays show it to all).
   `Simulation.LaserPath` now steps the ghost puck exactly as the real one moves (tick by tick, `Substeps`, MovePuck's
