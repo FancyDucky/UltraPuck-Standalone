@@ -833,9 +833,11 @@ namespace UltraPuck.Game
                 if (!(Plugged(s.Device) || Plugged(s.Extra)) || Blocked) { inputs[i].Buttons = setting; inputs[i].Look = look; continue; } // unplugged, or the Steam overlay is open: stands still
                 var m = StickOf(s);
                 var a = AimOfSlot(s, i);
-                // controllers: holding charge without the puck (a pre-charge) faces the middle of their net, unless
-                // the aim stick is pushed (the stick always wins). Just an aim like the stick's, so the rules don't change.
-                if (a.sqrMagnitude <= 0.04f && NetAim != null && PadCharging(s))
+                // controllers: holding charge (a shot, or a pre-charge without the puck) faces a scoreable spot in
+                // their net, unless the right stick is pushed (the stick always wins). Just an aim like the stick's, so
+                // the rules don't change. Settings > Controls > Charge auto-aim.
+                if (Settings.ChargeAutoAim && AimPad(s.Device).sqrMagnitude <= 0.04f && AimPad(s.Extra).sqrMagnitude <= 0.04f
+                    && a.sqrMagnitude <= 0.04f && NetAim != null && PadCharging(s))
                 {
                     var net = NetAim(i);
                     if (net.HasValue) a = net.Value;

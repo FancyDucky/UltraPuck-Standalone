@@ -89,6 +89,15 @@ so whoever works next knows what changed.
 ## Handoff log (newest first; add an entry for every session)
 - unreleased (Claude, 28 Nov 2026): **Multiple chaos cards rule, Giant Nets / More Pucks stack, wrapped menu hints;
   protocol 107.** "Chaos cards stack" is now "Multiple chaos cards" (`Settings.MultiChaos`, key `multi_chaos`, same bit
+- unreleased (Claude, 28 Nov 2026): **Charge auto-aim with the puck too, its setting, alternative bindings.** The
+  controller auto-aim on charge (`LocalPlayers.Sample`, `GameRunner` `NetAim`) now works while carrying as well, only
+  while the right stick is still; Settings > Controls > "Charge auto-aim" (`Settings.ChargeAutoAim`, on by default).
+  Bindings: several actions may share a key or button (`Controls.SetKey` / `SetPad` no longer take it off others);
+  keys get an alternative (`Key2Of` / `SetKey2`, `bind_key2_N`). Controls tab: A / Cross (left click) binds, X / Square
+  (right click) binds the alternative (`Row.AltPress`, `Menus._listenAlt`), Y / Triangle clears the pad buttons,
+  Delete / Backspace the keys (`Controls.ClearKeys`). While listening, and the frame it ends, rows and tabs take no
+  click (`Menus.ListenBlocksClicks`), so binding the left mouse doesn't start listening again. Display only, no
+  protocol change.
   1 of the rules byte after Knock-away, `Tuning.MultiChaos`, off by default): off, once a chaos card is held no other
   kind is offered (`CardLibrary.ChaosRoll`). Cards with `"stacks": true` (`CardDef.Stacks`: Giant Nets, More Pucks) can
   come again either way; others (Double Dip) never once held. Giant Nets copies add up: `Simulation.WideCopies`, one
@@ -108,12 +117,12 @@ so whoever works next knows what changed.
   New defaults: 5 cards offered, no pick time limit (new keys `cards_offered_v2` / `pick_time_v2`, so everyone starts on
   them once). Tests `WavedashForEveryoneRefillsDashesAndIsNeverOffered`, `DoubleDipLetsBothTeamsPickAfterAGoal`;
   screenshot scene `dip` (the new cards in a hand, then the pause menu over them).
-  `MovementTech`; `Simulation.PickedUp` refills the dashes (`MaxDashes`) on picking up the loose puck, stealing it
-  (`TakePuck`) or picking up an extra puck. Test `MovementTechRefillsDashesOnPickingUpThePuck`. The team's picks at the
 - unreleased (Claude, 28 Nov 2026): **Movement Tech card, no shadows on the side previews, free play's cards A to Z,
   Double Card gift fix; protocol 105.** Movement Tech (`ultrapuck.movementtech`, tier B, max 1, owner's art): stat
   side (minis, enlarged too) cast no drop shadow. Free play's card editor grid is A to Z by name (`_order` holds the
   card at each place, `CardScreen.EdCard`). Bug found by the new card shifting the deals: a one-a-team card (Swap,
+  `MovementTech`; `Simulation.PickedUp` refills the dashes (`MaxDashes`) on picking up the loose puck, stealing it
+  (`TakePuck`) or picking up an extra puck. Test `MovementTechRefillsDashesOnPickingUpThePuck`. The team's picks at the
   Portal Gun) that came as Double Card's *first* gift stayed in a teammate's Choose deck; now every card a pick brings
   goes through `OneATeamTaken`. `EveryCardIsOfferedAsOftenAsAnyOther` allows 0.9 of an even share (one utility a hand
   makes the utilities a little rarer). 304 tests pass, build, screenshots (editor, side previews, new card).

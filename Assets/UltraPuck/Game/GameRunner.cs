@@ -1339,6 +1339,7 @@ namespace UltraPuck.Game
                 // every rink, whole, with bots playing on it for a few seconds
                 _shotWholeRink = true;
                 var startMap = _mapIndex; // choosing a rink saves it: put the player's own back afterwards
+                _menus.ShotFocus("Shoot / check"); // (a binding row: its bind / alt bind / clear hints)
                 for (var m = 0; m < _maps.Count; m++)
                 {
                     UseMap(m);
@@ -2053,8 +2054,7 @@ namespace UltraPuck.Game
                 if (_state == null || _sim == null || p < 0 || p >= _state.Players.Length || _state.Phase != Phase.Play) return null;
                 var steer = Simulation.Steers(_state, p);
                 if (steer >= 0) p = steer;
-                if (_state.Carrier == p) return null;
-                var me = V.Of(_state.Players[p].Pos);
+                var me = V.Of(_state.Players[p].Pos); // (with the puck too: the shot goes that way)
                 var team = _state.Players[p].Team;
                 UltraPuck.Core.GoalDef net = null;
                 var near = float.MaxValue;

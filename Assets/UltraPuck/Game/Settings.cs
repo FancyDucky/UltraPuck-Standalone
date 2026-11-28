@@ -284,6 +284,13 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("dash_where_moving", value ? 1 : 0); }
         }
 
+        /// <summary>Controllers: holding charge (with or without the puck) faces the net you attack, unless the right stick aims. On by default.</summary>
+        public static bool ChargeAutoAim
+        {
+            get { return PlayerPrefs.GetInt("charge_auto_aim", 1) != 0; }
+            set { PlayerPrefs.SetInt("charge_auto_aim", value ? 1 : 0); }
+        }
+
         /// <summary>With separate keyboard and controller players: player 1 is the controller (true) or the keyboard.</summary>
         public static bool ControllerIsPlayer1
         {

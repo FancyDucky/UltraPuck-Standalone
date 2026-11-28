@@ -135,11 +135,22 @@ namespace UltraPuck.Game
             return Enum.IsDefined(typeof(Key), v) || IsMouse((Key)v) ? (Key)v : DefaultKeys[i];
         }
 
+        /// <summary>Bind a key. Several actions may share one key (or button): nothing else is taken off it.</summary>
         public static void SetKey(Act a, Key k)
         {
-            // clear the same key off anyone else
-            foreach (var o in All) if (o != a && KeyOf(o) == k) PlayerPrefs.SetInt("bind_key_" + (int)o, (int)Key.None);
             PlayerPrefs.SetInt("bind_key_" + (int)a, (int)k);
+        }
+
+        /// <summary>The alternative key (bound with a right click on the Controls tab), or None.</summary>
+        public static Key Key2Of(Act a)
+        {
+            var v = PlayerPrefs.GetInt("bind_key2_" + (int)a, (int)Key.None);
+            return Enum.IsDefined(typeof(Key), v) || IsMouse((Key)v) ? (Key)v : Key.None;
+        }
+
+        public static void SetKey2(Act a, Key k)
+        {
+            PlayerPrefs.SetInt("bind_key2_" + (int)a, (int)k);
         }
 
         public static Pad PadOf(Act a)
@@ -149,14 +160,9 @@ namespace UltraPuck.Game
             return Enum.IsDefined(typeof(Pad), v) ? (Pad)v : DefaultPads[i];
         }
 
+        /// <summary>Bind a controller button (several actions may share one).</summary>
         public static void SetPad(Act a, Pad p)
         {
-            foreach (var o in All)
-            {
-                if (o == a || KeyboardOnly(o)) continue;
-                if (PadOf(o) == p) PlayerPrefs.SetInt("bind_pad_" + (int)o, (int)DefaultPads[(int)o]);
-                if (Pad2Of(o) == p) PlayerPrefs.SetInt("bind_pad2_" + (int)o, DefaultPads2[(int)o] == p ? (int)Pad.South : (int)DefaultPads2[(int)o]);
-            }
             PlayerPrefs.SetInt("bind_pad_" + (int)a, (int)p);
         }
 
@@ -168,12 +174,19 @@ namespace UltraPuck.Game
             return Enum.IsDefined(typeof(Pad), v) ? (Pad)v : DefaultPads2[i];
         }
 
-        /// <summary>Take the controller button(s) off <paramref name="a"/> (a keyboard-only action: its key).</summary>
+        /// <summary>Take the controller button(s) off <paramref name="a"/> (a keyboard-only action: its keys).</summary>
         public static void Clear(Act a)
         {
-            if (KeyboardOnly(a)) { PlayerPrefs.SetInt("bind_key_" + (int)a, (int)Key.None); return; }
+            if (KeyboardOnly(a)) { ClearKeys(a); return; }
             PlayerPrefs.SetInt("bind_pad_" + (int)a, (int)Pad.None);
             PlayerPrefs.SetInt("bind_pad2_" + (int)a, (int)Pad.None);
+        }
+
+        /// <summary>Take the key(s) off <paramref name="a"/> (Delete on the Controls tab).</summary>
+        public static void ClearKeys(Act a)
+        {
+            PlayerPrefs.SetInt("bind_key_" + (int)a, (int)Key.None);
+            PlayerPrefs.SetInt("bind_key2_" + (int)a, (int)Key.None);
         }
 
         public static void SetPad2(Act a, Pad p)
@@ -187,6 +200,7 @@ namespace UltraPuck.Game
             {
                 var i = (int)a;
                 PlayerPrefs.DeleteKey("bind_key_" + i);
+                PlayerPrefs.DeleteKey("bind_key2_" + i);
                 PlayerPrefs.DeleteKey("bind_pad_" + i);
                 PlayerPrefs.DeleteKey("bind_pad2_" + i);
             }
@@ -239,35 +253,34 @@ namespace UltraPuck.Game
             }
         }
 
+        /// <summary>The key and its alternative: "Space" or "Space  or  Left mouse".</summary>
+        public static string KeysText(Act a)
+        {
+            Key k1 = KeyOf(a), k2 = Key2Of(a);
+            return k2 == Key.None || k2 == k1 ? KeyName(k1) : k1 == Key.None ? KeyName(k2) : KeyName(k1) + "  or  " + KeyName(k2);
+        }
+
         public static string BindingText(Act a)
         {
-            if (KeyboardOnly(a)) return KeyName(KeyOf(a));
+            if (KeyboardOnly(a)) return KeysText(a);
             var p1 = PadOf(a);
             var p2 = Pad2Of(a);
             var pad = p1 == p2 || p2 == Pad.None ? PadName(p1) : p1 == Pad.None ? PadName(p2) : PadName(p1) + "  or  " + PadName(p2);
-            return KeyName(KeyOf(a)) + "   ·   " + pad;
+            return KeysText(a) + "   ·   " + pad;
         }
 
         // ------------------------------------------------------------------ reading
 
-        public static bool KeyHeld(Keyboard kb, Act a)
-        {
-            var k = KeyOf(a);
-            if (IsMouse(k)) { var mb = MouseButton(k); return mb != null && mb.isPressed; }
-            if (kb == null) return false;
-            if (k == Key.None) return false;
-            var c = kb[k];
-            return c != null && c.isPressed;
-        }
+        public static bool KeyHeld(Keyboard kb, Act a) { return KeyDown(kb, KeyOf(a), false) || KeyDown(kb, Key2Of(a), false); }
 
-        public static bool KeyPressed(Keyboard kb, Act a)
+        public static bool KeyPressed(Keyboard kb, Act a) { return KeyDown(kb, KeyOf(a), true) || KeyDown(kb, Key2Of(a), true); }
+
+        private static bool KeyDown(Keyboard kb, Key k, bool pressedThisFrame)
         {
-            var k = KeyOf(a);
-            if (IsMouse(k)) { var mb = MouseButton(k); return mb != null && mb.wasPressedThisFrame; }
-            if (kb == null) return false;
-            if (k == Key.None) return false;
+            if (IsMouse(k)) { var mb = MouseButton(k); return mb != null && (pressedThisFrame ? mb.wasPressedThisFrame : mb.isPressed); }
+            if (kb == null || k == Key.None) return false;
             var c = kb[k];
-            return c != null && c.wasPressedThisFrame;
+            return c != null && (pressedThisFrame ? c.wasPressedThisFrame : c.isPressed);
         }
 
         public static bool PadHeld(Gamepad g, Act a)

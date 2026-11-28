@@ -38,6 +38,13 @@ namespace UltraPuck.Game
         /// <summary>Waiting for a key or button to rebind (Controls tab).</summary>
         public bool Listening { get { return _listen.HasValue; } }
         private Controls.Act? _listen;
+        /// <summary>Listening for the alternative binding (X / Square on a controller, a right click with the mouse).</summary>
+        private bool _listenAlt;
+        /// <summary>The frame listening for a binding ended: rows take no click then (the click was the binding).</summary>
+        private int _listenEnded = -10;
+        private bool ListenBlocksClicks { get { return _listen.HasValue || Time.frameCount - _listenEnded <= 1; } }
+        private void StopListening() { if (_listen.HasValue) _listenEnded = Time.frameCount; _listen = null; }
+        private void Listen(Controls.Act act, bool alt) { _listen = act; _listenAlt = alt; }
 
         // filled in by GameRunner
         public Action OnResume, OnMainMenu, OnGetCard;
@@ -111,6 +118,8 @@ namespace UltraPuck.Game
             public bool Text;                     // a text box (your name): press to type
             public Func<string> GlyphText;        // Controls rebinds: the binding as button pictures (instead of Value)
             public Action Clear;                  // Controls rebinds: Y / Triangle takes the binding off
+            public Action ClearKeys;              // Controls rebinds: Delete takes the keys off
+            public Action AltPress;               // Controls rebinds: X / Square or a right click binds the alternative
             public Action<Rect> Picture;          // drawn on the right instead of Value (the crosshair in use)
         }
 
@@ -391,6 +400,8 @@ namespace UltraPuck.Game
                 "When a bot on your team picks up the puck, you take over that bot."));
             _rows.Add(Choice("Dash direction", new[] { "Where you move", "Where you look" }, () => Settings.DashWhereMoving ? 0 : 1, v => Settings.DashWhereMoving = v == 0,
                 "Which way a check dashes. Where you move: along the move stick (where you look if it's still)."));
+            _rows.Add(Switch("Charge auto-aim", () => Settings.ChargeAutoAim, v => Settings.ChargeAutoAim = v,
+                "Controllers: holding charge turns you to the net you're attacking, with or without the puck, unless you're aiming with the right stick."));
             _rows.Add(new Row
             {
                 Label = "Change crosshair",
@@ -417,17 +428,19 @@ namespace UltraPuck.Game
                 _rows.Add(new Row
                 {
                     Label = Controls.Label(act),
-                    Value = () => _listen == act ? "Press a key or button…" : Controls.BindingText(act),
+                    Value = () => _listen == act ? (_listenAlt ? "Press a key or button (alt)…" : "Press a key or button…") : Controls.BindingText(act),
                     GlyphText = () => _listen == act ? null : Glyphs.BindingHint(act),
-                    Press = () => { _listen = act; },
+                    Press = () => Listen(act, false),
+                    AltPress = () => Listen(act, true),
                     Clear = () => Controls.Clear(act),
+                    ClearKeys = () => Controls.ClearKeys(act),
                     Hint = Controls.Hint(act),
                 });
             }
             _rows.Add(new Row
             {
                 Label = "Reset to defaults",
-                Press = () => { Controls.ResetDefaults(); _listen = null; },
+                Press = () => { Controls.ResetDefaults(); StopListening(); },
                 Hint = "Put every binding back the way it ships.",
             });
         }
@@ -703,7 +716,7 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Which settings tab is showing (0 Graphics … 4 Controls, 5 Match).</summary>
-        public int Tab { get { return _tab; } set { _tab = Mathf.Clamp(value, 0, Tabs.Length - 1); _focus = 0; _listen = null; } }
+        public int Tab { get { return _tab; } set { _tab = Mathf.Clamp(value, 0, Tabs.Length - 1); _focus = 0; StopListening(); } }
 
         public void OpenSettings(bool fromLobby)
         {
@@ -739,7 +752,7 @@ namespace UltraPuck.Game
         /// <summary>Controller / keyboard input for this frame (from <see cref="LocalPlayers.Menu"/>).</summary>
         public void Tick(LocalPlayers.MenuInput m)
         {
-            if (!IsOpen) { StopTyping(false); _listen = null; return; }
+            if (!IsOpen) { StopTyping(false); StopListening(); return; }
             if (_typing) { TypingTick(); return; }
             if (_listen.HasValue) { ListenTick(m); return; }
             if (Current == Page.Crosshair) { CrosshairTick(m); return; }
@@ -769,6 +782,8 @@ namespace UltraPuck.Game
             var row = _rows[_focus];
             if (!row.Enabled()) return;
             if (row.Clear != null && NorthPressed()) { row.Clear(); Sound.Back(); return; }
+            if (row.ClearKeys != null && DeletePressed()) { row.ClearKeys(); Sound.Back(); return; }
+            if (row.AltPress != null && WestPressed()) { Sound.Select(); row.AltPress(); return; }
             if (m.X != 0 && row.Step != null) { row.Step(m.X); Sound.Step(m.X); } // after the change: a volume slider ticks at its new volume
             else if (m.Confirm && row.Press != null) { PressSound(row); row.Press(); }
         }
@@ -782,31 +797,31 @@ namespace UltraPuck.Game
             if (kb != null && kb.escapeKey.wasPressedThisFrame)
             {
                 Sound.Back();
-                _listen = null;
+                StopListening();
                 return;
             }
             var key = Controls.ReadKeyPress(kb);
             if (key == Key.None) key = Controls.ReadMousePress(); // a mouse button (the side ones too)
             if (key != Key.None && key != Key.Escape)
             {
-                Controls.SetKey(act, key);
+                if (_listenAlt) Controls.SetKey2(act, key); else Controls.SetKey(act, key);
                 Sound.Select();
-                _listen = null;
+                StopListening();
                 return;
             }
             if (Controls.KeyboardOnly(act))
             {
                 // pad sticks cover move/aim: a controller can't bind these, so its B just cancels
-                if (m.Back) { Sound.Back(); _listen = null; }
+                if (m.Back) { Sound.Back(); StopListening(); }
                 return;
             }
             foreach (var g in Gamepad.all)
             {
                 var p = Controls.ReadPadPress(g);
                 if (!p.HasValue) continue;
-                Controls.SetPad(act, p.Value);
+                if (_listenAlt) Controls.SetPad2(act, p.Value); else Controls.SetPad(act, p.Value);
                 Sound.Select();
-                _listen = null;
+                StopListening();
                 return;
             }
         }
@@ -920,7 +935,7 @@ namespace UltraPuck.Game
                 hintStyle.wordWrap = false;
                 Glyphs.Hint(new Rect(x, y + panelH - 40f, panelW, 24f),
                     _typing ? (InputMode.Pad ? "Type on the keyboard    {confirm} Done    {back} Cancel" : "Type your name    {confirm} Done    {back} Cancel")
-                            : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : matchPage && ReadOnly && !teamPage ? "{nav} Scroll      {back} Back" : matchPage ? "{nav} Choose      {side} Change      {back} Back" : _tab == 4 && InputMode.Pad && _focus < _rows.Count && _rows[_focus].Clear != null ? "{tabs} Tabs      {freeplay} Clear      {back} Back" : "{tabs} Tabs      {back} Back",
+                            : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : matchPage && ReadOnly && !teamPage ? "{nav} Scroll      {back} Back" : matchPage ? "{nav} Choose      {side} Change      {back} Back" : _tab == 4 && _focus < _rows.Count && _rows[_focus].AltPress != null ? (_listen.HasValue ? "Esc  Cancel" : InputMode.Pad ? "{confirm} Bind      {clip} Alt bind      {freeplay} Clear      {back} Back" : "Left click  Bind      Right click  Alt bind      {delete} Clear      {back} Back") : "{tabs} Tabs      {back} Back",
                     14, new Color(1f, 1f, 1f, 0.45f));
             }
             GUI.matrix = oldMatrix;
@@ -1036,6 +1051,29 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Y / Triangle pressed on any controller this frame.</summary>
+        private static bool WestPressed()
+        {
+            if (LocalPlayers.Blocked) return false;
+            foreach (var g in Gamepad.all) if (g.buttonWest.wasPressedThisFrame) return true;
+            return false;
+        }
+
+        private static bool DeletePressed()
+        {
+            var kb = Keyboard.current;
+            return !LocalPlayers.Blocked && kb != null && (kb.deleteKey.wasPressedThisFrame || kb.backspaceKey.wasPressedThisFrame);
+        }
+
+        /// <summary>A right click this frame (once, like Ui.TakeClick).</summary>
+        private static bool TakeRightClick()
+        {
+            var mouse = Mouse.current;
+            if (mouse == null || !mouse.rightButton.wasPressedThisFrame || _rightFrame == Time.frameCount) return false;
+            _rightFrame = Time.frameCount;
+            return true;
+        }
+        private static int _rightFrame = -1;
+
         private static bool NorthPressed()
         {
             if (LocalPlayers.Blocked) return false;
@@ -1056,7 +1094,7 @@ namespace UltraPuck.Game
             for (var i = 0; i < TabCount; i++)
             {
                 var r = new Rect(x0 + i * (tabW + gap), y, tabW, tabH);
-                if (r.Contains(Ui.Mouse) && Ui.TakeClick()) { if (_tab != i) Sound.Move(); _tab = i; _focus = 0; _listen = null; }
+                if (r.Contains(Ui.Mouse) && !ListenBlocksClicks && Ui.TakeClick()) { if (_tab != i) Sound.Move(); _tab = i; _focus = 0; StopListening(); }
                 var on = i == _tab;
                 Ui.Label(r, Tabs[i], Ui.Font(18, on, TextAnchor.MiddleCenter), on ? new Color(0.08f, 0.08f, 0.09f) : Ui.TextDim, !on);
             }
@@ -1066,8 +1104,11 @@ namespace UltraPuck.Game
         {
             var enabled = row.Enabled();
             var textCol = enabled ? (focused ? Ui.Text : new Color(1f, 1f, 1f, 0.8f)) : new Color(1f, 1f, 1f, 0.3f);
-            // TakeClick: once per frame, so Layout + Repaint can't double-fire a button
-            var clicked = enabled && r.Contains(mouse) && Ui.TakeClick();
+            // TakeClick: once per frame, so Layout + Repaint can't double-fire a button. Not while listening for a
+            // binding (or the frame it ended): that click was the binding, not a press of the row again.
+            var clicked = enabled && r.Contains(mouse) && !ListenBlocksClicks && Ui.TakeClick();
+            // a right click on a binding row: bind its alternative
+            if (enabled && row.AltPress != null && r.Contains(mouse) && !ListenBlocksClicks && TakeRightClick()) { Sound.Select(); row.AltPress(); }
 
             if (pause && row.Value != null && row.Step != null)
             {

@@ -151,7 +151,7 @@ namespace UltraPuck.Game
             Controls.Act act;
             if (BindAct(action, "bindpad:", out act)) return new[] { InputIcons.FromControls(Controls.PadOf(act)) };
             if (BindAct(action, "bindpad2:", out act)) return new[] { InputIcons.FromControls(Controls.Pad2Of(act)) };
-            if (BindAct(action, "bindkey:", out act)) return new PadButton[0];
+            if (BindAct(action, "bindkey:", out act) || BindAct(action, "bindkey2:", out act)) return new PadButton[0];
             switch (action)
             {
                 case "confirm": case "join": return new[] { PadButton.South };
@@ -183,6 +183,7 @@ namespace UltraPuck.Game
         {
             Controls.Act act;
             if (BindAct(action, "bindkey:", out act)) return new[] { Controls.KeyName(Controls.KeyOf(act)) };
+            if (BindAct(action, "bindkey2:", out act)) return new[] { Controls.KeyName(Controls.Key2Of(act)) };
             switch (action)
             {
                 case "confirm": return new[] { "Enter" };
@@ -232,7 +233,12 @@ namespace UltraPuck.Game
         {
             InputMode.Update();
             var n = (int)a;
-            if (!InputMode.Pad) return "{bindkey:" + n + "}";
+            if (!InputMode.Pad)
+            {
+                Key k1 = Controls.KeyOf(a), k2 = Controls.Key2Of(a);
+                if (k2 == Key.None || k2 == k1) return "{bindkey:" + n + "}";
+                return k1 == Key.None ? "{bindkey2:" + n + "}" : "{bindkey:" + n + "}  or  {bindkey2:" + n + "}";
+            }
             if (Controls.KeyboardOnly(a)) return a >= Controls.Act.AimLeft ? "{aim}" : "{move}"; // the sticks (not rebindable on a controller)
             var p1 = Controls.PadOf(a);
             var p2 = Controls.Pad2Of(a);
