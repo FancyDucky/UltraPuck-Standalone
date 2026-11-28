@@ -1011,6 +1011,10 @@ namespace UltraPuck.Game
                     var offer = new List<int>();
                     foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.loyal", "ultrapuck.portalgun", "ultrapuck.stonewall" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                     _state.Players[0].Offer = offer.ToArray();
+                // Giant Nets stacks: a second copy, three times as wide
+                if (wide != null && _state.Players.Length > 0) { _sim.GiveCard(_state, _state.Players[0], wide.Index); _cards.Recompute(_state); }
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("chaos-nets-3x");
                 }
                 yield return new WaitForSecondsRealtime(2.2f);
                 yield return Shot("cardfx-1");
@@ -1142,6 +1146,12 @@ namespace UltraPuck.Game
                 _menus.ShotFocus("Change team");
                 yield return new WaitForSecondsRealtime(0.5f);
                 yield return Shot("pause-change-team");
+                _menus.ShotFocus("Multiple chaos cards"); // (a long hint: on two lines)
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("match-settings-chaos");
+                _menus.ShotFocus("Picking");
+                yield return new WaitForSecondsRealtime(0.5f);
+                yield return Shot("match-settings-picking");
                 _menus.OpenTeam();
                 yield return new WaitForSecondsRealtime(0.5f);
                 yield return Shot("change-team");
@@ -2649,8 +2659,8 @@ namespace UltraPuck.Game
             b.Add((byte)(Settings.CarryThrough ? Settings.CarryPercent : 0));
             // then Knock-away, in 5% steps (0..100 = 0..500%)
             b.Add((byte)(Settings.KnockAwayPercent / 5));
-            // then a few more rules' bits: 1 = chaos cards stack, 2 = Wavedash for everyone
-            b.Add((byte)((Settings.ChaosStack ? 1 : 0) | (Settings.WavedashForAll ? 2 : 0)));
+            // then a few more rules' bits: 1 = multiple chaos cards, 2 = Wavedash for everyone
+            b.Add((byte)((Settings.MultiChaos ? 1 : 0) | (Settings.WavedashForAll ? 2 : 0)));
             return b.ToArray();
         }
 
@@ -2677,7 +2687,7 @@ namespace UltraPuck.Game
             for (var k = 0; k < n; k++) t.CardsOff[k] = rules[7 + k];
             if (rules.Length > 7 + n && rules[7 + n] > 0) { t.CarryThrough = true; t.CarryPercent = Mathf.Clamp(rules[7 + n], 1, 100); }
             if (rules.Length > 8 + n) t.KnockAwayPercent = Mathf.Clamp(rules[8 + n] * 5, 0, 500);
-            if (rules.Length > 9 + n) { t.ChaosStack = (rules[9 + n] & 1) != 0; t.WavedashForAll = (rules[9 + n] & 2) != 0; }
+            if (rules.Length > 9 + n) { t.MultiChaos = (rules[9 + n] & 1) != 0; t.WavedashForAll = (rules[9 + n] & 2) != 0; }
             return t;
         }
 

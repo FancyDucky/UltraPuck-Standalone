@@ -281,8 +281,8 @@ namespace UltraPuck.Core
         public Fix BotPickDelay = Fix.Ratio(9, 5);
         /// <summary>One card pick in this many also offers a chaos card, flying in from a corner (0 = never).</summary>
         public int ChaosOdds = 6;
-        /// <summary>Chaos cards stack: a chaos card someone holds can be offered again (two More Pucks: two extra pucks).</summary>
-        public bool ChaosStack;
+        /// <summary>Multiple chaos cards: different kinds of chaos card can be in play at once. Off: once one kind is in play, no other kind is offered.</summary>
+        public bool MultiChaos;
         /// <summary>Wavedash for everyone: every player has the Wavedash card's effect all match, and the card is never offered.</summary>
         public bool WavedashForAll;
         /// <summary>The count before a face-off: 3, 2, 1, go.</summary>

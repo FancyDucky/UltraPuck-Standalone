@@ -13,23 +13,34 @@ namespace UltraPuck.Core
         /// The map as it plays in the state last handed to this simulation (every public call that takes a state
         /// switches to it first): <see cref="BaseMap"/>, or its wide-net copy while anyone holds Giant Nets.
         /// </summary>
-        public MapDef Map { get { return _wide ? WideMap : BaseMap; } }
+        public MapDef Map { get { return WideMapOf(_wide); } }
         /// <summary>The map as loaded.</summary>
         public readonly MapDef BaseMap;
-        private MapDef _wideMap;
-        private bool _wide;
+        private readonly MapDef[] _wideMaps = new MapDef[MaxWide + 1];
+        private int _wide;
+        /// <summary>Giant Nets copies that still make a difference: 1 = twice as wide, 2 = three times.</summary>
+        public const int MaxWide = 2;
         /// <summary>The map with every net twice as wide (made the first time it's needed; the same on every PC).</summary>
-        public MapDef WideMap { get { return _wideMap ?? (_wideMap = BaseMap.WithWideNets(2)); } }
-        /// <summary>Does anyone in <paramref name="s"/> hold Giant Nets (the nets are twice as wide)?</summary>
-        public static bool WideNets(GameState s)
+        public MapDef WideMap { get { return WideMapOf(1); } }
+        private MapDef WideMapOf(int copies)
         {
-            if (s == null || s.Players == null) return false;
-            foreach (var p in s.Players) if (p != null && p.Stats != null && p.Stats.WideNets > 0) return true;
-            return false;
+            if (copies <= 0) return BaseMap;
+            copies = Math.Min(MaxWide, copies);
+            return _wideMaps[copies] ?? (_wideMaps[copies] = BaseMap.WithWideNets(1 + copies));
+        }
+        /// <summary>Does anyone in <paramref name="s"/> hold Giant Nets (the nets are wider)?</summary>
+        public static bool WideNets(GameState s) { return WideCopies(s) > 0; }
+        /// <summary>Giant Nets copies held by everyone in <paramref name="s"/> (they stack: one twice as wide, two three times).</summary>
+        public static int WideCopies(GameState s)
+        {
+            var n = 0;
+            if (s != null && s.Players != null)
+                foreach (var p in s.Players) if (p != null && p.Stats != null) n += Math.Max(0, p.Stats.WideNets);
+            return Math.Min(MaxWide, n);
         }
         /// <summary>The map as it plays in <paramref name="s"/> (what to draw for it).</summary>
-        public MapDef MapFor(GameState s) { return WideNets(s) ? WideMap : BaseMap; }
-        private void Use(GameState s) { _wide = WideNets(s); }
+        public MapDef MapFor(GameState s) { return WideMapOf(WideCopies(s)); }
+        private void Use(GameState s) { _wide = WideCopies(s); }
 
         // ------------------------------------------------------------------ More Pucks (extra pucks are rocks with Puck set)
 
@@ -153,7 +164,7 @@ namespace UltraPuck.Core
                 // now and then a chaos card on top of the hand (last in the offer; a shared hand's is the whole team's)
                 if (p.Offer.Length > 0 && !(shared && teamOffer[p.Team & 1] != null))
                 {
-                    var chaos = Cards.ChaosRoll(s, i, T.ChaosOdds, T.CardsOff, T.ChaosStack);
+                    var chaos = Cards.ChaosRoll(s, i, T.ChaosOdds, T.CardsOff, T.MultiChaos);
                     if (chaos >= 0)
                     {
                         var with = new int[p.Offer.Length + 1];

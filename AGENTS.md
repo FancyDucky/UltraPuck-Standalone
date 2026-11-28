@@ -87,8 +87,15 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
-- unreleased (Claude, 28 Nov 2026): **Movement Tech card, no shadows on the side previews, free play's cards A to Z,
-  Double Card gift fix; protocol 105.** Movement Tech (`ultrapuck.movementtech`, tier B, max 1, owner's art): stat
+- unreleased (Claude, 28 Nov 2026): **Multiple chaos cards rule, Giant Nets / More Pucks stack, wrapped menu hints;
+  protocol 107.** "Chaos cards stack" is now "Multiple chaos cards" (`Settings.MultiChaos`, key `multi_chaos`, same bit
+  1 of the rules byte after Knock-away, `Tuning.MultiChaos`, off by default): off, once a chaos card is held no other
+  kind is offered (`CardLibrary.ChaosRoll`). Cards with `"stacks": true` (`CardDef.Stacks`: Giant Nets, More Pucks) can
+  come again either way; others (Double Dip) never once held. Giant Nets copies add up: `Simulation.WideCopies`, one
+  copy 2x wide, two 3x (`MaxWide`, maps cached per count in `_wideMaps`). The focused row's hint in the menus word-wraps
+  (two lines, last line just above the controls); keep hints under about 170 characters. Tests
+  `TwoGiantNetsMakeTheNetsThreeTimesAsWide`, `ChaosCardsOneKindAtATimeUnlessMultiple`; screenshots `chaos-nets-3x`,
+  `match-settings-chaos`, `match-settings-picking`.
 - unreleased (Claude, 28 Nov 2026): **Wavedash (was Movement Tech), Wavedash for everyone rule, Double Dip, pause over
   the cards, new pick defaults; protocol 106.** The card is now `ultrapuck.wavedash` ("Wavedash", flavour "Movement
   tech!"), stat `Wavedash` (`MovementTech` still read, for old card files). Match setting "Wavedash for everyone"
@@ -103,6 +110,8 @@ so whoever works next knows what changed.
   screenshot scene `dip` (the new cards in a hand, then the pause menu over them).
   `MovementTech`; `Simulation.PickedUp` refills the dashes (`MaxDashes`) on picking up the loose puck, stealing it
   (`TakePuck`) or picking up an extra puck. Test `MovementTechRefillsDashesOnPickingUpThePuck`. The team's picks at the
+- unreleased (Claude, 28 Nov 2026): **Movement Tech card, no shadows on the side previews, free play's cards A to Z,
+  Double Card gift fix; protocol 105.** Movement Tech (`ultrapuck.movementtech`, tier B, max 1, owner's art): stat
   side (minis, enlarged too) cast no drop shadow. Free play's card editor grid is A to Z by name (`_order` holds the
   card at each place, `CardScreen.EdCard`). Bug found by the new card shifting the deals: a one-a-team card (Swap,
   Portal Gun) that came as Double Card's *first* gift stayed in a teammate's Choose deck; now every card a pick brings

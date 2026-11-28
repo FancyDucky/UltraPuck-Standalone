@@ -3366,6 +3366,59 @@ namespace UltraPuck.Tests
             }
         }
 
+        /// <summary>Giant Nets stacks: two copies held make every net three times as wide (more change nothing).</summary>
+        [Test]
+        public void TwoGiantNetsMakeTheNetsThreeTimesAsWide()
+        {
+            var card = _lib.ById("ultrapuck.widenets");
+            Assert.IsTrue(card.Stacks, "Giant Nets stacks");
+            foreach (var file in new[] { "test-rink.json", "hockey-rink.json", "s-rink.json", "u-rink.json" })
+            {
+                var map = MapDef.FromJson(File.ReadAllText(Path.Combine(Application.streamingAssetsPath, "Maps", file)));
+                var sim = new Simulation(map, null, _lib);
+                var s = sim.NewGame(new[] { 0, 1, 0 }, 1u);
+                sim.GiveCard(s, s.Players[0], card.Index);
+                sim.GiveCard(s, s.Players[1], card.Index);
+                sim.GiveCard(s, s.Players[2], card.Index);
+                _lib.Recompute(s);
+                sim.Step(s, new PlayerInput[3]);
+                Assert.AreEqual(Simulation.MaxWide, Simulation.WideCopies(s));
+                for (var g = 0; g < map.Goals.Count; g++)
+                {
+                    GoalDef a = map.Goals[g], b = sim.Map.Goals[g];
+                    var across = a.HasFacing ? Fix.Abs(a.Facing.X) >= Fix.Abs(a.Facing.Y) : (a.Max.Y - a.Min.Y) >= (a.Max.X - a.Min.X);
+                    Fix wa = across ? a.Max.Y - a.Min.Y : a.Max.X - a.Min.X, wb = across ? b.Max.Y - b.Min.Y : b.Max.X - b.Min.X;
+                    Assert.LessOrEqual(System.Math.Abs((wa * 3 - wb).Raw), 2L, file + ": net " + g + " three times as wide");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Chaos card offers: one that doesn't stack (Double Dip) never comes again once held; one that does (More Pucks)
+        /// can; and without Multiple chaos cards, once one kind is in play no other kind is offered.
+        /// </summary>
+        [Test]
+        public void ChaosCardsOneKindAtATimeUnlessMultiple()
+        {
+            var dip = _lib.ById("ultrapuck.doubledip");
+            var more = _lib.ById("ultrapuck.morepucks");
+            Assert.IsFalse(dip.Stacks);
+            Assert.IsTrue(more.Stacks);
+            foreach (var multi in new[] { false, true })
+                foreach (var held in new[] { dip, more })
+                {
+                    var s = Game(0, 1);
+                    Give(s, 1, held.Id);
+                    var seen = new System.Collections.Generic.HashSet<int>();
+                    for (var k = 0; k < 300; k++) { var c = _lib.ChaosRoll(s, 0, 1, null, multi); if (c >= 0) seen.Add(c); }
+                    Assert.AreEqual(held.Stacks, seen.Contains(held.Index), held.Name + ": offered again only if it stacks (multi " + multi + ")");
+                    var others = 0;
+                    foreach (var c in seen) if (c != held.Index) others++;
+                    if (multi) Assert.Greater(others, 0, held.Name + " held: other kinds still come with Multiple chaos cards");
+                    else Assert.AreEqual(0, others, held.Name + " held: no other kind without Multiple chaos cards");
+                }
+        }
+
         [Test]
         public void MorePucksPutsAnExtraPuckOnTheIceThatScores()
         {
@@ -3619,11 +3672,12 @@ namespace UltraPuck.Tests
                 }
             }
             Assert.That(chaosOffers, Is.InRange(picks / 6 - 40, picks / 6 + 40), "about one pick in six");
-            // one copy a match: once anyone holds a chaos card, nobody is offered it again (only the others)
-            var held = new System.Collections.Generic.List<int>();
-            foreach (var c in _lib.Cards) if (c.Chaos) held.Add(c.Index);
+            // one copy a match (a chaos card that doesn't stack): once anyone holds it, nobody is offered it again
+            // (with several kinds allowed, another one instead)
+            var held = new System.Collections.Generic.List<int> { _lib.ById("ultrapuck.doubledip").Index };
+            foreach (var c in _lib.Cards) if (c.Chaos && !held.Contains(c.Index)) held.Add(c.Index);
             Assert.Greater(held.Count, 1, "needs two chaos cards");
-            var always = new Simulation(_sim.Map, new Tuning { ChaosOdds = 1 }, _lib);
+            var always = new Simulation(_sim.Map, new Tuning { ChaosOdds = 1, MultiChaos = true }, _lib);
             for (var k = 0; k < 60; k++)
             {
                 var s = always.NewGame(new[] { 0, 1 }, (uint)(k + 1));
@@ -3636,7 +3690,7 @@ namespace UltraPuck.Tests
                 foreach (var c in held) always.GiveCard(s, s.Players[1], c);
                 _lib.Recompute(s);
                 always.StartPicking(s, new[] { 0 });
-                foreach (var c in s.Players[0].Offer) Assert.IsFalse(_lib.IsChaosIndex(c), "every chaos card is taken: none offered");
+                foreach (var c in s.Players[0].Offer) Assert.IsFalse(_lib.IsChaosIndex(c) && !_lib.Cards[c].Stacks, "every chaos card is taken: only ones that stack offered");
             }
             // switched off: never
             var never = new Simulation(_sim.Map, new Tuning { ChaosOdds = 0 }, _lib);

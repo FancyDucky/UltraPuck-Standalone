@@ -484,7 +484,7 @@ namespace UltraPuck.Game
             _rows.Add(new Row { Label = "Cards offered", Value = () => r.CardsOffered.ToString(), Hint = hint });
             _rows.Add(new Row { Label = "Pick time", Value = () => r.PickTime == 0 ? "No limit" : r.PickTime + " s", Hint = hint });
             _rows.Add(new Row { Label = "Multiple utilities", Value = () => OnOff(r.MultiUtility), Hint = hint });
-            _rows.Add(new Row { Label = "Chaos cards stack", Value = () => OnOff(r.ChaosStack), Hint = hint });
+            _rows.Add(new Row { Label = "Multiple chaos cards", Value = () => OnOff(r.MultiChaos), Hint = hint });
             _rows.Add(new Row { Label = "Wavedash for everyone", Value = () => OnOff(r.WavedashForAll), Hint = hint });
             if (Cards != null) _rows.Add(new Row { Label = "Cards", Value = () => Mathf.Max(0, Cards.Cards.Count - r.CardsOff) + " of " + Cards.Cards.Count + " on", Hint = hint });
             // Carry-through can change mid-match: the match's own when there is one
@@ -523,7 +523,7 @@ namespace UltraPuck.Game
             _rows.Add(Switch("Rounds mode", () => Settings.Rounds, v => Settings.Rounds = v, "After each goal, the team that conceded picks a card that powers them up for the rest of the match."));
             _rows.Add(Switch("Goal replays", () => Settings.Replays, v => Settings.Replays = v, "Every goal is shown again, up to 10 seconds back, in slow motion on the big moments. Everyone pressing A skips it (bots always agree)."));
             var vote = Choice("Picking", Settings.PickModes, () => Settings.PickMode, v => Settings.PickMode = v,
-                "Each player: everyone draws and takes their own card. Same draw: your team is offered the same cards, each takes their own. Team vote: each team votes on one card the whole team gets (a tie is random).");
+                "Each player: everyone takes their own card. Same draw: your team is offered the same cards, each takes their own. Team vote: your team votes on one card for everyone.");
             vote.Enabled = () => Settings.Rounds;
             _rows.Add(vote);
             var offered = new string[Settings.OfferCounts.Length];
@@ -535,8 +535,8 @@ namespace UltraPuck.Game
                 "How long players have to pick. Anyone who hasn't picked in time gets a random card."));
             _rows.Add(Switch("Multiple utilities", () => Settings.MultiUtility, v => Settings.MultiUtility = v,
                 "Off: you can only hold one utility card (Puck Gun, Invisibility, Shockwave, Swap). Taking another replaces the one you have. On: you can hold several."));
-            _rows.Add(Switch("Chaos cards stack", () => Settings.ChaosStack, v => Settings.ChaosStack = v,
-                "Off: each chaos card comes once a match (once someone has it, it isn't offered again). On: they can come again and add up (two More Pucks: two extra pucks). Changes when the match restarts."));
+            _rows.Add(Switch("Multiple chaos cards", () => Settings.MultiChaos, v => Settings.MultiChaos = v,
+                "Off: one kind of chaos card at a time. On: different kinds can be in play together. Giant Nets and More Pucks can come again and add up. Changes when the match restarts."));
             _rows.Add(Switch("Wavedash for everyone", () => Settings.WavedashForAll, v => Settings.WavedashForAll = v,
                 "On: everyone has the Wavedash card all match (picking up the puck refills your dashes), and it's never offered. Changes when the match restarts."));
             _rows.Add(new Row { Label = "Toggle cards", Value = CardsOnText, Press = () => { _cardsFrom = Current; Current = Page.Cards; _focus = 0; _first = 0; _focusY = -1f; },
@@ -913,7 +913,11 @@ namespace UltraPuck.Game
             if (!pause)
             {
                 var hint = _focus < _rows.Count && _rows[_focus].Hint != null ? _rows[_focus].Hint : "";
-                Ui.Label(new Rect(x, y + panelH - 70f, panelW, 24f), hint, Ui.Font(16, false, TextAnchor.MiddleCenter), Ui.TextDim);
+                // (a long one goes onto a second line, inside the panel)
+                var hintStyle = Ui.Font(16, false, TextAnchor.LowerCenter);
+                hintStyle.wordWrap = true;
+                Ui.Label(new Rect(x + 30f, y + panelH - 92f, panelW - 60f, 52f), hint, hintStyle, Ui.TextDim); // (its last line just above the controls)
+                hintStyle.wordWrap = false;
                 Glyphs.Hint(new Rect(x, y + panelH - 40f, panelW, 24f),
                     _typing ? (InputMode.Pad ? "Type on the keyboard    {confirm} Done    {back} Cancel" : "Type your name    {confirm} Done    {back} Cancel")
                             : cardsPage ? "{nav} Scroll      {confirm} On / off      {back} Back" : matchPage && ReadOnly && !teamPage ? "{nav} Scroll      {back} Back" : matchPage ? "{nav} Choose      {side} Change      {back} Back" : _tab == 4 && InputMode.Pad && _focus < _rows.Count && _rows[_focus].Clear != null ? "{tabs} Tabs      {freeplay} Clear      {back} Back" : "{tabs} Tabs      {back} Back",

@@ -49,6 +49,8 @@ namespace UltraPuck.Core
         /// (CardScreen.ChaosGlitch, display only): "chaos": true.
         /// </summary>
         public bool Chaos;
+        /// <summary>A chaos card whose effect adds up (Giant Nets, More Pucks): it can be offered again while someone holds it. "stacks": true.</summary>
+        public bool Stacks;
         /// <summary>The card's body (everything but the picture, frame and text) pure black, for OLED screens, display only: "pureBlack": true.</summary>
         public bool PureBlack;
         /// <summary>Every "finish" a card file may use (see Card.shader for what each looks like).</summary>
@@ -129,6 +131,7 @@ namespace UltraPuck.Core
                     TextBoxes = Json.Get(o, "textBoxes") is bool && (bool)Json.Get(o, "textBoxes"),
                     TextOutline = Json.Get(o, "textOutline") is bool && (bool)Json.Get(o, "textOutline"),
                     Chaos = Json.Get(o, "chaos") is bool && (bool)Json.Get(o, "chaos"),
+                    Stacks = Json.Get(o, "stacks") is bool && (bool)Json.Get(o, "stacks"),
                     PureBlack = Json.Get(o, "pureBlack") is bool && (bool)Json.Get(o, "pureBlack"),
                     Odds = Json.Get(o, "odds") != null ? Math.Max(1, Math.Min(1000, Json.Int(Json.Get(o, "odds"), what + ".odds"))) : 100,
                 };
@@ -361,22 +364,27 @@ namespace UltraPuck.Core
 
         /// <summary>
         /// A chaos card for player <paramref name="i"/> one time in <paramref name="odds"/> (one they may have, not in
-        /// <paramref name="off"/>, and one nobody in the match holds yet), else -1. It's offered on top of their hand: it flies in from a corner of the card screen.
+        /// <paramref name="off"/>), else -1. It's offered on top of their hand: it flies in from a corner of the card screen.
+        /// One somebody in the match holds comes again only if it stacks (<see cref="CardDef.Stacks"/>); without
+        /// <paramref name="multi"/> (Tuning.MultiChaos), once a chaos card is in play no other kind is offered.
         /// Rolls only if there are chaos cards at all, so a library without them draws exactly as before.
         /// </summary>
-        public int ChaosRoll(GameState s, int i, int odds, int[] off = null, bool stack = false)
+        public int ChaosRoll(GameState s, int i, int odds, int[] off = null, bool multi = false)
         {
             var any = false;
             foreach (var c in Cards) any |= c.Chaos;
             if (!any || odds <= 0) return -1;
             if (s.NextRandom() % (uint)odds != 0) return -1;
-            // a chaos card changes the arena for everyone: once anyone in the match has it, it's never offered again
-            // (unless the match lets them stack: Tuning.ChaosStack)
+            // a chaos card changes the arena for everyone: once anyone in the match has it, it's never offered again,
+            // unless its effect adds up (Stacks); and with one kind in play, no other kind (unless the match allows several)
             var not = new List<int>();
             if (off != null) not.AddRange(off);
-            if (!stack)
-                foreach (var q in s.Players)
-                    foreach (var c in q.Cards) if (IsChaosIndex(c) && !not.Contains(c)) not.Add(c);
+            var held = new List<int>();
+            foreach (var q in s.Players)
+                foreach (var c in q.Cards) if (IsChaosIndex(c) && !held.Contains(c)) held.Add(c);
+            foreach (var c in held) if (!Cards[c].Stacks && !not.Contains(c)) not.Add(c);
+            if (!multi && held.Count > 0)
+                for (var c = 0; c < Cards.Count; c++) if (Cards[c].Chaos && !held.Contains(c) && !not.Contains(c)) not.Add(c);
             var got = DrawOffer(s, i, 1, not.ToArray(), true);
             return got.Length > 0 ? got[0] : -1;
         }
