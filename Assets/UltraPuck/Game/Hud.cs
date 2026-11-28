@@ -452,37 +452,60 @@ namespace UltraPuck.Game
         }
 
         /// <summary>
-        /// Everyone's cards in the lower-left corner (Settings > Gameplay): a row a player, their name, then each card
-        /// as a little card (its picture in its colour's frame; the same card more than once: a number on it). The mouse
-        /// over one shows its name.
+        /// Everyone's cards in the lower corners (Settings > Gameplay): your team's on the left, the other team's on the
+        /// right (mirrored). A row a player: their name, then each card as a little card (its picture in its colour's
+        /// frame; the same card more than once: a number on it). The mouse over one shows its name.
         /// </summary>
         private void CornerCards(float h, bool always = false)
         {
             if ((!Settings.CornerCards && !always) || _sim == null || _sim.Cards == null) return;
-            var lines = new System.Collections.Generic.List<int>();
+            // "your" team: the first person playing on this PC (team 0 with nobody)
+            var mine = 0;
+            if (_local != null) foreach (var s in _local.Slots) if (!s.Demo) { mine = s.Team & 1; break; }
+            var left = new System.Collections.Generic.List<int>();
+            var right = new System.Collections.Generic.List<int>();
             for (var i = 0; i < _state.Players.Length; i++)
             {
                 var any = false;
                 foreach (var c in _state.Players[i].Cards) any |= !_sim.Cards.IsChoose(c) && !_sim.Cards.IsDouble(c);
-                if (any) lines.Add(i);
+                if (any) ((_state.Players[i].Team & 1) == mine ? left : right).Add(i);
             }
+            string hover = null;
+            CornerSide(left, h, false, ref hover);
+            CornerSide(right, h, true, ref hover);
+            // the card under the mouse: its name just above it
+            if (hover != null)
+            {
+                var mouse = Ui.Mouse;
+                var hs = Ui.Font(14, true);
+                var w = hs.CalcSize(new GUIContent(hover)).x + 20f;
+                var r = new Rect(Mathf.Clamp(mouse.x - w / 2f, 8f, Ui.W - w - 8f), mouse.y - 44f, w, 26f);
+                Ui.Box(r, new Color(0f, 0f, 0f, 0.8f), 6f);
+                Ui.Label(r, hover, Ui.Font(14, true, TextAnchor.MiddleCenter), Color.white);
+            }
+        }
+
+        private const float MiniW = 32f, MiniH = 44f, MiniGap = 5f;
+
+        /// <summary>One corner's rows, from the bottom up; <paramref name="mirror"/>: the right-hand corner (name at the edge, cards inwards).</summary>
+        private void CornerSide(System.Collections.Generic.List<int> lines, float h, bool mirror, ref string hover)
+        {
             if (lines.Count == 0) return;
-            const float cw = 22f, ch = 30f, gap = 4f, rowH = ch + 6f;
-            var nameStyle = Ui.Font(13, true);
+            const float rowH = MiniH + 8f, edge = 14f;
+            var nameStyle = Ui.Font(14, true, mirror ? TextAnchor.MiddleRight : TextAnchor.MiddleLeft);
             // the names in one column, as wide as the longest
             var nameW = 0f;
-            foreach (var i in lines) nameW = Mathf.Max(nameW, nameStyle.CalcSize(new GUIContent(PlayerName != null ? PlayerName(i) : "P" + (i + 1))).x);
-            var x0 = 34f + nameW + 10f;
-            var y = h - 40f - lines.Count * rowH;
-            string hover = null;
+            foreach (var i in lines) nameW = Mathf.Max(nameW, nameStyle.CalcSize(new GUIContent(Who(i))).x);
+            var y = h - 34f - lines.Count * rowH;
             var mouse = Ui.Mouse;
             foreach (var i in lines)
             {
                 var p = _state.Players[i];
-                var who = PlayerName != null ? PlayerName(i) : "P" + (i + 1);
-                Ui.Swatch(new Rect(14f, y + ch / 2f - 7f, 14f, 14f), p.Team);
-                Ui.Label(new Rect(34f, y, nameW + 6f, ch), who, nameStyle, new Color(1f, 1f, 1f, 0.8f));
-                var x = x0;
+                var swatch = mirror ? Ui.W - edge - 14f : edge;
+                Ui.Swatch(new Rect(swatch, y + MiniH / 2f - 7f, 14f, 14f), p.Team);
+                var nameX = mirror ? Ui.W - edge - 20f - nameW - 6f : edge + 20f;
+                Ui.Label(new Rect(nameX, y, nameW + 6f, MiniH), Who(i), nameStyle, new Color(1f, 1f, 1f, 0.85f));
+                var x = mirror ? nameX - 10f - MiniW : edge + 20f + nameW + 10f;
                 var seen = new System.Collections.Generic.List<int>();
                 foreach (var c in p.Cards)
                 {
@@ -492,24 +515,16 @@ namespace UltraPuck.Game
                     var n = 0;
                     foreach (var d in p.Cards) if (d == c) n++;
                     var def = _sim.Cards.Cards[c];
-                    var r = new Rect(x, y, cw, ch);
+                    var r = new Rect(x, y, MiniW, MiniH);
                     MiniCard(r, def, n);
                     if (r.Contains(mouse)) hover = def.Name + (n > 1 ? "  x" + n : "");
-                    x += cw + gap;
+                    x += mirror ? -(MiniW + MiniGap) : MiniW + MiniGap;
                 }
                 y += rowH;
             }
-            // the card under the mouse: its name just above the list
-            if (hover != null)
-            {
-                var hs = Ui.Font(14, true);
-                var w = hs.CalcSize(new GUIContent(hover)).x + 20f;
-                var r = new Rect(Mathf.Min(mouse.x - w / 2f, Ui.W - w - 8f), mouse.y - 40f, w, 26f);
-                r.x = Mathf.Max(8f, r.x);
-                Ui.Box(r, new Color(0f, 0f, 0f, 0.8f), 6f);
-                Ui.Label(r, hover, Ui.Font(14, true, TextAnchor.MiddleCenter), Color.white);
-            }
         }
+
+        private string Who(int i) { return PlayerName != null ? PlayerName(i) : "P" + (i + 1); }
 
         /// <summary>One little card: a frame in the card's colour, its picture on top, a dark strip under it, and a count if more than one.</summary>
         private void MiniCard(Rect r, UltraPuck.Core.CardDef def, int count)
@@ -518,16 +533,16 @@ namespace UltraPuck.Game
             if (string.IsNullOrEmpty(def.Color) || !ColorUtility.TryParseHtmlString(def.Color, out frame)) frame = new Color(0.8f, 0.8f, 0.85f);
             Ui.Box(new Rect(r.x + 1f, r.y + 2f, r.width, r.height), new Color(0f, 0f, 0f, 0.45f), 4f); // (a little shadow, to lift it off the ice)
             Ui.Box(r, frame, 4f);
-            var inner = new Rect(r.x + 2f, r.y + 2f, r.width - 4f, r.height - 4f);
+            var inner = new Rect(r.x + 3f, r.y + 3f, r.width - 6f, r.height - 6f);
             Ui.Box(inner, def.PureBlack ? Color.black : new Color(0.12f, 0.12f, 0.13f), 3f);
             var art = CardArt != null ? CardArt(def.Art) : null;
             if (art != null && Event.current.type == EventType.Repaint)
                 GUI.DrawTexture(new Rect(inner.x + 1f, inner.y + 1f, inner.width - 2f, inner.width - 2f), art, ScaleMode.ScaleAndCrop);
             if (count > 1)
             {
-                var b = new Rect(r.xMax - 11f, r.yMax - 11f, 14f, 14f);
-                Ui.Box(b, Color.white, 4f);
-                Ui.Label(b, count.ToString(), Ui.Font(10, true, TextAnchor.MiddleCenter), new Color(0.08f, 0.08f, 0.09f), false);
+                var b = new Rect(r.xMax - 13f, r.yMax - 13f, 17f, 17f);
+                Ui.Box(b, Color.white, 5f);
+                Ui.Label(b, count.ToString(), Ui.Font(12, true, TextAnchor.MiddleCenter), new Color(0.08f, 0.08f, 0.09f), false);
             }
         }
 
