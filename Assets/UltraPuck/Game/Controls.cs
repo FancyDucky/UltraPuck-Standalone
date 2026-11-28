@@ -94,11 +94,45 @@ namespace UltraPuck.Game
             return a >= Act.MoveLeft;
         }
 
+        /// <summary>
+        /// Mouse buttons as keyboard bindings: numbers past the keyboard's keys (saved like a key), read off the mouse.
+        /// The side buttons are Back and Forward.
+        /// </summary>
+        public const int MouseLeft = 10000, MouseRight = 10001, MouseMiddle = 10002, MouseBack = 10003, MouseForward = 10004;
+
+        public static bool IsMouse(Key k) { return (int)k >= MouseLeft && (int)k <= MouseForward; }
+
+        private static ButtonControl MouseButton(Key k)
+        {
+            var m = Mouse.current;
+            if (m == null) return null;
+            switch ((int)k)
+            {
+                case MouseLeft: return m.leftButton;
+                case MouseRight: return m.rightButton;
+                case MouseMiddle: return m.middleButton;
+                case MouseBack: return m.backButton;
+                case MouseForward: return m.forwardButton;
+                default: return null;
+            }
+        }
+
+        /// <summary>Which mouse button was pressed this frame (as a binding), or None.</summary>
+        public static Key ReadMousePress()
+        {
+            for (var v = MouseLeft; v <= MouseForward; v++)
+            {
+                var b = MouseButton((Key)v);
+                if (b != null && b.wasPressedThisFrame) return (Key)v;
+            }
+            return Key.None;
+        }
+
         public static Key KeyOf(Act a)
         {
             var i = (int)a;
             var v = PlayerPrefs.GetInt("bind_key_" + i, (int)DefaultKeys[i]);
-            return Enum.IsDefined(typeof(Key), v) ? (Key)v : DefaultKeys[i];
+            return Enum.IsDefined(typeof(Key), v) || IsMouse((Key)v) ? (Key)v : DefaultKeys[i];
         }
 
         public static void SetKey(Act a, Key k)
@@ -161,6 +195,14 @@ namespace UltraPuck.Game
         public static string KeyName(Key k)
         {
             if (k == Key.None) return "—";
+            switch ((int)k)
+            {
+                case MouseLeft: return "Left mouse";
+                case MouseRight: return "Right mouse";
+                case MouseMiddle: return "Middle mouse";
+                case MouseBack: return "Mouse back";
+                case MouseForward: return "Mouse forward";
+            }
             switch (k)
             {
                 case Key.LeftArrow: return "←";
@@ -210,8 +252,9 @@ namespace UltraPuck.Game
 
         public static bool KeyHeld(Keyboard kb, Act a)
         {
-            if (kb == null) return false;
             var k = KeyOf(a);
+            if (IsMouse(k)) { var mb = MouseButton(k); return mb != null && mb.isPressed; }
+            if (kb == null) return false;
             if (k == Key.None) return false;
             var c = kb[k];
             return c != null && c.isPressed;
@@ -219,8 +262,9 @@ namespace UltraPuck.Game
 
         public static bool KeyPressed(Keyboard kb, Act a)
         {
-            if (kb == null) return false;
             var k = KeyOf(a);
+            if (IsMouse(k)) { var mb = MouseButton(k); return mb != null && mb.wasPressedThisFrame; }
+            if (kb == null) return false;
             if (k == Key.None) return false;
             var c = kb[k];
             return c != null && c.wasPressedThisFrame;

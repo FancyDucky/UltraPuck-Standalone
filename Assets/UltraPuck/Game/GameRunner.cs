@@ -828,6 +828,30 @@ namespace UltraPuck.Game
                 yield return Shot("coopchoose-deck");
                 GoMainMenu();
                 yield return new WaitForSecondsRealtime(0.5f);
+                // and Double Card: its two cards before the second person's hand
+                var dbl2 = _cards != null ? _cards.ById("ultrapuck.doublecard") : null;
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Name = "One" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 0, Name = "Two" });
+                _local.Slots.Add(new LocalPlayers.Slot { Team = 1, Demo = true, Name = "Bot" });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                _sim.T.CardsOffered = 3;
+                _sim.T.ChaosOdds = 0;
+                yield return new WaitForSecondsRealtime(0.8f);
+                _sim.StartPicking(_state, new[] { 0, 1 });
+                if (dbl2 != null)
+                {
+                    var offer = new List<int>(_state.Players[0].Offer);
+                    offer.Remove(dbl2.Index);
+                    offer[Mathf.Min(1, offer.Count - 1)] = dbl2.Index;
+                    _state.Players[0].Offer = offer.ToArray();
+                }
+                yield return new WaitForSecondsRealtime(1.2f);
+                _cardScreen.ShotConfirm = true;
+                yield return new WaitForSecondsRealtime(2.2f);
+                yield return Shot("coopdouble-gifts");
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
             }
 
             if (want("held"))

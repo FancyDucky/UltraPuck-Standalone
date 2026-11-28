@@ -783,6 +783,7 @@ namespace UltraPuck.Game
                 return;
             }
             var key = Controls.ReadKeyPress(kb);
+            if (key == Key.None) key = Controls.ReadMousePress(); // a mouse button (the side ones too)
             if (key != Key.None && key != Key.Escape)
             {
                 Controls.SetKey(act, key);

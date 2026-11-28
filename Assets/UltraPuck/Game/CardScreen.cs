@@ -218,6 +218,7 @@ namespace UltraPuck.Game
                     for (var i = 0; i < s.Players.Length; i++) _cardsAtStart[i] = s.Players[i].Cards.Length;
                 }
                 HeldFrame(s);
+                if (_stage == Stage.Revealing && !_held && Time.unscaledTime - _stageAt > RevealHold) Leave(-1);
                 // forget confirmed picks once the game has taken them
                 var done = new List<int>();
                 foreach (var kv in _ready)
@@ -252,6 +253,7 @@ namespace UltraPuck.Game
                 else if (_stage == Stage.Idle && !_editing)
                 {
                     if ((Sim.T.TeamVote || Sim.T.SameDraw) && !deckRound) BeginTeamVote(s);
+                    else if (!PickInFlight(s) && LocalGifts(s)) { }
                     else
                     {
                         var next = NextPicker(s);
@@ -846,8 +848,29 @@ namespace UltraPuck.Game
             _seenGifted.TryGetValue(_slot, out seen);
             if (p.Gifted == seen || p.Gifts.Length == 0) return false;
             _seenGifted[_slot] = p.Gifted;
-            ShowGifts(p);
+            ShowGifts(_slot, p, true);
             return true;
+        }
+
+        /// <summary>
+        /// Someone on this PC took Double Card (and didn't wait on their cards: someone else here still had to pick):
+        /// its two cards, shown before the next hand is dealt. True when they were.
+        /// </summary>
+        private bool LocalGifts(GameState s)
+        {
+            for (var i = 0; i < s.Players.Length; i++)
+            {
+                var slot = SlotOf(i);
+                if (slot < 0 || slot >= Local.Slots.Count || Local.Slots[slot].Demo) continue;
+                var p = s.Players[i];
+                int seen;
+                _seenGifted.TryGetValue(i, out seen);
+                if (p.Gifted == seen || p.Gifts.Length == 0) continue;
+                _seenGifted[i] = p.Gifted;
+                ShowGifts(i, p, false);
+                return true;
+            }
+            return false;
         }
 
         /// <summary>The team is done (or the pick is over): a second's look, then the cards leave.</summary>
@@ -862,9 +885,8 @@ namespace UltraPuck.Game
         }
 
         /// <summary>Double Card: the two cards it gave, dealt like a hand straight after the pick (nothing to choose).</summary>
-        private void ShowGifts(PlayerState p)
+        private void ShowGifts(int slot, PlayerState p, bool held)
         {
-            var slot = _slot;
             foreach (var c in _cards) { Destroy(c.Root.gameObject); Destroy(c.Shadow.gameObject); }
             _cards.Clear();
             var gifts = new List<int>();
@@ -874,7 +896,7 @@ namespace UltraPuck.Game
             _stage = Stage.Revealing;
             _focus = -1;
             _chosen = -1;
-            _held = true;
+            _held = held; // (not held: they leave after a look, see Frame)
             _heldDoneAt = -1f;
             _revealShow = true;
             _revealOwner.Clear();

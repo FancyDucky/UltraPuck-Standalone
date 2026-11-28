@@ -87,6 +87,16 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **portal controls turn with you; two on one PC: Double Card's cards first; mouse
+  buttons bindable. Protocol 99.** Coming out of a portal (a person steering, holding a direction) sets
+  `PlayerState.PortalTurned` (`TurnIn` / `TurnOut`, `TurnHeld` = the stick then, `LastMove` = last tick's stick): in
+  `Control` the move input is turned the way the portal turned you (`PortalTurn`) until you let go or push more than
+  ~35 degrees another way. Test `OutOfAPortalYourControlsTurnWithYou` (side-by-side portals: holding up carries you
+  away, not back in). `CardScreen.LocalGifts`: someone on this PC who took Double Card without waiting (another
+  person here still to pick) sees its two cards (not held: they leave after `RevealHold`) before the next hand.
+  `Controls`: mouse buttons as key bindings (`MouseLeft`..`MouseForward` = 10000..10004, past the `Key` values; the
+  side buttons are Back / Forward), read in `KeyHeld` / `KeyPressed`, named "Mouse back" etc., and picked up when
+  rebinding (`ReadMousePress`). Screenshot scene `coopchoose` covers both Choose and Double Card. 302 tests.
 - unreleased (Claude, 28 Nov 2026): **two on one PC: Choose's deck before the teammate's hand.** `CardScreen.NextPicker`
   waits while a pick made on this PC hasn't been taken by the game yet (`PickInFlight`; no watching meanwhile either),
   and deals follow-up picks (Choose's deck, New Hand's fresh hand: `PickKind` != 0) before anyone else's hand. Double

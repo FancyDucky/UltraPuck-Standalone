@@ -316,6 +316,14 @@ namespace UltraPuck.Core
         /// <summary>Going through a portal: the Id of the portal it's in (0 = none).</summary>
         public int PortalVia;
         /// <summary>
+        /// Came out of a portal (a person playing): their controls are turned the way the portal turned them
+        /// (<see cref="TurnIn"/> to <see cref="TurnOut"/>), so the way they were holding keeps taking them away from it,
+        /// until they let go or push a different way (<see cref="TurnHeld"/>: the way they held when they went through).
+        /// <see cref="LastMove"/>: the stick last tick.
+        /// </summary>
+        public bool PortalTurned;
+        public FixVec2 TurnIn, TurnOut, TurnHeld, LastMove;
+        /// <summary>
         /// Slot Machine: time left of the spin going on (0 = none), what it'll land on (<see cref="SlotWin"/>: 0 = nothing,
         /// else the prize), the three symbols it shows (4 bits each, for the drawing side), how many spins so far (so the
         /// drawing side sees a new one), the prize being enjoyed and for how long, and the wait after a losing spin.
@@ -624,6 +632,7 @@ namespace UltraPuck.Core
                 Mix(ref h, p.Pilot); Mix(ref h, p.SwapHeld ? 1 : 0); Mix(ref h, p.GoalPull ? 1 : 0); Mix(ref h, p.Goals); Mix(ref h, p.Assists); Mix(ref h, p.Saves); Mix(ref h, p.Bumps); Mix(ref h, p.Shoved);
                 Mix(ref h, p.ShovedBy); Mix(ref h, p.FastTime); Mix(ref h, p.Fast); Mix(ref h, p.ShockHold);
                 Mix(ref h, p.PortalNext); Mix(ref h, p.PortalCooldown); Mix(ref h, p.PortalVia);
+                Mix(ref h, p.PortalTurned ? 1 : 0); Mix(ref h, p.TurnIn); Mix(ref h, p.TurnOut); Mix(ref h, p.TurnHeld); Mix(ref h, p.LastMove);
                 Mix(ref h, p.SlotSpin); Mix(ref h, p.SlotWin); Mix(ref h, p.SlotReels); Mix(ref h, p.SlotSpins); Mix(ref h, p.SlotPrize);
                 Mix(ref h, p.SlotPrizeTime); Mix(ref h, p.SlotWait);
                 Mix(ref h, p.RageFill); Mix(ref h, p.RageNeed); Mix(ref h, p.RageTime); Mix(ref h, p.RageCooldown);

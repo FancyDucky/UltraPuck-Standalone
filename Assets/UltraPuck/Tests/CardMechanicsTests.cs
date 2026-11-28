@@ -2398,6 +2398,41 @@ namespace UltraPuck.Tests
             return default(Portal);
         }
 
+        /// <summary>
+        /// Two portals side by side on one wall: holding up walks you into one and out of the other, and holding up still
+        /// takes you away from the wall (your controls turned with you), not back in; letting go hands them back.
+        /// </summary>
+        [Test]
+        public void OutOfAPortalYourControlsTurnWithYou()
+        {
+            var s = PortalGame();
+            var up = new FixVec2(Fix.Zero, Fix.One);
+            ShootPortal(s, At(-6, 0), up);
+            ShootPortal(s, At(6, 0), up);
+            var blue = PortalOf(s, 0); var orange = PortalOf(s, 1);
+            Assert.Greater(FixVec2.Dot(blue.Normal, orange.Normal).ToDouble(), 0.9, "both on the same wall");
+            var p = s.Players[0];
+            p.Pos = blue.Pos + blue.Normal * Fix.FromInt(3);
+            p.Vel = FixVec2.Zero;
+            var hold = new PlayerInput { MoveX = PlayerInput.Axis(-blue.Normal.X.ToFloat()), MoveY = PlayerInput.Axis(-blue.Normal.Y.ToFloat()) };
+            var through = false;
+            for (var t = 0; t < 240 && !through; t++)
+            {
+                _sim.Step(s, new[] { hold, default(PlayerInput) });
+                if ((p.Pos - orange.Pos).Length < Fix.FromInt(2)) through = true;
+            }
+            Assert.IsTrue(through, "came out of orange");
+            Assert.IsTrue(p.PortalTurned, "controls turned with them");
+            // still holding the same way for a second: away from the wall, never back into a portal
+            var uses = PortalOf(s, 0).Uses;
+            for (var t = 0; t < 120; t++) _sim.Step(s, new[] { hold, default(PlayerInput) });
+            Assert.Greater(FixVec2.Dot(p.Pos - orange.Pos, orange.Normal).ToDouble(), 2.5, "carried on away from the wall");
+            Assert.AreEqual(uses, PortalOf(s, 0).Uses, "not back through");
+            // let go: their own controls again
+            _sim.Step(s, new PlayerInput[2]);
+            Assert.IsFalse(p.PortalTurned);
+        }
+
         [Test]
         public void PortalGunShootsBlueThenOrangeThenReplacesBlue()
         {
