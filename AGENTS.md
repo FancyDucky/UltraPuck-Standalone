@@ -87,6 +87,12 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 27 Nov 2026): **chaos card drops in from the top; four more chaos sounds like C.** The corner
+  chaos card now starts straight above its spot (off the top of the screen) and drops down into the top-right corner
+  (`CardScreen.Deal`). New sounds in the style of C (whoosh into a detuned stinger that winds down like a tape
+  stopping): `Sfx.ChaosE` deeper and longer, `F` the stinger stuttering as it winds down, `G` sharper and dissonant with
+  a shimmer, `H` short and punchy; Settings > Sound > "Chaos card" lists all eight. Screenshot `chaos-drop` catches it
+  on the way down. No rules change.
 - unreleased (Claude, 27 Nov 2026): **chaos cards fly in from the corner, protocol 95.** Chaos cards are never in a
   normal draw any more (`CardLibrary.DrawOffer` skips them, so hands, New Hand, Choose's deck and Double Card never
   give one). Instead one pick in `Tuning.ChaosOdds` (6) rolls (`CardLibrary.ChaosRoll`, `s.NextRandom()`, only if

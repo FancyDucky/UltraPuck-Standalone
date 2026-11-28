@@ -36,9 +36,10 @@ namespace UltraPuck.Game
         BounceSnap,
         /// <summary>
         /// A chaos card flying in (Sound settings > Chaos card picks one): A a glitchy zap, B a corrupted chime,
-        /// C a whoosh into a dark stinger, D a cascade of error bleeps.
+        /// C a whoosh into a dark stinger, D a cascade of error bleeps; E..H more like C: E deeper and longer, F the
+        /// stinger stuttering as it winds down, G a sharper, dissonant one with a shimmer, H short and punchy.
         /// </summary>
-        ChaosA, ChaosB, ChaosC, ChaosD,
+        ChaosA, ChaosB, ChaosC, ChaosD, ChaosE, ChaosF, ChaosG, ChaosH,
     }
 
     /// <summary>
@@ -404,6 +405,75 @@ namespace UltraPuck.Game
                     Crackle(s, 0.5f, 0.6f, 0.2f, 6f, 233u);
                     Drive(s, 1.8f);
                     Reverb(s, 0.35f);
+                    break;
+
+                case Sfx.ChaosE:
+                    // like C, deeper and longer: a slow rising rush, a low cluster that hits with a big boom, winding
+                    // down slowly
+                    s = New(2f);
+                    Noise(s, 0f, 0.7f, 0.65f, t => 400f + 7000f * Sq(t / 0.7f), 200f, t => Sq(t / 0.7f), 251u);
+                    foreach (var f in new[] { 55f, 58.3f, 82.4f, 116.5f, 123.5f })
+                    {
+                        var hz = f;
+                        Tone(s, 0.68f, 1.3f, 0.3f, Wave.Square, t => hz * (t < 0.45f ? 1f : Mathf.Pow(0.3f, (t - 0.45f) / 0.8f)), t => Pluck(t, 0.003f, 1.8f));
+                    }
+                    Tone(s, 0.68f, 0.9f, 1f, Wave.Sine, t => Glide(110f, 30f, t, 0.2f), t => Pluck(t, 0.002f, 3.5f));
+                    Noise(s, 0.68f, 0.06f, 0.9f, t => 9000f, 600f, t => 1f, 252u);
+                    Crackle(s, 0.8f, 0.9f, 0.18f, 4f, 253u);
+                    Drive(s, 2f);
+                    Reverb(s, 0.45f);
+                    break;
+
+                case Sfx.ChaosF:
+                    // like C, but the stinger stutters (chopped on and off, faster and faster) as it winds down
+                    s = New(1.4f);
+                    Noise(s, 0f, 0.4f, 0.6f, t => 700f + 9000f * Sq(t / 0.4f), 300f, t => Sq(t / 0.4f), 261u);
+                    foreach (var f in new[] { 103.8f, 110f, 155.6f, 220f })
+                    {
+                        var hz = f;
+                        Tone(s, 0.38f, 0.95f, 0.32f, Wave.Square, t => hz * (t < 0.25f ? 1f : Mathf.Pow(0.3f, (t - 0.25f) / 0.6f)),
+                            t => Pluck(t, 0.003f, 2.2f) * (t < 0.25f ? 1f : (Mathf.Floor((t - 0.25f) * (12f + 30f * t)) % 2f == 0f ? 1f : 0.05f)));
+                    }
+                    Tone(s, 0.38f, 0.5f, 0.85f, Wave.Sine, t => Glide(160f, 42f, t, 0.1f), t => Pluck(t, 0.002f, 7f));
+                    Noise(s, 0.38f, 0.04f, 0.8f, t => 10000f, 1000f, t => 1f, 262u);
+                    Drive(s, 1.8f);
+                    Reverb(s, 0.3f);
+                    break;
+
+                case Sfx.ChaosG:
+                    // like C, sharper: a fast whoosh into a dissonant chord (a tritone and a minor second), a bright
+                    // metallic shimmer over it, winding down
+                    s = New(1.5f);
+                    Noise(s, 0f, 0.35f, 0.6f, t => 1000f + 11000f * Sq(t / 0.35f), 500f, t => Sq(t / 0.35f), 271u);
+                    foreach (var f in new[] { 146.8f, 155.6f, 207.7f, 293.7f })
+                    {
+                        var hz = f;
+                        Tone(s, 0.33f, 1f, 0.28f, Wave.Square, t => hz * (t < 0.3f ? 1f : Mathf.Pow(0.4f, (t - 0.3f) / 0.65f)), t => Pluck(t, 0.002f, 2.8f));
+                    }
+                    foreach (var f in new[] { 2349.3f, 2489f, 3322.4f })
+                    {
+                        var hz = f;
+                        Tone(s, 0.33f, 0.9f, 0.08f, Wave.Sine, t => hz * (t < 0.3f ? 1f : Mathf.Pow(0.4f, (t - 0.3f) / 0.65f)), t => Pluck(t, 0.002f, 4f) * (0.6f + 0.4f * Mathf.Sin(Tau * 17f * t)));
+                    }
+                    Tone(s, 0.33f, 0.45f, 0.75f, Wave.Sine, t => Glide(180f, 50f, t, 0.09f), t => Pluck(t, 0.002f, 7f));
+                    Noise(s, 0.33f, 0.04f, 0.8f, t => 12000f, 1500f, t => 1f, 272u);
+                    Drive(s, 1.6f);
+                    Reverb(s, 0.4f);
+                    break;
+
+                case Sfx.ChaosH:
+                    // like C, short and punchy: a quick rush, a tight hit, a fast wind-down
+                    s = New(0.75f);
+                    Noise(s, 0f, 0.22f, 0.6f, t => 900f + 9000f * Sq(t / 0.22f), 300f, t => Sq(t / 0.22f), 281u);
+                    foreach (var f in new[] { 110f, 116.5f, 164.8f, 233.1f })
+                    {
+                        var hz = f;
+                        Tone(s, 0.2f, 0.5f, 0.32f, Wave.Square, t => hz * (t < 0.12f ? 1f : Mathf.Pow(0.3f, (t - 0.12f) / 0.3f)), t => Pluck(t, 0.002f, 5f));
+                    }
+                    Tone(s, 0.2f, 0.35f, 0.9f, Wave.Sine, t => Glide(160f, 45f, t, 0.06f), t => Pluck(t, 0.002f, 10f));
+                    Noise(s, 0.2f, 0.03f, 0.9f, t => 10000f, 1000f, t => 1f, 282u);
+                    Drive(s, 2f);
+                    Reverb(s, 0.2f);
                     break;
 
                 case Sfx.ChaosD:
@@ -881,11 +951,11 @@ namespace UltraPuck.Game
             Play(id, Mathf.Lerp(0.3f, 0.85f, hard), Mathf.Lerp(0.5f, 1f, hard), pan, 0.03f);
         }
 
-        /// <summary>A chaos card flying in, with the sound chosen in Sound settings (none if it's off), or <paramref name="which"/> (1..4).</summary>
+        /// <summary>A chaos card flying in, with the sound chosen in Sound settings (none if it's off), or <paramref name="which"/> (1..8).</summary>
         public static void Chaos(int which = -1)
         {
             if (which < 0) which = Settings.ChaosSound;
-            if (which <= 0 || which > 4) return;
+            if (which <= 0 || which > 8) return;
             Play(Sfx.ChaosA + (which - 1), 0.75f);
         }
 

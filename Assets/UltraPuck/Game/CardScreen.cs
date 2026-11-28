@@ -669,7 +669,7 @@ namespace UltraPuck.Game
                 return;
             }
             // three in a row; more fan out in an arc (like a rainbow), a little smaller, so they all fit on screen. A
-            // chaos card at the end of the offer isn't one of them: it flies in from the top-right corner and stays there.
+            // chaos card at the end of the offer isn't one of them: it drops in from the top into the top-right corner and stays there.
             var corner = offer.Length > 1 && Sim.Cards.IsChaosIndex(offer[offer.Length - 1]) ? offer.Length - 1 : -1;
             var n = corner >= 0 ? offer.Length - 1 : offer.Length;
             _focus = n / 2;
@@ -685,8 +685,8 @@ namespace UltraPuck.Game
                     v.Corner = true;
                     v.Size = CornerSize / _dealScale;
                     v.Home = new Vector3(halfH - 1.25f * CornerSize - 0.3f, halfV - 1.75f * CornerSize - 0.32f, 0f);
-                    v.Pos = new Vector3(halfH + 3f, halfV + 3.5f, 1f); // off the corner of the screen
-                    v.Rot = new Vector3(0f, 180f, Random.value < 0.5f ? -120f : 120f);
+                    v.Pos = new Vector3(v.Home.x, halfV + 4f, 1f); // straight down from above the top of the screen
+                    v.Rot = new Vector3(-60f, 180f, Random.Range(-10f, 10f));
                     v.Scale = 0.4f;
                     v.Delay = 0.12f + n * 0.11f + 0.45f; // after the hand
                     _cards.Add(v);
@@ -2068,7 +2068,7 @@ namespace UltraPuck.Game
             /// <summary>Tilt along the fan when more than three are offered (degrees).</summary>
             public float Fan;
             public float Scale = 1f, ScaleVel, Delay, Phase;
-            /// <summary>A chaos card in the top-right corner (not in the hand's row): it flies in last, with its own sound.</summary>
+            /// <summary>A chaos card in the top-right corner (not in the hand's row): it drops in from the top last, with its own sound.</summary>
             public bool Corner;
             /// <summary>Its size next to the hand's cards (the corner card is smaller).</summary>
             public float Size = 1f;

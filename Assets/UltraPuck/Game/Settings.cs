@@ -137,14 +137,15 @@ namespace UltraPuck.Game
             set { PlayerPrefs.SetInt("puck_bounce_snap", Mathf.Clamp(value, 0, PuckBounceNames.Length - 1)); }
         }
 
-        /// <summary>The sound a chaos card makes as it flies in: 0 = none, 1..4 = Sfx.ChaosA..D.</summary>
+        /// <summary>The sound a chaos card makes as it flies in: 0 = none, 1..8 = Sfx.ChaosA..H.</summary>
         public static int ChaosSound
         {
             get { return Mathf.Clamp(PlayerPrefs.GetInt("chaos_sound", 1), 0, ChaosSoundNames.Length - 1); }
             set { PlayerPrefs.SetInt("chaos_sound", Mathf.Clamp(value, 0, ChaosSoundNames.Length - 1)); }
         }
 
-        public static readonly string[] ChaosSoundNames = { "Off", "A: glitch zap", "B: corrupted chime", "C: whoosh + stinger", "D: error bleeps" };
+        public static readonly string[] ChaosSoundNames = { "Off", "A: glitch zap", "B: corrupted chime", "C: whoosh + stinger", "D: error bleeps",
+            "E: deep stinger", "F: stuttering stinger", "G: sharp stinger", "H: short stinger" };
 
         public static readonly string[] PuckBounceNames = { "Off", "Snap", "Tok", "Tok: rounder", "Tok: brighter", "Plink",
             "Drum A: clean", "Drum B: tight", "Drum C: round", "Drum D: soft click", "Drum E: deep", "Drum F: snappy" };

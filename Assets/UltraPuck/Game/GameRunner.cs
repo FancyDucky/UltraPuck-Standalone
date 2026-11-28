@@ -822,7 +822,10 @@ namespace UltraPuck.Game
                     foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.loyal", "ultrapuck.portalgun", "ultrapuck.widenets" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                     _state.Players[0].Offer = offer.ToArray();
                 }
-                yield return new WaitForSecondsRealtime(2.2f);
+                // the chaos card on its way down from the top
+                yield return new WaitForSecondsRealtime(1.2f);
+                yield return Shot("chaos-drop");
+                yield return new WaitForSecondsRealtime(1.0f);
                 // eight moments half a second apart: calm most of the time, a twitch now and then
                 for (var k = 1; k <= 8; k++)
                 {
