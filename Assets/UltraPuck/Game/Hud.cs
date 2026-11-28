@@ -526,6 +526,16 @@ namespace UltraPuck.Game
             }
         }
 
+        /// <summary>The first letter of each word: "Friendly Fire" FF, "Heavyweight" H.</summary>
+        private static string Initials(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            var sb = new System.Text.StringBuilder();
+            foreach (var w in name.Split(new[] { ' ', '-', '_' }, System.StringSplitOptions.RemoveEmptyEntries))
+                foreach (var ch in w) if (char.IsLetterOrDigit(ch)) { sb.Append(char.ToUpperInvariant(ch)); break; }
+            return sb.Length > 3 ? sb.ToString(0, 3) : sb.ToString();
+        }
+
         private string Who(int i) { return PlayerName != null ? PlayerName(i) : "P" + (i + 1); }
 
         /// <summary>One little card: a frame in the card's colour, its picture on top, a dark strip under it, and a count if more than one.</summary>
@@ -540,9 +550,12 @@ namespace UltraPuck.Game
             var art = CardArt != null ? CardArt(def.Art) : null;
             if (art != null && Event.current.type == EventType.Repaint)
                 GUI.DrawTexture(new Rect(inner.x + 1f, inner.y + 1f, inner.width - 2f, inner.width - 2f), art, ScaleMode.ScaleAndCrop);
+            // the card's initials in the strip under the picture (Friendly Fire: FF), in its colour
+            var strip = new Rect(inner.x, inner.y + inner.width - 1f, inner.width, inner.yMax - (inner.y + inner.width - 1f));
+            Ui.Label(strip, Initials(def.Name), Ui.Font(12, true, TextAnchor.MiddleCenter), Color.Lerp(frame, Color.white, 0.35f), false);
             if (count > 1)
             {
-                var b = new Rect(r.xMax - 13f, r.yMax - 13f, 17f, 17f);
+                var b = new Rect(r.xMax - 13f, r.y - 4f, 17f, 17f); // (top corner: the initials are along the bottom)
                 Ui.Box(b, Color.white, 5f);
                 Ui.Label(b, count.ToString(), Ui.Font(12, true, TextAnchor.MiddleCenter), new Color(0.08f, 0.08f, 0.09f), false);
             }
