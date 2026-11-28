@@ -190,6 +190,7 @@ namespace UltraPuck.Game
             // the Black Hole explosion pulls everyone in, so the game itself has to know (it goes with the controls)
             _local.LookFor = slot => slot == FirstPerson() && Cosmetics.MyBoom == Cosmetics.BlackHoleBoom ? PlayerInput.LookPull : (byte)0;
             _hud.PictureOf = i => SteamNet.Avatar(AccountOf(i));
+            _hud.CardArt = id => _cardScreen != null ? _cardScreen.Art(id) : null;
             _hud.SymbolOf = SymbolOf;
             _shots = new ShotViews(_entities);
             _pylons = new PylonViews(_entities);
@@ -624,6 +625,11 @@ namespace UltraPuck.Game
                 }
                 _state.Score[0] = 4; _state.Score[1] = 2;
                 _state.LastScorer = 0;
+                // more cards, so the corner list's little cards show a few colours (a duplicate, a chaos card)
+                int Idx(string id) { var c = _cards != null ? _cards.ById(id) : null; return c != null ? c.Index : 0; }
+                _state.Players[0].Cards = new[] { 0, 1, 1, Idx("ultrapuck.lasersight"), Idx("ultrapuck.wavedash") };
+                _state.Players[1].Cards = new[] { Idx("ultrapuck.portalgun") };
+                _state.Players[2].Cards = new[] { 2, Idx("ultrapuck.morepucks") };
                 _state.Phase = Phase.GameOver;
                 yield return new WaitForSecondsRealtime(0.6f);
                 yield return Shot("gameover");

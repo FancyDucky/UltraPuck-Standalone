@@ -60,6 +60,8 @@ namespace UltraPuck.Game
         public System.Func<int, int> StyleOf, SymbolOf;
         /// <summary>A player's Steam profile picture (null: none), shown on their banner instead of their symbol.</summary>
         public System.Func<int, Texture> PictureOf;
+        /// <summary>A card's picture by its art id (the card screen's, already loaded), for the corner card list.</summary>
+        public System.Func<string, Texture> CardArt;
         /// <summary>After the match: 0 no replay to save, 1 one to save, 2 saved.</summary>
         public int ReplaySave;
         /// <summary>Draw a mouse reticle (keyboard players aiming with the mouse).</summary>
@@ -449,7 +451,11 @@ namespace UltraPuck.Game
                 }
         }
 
-        /// <summary>Everyone's cards, small, in the lower-left corner (Settings > Gameplay).</summary>
+        /// <summary>
+        /// Everyone's cards in the lower-left corner (Settings > Gameplay): a row a player, their name, then each card
+        /// as a little card (its picture in its colour's frame; the same card more than once: a number on it). The mouse
+        /// over one shows its name.
+        /// </summary>
         private void CornerCards(float h, bool always = false)
         {
             if ((!Settings.CornerCards && !always) || _sim == null || _sim.Cards == null) return;
@@ -461,13 +467,22 @@ namespace UltraPuck.Game
                 if (any) lines.Add(i);
             }
             if (lines.Count == 0) return;
-            var style = Ui.Font(13);
-            var y = h - 46f - lines.Count * 20f;
+            const float cw = 22f, ch = 30f, gap = 4f, rowH = ch + 6f;
+            var nameStyle = Ui.Font(13, true);
+            // the names in one column, as wide as the longest
+            var nameW = 0f;
+            foreach (var i in lines) nameW = Mathf.Max(nameW, nameStyle.CalcSize(new GUIContent(PlayerName != null ? PlayerName(i) : "P" + (i + 1))).x);
+            var x0 = 34f + nameW + 10f;
+            var y = h - 40f - lines.Count * rowH;
+            string hover = null;
+            var mouse = Ui.Mouse;
             foreach (var i in lines)
             {
                 var p = _state.Players[i];
-                var names = new System.Text.StringBuilder();
-                // the same card more than once: "Speed Up x2"
+                var who = PlayerName != null ? PlayerName(i) : "P" + (i + 1);
+                Ui.Swatch(new Rect(14f, y + ch / 2f - 7f, 14f, 14f), p.Team);
+                Ui.Label(new Rect(34f, y, nameW + 6f, ch), who, nameStyle, new Color(1f, 1f, 1f, 0.8f));
+                var x = x0;
                 var seen = new System.Collections.Generic.List<int>();
                 foreach (var c in p.Cards)
                 {
@@ -476,14 +491,43 @@ namespace UltraPuck.Game
                     if (_sim.Cards.IsChoose(c) || _sim.Cards.IsDouble(c)) continue; // (they only lead to the cards they gave)
                     var n = 0;
                     foreach (var d in p.Cards) if (d == c) n++;
-                    if (names.Length > 0) names.Append(",  ");
-                    names.Append(_sim.Cards.Cards[c].Name);
-                    if (n > 1) names.Append(" x" + n);
+                    var def = _sim.Cards.Cards[c];
+                    var r = new Rect(x, y, cw, ch);
+                    MiniCard(r, def, n);
+                    if (r.Contains(mouse)) hover = def.Name + (n > 1 ? "  x" + n : "");
+                    x += cw + gap;
                 }
-                var who = PlayerName != null ? PlayerName(i) : "P" + (i + 1);
-                Ui.Swatch(new Rect(14f, y + 3f, 14f, 14f), p.Team);
-                Ui.Label(new Rect(34f, y, 900f, 20f), "<b>" + who + "</b>   " + names, style, new Color(1f, 1f, 1f, 0.75f));
-                y += 20f;
+                y += rowH;
+            }
+            // the card under the mouse: its name just above the list
+            if (hover != null)
+            {
+                var hs = Ui.Font(14, true);
+                var w = hs.CalcSize(new GUIContent(hover)).x + 20f;
+                var r = new Rect(Mathf.Min(mouse.x - w / 2f, Ui.W - w - 8f), mouse.y - 40f, w, 26f);
+                r.x = Mathf.Max(8f, r.x);
+                Ui.Box(r, new Color(0f, 0f, 0f, 0.8f), 6f);
+                Ui.Label(r, hover, Ui.Font(14, true, TextAnchor.MiddleCenter), Color.white);
+            }
+        }
+
+        /// <summary>One little card: a frame in the card's colour, its picture on top, a dark strip under it, and a count if more than one.</summary>
+        private void MiniCard(Rect r, UltraPuck.Core.CardDef def, int count)
+        {
+            Color frame;
+            if (string.IsNullOrEmpty(def.Color) || !ColorUtility.TryParseHtmlString(def.Color, out frame)) frame = new Color(0.8f, 0.8f, 0.85f);
+            Ui.Box(new Rect(r.x + 1f, r.y + 2f, r.width, r.height), new Color(0f, 0f, 0f, 0.45f), 4f); // (a little shadow, to lift it off the ice)
+            Ui.Box(r, frame, 4f);
+            var inner = new Rect(r.x + 2f, r.y + 2f, r.width - 4f, r.height - 4f);
+            Ui.Box(inner, def.PureBlack ? Color.black : new Color(0.12f, 0.12f, 0.13f), 3f);
+            var art = CardArt != null ? CardArt(def.Art) : null;
+            if (art != null && Event.current.type == EventType.Repaint)
+                GUI.DrawTexture(new Rect(inner.x + 1f, inner.y + 1f, inner.width - 2f, inner.width - 2f), art, ScaleMode.ScaleAndCrop);
+            if (count > 1)
+            {
+                var b = new Rect(r.xMax - 11f, r.yMax - 11f, 14f, 14f);
+                Ui.Box(b, Color.white, 4f);
+                Ui.Label(b, count.ToString(), Ui.Font(10, true, TextAnchor.MiddleCenter), new Color(0.08f, 0.08f, 0.09f), false);
             }
         }
 
