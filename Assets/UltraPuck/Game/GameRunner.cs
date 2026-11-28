@@ -4017,7 +4017,7 @@ namespace UltraPuck.Game
                     // (but not to themselves: a person playing here sees their own name, unless someone on the other
                     // team is at this PC too and would see it)
                     var named = pb.Disguised && pb.DisguiseAs >= 0 && pb.DisguiseAs < b.Players.Length && !SeesOwnName(b, i) ? pb.DisguiseAs : i;
-                    _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.62f, 0f), Name = NameOf(named), Team = pb.Team, Owner = i });
+                    _hud.Tags.Add(new Hud.Tag { World = new Vector3(pos.x, pos.y + radius + 0.62f, 0f), Name = NameOf(named), Team = pb.Team, Owner = i, Mine = IsLocalPerson(i) });
                     _hud.Under.Add(new Vector4(pos.x, pos.y, radius, i));
                 }
                 if (hit > 0f)

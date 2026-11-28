@@ -19,7 +19,8 @@ namespace UltraPuck.Game
         private string _error;
 
         /// <summary>A name floating over a player (filled in by GameRunner each frame).</summary>
-        public struct Tag { public Vector3 World; public string Name; public int Team; public int Owner; }
+        /// <summary>A name over a player; <see cref="Mine"/>: someone playing on this PC (their name pulses at the kick-off).</summary>
+        public struct Tag { public Vector3 World; public string Name; public int Team; public int Owner; public bool Mine; }
         public readonly System.Collections.Generic.List<Tag> Tags = new System.Collections.Generic.List<Tag>();
         /// <summary>
         /// What a name tag shouldn't hide: each player (x, y, radius, player number) and the puck (player number -1),
@@ -758,11 +759,21 @@ namespace UltraPuck.Game
             var style = Ui.Font(12, true, TextAnchor.LowerCenter);
             var dt = Mathf.Clamp(Clock.Now - _tagsAt, 0f, 0.1f);
             _tagsAt = Clock.Now;
+            // the kick-off: your own name grows and shrinks twice, so you can see which one you are and where you start
+            var into = _sim != null && _state.Phase == Phase.Countdown ? (_sim.T.CountdownTime - _state.PhaseTime).ToFloat() : -1f;
             foreach (var t in Tags)
             {
                 if (string.IsNullOrEmpty(t.Name)) continue;
                 var sp = Cam.WorldToScreenPoint(t.World);
                 var p = new Vector2(sp.x / k, (Screen.height - sp.y) / k);
+                var pulse = t.Mine && into >= 0f && into < 1.6f ? 1f + 0.8f * Mathf.Abs(Mathf.Sin(into / 0.8f * Mathf.PI)) : 1f;
+                if (pulse > 1.01f)
+                {
+                    var big = Ui.Font(Mathf.RoundToInt(12f * pulse), true, TextAnchor.LowerCenter);
+                    Ui.Label(new Rect(p.x - 200f, p.y - 18f * pulse, 400f, 18f * pulse), t.Name, big, Color.white);
+                    _tagAlpha[t.Owner] = TagFull;
+                    continue;
+                }
                 // fade while another player or the puck is under the text (so a crowd round the puck stays readable)
                 var w = style.CalcSize(new GUIContent(t.Name)).x;
                 var box = new Rect(p.x - w * 0.5f - 2f, p.y - 16f, w + 4f, 16f);

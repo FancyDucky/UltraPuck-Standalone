@@ -87,6 +87,9 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **your name pulses at the kick-off.** `Hud.NameTags`: a tag with `Mine` (a person
+  playing on this PC, `IsLocalPerson`) grows and shrinks twice in the first 1.6 s of the countdown (after a card pick,
+  once the cards have left: `CountdownTime - PhaseTime`), up to 1.8x, always at full strength. Display only.
 - unreleased (Claude, 28 Nov 2026): **portal controls turn with you; two on one PC: Double Card's cards first; mouse
   buttons bindable. Protocol 99.** Coming out of a portal (a person steering, holding a direction) sets
   `PlayerState.PortalTurned` (`TurnIn` / `TurnOut`, `TurnHeld` = the stick then, `LastMove` = last tick's stick): in
