@@ -87,6 +87,10 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- 0.1.77 (Claude, 28 Nov 2026): **released** (chaos cards, Giant Nets, More Pucks, corner drop, pure black,
+  card mouse-leave, arena maker / custom arenas). Chaos card sound defaults to H, the short stinger
+  (`Settings.ChaosSound` 8). Release.ps1's `gh release create` failed on the notes (Windows PowerShell 5.1 splits a
+  native argument at double quotes): published by hand with `--notes-file`; keep quotes out of `-Notes` or pass a file.
 - unreleased (Claude, 27 Nov 2026): **chaos card drops in from the top; four more chaos sounds like C.** The corner
   chaos card now starts straight above its spot (off the top of the screen) and drops down into the top-right corner
   (`CardScreen.Deal`). New sounds in the style of C (whoosh into a detuned stinger that winds down like a tape
