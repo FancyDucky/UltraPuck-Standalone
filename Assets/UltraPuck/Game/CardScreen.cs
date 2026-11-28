@@ -1478,11 +1478,11 @@ namespace UltraPuck.Game
             {
                 GUI.depth = 5;
                 Ui.Begin();
-                var r = new Rect(Ui.W - 330f, 14f, 316f, 34f);
+                var r = new Rect(Ui.W - 330f, Ui.H - 48f, 316f, 34f); // (bottom right)
                 Ui.Box(r, new Color(0f, 0f, 0f, 0.45f), 6f);
                 if (HostEnd > 0f) Ui.Box(new Rect(r.x, r.y, r.width * HostEnd, r.height), new Color(0.9f, 0.35f, 0.3f, 0.6f), 6f);
                 var dev = Local != null && Local.Slots.Count > 0 ? Local.Slots[0].Device : null;
-                Glyphs.Hint(r, "Hold {menu} to end the card pick", 15, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleCenter, dev, true);
+                Glyphs.Hint(r, "Hold {menu} to skip the card pick", 15, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleCenter, dev, true);
             }
             if (_stage == Stage.Idle) return;
             if (!_browse && (_state == null || _slot < 0 || _slot >= _state.Players.Length)) return; // (the card list needs no game)
