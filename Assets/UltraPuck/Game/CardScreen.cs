@@ -728,7 +728,7 @@ namespace UltraPuck.Game
                 return;
             }
             // three in a row; more fan out in an arc (like a rainbow), a little smaller, so they all fit on screen. A
-            // chaos card at the end of the offer isn't one of them: it drops in from the top into the top-right corner and stays there.
+            // chaos card at the end of the offer isn't one of them: it drops in from the top near the top-right corner (clear of the picks at the side) and stays there.
             var corner = offer.Length > 1 && Sim.Cards.IsChaosIndex(offer[offer.Length - 1]) ? offer.Length - 1 : -1;
             var n = corner >= 0 ? offer.Length - 1 : offer.Length;
             _focus = n / 2;
@@ -747,7 +747,9 @@ namespace UltraPuck.Game
                     // on the left, the other team on the right: see Minis)
                     var theirs = _state != null && slot >= 0 && slot < _state.Players.Length ? _state.Players[slot].Team & 1 : 0;
                     var side = _state != null && theirs == MyTeam(_state) ? 1f : -1f;
-                    v.Home = new Vector3(side * (halfH - 1.25f * CornerSize - 0.3f), halfV - 1.75f * CornerSize - 0.32f, 0f);
+                    // in from the edge, clear of the picks at the side (with Double Dip both teams pick, so there are
+                    // some on both sides)
+                    v.Home = new Vector3(side * (halfH - 1.25f * CornerSize - 2.35f), halfV - 1.75f * CornerSize - 0.32f, 0f);
                     v.Pos = new Vector3(v.Home.x, halfV + 4f, 1f); // straight down from above the top of the screen
                     v.Rot = new Vector3(-60f, 180f, Random.Range(-10f, 10f));
                     v.Scale = 0.4f;
