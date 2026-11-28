@@ -91,6 +91,14 @@ namespace UltraPuck.Core
                     toGoal = aim * bankLen; // (how far it has to go, for when to let go)
                 }
                 var blocked = sim.Map.Route.Count > 1 && sim.Map.Blocked(pos, spot);
+                // (brain 3) a clear look at the net: on a breakaway (nobody of theirs nearer the net than us) no pass at
+                // all, go and score; in range, no pass back or across under pressure either: shoot, or take the bump
+                if (sim.BotBrain[me.Team & 1] >= 3 && mate >= 0 && !covered && !blocked)
+                {
+                    var ahead = attack - defend;
+                    var forward = FixVec2.Dot(s.Players[mate].Pos - pos, ahead) > ahead.Length * Fix.Two;
+                    if (!OpponentNearerThan(s, attack, me.Team, pos) || (!forward && toGoal.Length < range + Fix.FromInt(4))) mate = -1;
+                }
                 // a teammate with a much better look at the net than ours: give it to them
                 var better = mate >= 0 && !covered && LaneClear(s, s.Players[mate].Pos, attack, me.Team, lane)
                              && (s.Players[mate].Pos - attack).SqrLength + Fix.FromInt(30) < toGoal.SqrLength;

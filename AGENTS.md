@@ -87,6 +87,18 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **Laser Sights card; bots stop passing back on a clear look (brain 3), protocol
+  104.** Laser Sights (`ultrapuck.lasersight`, tier C, max 1, art from the owner): stat `LaserSight`. While its holder
+  carries the puck and charges, `Simulation.LaserPath` traces a ghost puck from the puck at the speed a release now
+  would give (skater's speed included): `CollideWalls` / pylons / stone walls as the real puck, slowing by PuckDrag per
+  unit (Momentum's floor respected), ending where it stops, in a net, after 4 bounces or at `Tuning.LaserLength` (45).
+  Changes nothing (test checks the checksum). Drawn by `Views.LaserViews` (glow + beam + end dot), for everyone (it's a
+  laser), not while invisible to this screen. Screenshot scene `laser` (4 bots holding it). Test
+  `LaserSightsTraceTheShotIntoTheNetAndOffTheBoards`. Bots (owner: "they could have a breakaway but pass it backwards"):
+  brain 3 in the carrier branch drops the pass when the net isn't covered and either nobody of theirs is nearer the
+  net (`OpponentNearerThan`: a breakaway) or the shot is in range (+4) and the teammate isn't 2+ further up the ice:
+  shoot or take the bump. BotBench 3 vs 2, 192 matches: won 73, lost 21, drew 2, goals 418 - 274 (1v1 even on both
+  rinks, 2v2 and 3v3 about 15-1). 302 tests pass, build, screenshots checked (laser off the back of a net and boards).
 - unreleased (Claude, 28 Nov 2026): **bots bank shots off the boards (brain 2), protocol 103.** `Bot.BankShot`: when the
   net is covered (a teammate open too: half the time), each straight stretch of wall (3+ long) is tried: the spot in the
   net mirrored across the line the puck's middle bounces off (the wall face plus the puck's radius), pushed out by

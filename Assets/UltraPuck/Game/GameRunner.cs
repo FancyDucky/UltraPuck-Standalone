@@ -53,6 +53,8 @@ namespace UltraPuck.Game
         private RockViews _rocks;
         private readonly List<int> _seenSwaps = new List<int>();
         private IceViews _ice;
+        private LaserViews _lasers;
+        private readonly System.Collections.Generic.List<FixVec2> _laserPath = new System.Collections.Generic.List<FixVec2>();
         private StoneViews _stones;
         private PortalViews _portals;
         private SlotViews _slots;
@@ -193,6 +195,7 @@ namespace UltraPuck.Game
             _pylons = new PylonViews(_entities);
             _rocks = new RockViews(_entities);
             _ice = new IceViews(_entities);
+            _lasers = new LaserViews(_entities);
             _stones = new StoneViews(_entities, _effects);
             _portals = new PortalViews(_entities, _effects);
             _slots = new SlotViews(_entities);
@@ -540,6 +543,32 @@ namespace UltraPuck.Game
                 yield return Shot("replay-wipe");
                 yield return new WaitForSecondsRealtime(4f); // into the replay
                 yield return Shot("replay");
+                GoMainMenu();
+            }
+
+            if (want("laser"))
+            {
+                // Laser Sights: four bots who all hold it; a few moments where one is charging a shot
+                _local.Slots.Clear();
+                for (var bb = 0; bb < 4; bb++) _local.Slots.Add(new LocalPlayers.Slot { Team = bb & 1, Colour = bb & 1, Demo = true, Name = "Bot" });
+                _local.AssignTeams();
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(false);
+                while (_state != null && _state.Phase == Phase.Countdown) yield return null;
+                var taken = 0;
+                for (var wait = 0f; wait < 40f && taken < 3; wait += Time.unscaledDeltaTime)
+                {
+                    if (_state == null) break;
+                    foreach (var q in _state.Players) q.Stats.LaserSight = 1;
+                    if (_state.Phase == Phase.Play && _state.Carrier >= 0 && _state.Players[_state.Carrier].Charge > Fix.Ratio(1, 10))
+                    {
+                        yield return Shot("laser-" + (++taken));
+                        yield return new WaitForSecondsRealtime(1.5f);
+                        wait += 1.5f;
+                    }
+                    else yield return null;
+                }
+                Debug.Log("Ultra Puck: laser shots " + taken + ", phase " + (_state != null ? _state.Phase.ToString() : "none"));
                 GoMainMenu();
             }
 
@@ -3958,6 +3987,7 @@ namespace UltraPuck.Game
         {
             _hud.Tags.Clear();
             _hud.Rages.Clear();
+            _lasers.Begin();
             _hud.Pillars.Clear();
             _hud.OutCountdown = 0f;
             _hud.Under.Clear();
@@ -4008,6 +4038,12 @@ namespace UltraPuck.Game
                 var look = StyleOf(i);
                 _players[i].DashColour = Cosmetics.DashTint(Cosmetics.Dash(look), Palette.Team(pb.Team));
                 var hiddenNow = CardEffects(i, pb, pos);
+                // Laser Sights: charging a shot with the puck, a laser along where it would go (for everyone: it's a laser)
+                if (pb.Stats.LaserSight > 0 && b.Carrier == i && pb.Charge > Fix.Zero && !hiddenNow && !outNow && b.Phase == Phase.Play)
+                {
+                    _sim.LaserPath(b, i, _laserPath);
+                    _lasers.Show(i, _laserPath);
+                }
                 if (!hiddenNow && !outNow)
                 {
                     if (i >= _dashAcc.Length) System.Array.Resize(ref _dashAcc, i + 8);
@@ -4056,6 +4092,7 @@ namespace UltraPuck.Game
             _shots.Show(b, _sim.T.ShotRadius.ToFloat());
             _pylons.Show(b, _sim.T.PylonRadius.ToFloat());
             _rocks.Show(b, _sim.T.RockRadius.ToFloat(), SymbolOf, i => Palette.Team(b.Players[i].Team), IsLocalPerson, _sim.T.RockFlash.ToFloat(), _sim.T.PuckRadius.ToFloat());
+            _lasers.End();
             _ice.Show(b, _sim.T.IceRadius.ToFloat());
             _stones.Show(b, _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.StoneLife.ToFloat());
             _portals.Show(b, _sim.Map, _sim.T.PortalLength.ToFloat(), _sim.T.WallThickness.ToFloat() * 0.5f, _sim.T.PortalShotRadius.ToFloat());

@@ -1297,6 +1297,68 @@ namespace UltraPuck.Game
     /// shader (UltraPuck/Ice) shows the arena's hidden frozen surface through it, fixed to the rink, with a reflection
     /// that moves with the camera.
     /// </summary>
+    /// <summary>
+    /// Laser Sights: a thin green beam (with a soft glow and a dot where it ends) along the way a carrier's shot would
+    /// go if they let go now (Simulation.LaserPath), bounces and all. Built again each frame it shows.
+    /// </summary>
+    internal sealed class LaserViews
+    {
+        private static readonly Color Beam = new Color(0.45f, 1f, 0.45f, 0.95f);
+        private static readonly Color Glow = new Color(0.15f, 1f, 0.3f, 0.22f);
+        private readonly Transform _parent;
+        private readonly List<MeshFilter[]> _views = new List<MeshFilter[]>();
+        private readonly List<bool> _shown = new List<bool>();
+        private readonly List<Vector2> _pts = new List<Vector2>();
+
+        public LaserViews(Transform parent) { _parent = parent; }
+
+        /// <summary>Before a frame's lasers: none shown yet.</summary>
+        public void Begin() { for (var k = 0; k < _shown.Count; k++) _shown[k] = false; }
+
+        /// <summary>Player <paramref name="i"/>'s laser along <paramref name="path"/> (at least two points).</summary>
+        public void Show(int i, List<FixVec2> path)
+        {
+            if (path.Count < 2) return;
+            while (_views.Count <= i)
+            {
+                var root = new GameObject("Laser" + _views.Count).transform;
+                root.SetParent(_parent, false);
+                _views.Add(new[] { Draw.Make("Glow", root, null, 5), Draw.Make("Beam", root, null, 7), Draw.Make("Dot", root, null, 7) });
+                _shown.Add(false);
+            }
+            _pts.Clear();
+            foreach (var q in path) _pts.Add(new Vector2(q.X.ToFloat(), q.Y.ToFloat()));
+            var end = _pts[_pts.Count - 1];
+            // a gentle shimmer, so it reads as light
+            var pulse = 0.85f + 0.15f * Mathf.Sin(Time.unscaledTime * 18f + i);
+            var glow = Glow; glow.a *= pulse;
+            var mf = _views[i];
+            Set(mf[0], Draw.Line(_pts, false, 0.26f, glow));
+            Set(mf[1], Draw.Line(_pts, false, 0.06f, Beam));
+            var dot = Draw.Disc(0.13f * pulse, Beam, 20);
+            var vs = dot.vertices;
+            for (var k = 0; k < vs.Length; k++) vs[k] += (Vector3)end;
+            dot.vertices = vs;
+            dot.RecalculateBounds();
+            Set(mf[2], dot);
+            if (!mf[0].transform.parent.gameObject.activeSelf) mf[0].transform.parent.gameObject.SetActive(true);
+            _shown[i] = true;
+        }
+
+        /// <summary>After a frame's lasers: hide the ones not shown.</summary>
+        public void End()
+        {
+            for (var k = 0; k < _views.Count; k++)
+                if (!_shown[k] && _views[k][0].transform.parent.gameObject.activeSelf) _views[k][0].transform.parent.gameObject.SetActive(false);
+        }
+
+        private static void Set(MeshFilter mf, Mesh mesh)
+        {
+            if (mf.sharedMesh != null) Object.Destroy(mf.sharedMesh);
+            mf.sharedMesh = mesh;
+        }
+    }
+
     internal sealed class IceViews
     {
         private static readonly Color Body = Color.Lerp(Palette.Floor, new Color(0.66f, 0.87f, 1f), 0.72f);

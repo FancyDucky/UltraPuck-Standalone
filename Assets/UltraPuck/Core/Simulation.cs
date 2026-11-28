@@ -83,12 +83,12 @@ namespace UltraPuck.Core
         }
         public readonly Tuning T;
         /// <summary>
-        /// Which bot brain each team's bots use, newest highest: 2 bank shots off the boards, 1 going where the puck
+        /// Which bot brain each team's bots use, newest highest: 3 no pass back with a clear look at the net, 2 bank shots off the boards, 1 going where the puck
         /// will be and one chaser a team, 0 the first. Always the newest in the game (<see cref="NewestBrain"/>); the
         /// bot-vs-bot scoreboard (BotBench) sets one team to an older one to compare.
         /// </summary>
         public readonly int[] BotBrain = { NewestBrain, NewestBrain };
-        public const int NewestBrain = 2;
+        public const int NewestBrain = 3;
         /// <summary>The cards in play, or null for no cards (then no picks happen after goals).</summary>
         public readonly CardLibrary Cards;
 
@@ -1868,6 +1868,61 @@ namespace UltraPuck.Core
 
         /// <summary>A quick shot's speed: Power Shot makes it a full charge's (Over Charge doesn't add).</summary>
         private Fix QuickShotSpeed(PlayerState p) { return p.Stats.QuickShotFull > 0 ? T.ChargedShotMax : T.ShotSpeed * p.Stats.QuickShotPower; }
+
+        /// <summary>
+        /// Laser Sights: where carrier <paramref name="i"/>'s shot would go if they let go of the charge now, as the
+        /// points of a line in <paramref name="pts"/> (empty if they don't have the puck). A ghost puck from where the
+        /// puck is, at the shot's speed and way (the skater's own speed included), bouncing off the boards, pylons and
+        /// stone walls as the real one does and slowing as it does: it ends where the puck would stop, in a net, after a
+        /// few bounces or at <see cref="Tuning.LaserLength"/>. Changes nothing (drawing only).
+        /// </summary>
+        public void LaserPath(GameState s, int i, System.Collections.Generic.List<FixVec2> pts)
+        {
+            pts.Clear();
+            if (s == null || i < 0 || i >= s.Players.Length || s.Carrier != i) return;
+            Use(s);
+            var p = s.Players[i];
+            var charged = p.Charge <= Fix.One
+                ? T.ChargedShotMin + (T.ChargedShotMax - T.ChargedShotMin) * p.Charge
+                : T.ChargedShotMax * p.Charge;
+            var vel = p.Facing * (charged * p.Stats.ShotPower) + p.Vel * Fix.Half;
+            var speed = vel.Length;
+            if (speed < Fix.One) return;
+            // Momentum: it doesn't slow below a share of its starting speed (so it goes the whole way)
+            var least = p.Stats.Momentum > 0 ? speed * Fix.Min(Fix.One, Fix.Ratio(T.MomentumPercent * p.Stats.Momentum, 100)) : Fix.Zero;
+            var pos = s.PuckPos;
+            var dir = vel / speed;
+            pts.Add(pos);
+            var step = Fix.Ratio(1, 5);
+            var left = T.LaserLength;
+            var bounces = 0;
+            while (left > Fix.Zero && speed > least + Fix.Half && bounces < 4)
+            {
+                var from = pos;
+                var v = dir * speed;
+                pos += dir * step;
+                var hit = FirstWallHit(from, pos);
+                if (hit < Fix.One) pos = from;
+                CollideWalls(ref pos, ref v, T.PuckRadius, T.PuckWallBounce);
+                if (hit < Fix.One && FixVec2.Dot(v, pos - from) >= Fix.Zero) v = -v * T.PuckWallBounce;
+                CollidePylons(s, ref pos, ref v, T.PuckRadius, T.PuckWallBounce);
+                if (s.Stones.Length > 0) CollideStones(s, ref pos, ref v, T.PuckRadius, T.PuckWallBounce);
+                if (!Map.Inside(pos)) { pts.Add(from); return; }
+                var now = v.Length;
+                if (now.Raw <= 0) break;
+                var nd = v / now;
+                // a turn: a corner of the line (a sharp one counts as a bounce)
+                var turn = FixVec2.Dot(nd, dir);
+                if (turn < Fix.Ratio(9995, 10000)) pts.Add(pos);
+                if (turn < Fix.Ratio(9, 10)) bounces++;
+                dir = nd;
+                speed = now - T.PuckDrag * step; // (slowing with the distance it goes: the drag is a share of the speed a second)
+                left -= step;
+                foreach (var g in Map.Goals)
+                    if (g.Touches(pos, T.PuckRadius)) { pts.Add(pos); return; }
+            }
+            pts.Add(pos);
+        }
 
         private void Shoot(GameState s, int i, bool released)
         {

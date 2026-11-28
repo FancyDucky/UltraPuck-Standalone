@@ -3410,6 +3410,46 @@ namespace UltraPuck.Tests
         }
 
         [Test]
+        public void LaserSightsTraceTheShotIntoTheNetAndOffTheBoards()
+        {
+            var laser = _lib.ById("ultrapuck.lasersight");
+            Assert.IsNotNull(laser);
+            var s = Game(0, 1);
+            _sim.GiveCard(s, s.Players[0], laser.Index);
+            _lib.Recompute(s);
+            Assert.AreEqual(1, s.Players[0].Stats.LaserSight);
+            var pts = new System.Collections.Generic.List<FixVec2>();
+            var p = s.Players[0];
+            // straight at the other team's net from in front of it: the line ends in it
+            var g = _sim.Map.Goals.Find(x => x.Team == 1);
+            var mid = new FixVec2((g.Min.X + g.Max.X) * Fix.Half, (g.Min.Y + g.Max.Y) * Fix.Half);
+            var way = mid.X > Fix.Zero ? Fix.One : -Fix.One;
+            p.Pos = new FixVec2(mid.X - way * Fix.FromInt(8), mid.Y);
+            p.Vel = FixVec2.Zero;
+            p.Facing = new FixVec2(way, Fix.Zero);
+            s.Carrier = 0;
+            s.PuckPos = p.Pos + p.Facing * Fix.One;
+            p.Charge = Fix.One;
+            _sim.LaserPath(s, 0, pts);
+            Assert.GreaterOrEqual(pts.Count, 2);
+            Assert.IsTrue(g.Touches(pts[pts.Count - 1], _sim.T.PuckRadius), "ends in the net");
+            var before = s.Checksum();
+            // straight at the boards beside: it bounces (a corner in the line) and changes nothing
+            p.Pos = FixVec2.Zero;
+            p.Facing = new FixVec2(Fix.Zero, Fix.One);
+            s.PuckPos = p.Pos + p.Facing * Fix.One;
+            before = s.Checksum();
+            _sim.LaserPath(s, 0, pts);
+            Assert.GreaterOrEqual(pts.Count, 3, "a bounce");
+            Assert.Less(pts[pts.Count - 1].Y.ToDouble(), pts[1].Y.ToDouble(), "back off the boards");
+            Assert.AreEqual(before, s.Checksum(), "only drawing");
+            // not carrying it: no laser
+            s.Carrier = -1;
+            _sim.LaserPath(s, 0, pts);
+            Assert.AreEqual(0, pts.Count);
+        }
+
+        [Test]
         public void HeadStartGivesTheExtraPucksToo()
         {
             var more = _lib.ById("ultrapuck.morepucks");

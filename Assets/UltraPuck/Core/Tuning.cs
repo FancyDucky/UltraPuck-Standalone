@@ -104,6 +104,8 @@ namespace UltraPuck.Core
         /// down to (up to all of it), until someone gets the puck or the other team touches it.
         /// </summary>
         public int MomentumPercent = 33;
+        /// <summary>Laser Sights: the longest the laser goes (units of puck travel, bounces included).</summary>
+        public Fix LaserLength = Fix.FromInt(45);
         /// <summary>Team Play: after a clean pass the passer and the teammate are this much faster (0.8 = 80%) for this long.</summary>
         public Fix PassSpeedBoost = Fix.Ratio(5, 10), PassSpeedTime = Fix.FromInt(3);
         /// <summary>
