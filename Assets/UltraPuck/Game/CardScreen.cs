@@ -1546,12 +1546,29 @@ namespace UltraPuck.Game
             // New Hand: how to re-roll them (while a re-roll is left this pick)
             var reroll = Roller() >= 0 && _stage == Stage.Choosing ? "{utility}   Re-roll" : null;
             var cyan = new Color(0.55f, 0.95f, 0.9f, 0.95f);
+            RerollHint(device, reroll, cyan, a);
+            reroll = null; // (under the cards, big, not with the other controls)
             if (kbm)
                 SideHints(device, a, (reroll, cyan), (_deck ? "{look} {nav}   Look" : "{look}   Look", HintColor), (_deck ? "{tabs}   Card size" : null, HintColor),
                     ("Left click or {join}   Take it", HintColor), (MiniHint, HintColor));
             else
                 SideHints(device, a, (reroll, cyan), (_deck ? "{side} {nav}   Look" : "{side}   Look", HintColor), (_deck ? "{tabs}   Card size" : "{aim}   Tilt", HintColor),
                     ("{confirm}   Take it", HintColor), (MiniHint, HintColor));
+        }
+
+        /// <summary>New Hand's re-roll, big and centred under the cards, so it's plain when you can re-roll.</summary>
+        private void RerollHint(UnityEngine.InputSystem.InputDevice device, string text, Color colour, float a)
+        {
+            if (string.IsNullOrEmpty(text) || _cards.Count == 0) return;
+            const int size = 26;
+            var scale = Screen.height / 720f * Settings.UiScale;
+            var bottom = 0f;
+            foreach (var c in _cards) bottom = Mathf.Max(bottom, (Screen.height - ScreenRect(c).yMin) / scale);
+            var w = Glyphs.Width(text, size) + 16f;
+            var y = Mathf.Min(bottom + 16f, Ui.H - 64f);
+            Ui.Box(new Rect(Ui.W / 2f - w / 2f - 18f, y, w + 36f, 48f), new Color(0f, 0f, 0f, 0.55f * a), 10f);
+            colour.a *= a;
+            Glyphs.Hint(new Rect(Ui.W / 2f - w / 2f, y, w, 48f), text, size, colour, TextAnchor.MiddleCenter, device, true);
         }
 
         /// <summary>Double Card's reveal: who got which cards.</summary>

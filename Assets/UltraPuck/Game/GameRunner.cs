@@ -1089,6 +1089,8 @@ namespace UltraPuck.Game
                 _mainMenu.Show(MainMenu.Page.None);
                 StartMatch(false);
                 yield return new WaitForSecondsRealtime(0.8f);
+                var hand = _cards != null ? _cards.ById("ultrapuck.newhand") : null; // (so the re-roll prompt shows)
+                if (hand != null && _state.Players.Length > 0) { _sim.GiveCard(_state, _state.Players[0], hand.Index); _cards.Recompute(_state); }
                 _sim.StartPicking(_state, new List<int> { 0 });
                 if (_cards != null && _state.Players.Length > 0)
                 {
