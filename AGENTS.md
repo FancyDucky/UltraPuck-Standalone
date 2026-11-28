@@ -87,6 +87,18 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 27 Nov 2026): **chaos cards fly in from the corner, protocol 95.** Chaos cards are never in a
+  normal draw any more (`CardLibrary.DrawOffer` skips them, so hands, New Hand, Choose's deck and Double Card never
+  give one). Instead one pick in `Tuning.ChaosOdds` (6) rolls (`CardLibrary.ChaosRoll`, `s.NextRandom()`, only if
+  chaos cards exist) and adds one at the END of the offer (a shared hand's for the whole team); picking works as for
+  any card. New Hand keeps it. `CardScreen.Deal`: a chaos card last in an offer isn't in the row / fan; it flies in
+  from off the top-right corner after the hand (`CardView.Corner`, smaller: `CornerSize` 0.68), playing
+  `Sound.Chaos()`. Left / right steps onto it after the right-most card. Teammates' picks show on the left, so the
+  right; the other team's minis (right edge, when both teams pick) can sit under it. Four sounds to choose from:
+  `Sfx.ChaosA` glitch zap, `B` corrupted chime, `C` whoosh + stinger, `D` error bleeps; Settings > Sound >
+  "Chaos card" (`Settings.ChaosSound`, default A, plays as you pick). Test
+  `ChaosCardsComeOnTopOfAHandAboutOneTimeInSix`; `NewHandRerollsOncePerPick` and `TheTeamThatConcededPicksACard` use
+  `ChaosOdds = 0` (they're about the plain hand). Screenshot scene `chaos` deals three and Giant Nets. 299 tests.
 - unreleased (Claude, 27 Nov 2026): **a card the mouse leaves goes back to its own size.** Every card screen (pick,
   team vote, free play's editor, the card list): when the mouse has moved and is no longer over the card it raised,
   that card drops back (`CardScreen.MouseOver` / `MouseLeft`, `_mouseOff` for this screen only), but stays the one

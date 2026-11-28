@@ -803,7 +803,7 @@ namespace UltraPuck.Game
 
             if (want("chaos"))
             {
-                // chaos cards: Giant Nets glitching in a pick, in free play's card
+                // chaos cards: Giant Nets flying into the corner of a pick (a hand of three and the chaos card last), in free play's card
                 // editor grid, then held, with both nets twice as wide
                 _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
                 _mainMenu.Show(MainMenu.Page.None);
@@ -819,7 +819,7 @@ namespace UltraPuck.Game
                 if (wide != null && _state.Players.Length > 0)
                 {
                     var offer = new List<int>();
-                    foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.widenets", "ultrapuck.morepucks" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                    foreach (var id in new[] { "ultrapuck.momentum", "ultrapuck.loyal", "ultrapuck.portalgun", "ultrapuck.widenets" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
                     _state.Players[0].Offer = offer.ToArray();
                 }
                 yield return new WaitForSecondsRealtime(2.2f);
