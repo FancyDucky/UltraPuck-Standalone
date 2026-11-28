@@ -4078,10 +4078,12 @@ namespace UltraPuck.Core
             var p = s.Players[passer];
             if (p.Stats.PassSpeed > 0)
             {
-                // both of you skate faster for a bit
-                SpeedUp(p, T.PassSpeedBoost, T.PassSpeedTime); p.Refreshes++;
+                // both of you skate faster for a bit; twice as much when the teammate has Team Play too (it stacks
+                // to 100%, not more)
                 var q = s.Players[to];
-                SpeedUp(q, T.PassSpeedBoost, T.PassSpeedTime); q.Refreshes++;
+                var boost = q.Stats.PassSpeed > 0 ? T.PassSpeedBoost * 2 : T.PassSpeedBoost;
+                SpeedUp(p, boost, T.PassSpeedTime); p.Refreshes++;
+                SpeedUp(q, boost, T.PassSpeedTime); q.Refreshes++;
             }
             if (p.Stats.PassRefreshTeam > 0)
             {

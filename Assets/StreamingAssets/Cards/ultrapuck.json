@@ -340,7 +340,7 @@
         { "label": "Speed on Pass", "value": "[good]+50%[/]" },
         { "label": "Lasts", "value": "[good]3 s[/]" }
       ],
-      "text": "[note]For you and the teammate you passed to.[/]",
+      "text": "[note]For you and who you pass to. Both have it: +100%.[/]",
       "stats": { "PassSpeed": "+1" }
     },
     {

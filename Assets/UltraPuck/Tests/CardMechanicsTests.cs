@@ -1985,10 +1985,11 @@ namespace UltraPuck.Tests
         }
 
         /// <summary>Player 0 passes along y = -5 to teammate 1; an opponent (2) waits somewhere.</summary>
-        private GameState Pass(string card, FixVec2 opponent)
+        private GameState Pass(string card, FixVec2 opponent, bool both = false)
         {
             var s = Game(0, 0, 1);
             Give(s, 0, card);
+            if (both) { s.Players[1].Cards = new[] { _lib.ById(card).Index }; _lib.Recompute(s); }
             Play(s);
             s.Players[0].Pos = At(-6, -5); s.Players[0].Facing = FixVec2.Right;
             s.Players[1].Pos = At(0, -5); s.Players[1].Facing = new FixVec2(-Fix.One, Fix.Zero);
@@ -2012,6 +2013,16 @@ namespace UltraPuck.Tests
             Assert.AreEqual(Fix.Zero, s.Players[2].FastTime, "not the other team");
             for (var t = 0; t < 120 * 3 + 2; t++) _sim.Step(s, new PlayerInput[3]);
             Assert.AreEqual(Fix.Zero, s.Players[1].FastTime, "worn off");
+        }
+
+        /// <summary>Team Play stacks: a pass between two holders makes both of them 100% faster for 3 s.</summary>
+        [Test]
+        public void TeamPlayBetweenTwoHoldersIsTwiceAsFast()
+        {
+            var s = Pass("ultrapuck.teamplay", At(10, 8), true);
+            Assert.AreEqual(1.0, s.Players[0].Fast.ToDouble(), 1e-3, "the passer is 100% faster");
+            Assert.AreEqual(1.0, s.Players[1].Fast.ToDouble(), 1e-3, "and the teammate");
+            Assert.Greater(s.Players[1].FastTime.ToDouble(), 2.9, "for 3 s");
         }
 
         [Test]
