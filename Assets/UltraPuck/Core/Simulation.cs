@@ -133,6 +133,18 @@ namespace UltraPuck.Core
                     if (shared) foreach (var q in s.Players) if (not == null && q.Team == p.Team) not = StandInOff(q);
                     p.Offer = Cards.DrawOffer(s, i, Math.Max(1, Math.Min(5, T.CardsOffered)), not);
                 }
+                // now and then a chaos card on top of the hand (last in the offer; a shared hand's is the whole team's)
+                if (p.Offer.Length > 0 && !(shared && teamOffer[p.Team & 1] != null))
+                {
+                    var chaos = Cards.ChaosRoll(s, i, T.ChaosOdds, T.CardsOff);
+                    if (chaos >= 0)
+                    {
+                        var with = new int[p.Offer.Length + 1];
+                        Array.Copy(p.Offer, with, p.Offer.Length);
+                        with[with.Length - 1] = chaos;
+                        p.Offer = with;
+                    }
+                }
                 if (shared && teamOffer[p.Team & 1] == null) teamOffer[p.Team & 1] = p.Offer;
                 p.Picked = -1;
                 p.Hover = 0;
@@ -273,6 +285,8 @@ namespace UltraPuck.Core
                 hand.AddRange(Cards.DrawOffer(s, i, count - hand.Count, off2.ToArray()));
             }
             if (hand.Count == 0) return;
+            // a chaos card that flew in stays (it's not part of the hand)
+            foreach (var c in p.Offer) if (Cards.IsChaosIndex(c)) hand.Add(c);
             if (!(T.TeamVote || T.SameDraw)) { p.Offer = hand.ToArray(); p.Hover = 0; p.PickHeld = true; return; }
             var order = new System.Collections.Generic.List<int>();
             for (var pass = 0; pass < 2; pass++)

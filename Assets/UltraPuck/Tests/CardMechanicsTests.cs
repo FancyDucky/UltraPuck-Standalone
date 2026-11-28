@@ -3203,7 +3203,7 @@ namespace UltraPuck.Tests
         [Test]
         public void NewHandRerollsOncePerPick()
         {
-            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3 }, _lib);
+            var sim = new Simulation(Rink(), new Tuning { CardsOffered = 3, ChaosOdds = 0 }, _lib); // (the plain hand: no chaos card on top)
             var s = sim.NewGame(new[] { 0, 1 }, 9u);
             sim.StartPicking(s, new[] { 0 });
             var before = (int[])s.Players[0].Offer.Clone();
@@ -3394,6 +3394,35 @@ namespace UltraPuck.Tests
             _lib.Recompute(s);
             _sim.FaceOff(s);
             Assert.AreEqual(0, s.Rocks.Length, "no extra puck without the card");
+        }
+
+        [Test]
+        public void ChaosCardsComeOnTopOfAHandAboutOneTimeInSix()
+        {
+            var chaosOffers = 0;
+            const int picks = 600;
+            for (var k = 0; k < picks; k++)
+            {
+                var s = _sim.NewGame(new[] { 0, 1 }, (uint)(k + 1));
+                _sim.StartPicking(s, new[] { 0 });
+                var offer = s.Players[0].Offer;
+                Assert.Greater(offer.Length, 0);
+                for (var j = 0; j < offer.Length - 1; j++) Assert.IsFalse(_lib.IsChaosIndex(offer[j]), "never in the hand itself");
+                if (_lib.IsChaosIndex(offer[offer.Length - 1]))
+                {
+                    chaosOffers++;
+                    Assert.AreEqual(_sim.T.CardsOffered + 1, offer.Length, "on top of a full hand");
+                }
+            }
+            Assert.That(chaosOffers, Is.InRange(picks / 6 - 40, picks / 6 + 40), "about one pick in six");
+            // switched off: never
+            var never = new Simulation(_sim.Map, new Tuning { ChaosOdds = 0 }, _lib);
+            for (var k = 0; k < 60; k++)
+            {
+                var s = never.NewGame(new[] { 0, 1 }, (uint)(k + 1));
+                never.StartPicking(s, new[] { 0 });
+                foreach (var c in s.Players[0].Offer) Assert.IsFalse(_lib.IsChaosIndex(c));
+            }
         }
     }
 }

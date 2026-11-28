@@ -133,7 +133,7 @@ namespace UltraPuck.Tests
         public void TheTeamThatConcededPicksACard()
         {
             var lib = Library();
-            var sim = new Simulation(Rink(), null, lib);
+            var sim = new Simulation(Rink(), new Tuning { ChaosOdds = 0 }, lib); // (the plain hand: no chaos card on top)
             var s = sim.NewGame(new[] { 0, 1, 0, 1 }, 99u);
             OrangeScores(sim, s);
             Assert.AreEqual(Phase.Picking, s.Phase);

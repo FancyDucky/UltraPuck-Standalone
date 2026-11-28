@@ -342,6 +342,24 @@ namespace UltraPuck.Core
             return deck;
         }
 
+        /// <summary>Is card <paramref name="index"/> a chaos card?</summary>
+        public bool IsChaosIndex(int index) { return index >= 0 && index < Cards.Count && Cards[index].Chaos; }
+
+        /// <summary>
+        /// A chaos card for player <paramref name="i"/> one time in <paramref name="odds"/> (one they may have, not in
+        /// <paramref name="off"/>), else -1. It's offered on top of their hand: it flies in from a corner of the card screen.
+        /// Rolls only if there are chaos cards at all, so a library without them draws exactly as before.
+        /// </summary>
+        public int ChaosRoll(GameState s, int i, int odds, int[] off = null)
+        {
+            var any = false;
+            foreach (var c in Cards) any |= c.Chaos;
+            if (!any || odds <= 0) return -1;
+            if (s.NextRandom() % (uint)odds != 0) return -1;
+            var got = DrawOffer(s, i, 1, off, true);
+            return got.Length > 0 ? got[0] : -1;
+        }
+
         /// <summary>Does this card use the utility button?</summary>
         public bool IsUtility(CardDef c)
         {
@@ -402,7 +420,7 @@ namespace UltraPuck.Core
         /// every card they could be offered is as likely as any other, whatever its tier.
         /// Other utilities stay in the pool — picking one replaces the utility you already have (unless MultiUtility).
         /// </summary>
-        public int[] DrawOffer(GameState s, int i, int count, int[] off = null)
+        public int[] DrawOffer(GameState s, int i, int count, int[] off = null, bool chaos = false)
         {
             var p = s.Players[i];
             var pool = new List<int>();
@@ -410,6 +428,7 @@ namespace UltraPuck.Core
             foreach (var q in s.Players) if (q.Team == p.Team) teamSize++;
             foreach (var c in Cards)
             {
+                if (c.Chaos != chaos) continue; // chaos cards are never in a normal draw (see ChaosRoll), and only they in a chaos one
                 if (off != null && Array.IndexOf(off, c.Index) >= 0) continue;
                 if (c.MinTeam > 0 && teamSize < c.MinTeam) continue;
                 if (c.NoBots && p.Bot) continue;

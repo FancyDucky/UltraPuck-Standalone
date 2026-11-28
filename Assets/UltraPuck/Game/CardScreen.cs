@@ -668,13 +668,30 @@ namespace UltraPuck.Game
                 }
                 return;
             }
-            // three in a row; more fan out in an arc (like a rainbow), a little smaller, so they all fit on screen
-            var n = offer.Length;
+            // three in a row; more fan out in an arc (like a rainbow), a little smaller, so they all fit on screen. A
+            // chaos card at the end of the offer isn't one of them: it flies in from the top-right corner and stays there.
+            var corner = offer.Length > 1 && Sim.Cards.IsChaosIndex(offer[offer.Length - 1]) ? offer.Length - 1 : -1;
+            var n = corner >= 0 ? offer.Length - 1 : offer.Length;
+            _focus = n / 2;
             _dealScale = n <= 3 ? 1f : n == 4 ? 0.9f : 0.82f;
             for (var k = 0; k < offer.Length; k++)
             {
                 var def = Sim.Cards.Cards[offer[k]];
                 var v = Build(def, k);
+                if (k == corner)
+                {
+                    float halfV, halfH;
+                    ScreenHalf(out halfV, out halfH);
+                    v.Corner = true;
+                    v.Size = CornerSize / _dealScale;
+                    v.Home = new Vector3(halfH - 1.25f * CornerSize - 0.3f, halfV - 1.75f * CornerSize - 0.32f, 0f);
+                    v.Pos = new Vector3(halfH + 3f, halfV + 3.5f, 1f); // off the corner of the screen
+                    v.Rot = new Vector3(0f, 180f, Random.value < 0.5f ? -120f : 120f);
+                    v.Scale = 0.4f;
+                    v.Delay = 0.12f + n * 0.11f + 0.45f; // after the hand
+                    _cards.Add(v);
+                    continue;
+                }
                 float x, y = -0.3f;
                 v.Fan = 0f;
                 if (n <= 3) x = (k - (n - 1) / 2f) * 3.05f;
@@ -694,6 +711,16 @@ namespace UltraPuck.Game
                 v.Delay = 0.12f + k * 0.11f;
                 _cards.Add(v);
             }
+        }
+
+        /// <summary>How big the corner chaos card is, next to a card in a row of three.</summary>
+        private const float CornerSize = 0.68f;
+
+        /// <summary>Half the card screen's height and width, in card units, at the cards' depth.</summary>
+        private void ScreenHalf(out float halfV, out float halfH)
+        {
+            halfV = -_cam.transform.position.z * Mathf.Tan(_cam.fieldOfView * 0.5f * Mathf.Deg2Rad);
+            halfH = halfV * _cam.aspect;
         }
 
         private void Choose()
@@ -810,7 +837,8 @@ namespace UltraPuck.Game
                     // its turn: off the deck with a flick (in the editor, only the rows on screen are heard)
                     c.Dealt = true;
                     var row = k / EditCols - _editTop;
-                    if (!grid || (row >= 0 && row < EditRows))
+                    if (c.Corner) Sound.Chaos(); // a chaos card flying in: its own sound (Sound settings)
+                    else if (!grid || (row >= 0 && row < EditRows))
                         Sound.Play(Sfx.CardDeal, 0.5f, 1f + 0.04f * (k % 5), Mathf.Clamp(c.Home.x / 8f, -0.5f, 0.5f));
                 }
                 if (live && since < c.Delay)
@@ -864,7 +892,8 @@ namespace UltraPuck.Game
                     tr = new Vector3(0f, 0f, Mathf.Sin(t * 1.2f + c.Phase) * 1.8f + c.Fan * (focused ? 0.25f : 1f));
                     if (focused) tr += new Vector3(-tilt.y * 16f, tilt.x * 18f, 0f);
                     else tr += new Vector3(Mathf.Sin(t * 0.9f + c.Phase) * 3f, Mathf.Cos(t * 0.8f + c.Phase) * 4f, 0f);
-                    ts = (focused ? (grid ? 1.3f : 1.12f) : 0.95f) * size;
+                    ts = (focused ? (grid ? 1.3f : 1.12f) : 0.95f) * size * c.Size;
+                    if (c.Corner && focused) tp += new Vector3(-0.35f, -0.45f, 0f); // (lifted towards the middle, so it stays on screen)
                     // in the editor, cards you don't have sit back a little
                     if (_editing && !_browse && !focused && _counts[_who][k] == 0) ts *= 0.92f;
                     if (focused && grid)
@@ -2039,6 +2068,10 @@ namespace UltraPuck.Game
             /// <summary>Tilt along the fan when more than three are offered (degrees).</summary>
             public float Fan;
             public float Scale = 1f, ScaleVel, Delay, Phase;
+            /// <summary>A chaos card in the top-right corner (not in the hand's row): it flies in last, with its own sound.</summary>
+            public bool Corner;
+            /// <summary>Its size next to the hand's cards (the corner card is smaller).</summary>
+            public float Size = 1f;
             public readonly List<Renderer> Front = new List<Renderer>(), Back = new List<Renderer>(), Texts = new List<Renderer>(), BackTexts = new List<Renderer>();
             /// <summary>Each front part's place in the stack (body under picture).</summary>
             public readonly List<int> FrontOrder = new List<int>();

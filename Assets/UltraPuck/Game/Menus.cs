@@ -357,6 +357,9 @@ namespace UltraPuck.Game
                     _rows.Add(Choice("Puck bounce", Settings.PuckBounceNames, () => Settings.PuckBounceSound,
                         v => { Settings.PuckBounceSound = v; Sound.Bounce(1f, 0f); },
                         "The sound of the puck bouncing off the boards: lower and quieter when it's slow, higher when it's fast."));
+                    _rows.Add(Choice("Chaos card", Settings.ChaosSoundNames, () => Settings.ChaosSound,
+                        v => { Settings.ChaosSound = v; Sound.Chaos(v); },
+                        "The sound a chaos card makes when it flies in from the corner."));
                     _rows.Add(Switch("Pause music when unfocused", () => Settings.PauseMusicWhenUnfocused, v => Settings.PauseMusicWhenUnfocused = v,
                         "When the game window isn't focused: pause the music. Leave this off and the next song still starts if one ends while you're looking elsewhere."));
                     _rows.Add(Switch("Music in clips", () => Settings.MusicInClips, v => Settings.MusicInClips = v,

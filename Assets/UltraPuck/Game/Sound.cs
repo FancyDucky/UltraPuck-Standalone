@@ -34,6 +34,11 @@ namespace UltraPuck.Game
         BounceTok, BounceTokRound, BounceTokBright,
         /// <summary>The puck bouncing off a wall (the usual one): a tiny dry snap, a very short high tick.</summary>
         BounceSnap,
+        /// <summary>
+        /// A chaos card flying in (Sound settings > Chaos card picks one): A a glitchy zap, B a corrupted chime,
+        /// C a whoosh into a dark stinger, D a cascade of error bleeps.
+        /// </summary>
+        ChaosA, ChaosB, ChaosC, ChaosD,
     }
 
     /// <summary>
@@ -343,6 +348,82 @@ namespace UltraPuck.Game
                     s = New(0.22f);
                     Tone(s, 0f, 0.22f, 1f, Wave.Sine, t => 2093f, t => Pluck(t, 0.001f, 28f));
                     Tone(s, 0f, 0.22f, 0.15f, Wave.Sine, t => 4186f, t => Pluck(t, 0.001f, 45f));
+                    break;
+
+                case Sfx.ChaosA:
+                    // a glitchy zap: square-wave stutters jumping between random pitches, a bit-crushed buzz, then a
+                    // warbling fall
+                    s = New(0.95f);
+                    {
+                        uint seed = 211u;
+                        for (var k = 0; k < 14; k++)
+                        {
+                            var f = 180f + 1400f * (Next(ref seed) * 0.5f + 0.5f);
+                            var len = 0.018f + 0.02f * (Next(ref seed) * 0.5f + 0.5f);
+                            Tone(s, k * 0.032f, len, 0.42f, Wave.Square, t => f, t => 1f);
+                        }
+                        Noise(s, 0f, 0.45f, 0.35f, t => 6000f, 800f, t => (Mathf.Floor(t * 60f) % 2f == 0f ? 1f : 0.2f) * Mathf.Exp(-t * 3f), 212u);
+                        Tone(s, 0.45f, 0.5f, 0.5f, Wave.Square, t => Glide(900f, 90f, t, 0.18f) * (1f + 0.12f * Mathf.Sin(Tau * 28f * t)), t => Pluck(t, 0.004f, 5f));
+                        Tone(s, 0.45f, 0.5f, 0.35f, Wave.Triangle, t => Glide(450f, 45f, t, 0.18f), t => Pluck(t, 0.004f, 5f));
+                        Drive(s, 2.2f);
+                    }
+                    break;
+
+                case Sfx.ChaosB:
+                    // a corrupted chime: a bright rising arpeggio that skips and repeats like a scratched disc, notes
+                    // knocked off pitch, with bursts of static
+                    s = New(1.1f);
+                    {
+                        var notes = new[] { 659.3f, 830.6f, 987.8f, 830.6f, 987.8f, 1318.5f, 1244.5f, 1318.5f, 1661.2f, 1568f };
+                        uint seed = 221u;
+                        for (var k = 0; k < notes.Length; k++)
+                        {
+                            var f = notes[k] * (1f + 0.04f * Next(ref seed));
+                            var at = k * 0.055f + (k > 4 ? 0.03f : 0f);
+                            Tone(s, at, 0.16f, 0.4f, Wave.Triangle, t => f, t => Pluck(t, 0.002f, 16f));
+                            Tone(s, at, 0.06f, 0.18f, Wave.Square, t => f * 2f, t => Pluck(t, 0.001f, 40f));
+                            if (k % 3 == 2) Noise(s, at + 0.02f, 0.04f, 0.3f, t => 9000f, 2500f, t => 1f, 222u + (uint)k);
+                        }
+                        foreach (var f in new[] { 1318.5f, 1396.9f, 1975.5f })
+                            Tone(s, 0.6f, 0.5f, 0.2f, Wave.Sine, t => f * (1f + 0.01f * Mathf.Sin(Tau * 7f * t)), t => Pluck(t, 0.005f, 5f) * (Mathf.Floor(t * 24f) % 3f == 0f ? 0.3f : 1f));
+                        Reverb(s, 0.3f);
+                    }
+                    break;
+
+                case Sfx.ChaosC:
+                    // a whoosh that rises out of nothing into a dark, detuned stinger that bends down like a tape stopping
+                    s = New(1.3f);
+                    Noise(s, 0f, 0.45f, 0.6f, t => 600f + 9000f * Sq(t / 0.45f), 300f, t => Sq(t / 0.45f), 231u);
+                    foreach (var f in new[] { 110f, 116.5f, 164.8f, 233.1f })
+                    {
+                        var hz = f;
+                        Tone(s, 0.42f, 0.85f, 0.32f, Wave.Square, t => hz * (t < 0.35f ? 1f : Mathf.Pow(0.35f, (t - 0.35f) / 0.5f)), t => Pluck(t, 0.003f, 2.6f));
+                    }
+                    Tone(s, 0.42f, 0.5f, 0.8f, Wave.Sine, t => Glide(150f, 40f, t, 0.12f), t => Pluck(t, 0.002f, 6f));
+                    Noise(s, 0.42f, 0.04f, 0.8f, t => 10000f, 1000f, t => 1f, 232u);
+                    Crackle(s, 0.5f, 0.6f, 0.2f, 6f, 233u);
+                    Drive(s, 1.8f);
+                    Reverb(s, 0.35f);
+                    break;
+
+                case Sfx.ChaosD:
+                    // a stream of computer error bleeps at random pitches, faster and faster, cut off by a low thud
+                    s = New(1f);
+                    {
+                        uint seed = 241u;
+                        var at = 0f;
+                        var gap = 0.075f;
+                        for (var k = 0; k < 18 && at < 0.62f; k++)
+                        {
+                            var f = new[] { 880f, 1174.7f, 1760f, 1318.5f, 2349.3f, 987.8f }[(int)((Next(ref seed) * 0.5f + 0.5f) * 5.99f)];
+                            Tone(s, at, 0.045f, 0.32f, Wave.Square, t => f, t => 1f);
+                            Tone(s, at, 0.045f, 0.2f, Wave.Sine, t => f * 0.5f, t => 1f);
+                            at += gap;
+                            gap = Mathf.Max(0.028f, gap * 0.86f);
+                        }
+                        Tone(s, at, 0.35f, 1f, Wave.Sine, t => Glide(120f, 42f, t, 0.06f), t => Pluck(t, 0.002f, 9f));
+                        Noise(s, at, 0.05f, 0.6f, t => 3000f, 100f, t => Mathf.Exp(-t * 60f), 242u);
+                    }
                     break;
 
                 default:
@@ -798,6 +879,14 @@ namespace UltraPuck.Game
             hard = Mathf.Clamp01(hard);
             var id = which == 1 ? Sfx.BounceSnap : which <= 4 ? Sfx.BounceTok + (which - 2) : which == 5 ? Sfx.BouncePlink : Sfx.BounceA + (which - 6);
             Play(id, Mathf.Lerp(0.3f, 0.85f, hard), Mathf.Lerp(0.5f, 1f, hard), pan, 0.03f);
+        }
+
+        /// <summary>A chaos card flying in, with the sound chosen in Sound settings (none if it's off), or <paramref name="which"/> (1..4).</summary>
+        public static void Chaos(int which = -1)
+        {
+            if (which < 0) which = Settings.ChaosSound;
+            if (which <= 0 || which > 4) return;
+            Play(Sfx.ChaosA + (which - 1), 0.75f);
         }
 
         public static void Move() { Play(Sfx.UiMove, 0.4f, 1f, 0f, 0.03f); }
