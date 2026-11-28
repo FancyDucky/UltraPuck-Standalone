@@ -87,6 +87,12 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **no watching your own team pick; your own pick first; chaos corner on the free side.**
+  `CardScreen.NextWatched` skips the team of this PC's people (their picks show small at the side, see Minis); someone
+  with nobody playing here may still watch either team. While watching, as soon as one of this PC's people has cards
+  to pick (Choose's deck, a hand) the watched cards are put away and theirs dealt. The corner chaos card goes in the
+  top corner away from that team's minis: right for this PC's team's cards, left for the other team's (raised, it
+  leans further in). Display only, protocol unchanged.
 - unreleased (Claude, 28 Nov 2026): **Head Start hands out the extra pucks too, protocol 97.** `Simulation.HeadStart`: after
   the puck goes to the nearest on the Head Start team, each extra puck (More Pucks) goes to the next nearest teammate
   (same order: Double Agents last, nobody raging); with nobody left to hold one it waits loose, still, just beside the

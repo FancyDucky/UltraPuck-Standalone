@@ -217,6 +217,11 @@ namespace UltraPuck.Game
                     var p = s.Players[_slot];
                     if (p.Offer.Length > 0 && p.Picked < 0 && !SameCards(p.Offer, _dealt)) Redeal(s);
                 }
+                // your own cards to pick (Choose's deck, a hand) come first: put away whatever is being watched
+                if (_watching && _stage == Stage.Choosing && !_editing && NextPicker(s) >= 0)
+                {
+                    if (_teamVote) LeaveTeamVote(); else Leave(-1);
+                }
                 if (_stage == Stage.Idle && !_editing && catchUp)
                 {
                     // catching up: their own cards, one round at a time (nobody else's picks to watch)
@@ -383,9 +388,13 @@ namespace UltraPuck.Game
         /// <summary>Someone else still choosing (not a person on this PC) whom we haven't watched yet this time.</summary>
         private int NextWatched(GameState s)
         {
+            // never your own team: their picks show at the side (see Minis); someone only watching here may watch either
+            var mine = -1;
+            for (var i = 0; i < s.Players.Length && mine < 0; i++) if (OnThisPc(i)) mine = s.Players[i].Team & 1;
             for (var i = 0; i < s.Players.Length; i++)
             {
                 if (_watched.Contains(i)) continue;
+                if ((s.Players[i].Team & 1) == mine) continue;
                 var slot = SlotOf(i);
                 if (slot >= 0 && slot < Local.Slots.Count && !Local.Slots[slot].Demo) continue; // on this PC: they pick themselves
                 var p = s.Players[i];
@@ -684,7 +693,11 @@ namespace UltraPuck.Game
                     ScreenHalf(out halfV, out halfH);
                     v.Corner = true;
                     v.Size = CornerSize / _dealScale;
-                    v.Home = new Vector3(halfH - 1.25f * CornerSize - 0.3f, halfV - 1.75f * CornerSize - 0.32f, 0f);
+                    // the top corner on the other side from that team's picks at the side (teammates of this PC go
+                    // on the left, the other team on the right: see Minis)
+                    var theirs = _state != null && slot >= 0 && slot < _state.Players.Length ? _state.Players[slot].Team & 1 : 0;
+                    var side = _state != null && theirs == MyTeam(_state) ? 1f : -1f;
+                    v.Home = new Vector3(side * (halfH - 1.25f * CornerSize - 0.3f), halfV - 1.75f * CornerSize - 0.32f, 0f);
                     v.Pos = new Vector3(v.Home.x, halfV + 4f, 1f); // straight down from above the top of the screen
                     v.Rot = new Vector3(-60f, 180f, Random.Range(-10f, 10f));
                     v.Scale = 0.4f;
@@ -893,7 +906,7 @@ namespace UltraPuck.Game
                     if (focused) tr += new Vector3(-tilt.y * 16f, tilt.x * 18f, 0f);
                     else tr += new Vector3(Mathf.Sin(t * 0.9f + c.Phase) * 3f, Mathf.Cos(t * 0.8f + c.Phase) * 4f, 0f);
                     ts = (focused ? (grid ? 1.3f : 1.12f) : 0.95f) * size * c.Size;
-                    if (c.Corner && focused) tp += new Vector3(-0.35f, -0.45f, 0f); // (lifted towards the middle, so it stays on screen)
+                    if (c.Corner && focused) tp += new Vector3(c.Home.x > 0f ? -0.6f : 0.6f, -0.5f, 0f); // (lifted towards the middle, so it stays on screen)
                     // in the editor, cards you don't have sit back a little
                     if (_editing && !_browse && !focused && _counts[_who][k] == 0) ts *= 0.92f;
                     if (focused && grid)
