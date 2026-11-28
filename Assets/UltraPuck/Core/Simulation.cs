@@ -1873,7 +1873,7 @@ namespace UltraPuck.Core
         /// Laser Sights: where carrier <paramref name="i"/>'s shot would go if they let go of the charge now, as the
         /// points of a line in <paramref name="pts"/> (empty if they don't have the puck). A ghost puck from where the
         /// puck is, at the shot's speed and way (the skater's own speed included), bouncing off the boards, pylons and
-        /// stone walls as the real one does and slowing as it does: it ends where the puck would stop, in a net, after a
+        /// stone walls as the real one does and slowing as it does (the same steps as MovePuck): it ends where the puck would stop, in a net, after a
         /// few bounces or at <see cref="Tuning.LaserLength"/>. Changes nothing (drawing only).
         /// </summary>
         public void LaserPath(GameState s, int i, System.Collections.Generic.List<FixVec2> pts)
@@ -1893,33 +1893,52 @@ namespace UltraPuck.Core
             var pos = s.PuckPos;
             var dir = vel / speed;
             pts.Add(pos);
-            var step = Fix.Ratio(1, 5);
-            var left = T.LaserLength;
+            // tick by tick, step by step, exactly as MovePuck and the drag at the end of a tick move the real one (the
+            // size of each step matters on curved boards: many short walls, each push-out a little different)
+            var dt = T.Dt;
+            var sub = dt / T.Substeps;
+            var most = T.PuckRadius * Fix.Half;
+            var gone = Fix.Zero;
             var bounces = 0;
-            while (left > Fix.Zero && speed > least + Fix.Half && bounces < 4)
+            for (var tick = 0; tick < T.TicksPerSecond * 6; tick++)
             {
-                var from = pos;
-                var v = dir * speed;
-                pos += dir * step;
-                var hit = FirstWallHit(from, pos);
-                if (hit < Fix.One) pos = from;
-                CollideWalls(ref pos, ref v, T.PuckRadius, T.PuckWallBounce);
-                if (hit < Fix.One && FixVec2.Dot(v, pos - from) >= Fix.Zero) v = -v * T.PuckWallBounce;
-                CollidePylons(s, ref pos, ref v, T.PuckRadius, T.PuckWallBounce);
-                if (s.Stones.Length > 0) CollideStones(s, ref pos, ref v, T.PuckRadius, T.PuckWallBounce);
-                if (!Map.Inside(pos)) { pts.Add(from); return; }
-                var now = v.Length;
-                if (now.Raw <= 0) break;
-                var nd = v / now;
-                // a turn: a corner of the line (a sharp one counts as a bounce)
-                var turn = FixVec2.Dot(nd, dir);
-                if (turn < Fix.Ratio(9995, 10000)) pts.Add(pos);
-                if (turn < Fix.Ratio(9, 10)) bounces++;
-                dir = nd;
-                speed = now - T.PuckDrag * step; // (slowing with the distance it goes: the drag is a share of the speed a second)
-                left -= step;
-                foreach (var g in Map.Goals)
-                    if (g.Touches(pos, T.PuckRadius)) { pts.Add(pos); return; }
+                for (var k = 0; k < T.Substeps; k++)
+                {
+                    var steps = 1;
+                    var travel = (vel * sub).Length;
+                    if (travel > most) steps = Math.Min(8, (travel / most).FloorToInt() + 1);
+                    var part = sub / steps;
+                    var before = pos;
+                    for (var m = 0; m < steps; m++)
+                    {
+                        var from = pos;
+                        pos += vel * part;
+                        var hit = FirstWallHit(from, pos);
+                        if (hit < Fix.One) pos = from;
+                        CollideWalls(ref pos, ref vel, T.PuckRadius, T.PuckWallBounce);
+                        if (hit < Fix.One && FixVec2.Dot(vel, pos - from) >= Fix.Zero) vel = -vel * T.PuckWallBounce;
+                        CollidePylons(s, ref pos, ref vel, T.PuckRadius, T.PuckWallBounce);
+                        if (s.Stones.Length > 0) CollideStones(s, ref pos, ref vel, T.PuckRadius, T.PuckWallBounce);
+                        gone += (pos - from).Length;
+                    }
+                    if (!Map.Inside(pos)) { pos = Map.Inside(before) ? before : pos; vel = -vel * T.PuckWallBounce; }
+                    var now = vel.Length;
+                    if (now.Raw <= 0) { pts.Add(pos); return; }
+                    var nd = vel / now;
+                    // a turn: a corner of the line (a sharp one counts as a bounce)
+                    var turn = FixVec2.Dot(nd, dir);
+                    if (turn < Fix.Ratio(9995, 10000)) pts.Add(pos);
+                    if (turn < Fix.Ratio(9, 10)) bounces++;
+                    dir = nd;
+                    foreach (var g in Map.Goals)
+                        if (g.Touches(pos, T.PuckRadius)) { pts.Add(pos); return; }
+                    if (gone >= T.LaserLength || bounces >= 4) { pts.Add(pos); return; }
+                }
+                vel -= vel * Fix.Min(Fix.One, T.PuckDrag * dt);
+                var sp = vel.Length;
+                if (least > Fix.Zero && sp > Fix.Zero && sp < least) vel = vel * (least / sp);
+                vel = vel.ClampLength(T.PuckMaxSpeed);
+                if (vel.Length < Fix.Half && least <= Fix.Zero) break; // (as good as stopped)
             }
             pts.Add(pos);
         }

@@ -87,6 +87,17 @@ so whoever works next knows what changed.
 - Updater: `Game/Updater.cs` (Windows zip via PowerShell, Linux tar.gz via shell script).
 
 ## Handoff log (newest first; add an entry for every session)
+- unreleased (Claude, 28 Nov 2026): **Laser Sights for the team only, exact bounces, infinity mirror finish.** The laser
+  shows only on a screen with someone of the holder's team on it (`GameRunner.TeamHere`; replays show it to all).
+  `Simulation.LaserPath` now steps the ghost puck exactly as the real one moves (tick by tick, `Substeps`, MovePuck's
+  split into steps of half a puck radius, drag and Momentum at the end of each tick): before, fixed 0.2 steps came off
+  curved boards (many short walls) at a different angle. Test `LaserSightsFollowTheRealPuckRoundACurvedCorner` (the real
+  shot stays within 0.1 of the line). New card finish **"infinity"** (`Card.shader` special 12, `CardDef.FinishNames`,
+  `CardScreen.SpecialNames`, new `_FxColor` = the card's accent): an infinity mirror, a ring of beaded lights reflected
+  10 times, each 0.8 the size and 0.74 as bright, the deeper ones sliding further with the tilt so the tunnel bends
+  away; a chase runs round the beads; deeper rings faint behind the title / rules text; on the picture its own tunnel
+  at 0.55. Laser Sights uses it. `CardScreen.ShotTilt` (screenshots only) and scene `mirror`; scene `laser` now has you
+  on red. 303 tests pass, build, screenshots checked. Protocol unchanged (104).
 - unreleased (Claude, 28 Nov 2026): **Laser Sights card; bots stop passing back on a clear look (brain 3), protocol
   104.** Laser Sights (`ultrapuck.lasersight`, tier C, max 1, art from the owner): stat `LaserSight`. While its holder
   carries the puck and charges, `Simulation.LaserPath` traces a ghost puck from the puck at the speed a release now

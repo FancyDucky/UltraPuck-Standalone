@@ -53,7 +53,7 @@ namespace UltraPuck.Core
         public bool PureBlack;
         /// <summary>Every "finish" a card file may use (see Card.shader for what each looks like).</summary>
         public static readonly string[] FinishNames =
-            { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass", "borealis", "rainbow" };
+            { "foil", "polychrome", "holo", "pearl", "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass", "borealis", "rainbow", "infinity" };
         /// <summary>How often it's offered next to other cards, in % ("odds"; 100 = as often as any other, 70 = 30% rarer).</summary>
         public int Odds = 100;
         /// <summary>Most copies one player can hold (0 = no limit).</summary>

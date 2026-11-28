@@ -457,6 +457,7 @@
       "id": "ultrapuck.lasersight",
       "name": "Laser Sights",
       "tier": "C",
+      "finish": "infinity",
       "glare": false,
       "max": 1,
       "color": "#3DF266",
@@ -464,7 +465,7 @@
       "face": [
         { "label": "Shot Preview", "value": "[good]Laser[/]" }
       ],
-      "text": "[note]Shows while you charge, bounces included. Everyone can see it.[/]",
+      "text": "[note]Shows while you charge, bounces included. Only your team can see it.[/]",
       "stats": { "LaserSight": "+1" }
     }
   ]

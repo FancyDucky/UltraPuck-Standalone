@@ -3450,6 +3450,55 @@ namespace UltraPuck.Tests
         }
 
         [Test]
+        public void LaserSightsFollowTheRealPuckRoundACurvedCorner()
+        {
+            var s = Game(0, 1);
+            s.Phase = Phase.Play;
+            // the rink's top right: a shot from inside it, up and right into the rounded corner
+            Fix maxX = Fix.FromInt(-1000), maxY = Fix.FromInt(-1000);
+            foreach (var seg in _sim.Map.Segments) { maxX = Fix.Max(maxX, Fix.Max(seg.A.X, seg.B.X)); maxY = Fix.Max(maxY, Fix.Max(seg.A.Y, seg.B.Y)); }
+            var p = s.Players[0];
+            p.Pos = new FixVec2(maxX - Fix.FromInt(9), maxY - Fix.FromInt(6));
+            p.Vel = FixVec2.Zero;
+            p.Facing = new FixVec2(Fix.Ratio(8, 10), Fix.Ratio(6, 10));
+            s.Players[1].Pos = new FixVec2(-maxX + Fix.FromInt(4), -maxY + Fix.FromInt(4));
+            s.Players[1].Vel = FixVec2.Zero;
+            s.Carrier = 0;
+            s.PuckPos = p.Pos + p.Facing * Fix.One;
+            p.Charge = Fix.One;
+            var pts = new System.Collections.Generic.List<FixVec2>();
+            _sim.LaserPath(s, 0, pts);
+            Assert.GreaterOrEqual(pts.Count, 3, "it comes off the corner");
+            // now the real shot, as Shoot sends it, and every tick of where the puck goes against the line
+            s.Carrier = -1;
+            s.PuckVel = p.Facing * (_sim.T.ChargedShotMax * p.Stats.ShotPower);
+            p.Charge = Fix.Zero;
+            p.NoPickup = Fix.FromInt(100);
+            p.Pos = new FixVec2(-maxX + Fix.FromInt(4), maxY - Fix.FromInt(4)); // (out of its way: the laser goes through bodies)
+            var none = new PlayerInput[2];
+            var worst = 0.0;
+            var last = pts[pts.Count - 1];
+            for (var k = 0; k < _sim.T.TicksPerSecond; k++)
+            {
+                _sim.Step(s, none);
+                if (s.Phase != Phase.Play) break;
+                var at = s.PuckPos;
+                var best = double.MaxValue;
+                for (var j = 0; j + 1 < pts.Count; j++)
+                {
+                    var a = pts[j]; var b = pts[j + 1];
+                    var ab = b - a;
+                    var len2 = ab.SqrLength;
+                    var u = len2.Raw > 0 ? Fix.Clamp01(FixVec2.Dot(at - a, ab) / len2) : Fix.Zero;
+                    best = System.Math.Min(best, (at - (a + ab * u)).Length.ToDouble());
+                }
+                worst = System.Math.Max(worst, best);
+                if ((at - last).Length < Fix.Half) break; // (got to the end of the line)
+            }
+            Assert.Less(worst, 0.1, "the puck stays on the laser");
+        }
+
+        [Test]
         public void HeadStartGivesTheExtraPucksToo()
         {
             var more = _lib.ById("ultrapuck.morepucks");

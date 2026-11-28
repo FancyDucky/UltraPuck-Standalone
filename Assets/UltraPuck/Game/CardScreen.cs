@@ -2356,7 +2356,7 @@ namespace UltraPuck.Game
                 foreach (var r in Back) { r.enabled = !front; r.sortingOrder = order + 1; }
                 foreach (var r in BackTexts) { r.enabled = !front; r.sortingOrder = order + 5; }
                 // the finishes follow the tilt (and a little of the movement), like light on a real card
-                var tilt = new Vector4(Mathf.DeltaAngle(0f, Rot.y) / 22f + PosVel.x * 0.04f, -Mathf.DeltaAngle(0f, Rot.x) / 22f + PosVel.y * 0.03f, 0f, 0f);
+                var tilt = new Vector4(Mathf.DeltaAngle(0f, Rot.y) / 22f + PosVel.x * 0.04f + ShotTilt.x, -Mathf.DeltaAngle(0f, Rot.x) / 22f + PosVel.y * 0.03f + ShotTilt.y, 0f, 0f);
                 foreach (var m in Finishes) m.SetVector("_Tilt", tilt);
                 foreach (var b in TextBoxes) b.Fit();
                 // the shadow stays flat on the "table" and softens as the card lifts
@@ -2431,6 +2431,7 @@ namespace UltraPuck.Game
                 metal: metal ? 0.85f : 0f,
                 poly: poly ? 0.8f : 0f);
             Special(body, fx, def.Finish, true);
+            body.SetColor("_FxColor", accent); // (infinity: its lights)
             if (def.PureBlack)
             {
                 // "pureBlack": the body pure black (OLED), with no light streaks or glints on it
@@ -2458,6 +2459,7 @@ namespace UltraPuck.Game
                 metal: metal ? 0.6f : 0f,
                 poly: poly ? 0.65f : 0f);
             Special(art, fx, def.Finish, false);
+            art.SetColor("_FxColor", accent);
             // a chaos card with no finish of its own: the picture tears inside too (the glitch finish), in step with
             // the glitch over the card (same seed)
             if (def.Chaos && def.Finish == null) Special(art, fx, "glitch", false);
@@ -2598,11 +2600,14 @@ namespace UltraPuck.Game
 
         private Shader _chaosShader;
 
+        /// <summary>Screenshots: added to every card's finish tilt (to see a finish react without a mouse).</summary>
+        public static Vector2 ShotTilt;
+
         // the shader's special finishes (_Special 1..11, see Card.shader) and how strong each is on the body / the
         // picture (borealis and rainbow are animated fills behind the picture: never on it)
-        private static readonly string[] SpecialNames = { "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass", "borealis", "rainbow" };
-        private static readonly float[] SpecialBody = { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f };
-        private static readonly float[] SpecialArt = { 0.8f, 0.5f, 0.7f, 0.8f, 0f, 0.6f, 0.5f, 1f, 0.8f, 0f, 0f };
+        private static readonly string[] SpecialNames = { "starfield", "gilded", "prism", "frosted", "neon", "aurora", "molten", "glitch", "glass", "borealis", "rainbow", "infinity" };
+        private static readonly float[] SpecialBody = { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f };
+        private static readonly float[] SpecialArt = { 0.8f, 0.5f, 0.7f, 0.8f, 0f, 0.6f, 0.5f, 1f, 0.8f, 0f, 0f, 0.55f };
 
         private static void Special(Material m, bool fx, string finish, bool body)
         {

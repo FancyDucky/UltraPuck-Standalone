@@ -12,7 +12,9 @@
 //             streak; the picture shows faintly), 10 borealis (soft coloured glows drifting, turning and swelling
 //             behind the card's things, on deep blue), 11 rainbow (a rainbow gradient drifting back and forth, with a
 //             fine diagonal holographic grating over it). 10 and 11 replace the card's own fill (body only; the
-//             picture, text and frame stay); _FxSpeed, _FxBright, _FxSat, _FxFoil (11's grating) and _FxPhase tune them.
+//             picture, text and frame stay), 12 infinity (an infinity mirror: a dark mirror with a ring of lights in
+//             _FxColor repeating smaller and dimmer into the distance, the tunnel bending away as the card tilts; on
+//             the picture its own fainter tunnel over it); _FxSpeed, _FxBright, _FxSat, _FxFoil (11's grating) and _FxPhase tune them.
 //   _Glare    a soft light streak and hotspot that move opposite the tilt, like light on a glossy card
 //   _Sparkle  tiny glints that twinkle as the card moves
 //   _Sweep    a bright band of light crossing the card (its position; animated from C#), _SweepStrength how bright
@@ -40,6 +42,7 @@ Shader "UltraPuck/Card"
         _FxSat ("Animated finish saturation", Float) = 1
         _FxFoil ("Animated finish foil (grating)", Range(0,2)) = 1
         _FxPhase ("Animated finish phase (seconds)", Float) = 0
+        _FxColor ("Animated finish light colour (infinity)", Color) = (1,1,1,1)
         _GlitchSeed ("Glitch seed (chaos cards: in step with their glitch)", Float) = 0
         _GlitchTwitch ("Glitch only in twitches (chaos cards)", Float) = 0
         _Glare ("Glare", Range(0,1)) = 0.35
@@ -68,7 +71,7 @@ Shader "UltraPuck/Card"
             #include "UnityCG.cginc"
 
             sampler2D _MainTex; float4 _MainTex_ST;
-            fixed4 _Color, _Color2, _BorderColor;
+            fixed4 _Color, _Color2, _BorderColor, _FxColor;
             float4 _Size, _Tilt;
             float _Border, _Foil, _Pearl, _Metal, _Poly, _Special, _SpecialAmt, _Glare, _Sparkle, _Alpha, _Shadow, _Sweep, _SweepStrength, _Rim;
             float _FxSpeed, _FxBright, _FxSat, _FxFoil, _FxPhase, _GlitchSeed, _GlitchTwitch;
@@ -222,6 +225,38 @@ Shader "UltraPuck/Card"
                 float3 over = lerp(2.0 * col * st.rgb, 1.0 - 2.0 * (1.0 - col) * (1.0 - st.rgb), step(0.5, col));
                 col = lerp(col, over, saturate(st.a * _FxFoil));
                 return Grade(col);
+            }
+
+            // INFINITY MIRROR: a ring of lights just inside the edge, reflected over and over between two mirrors: each
+            // reflection a fifth smaller and dimmer, and the deeper ones slide further as the card tilts (parallax),
+            // so the tunnel bends away from you. The lights are beads that a slow chase runs round.
+            float3 Infinity(float2 uv, float2 t, float3 led, float quiet)
+            {
+                float2 q = (uv - 0.5) * _Size.xy;
+                float2 hb = _Size.xy * 0.5 - 0.09;
+                float rad = max(_Size.z - 0.04, 0.02);
+                float3 acc = 0;
+                float s = 1.0, fade = 1.0;
+                for (int k = 0; k < 10; k++)
+                {
+                    float2 c = -t * (1.0 - s) * _Size.xy * 0.45;
+                    float2 r = (q - c) / s;
+                    float dist = abs(RoundedBox(r, hb, rad)) * s; // (in card units: deeper rings are thinner)
+                    float w = 0.018 * s + 0.002;
+                    float core = exp(-dist * dist / (w * w));
+                    float halo = exp(-dist / (0.07 * s + 0.01)) * 0.35;
+                    // beads along the ring, and a chase of brighter ones running round (each reflection a beat later)
+                    float ang = atan2(r.y * hb.x / hb.y, r.x) / 6.2831853;
+                    float bead = 0.45 + 0.55 * smoothstep(0.32, 0.0, abs(frac(ang * 56.0) - 0.5));
+                    float chase = 0.65 + 0.35 * sin(ang * 6.2831853 * 3.0 - _Time.y * 2.2 * _FxSpeed + k * 0.55);
+                    acc += led * (core * bead * 1.25 + halo) * chase * fade * (k == 0 ? 1.0 : 1.0 - quiet);
+                    s *= 0.8;
+                    fade *= 0.74;
+                }
+                // the mirror's own dim glow at the far end of the tunnel
+                float2 end = q + t * _Size.xy * 0.45;
+                acc += led * 0.06 * exp(-dot(end, end) * 1.2);
+                return acc * _FxBright;
             }
 
             fixed4 frag(v2f i) : SV_Target
@@ -439,6 +474,14 @@ Shader "UltraPuck/Card"
                         c.rgb = lerp(c.rgb, c.rgb * 0.6 + tint * 0.25, amt * 0.6);
                         c.rgb += tint * (fres * 0.22 + streak * 0.12) * amt;
                         glass = lerp(1.0, saturate(0.1 + fres * 0.45 + streak * 0.12 + frame * 0.5 + lum * 0.6), amt);
+                    }
+                    else if (id == 12) // infinity mirror: dark glass with the tunnel of lights in it
+                    {
+                        // (on the body, the deeper rings stay faint behind the title and rules text, so it reads)
+                        float textArea = _Border > 0 ? smoothstep(0.47, 0.42, uv.y) * smoothstep(0.47, 0.40, abs(uv.x - 0.5)) * 0.7 : 0.0;
+                        float3 rings = Infinity(uv, t, _FxColor.rgb, textArea);
+                        c.rgb = lerp(c.rgb, c.rgb * 0.35, amt * inside * 0.6);
+                        c.rgb += rings * amt * inside;
                     }
                     else if (id == 10 || id == 11) // borealis / rainbow: an animated fill in place of the card's own
                     {

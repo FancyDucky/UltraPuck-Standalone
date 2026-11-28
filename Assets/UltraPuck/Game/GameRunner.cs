@@ -548,9 +548,11 @@ namespace UltraPuck.Game
 
             if (want("laser"))
             {
-                // Laser Sights: four bots who all hold it; a few moments where one is charging a shot
+                // Laser Sights: everyone holds it, you (red, standing still) with three bots; a few moments where one of
+                // red's is charging a shot (only your own team sees the laser)
                 _local.Slots.Clear();
-                for (var bb = 0; bb < 4; bb++) _local.Slots.Add(new LocalPlayers.Slot { Team = bb & 1, Colour = bb & 1, Demo = true, Name = "Bot" });
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0, Colour = 0 });
+                for (var bb = 1; bb < 4; bb++) _local.Slots.Add(new LocalPlayers.Slot { Team = bb & 1, Colour = bb & 1, Demo = true, Name = "Bot" });
                 _local.AssignTeams();
                 _mainMenu.Show(MainMenu.Page.None);
                 StartMatch(false);
@@ -560,7 +562,7 @@ namespace UltraPuck.Game
                 {
                     if (_state == null) break;
                     foreach (var q in _state.Players) q.Stats.LaserSight = 1;
-                    if (_state.Phase == Phase.Play && _state.Carrier >= 0 && _state.Players[_state.Carrier].Charge > Fix.Ratio(1, 10))
+                    if (_state.Phase == Phase.Play && _state.Carrier >= 0 && _state.Players[_state.Carrier].Team == 0 && _state.Players[_state.Carrier].Charge > Fix.Ratio(1, 10))
                     {
                         yield return Shot("laser-" + (++taken));
                         yield return new WaitForSecondsRealtime(1.5f);
@@ -1016,6 +1018,34 @@ namespace UltraPuck.Game
                 yield return Shot("cardfx-2");
                 for (var k = 0; k < fx.Length; k++) { var c = _cards != null ? _cards.ById(fx[k]) : null; if (c != null) c.Finish = was[k]; }
                 if (outlineCard != null) outlineCard.TextOutline = hadOutline;
+                GoMainMenu();
+                yield return new WaitForSecondsRealtime(0.5f);
+            }
+
+            if (want("mirror"))
+            {
+                // the infinity mirror finish (Laser Sights) in a hand, flat and tilted both ways
+                _local.Slots.Add(new LocalPlayers.Slot { Device = kb, Team = 0 });
+                _mainMenu.Show(MainMenu.Page.None);
+                StartMatch(true);
+                _sim.T.CardsOffered = 3;
+                yield return new WaitForSecondsRealtime(0.8f);
+                PickACard();
+                if (_cards != null && _state.Players.Length > 0)
+                {
+                    var offer = new List<int>();
+                    foreach (var id in new[] { "ultrapuck.lasersight", "ultrapuck.momentum", "ultrapuck.portalgun" }) { var c = _cards.ById(id); if (c != null) offer.Add(c.Index); }
+                    _state.Players[0].Offer = offer.ToArray();
+                }
+                yield return new WaitForSecondsRealtime(2.2f);
+                yield return Shot("mirror-flat");
+                CardScreen.ShotTilt = new Vector2(0.7f, 0.35f);
+                yield return new WaitForSecondsRealtime(0.3f);
+                yield return Shot("mirror-right");
+                CardScreen.ShotTilt = new Vector2(-0.6f, -0.45f);
+                yield return new WaitForSecondsRealtime(0.3f);
+                yield return Shot("mirror-left");
+                CardScreen.ShotTilt = Vector2.zero;
                 GoMainMenu();
                 yield return new WaitForSecondsRealtime(0.5f);
             }
@@ -3718,6 +3748,14 @@ namespace UltraPuck.Game
             foreach (var sl in _local.Slots) if (!sl.Demo) { if (sl.Team == 0) orange = true; else blue = true; }
         }
 
+        /// <summary>Someone on team <paramref name="team"/> plays at this PC (their screen shows team-only things).</summary>
+        private bool TeamHere(int team)
+        {
+            bool orange, blue;
+            LocalTeams(out orange, out blue);
+            return team == 0 ? orange : blue;
+        }
+
         /// <summary>Card effects for one player: invisibility, slowed / boosted, cooldown bars, shockwave and Team Play bursts.</summary>
         private bool CardEffects(int i, PlayerState p, Vector2 pos)
         {
@@ -4038,8 +4076,9 @@ namespace UltraPuck.Game
                 var look = StyleOf(i);
                 _players[i].DashColour = Cosmetics.DashTint(Cosmetics.Dash(look), Palette.Team(pb.Team));
                 var hiddenNow = CardEffects(i, pb, pos);
-                // Laser Sights: charging a shot with the puck, a laser along where it would go (for everyone: it's a laser)
-                if (pb.Stats.LaserSight > 0 && b.Carrier == i && pb.Charge > Fix.Zero && !hiddenNow && !outNow && b.Phase == Phase.Play)
+                // Laser Sights: charging a shot with the puck, a laser along where it would go, seen by their own team
+                // only (a screen with one of them on it; replays show it to everyone)
+                if (pb.Stats.LaserSight > 0 && b.Carrier == i && pb.Charge > Fix.Zero && !hiddenNow && !outNow && b.Phase == Phase.Play && (replay || TeamHere(pb.Team)))
                 {
                     _sim.LaserPath(b, i, _laserPath);
                     _lasers.Show(i, _laserPath);
